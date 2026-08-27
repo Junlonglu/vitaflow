@@ -1,6 +1,26 @@
 services:
+  mysql:
+    image: mysql:8.0
+    container_name: vitaflow-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: vitaflow
+    volumes:
+      - mysql-data:/var/lib/mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p123456"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: vitaflow-minio
     ports:
       - "9000:9000"   # API 端口
@@ -23,5 +43,6 @@ services:
     restart: unless-stopped
 
 volumes:
+  mysql-data:
   minio-data:
   redis-data:

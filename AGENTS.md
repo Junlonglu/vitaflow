@@ -126,3 +126,13 @@ npm install
 - TypeScript 代码避免 `any` 扩散；确需使用时，限制在接口边界或兼容旧数据的位置。
 - 注释只解释不明显的业务规则、迁移原因或安全边界，不写重复代码含义的注释。
 - 优先复用现有工具函数、类型、组件和服务，不新增平行实现。
+
+## Agent skills
+
+### Issue tracker
+
+本仓库的 issue 与 spec 以 markdown 文件形式存放在 `.scratch/<feature>/` 下，一个功能一个目录。详见 `docs/agents/issue-tracker.md`。
+
+### Domain docs
+
+单上下文：仓库根一份 `CONTEXT.md`，ADR 位于 `docs/adr/`。详见 `docs/agents/domain.md`。

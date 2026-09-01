@@ -1,12 +1,12 @@
 # VitaFlow AI 模块重构设计：pi-agent 化
 
 > status: accepted · 2026-09-01
-> 决策记录见 `doc/adr/0001~0004`，术语表见 `CONTEXT.md`
+> 决策记录见 `docs/adr/0001~0004`，术语表见 `CONTEXT.md`
 > 本文是纸面设计的最终产物，编码后置；同时作为旧链路退役后的回滚依据。
 
 ## 1. 背景与动机
 
-实测（`doc/learning/05-AI功能链路分析与耗时排查.md`）：对话改简历中「广州→深圳」这类微小修改因整份简历 JSON 重传耗时 30~50s，逼近 `AI_TIMEOUT=60` 超时线。
+实测（`docs/learning/05-AI功能链路分析与耗时排查.md`）：对话改简历中「广州→深圳」这类微小修改因整份简历 JSON 重传耗时 30~50s，逼近 `AI_TIMEOUT=60` 超时线。
 
 重构三重动机（按优先级）：
 
@@ -178,7 +178,7 @@ pi.registerProvider(name, {
 
 **删除范围**（迁移验证通过后）：`services/ai/chains.py`、`graphs.py`、`prompts.py`、`schemas.py`、`llm.py`、`token_usage.py`，requirements 中 `langchain`/`langchain-openai`/`langgraph`，前端评分组件与 API。
 
-**回滚依据**：本设计文档 + `doc/learning/` 四篇分析 + git 历史。
+**回滚依据**：本设计文档 + `docs/learning/` 四篇分析 + git 历史。
 
 ## 11. 实施里程碑
 

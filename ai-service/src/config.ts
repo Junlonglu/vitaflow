@@ -13,6 +13,8 @@ export interface ServiceConfig {
   provider: "faux" | "real";
   /** Timeout in ms before an agent turn is aborted. */
   turnTimeoutMs: number;
+  /** FastAPI base URL the tool uses to call back the validation endpoint. */
+  fastapiBaseUrl: string;
 }
 
 export function loadConfig(): ServiceConfig {
@@ -22,5 +24,6 @@ export function loadConfig(): ServiceConfig {
     serviceToken: process.env.AI_SERVICE_TOKEN || "",
     provider: provider === "real" ? "real" : "faux",
     turnTimeoutMs: Number(process.env.AI_TURN_TIMEOUT_MS || 60_000),
+    fastapiBaseUrl: (process.env.PI_FASTAPI_BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, ""),
   };
 }

@@ -1,3 +1,4 @@
+import hmac
 import json
 from collections.abc import Callable, Iterable
 from typing import Any
@@ -54,6 +55,7 @@ from app.services.ai_chat_service import (
     resolve_chat_change,
     send_chat_message,
     stream_chat_message,
+    validate_basics_field_update,
 )
 from app.services.ai_config_service import bind_ai_runtime_config, get_active_ai_config, get_ai_config_by_id, get_default_chat_ai_config, public_ai_capability
 from app.services.ai_task_service import create_ai_task, run_tracked_ai, tracked_ai_events
@@ -75,6 +77,22 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 
 class FlowPointRedeemRequest(BaseModel):
     code: str
+
+
+class UpdateBasicsFieldRequest(BaseModel):
+    """Field-level basics change proposed by the AI service's update_basics_field tool."""
+
+    user_id: int
+    resume_id: int
+    basics: dict[str, Any]
+
+
+def require_ai_service_token(request: Request) -> None:
+    """Gate the internal tool-callback endpoints to the Node AI service only."""
+    supplied = request.headers.get("x-ai-service-token") or ""
+    expected = settings.ai_service_token
+    if not expected or not supplied or not hmac.compare_digest(supplied, expected):
+        raise AppException("未授权：需要有效的服务令牌", 401)
 
 
 def ai_payload(payload: Any) -> dict[str, Any]:
@@ -643,3 +661,38 @@ def resume_chat_clear(resume_id: int, db: Session = Depends(get_db), current_use
     get_resume(db, current_user.id, resume_id)
     clear_chat_messages(db, current_user.id, resume_id)
     return success(True)
+
+
+@router.post("/service/tool/update-basics-field")
+def service_update_basics_field(
+    payload: UpdateBasicsFieldRequest,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_ai_service_token),
+):
+    """Internal tool callback: validate the agent's field-level basics change.
+
+    The Node AI service calls this when its ``update_basics_field`` tool fires. It
+    loads the resume and recent conversation from MySQL (source of truth), runs the
+    numeric anti-hallucination guard, and returns the validated pending-change
+    payload. It does NOT persist here — ``stream_ai_service_chat`` writes the
+    pending-change row when the agent produces its ``result`` event, keeping MySQL
+    the single mutation point.
+    """
+    resume = get_resume(db, payload.user_id, payload.resume_id)
+    history = [
+        {"role": item.role, "content": item.content}
+        for item in list_chat_messages(db, payload.user_id, payload.resume_id, limit=40)
+    ]
+    user_message = next(
+        (item["content"] for item in reversed(history) if item.get("role") == "user"),
+        "",
+    )
+    optimized_data, suggestions, issue = validate_basics_field_update(
+        resume.resume_data,
+        payload.basics,
+        history,
+        user_message,
+    )
+    if issue:
+        return success({"ok": False, "reason": issue})
+    return success({"ok": True, "optimized_resume_data": optimized_data, "suggestions": suggestions})

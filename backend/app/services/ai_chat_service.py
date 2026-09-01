@@ -416,7 +416,7 @@ async def stream_ai_service_chat(
     db.refresh(user_message)
 
     text_parts: list[str] = []
-    events = ai_service_chat_events(message, context=context)
+    events = ai_service_chat_events(message, context=context, user_id=user.id, resume_id=resume.id)
     try:
         async for event in events:
             event_type = event.get("type")
@@ -425,7 +425,23 @@ async def stream_ai_service_chat(
                 yield event
             elif event_type == "result":
                 reply = "".join(text_parts)
-                assistant = _save_assistant_message(db, session, user, resume, reply, [], None)
+                # The agent called update_basics_field and the Node side echoed the
+                # validated payload back on the result event. Persist it as a pending
+                # change so the existing /decision route can apply/reject it.
+                data = event.get("data") or {}
+                pending = data.get("pending_change")
+                if isinstance(pending, dict) and pending.get("optimized_resume_data"):
+                    assistant = _save_assistant_message(
+                        db,
+                        session,
+                        user,
+                        resume,
+                        reply,
+                        list(pending.get("suggestions") or []),
+                        pending.get("optimized_resume_data"),
+                    )
+                else:
+                    assistant = _save_assistant_message(db, session, user, resume, reply, [], None)
                 yield {"type": "result", "data": {"assistant_message": assistant.model_dump(mode="json")}}
             else:
                 yield event
@@ -591,6 +607,50 @@ def _validated_optimized_data(
     if _unverified_numeric_claims(payload, merged):
         return None, "检测到方案包含简历和对话中未提供的量化结果，已阻止写入。"
     return merged, ""
+
+
+def validate_basics_field_update(
+    current_data: dict[str, Any] | None,
+    basics: dict[str, Any] | None,
+    history: list[dict[str, Any]] | None = None,
+    user_message: str = "",
+) -> tuple[dict[str, Any] | None, list[str], str]:
+    """Validate a field-level basics change proposed by ``update_basics_field``.
+
+    The AI service calls this through the ``/api/ai/service/tool/update-basics-field``
+    endpoint. The tool proposes only the changed basics *fields* (e.g. ``{location:
+    "深圳"}``) rather than a whole resume, so the guard is the same numeric
+    anti-hallucination the LangChain path uses: a quantified result the model
+    proposes must already appear in the resume or conversation, otherwise the
+    pending change is blocked.
+
+    Returns ``(optimized_data, suggestions, issue)``:
+
+    - ``issue`` empty: ``optimized_data`` is the FULL merged resume (safe to persist
+      as a pending change) with a human-readable ``suggestions`` list.
+    - ``issue`` set: ``optimized_data`` is ``None`` and the change must be blocked.
+    """
+    if not isinstance(basics, dict) or not any(str(value or "").strip() for value in basics.values()):
+        return None, [], "未提供需要修改的基本信息字段"
+
+    payload: dict[str, Any] = {
+        "resume": {"resume_data": current_data or {}},
+        "history": history or [],
+        "user_message": user_message,
+        "attachments": [],
+    }
+    # The tool submits only the changed fields; merge them into the current basics
+    # (leaving the rest of the basics section intact) rather than replacing it.
+    merged, issue = _validated_optimized_data(
+        payload,
+        current_data,
+        {"basics": basics},
+        replace_sections=set(),
+    )
+    if issue:
+        return None, [], issue
+    suggestions = _actual_change_suggestions(current_data, merged)
+    return merged, suggestions, ""
 
 
 def _actual_change_suggestions(

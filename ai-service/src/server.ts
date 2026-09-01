@@ -67,6 +67,8 @@ app.post("/v1/chat", async (req, res) => {
   }
   const context: AiServiceContext | null =
     typeof req.body?.context === "object" && req.body.context !== null ? req.body.context : null;
+  const userId = Number.isInteger(req.body?.user_id) ? req.body.user_id : 0;
+  const resumeId = Number.isInteger(req.body?.resume_id) ? req.body.resume_id : 0;
   const systemPrompt = typeof req.body?.system_prompt === "string" && req.body.system_prompt.trim()
     ? req.body.system_prompt
     : buildContextPrompt(DEFAULT_SYSTEM_PROMPT, context);
@@ -81,7 +83,7 @@ app.post("/v1/chat", async (req, res) => {
   res.on("close", () => controller.abort());
 
   await runChat(
-    { message, systemPrompt, config, runtime },
+    { message, systemPrompt, config, runtime, userId, resumeId },
     (event) => sendEvent(res, event),
     controller.signal,
   );

@@ -11,15 +11,26 @@
  * faux provider must be registered there too or the first prompt throws
  * "Provider is not configured: faux".
  */
-import { registerFauxProvider, fauxAssistantMessage, getApiProvider } from "@earendil-works/pi-ai/compat";
+import { registerFauxProvider, fauxAssistantMessage, fauxToolCall, getApiProvider } from "@earendil-works/pi-ai/compat";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { Model } from "@earendil-works/pi-ai/compat";
+
+/** A canned tool call the deterministic faux model should make this turn. */
+export interface FauxToolPlan {
+  name: string;
+  args: Record<string, unknown>;
+}
 
 export interface FauxRuntime {
   model: Model<string>;
   modelRuntime: ModelRuntime;
-  /** Reprogram the response queue for the next agent turn. */
-  prepare: (systemPrompt: string) => void;
+  /**
+   * Reprogram the response queue for the next agent turn. When a change is
+   * detected in ``message`` (or an explicit ``toolPlan`` is passed), the faux
+   * model first emits a tool call, then a follow-up reply; otherwise it emits
+   * plain deterministic prose.
+   */
+  prepare: (systemPrompt: string, message?: string, toolPlan?: FauxToolPlan) => void;
   dispose: () => void;
 }
 
@@ -51,6 +62,49 @@ function replyFactory(systemPrompt: string) {
         `后续接入真实模型后即为真实回答。`,
     );
   };
+}
+
+/**
+ * Reply factory fed to the faux model AFTER it emitted a tool call. Reads the
+ * tool result the agent loop just injected back and reflects it in prose, so the
+ * fake reply stays coherent with whatever the FastAPI validation returned.
+ */
+function toolAdviceFactory() {
+  return (context: { messages: Array<{ role: string; content: unknown }> }) => {
+    const lastToolMessage = [...context.messages].reverse().find((m) => {
+      if (m.role === "tool") return true;
+      const content = Array.isArray(m.content) ? m.content : [];
+      return content.some((block) => block && typeof block === "object" && (block as { type?: string }).type === "toolResult");
+    });
+    const summary = contentText(lastToolMessage?.content as unknown);
+    return fauxAssistantMessage(
+      `我已调用「修改基本信息」工具。${summary ? summary + "。" : "系统已生成一份待确认的修改方案。"}` +
+        `\n\n请查看并确认该修改，确认后才会写入简历。`,
+    );
+  };
+}
+
+/**
+ * Heuristic used only by the Faux demo to decide whether to exercise the
+ * update_basics_field tool with a real model absent. A real model emits the tool
+ * call on its own; this simply maps a "把X改成Y" request to a basic field so the
+ * deterministic provider can drive the same code path in a demo.
+ */
+function detectBasicsChange(message: string): FauxToolPlan | null {
+  const match = message.match(/把([^，。！？\s]+)改成([^，。！？\s]+)/);
+  if (!match) return null;
+  const subject = match[1];
+  const value = match[2];
+  let field: string | null = null;
+  if (subject.includes("城市") || subject.includes("地点") || subject === "地方") field = "location";
+  else if (subject.includes("电话") || subject.includes("手机")) field = "phone";
+  else if (subject.includes("邮箱") || subject.includes("邮件")) field = "email";
+  else if (subject.includes("薪资")) field = "expected_salary";
+  else if (subject.includes("姓名") || subject === "名字") field = "name";
+  else if (subject.includes("职位") || subject.includes("方向") || subject.includes("岗位")) field = "title";
+  else if (subject.includes("学历")) field = "highest_degree";
+  if (!field) return null;
+  return { name: "update_basics_field", args: { basics: { [field]: value } } };
 }
 
 export async function createFauxRuntime(): Promise<FauxRuntime> {
@@ -91,7 +145,17 @@ export async function createFauxRuntime(): Promise<FauxRuntime> {
   return {
     model: faux.getModel(),
     modelRuntime,
-    prepare: (systemPrompt: string) => {
+    prepare: (systemPrompt: string, message = "", toolPlan?: FauxToolPlan) => {
+      const plan = toolPlan ?? detectBasicsChange(message);
+      if (plan) {
+        // Two steps: an assistant message carrying the tool call, then a follow-up
+        // reply that reads the tool result the loop injects back.
+        faux.setResponses([
+          fauxAssistantMessage([fauxToolCall(plan.name, plan.args)]),
+          toolAdviceFactory(),
+        ]);
+        return;
+      }
       faux.setResponses([replyFactory(systemPrompt)]);
     },
     dispose: () => faux.unregister(),

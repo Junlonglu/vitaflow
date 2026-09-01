@@ -37,6 +37,8 @@ async def ai_service_chat_events(
     message: str,
     system_prompt: str | None = None,
     context: dict[str, Any] | None = None,
+    user_id: int | None = None,
+    resume_id: int | None = None,
     *,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
@@ -59,6 +61,12 @@ async def ai_service_chat_events(
         payload["system_prompt"] = system_prompt
     if context:
         payload["context"] = context
+    # The AI service needs the identity to call back the validation endpoint when
+    # its update_basics_field tool fires. Only the proxy knows the real user/resume.
+    if user_id is not None:
+        payload["user_id"] = user_id
+    if resume_id is not None:
+        payload["resume_id"] = resume_id
 
     url = f"{settings.ai_service_url.rstrip('/')}/v1/chat"
     headers = {"Authorization": f"Bearer {settings.ai_service_token}"}

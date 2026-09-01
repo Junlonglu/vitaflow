@@ -11,7 +11,8 @@ import { join } from "node:path";
 import { createAgentSession, DefaultResourceLoader, SessionManager } from "@earendil-works/pi-coding-agent";
 import type { Model } from "@earendil-works/pi-ai/compat";
 import type { ServiceConfig } from "./config.js";
-import type { FauxRuntime } from "./faux.js";
+import type { FauxRuntime, FauxToolPlan } from "./faux.js";
+import { createUpdateBasicsFieldTool, type BasicsToolState } from "./tools/basics.js";
 
 export type ChatStreamEvent =
   | { type: "start"; data: Record<string, unknown> }
@@ -25,6 +26,14 @@ export interface AgentInput {
   systemPrompt: string;
   config: ServiceConfig;
   runtime: FauxRuntime;
+  /** Identity needed for the tool's FastAPI callback (only the proxy has it). */
+  userId: number;
+  resumeId: number;
+  /**
+   * Only used by the Faux provider: the canned tool call the deterministic model
+   * should make this turn. Undefined for the real provider.
+   */
+  toolPlan?: FauxToolPlan;
 }
 
 type Emit = (event: ChatStreamEvent) => void;
@@ -44,17 +53,36 @@ function buildAssistantMessage(text: string, now: number) {
 
 /** Drive one agent turn, emitting NDJSON events as the model streams. */
 export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSignal): Promise<void> {
-  const { message, systemPrompt, config, runtime } = input;
+  const { message, systemPrompt, config, runtime, userId, resumeId, toolPlan } = input;
   const cwd = process.cwd();
   // Isolate the agent config from whatever lives in the developer's global
   // ~/.pi/agent so the service never picks up unrelated auth/models/skills.
   const agentDir = join(cwd, ".pi-agent");
 
+  // The update_basics_field tool records the validated pending payload here so we
+  // can echo it onto the result event deterministically (independent of what
+  // prose the model weaves into its answer). FastAPI persists it as a pending row.
+  const toolState: BasicsToolState = { pendingChange: null };
+  const basicsTool = createUpdateBasicsFieldTool(
+    {
+      fetch: globalThis.fetch,
+      fastapiBaseUrl: config.fastapiBaseUrl,
+      serviceToken: config.serviceToken,
+      userId,
+      resumeId,
+    },
+    toolState,
+  );
+
   let resultSent = false;
   const sendResult = (text: string) => {
     if (resultSent) return;
     resultSent = true;
-    emit({ type: "result", data: { assistant_message: buildAssistantMessage(text, Date.now()) } });
+    const data: Record<string, unknown> = { assistant_message: buildAssistantMessage(text, Date.now()) };
+    if (toolState.pendingChange) {
+      data.pending_change = toolState.pendingChange;
+    }
+    emit({ type: "result", data });
   };
 
   const loader = new DefaultResourceLoader({
@@ -75,8 +103,11 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     modelRuntime: runtime.modelRuntime,
     sessionManager: SessionManager.inMemory(cwd),
     resourceLoader: loader,
-    // No tools → no modification path is exposed, the skeleton is read-only.
-    tools: [],
+    // Only the field-level basics-change tool is exposed. Built-in read/bash/edit
+    // tools stay off: the agent modifies the resume through this one tool instead
+    // of touching the filesystem, keeping a single validated mutation path.
+    tools: ["update_basics_field"],
+    customTools: [basicsTool],
     // The faux model reports reasoning:false; pinning thinking off keeps the
     // agent loop on the plain text path (the default level can produce an empty
     // assistant message with a non-reasoning model).
@@ -112,9 +143,11 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
   emit({ type: "start", data: {} });
   emit({ type: "phase", phase: "replying", text: "正在组织回复" });
 
-  // Program the fake response for this turn right before prompting. Because the
-  // agent loop runs one LLM call (no tools), exactly one response is consumed.
-  runtime.prepare(systemPrompt);
+  // Program the fake response for this turn right before prompting. With no tool
+  // plan the agent loop runs one LLM call (no tools); with a plan (or a change the
+  // faux runtime detects in the message) the faux model emits a tool call, the
+  // loop executes it, and then consumes the follow-up reply.
+  runtime.prepare(systemPrompt, message, toolPlan);
   turnTimer = setTimeout(() => void session.abort(), config.turnTimeoutMs);
 
   try {

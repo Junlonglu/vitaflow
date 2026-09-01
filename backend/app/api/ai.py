@@ -56,6 +56,9 @@ from app.services.ai_chat_service import (
     send_chat_message,
     stream_chat_message,
     validate_basics_field_update,
+    validate_section_update,
+    validate_propose_change,
+    get_section_context,
 )
 from app.services.ai_config_service import bind_ai_runtime_config, get_active_ai_config, get_ai_config_by_id, get_default_chat_ai_config, public_ai_capability
 from app.services.ai_task_service import create_ai_task, run_tracked_ai, tracked_ai_events
@@ -85,6 +88,24 @@ class UpdateBasicsFieldRequest(BaseModel):
     user_id: int
     resume_id: int
     basics: dict[str, Any]
+
+
+class UpdateSectionRequest(BaseModel):
+    """Section-level change proposed by the AI service's update_section tool."""
+
+    user_id: int
+    resume_id: int
+    section: str
+    proposed: Any = None
+    removed_ids: list[str] | None = None
+
+
+class ProposeChangeRequest(BaseModel):
+    """Atomic multi-section change proposed by the AI service's propose_change tool."""
+
+    user_id: int
+    resume_id: int
+    updates: list[dict[str, Any]]
 
 
 def require_ai_service_token(request: Request) -> None:
@@ -696,3 +717,91 @@ def service_update_basics_field(
     if issue:
         return success({"ok": False, "reason": issue})
     return success({"ok": True, "optimized_resume_data": optimized_data, "suggestions": suggestions})
+
+
+@router.post("/service/tool/update-section")
+def service_update_section(
+    payload: UpdateSectionRequest,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_ai_service_token),
+):
+    """Internal tool callback: validate a section-level change.
+
+    Called by the Node AI service's ``update_section`` tool. Loads the resume and
+    recent conversation from MySQL, merges the proposed section change by item id
+    (so only named entries change), runs the numeric anti-hallucination guard, and
+    returns the validated pending payload. It does NOT persist here — the
+    ``stream_ai_service_chat`` result event writes the pending-change row, keeping
+    MySQL the single mutation point.
+    """
+    resume = get_resume(db, payload.user_id, payload.resume_id)
+    history = [
+        {"role": item.role, "content": item.content}
+        for item in list_chat_messages(db, payload.user_id, payload.resume_id, limit=40)
+    ]
+    user_message = next(
+        (item["content"] for item in reversed(history) if item.get("role") == "user"),
+        "",
+    )
+    optimized_data, suggestions, issue = validate_section_update(
+        resume.resume_data,
+        payload.section,
+        payload.proposed,
+        history,
+        user_message,
+        payload.removed_ids,
+    )
+    if issue:
+        return success({"ok": False, "reason": issue})
+    return success({"ok": True, "optimized_resume_data": optimized_data, "suggestions": suggestions})
+
+
+@router.post("/service/tool/propose-change")
+def service_propose_change(
+    payload: ProposeChangeRequest,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_ai_service_token),
+):
+    """Internal tool callback: validate an atomic change spanning several sections.
+
+    Called by the Node AI service's ``propose_change`` tool. Applies all section
+    updates to one snapshot (id-bounded merge), runs a single numeric anti-hallucination
+    guard, and returns the staged pending payload — without persisting here.
+    """
+    resume = get_resume(db, payload.user_id, payload.resume_id)
+    history = [
+        {"role": item.role, "content": item.content}
+        for item in list_chat_messages(db, payload.user_id, payload.resume_id, limit=40)
+    ]
+    user_message = next(
+        (item["content"] for item in reversed(history) if item.get("role") == "user"),
+        "",
+    )
+    optimized_data, suggestions, issue = validate_propose_change(
+        resume.resume_data,
+        payload.updates,
+        history,
+        user_message,
+    )
+    if issue:
+        return success({"ok": False, "reason": issue})
+    return success({"ok": True, "optimized_resume_data": optimized_data, "suggestions": suggestions})
+
+
+@router.get("/service/tool/get-resume-context")
+def service_get_resume_context(
+    user_id: int,
+    resume_id: int,
+    sections: str,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_ai_service_token),
+):
+    """Internal tool callback: read the requested section(s) on demand.
+
+    The Node AI service calls this when its ``get_resume_context`` tool fires, so the
+    agent can pull exactly the section it needs instead of shipping the whole resume.
+    Reads-only, never mutates.
+    """
+    resume = get_resume(db, user_id, resume_id)
+    ctx = get_section_context(resume.resume_data, sections)
+    return success({"ok": True, "sections": ctx})

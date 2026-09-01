@@ -653,6 +653,232 @@ def validate_basics_field_update(
     return merged, suggestions, ""
 
 
+_LIST_SECTION_KEYS = {"education", "skills", "work", "projects", "awards", "custom_sections"}
+_DICT_SECTION_KEYS = {"basics", "summary", "layout"}
+# Prefix used when minting a fresh id for a list entry the model introduced without one.
+_SECTION_ITEM_ID_PREFIX = {
+    "education": "edu",
+    "skills": "skill",
+    "work": "work",
+    "projects": "project",
+    "awards": "award",
+    "custom_sections": "custom",
+}
+
+
+def _section_item_id(section: str, n: int) -> str:
+    prefix = _SECTION_ITEM_ID_PREFIX.get(section, section.rstrip("s"))
+    return f"{prefix}_{n}"
+
+
+def _merge_list_section(section: str, current: list, proposed: list, removed_ids: list[str] | None) -> list:
+    """Merge a list section by item id, preserving untouched entries and position.
+
+    - A current item whose id matches a proposed item is patched in place (its own
+      id and untnamed fields survive); it stays where it was.
+    - A current item not named by the model is untouched.
+    - An id in ``removed_ids`` is dropped.
+    - A proposed item with a model-supplied id that does not exist in the current
+      section (or with no id at all) is appended as a NEW entry with a freshly
+      generated id — the model cannot claim a known entry under a different id, so it
+      cannot reorder or renumber existing work/projects.
+    """
+    if not isinstance(proposed, list):
+        return deepcopy(current)
+
+    removed = {str(item) for item in (removed_ids or [])}
+    current_items = [item for item in current if isinstance(item, dict)]
+    # First pass over current entries: patch matched, keep the rest as-is.
+    result: list[dict] = []
+    for item in current_items:
+        item_id = item.get("id")
+        if item_id is not None and str(item_id) in removed:
+            continue
+        patch = next(
+            (p for p in proposed if isinstance(p, dict) and p.get("id") is not None and str(p.get("id")) == str(item_id)),
+            None,
+        )
+        if patch is None:
+            result.append(deepcopy(item))
+            continue
+        merged_item = deepcopy(item)
+        for key, value in patch.items():
+            if key == "id":
+                continue
+            merged_item[key] = value
+        result.append(merged_item)
+
+    # Second pass: append genuinely new items the model introduced.
+    existing_ids = {str(item.get("id")) for item in result if item.get("id") is not None}
+    next_n = 1
+    for patch in proposed:
+        if not isinstance(patch, dict):
+            continue
+        patch_id = patch.get("id")
+        if patch_id is not None and str(patch_id) in existing_ids:
+            continue
+        new_item = deepcopy(patch)
+        while _section_item_id(section, next_n) in existing_ids:
+            next_n += 1
+        new_item["id"] = _section_item_id(section, next_n)
+        existing_ids.add(new_item["id"])
+        result.append(new_item)
+    return result
+
+
+def merge_section_update(
+    current_data: dict[str, Any] | None,
+    section: str,
+    proposed: Any,
+    removed_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Reconcile a section-level update against the current resume snapshot.
+
+    ``section`` is a top-level resume key (basics/summary/education/skills/work/
+    projects/awards/custom_sections/layout). Dict sections merge field-level; list
+    sections merge by item id via :func:`_merge_list_section`, so a change touches
+    only the named entries. The returned value is the full merged resume data.
+    """
+    current = deepcopy(current_data or {})
+    if section in _LIST_SECTION_KEYS:
+        current_section = current.get(section)
+        if not isinstance(current_section, list):
+            current_section = deepcopy(current_section) if current_section is not None else []
+            current[section] = current_section
+        current[section] = _merge_list_section(section, current_section, proposed, removed_ids)
+    elif section in _DICT_SECTION_KEYS:
+        current_section = current.get(section)
+        merged_section = deepcopy(current_section) if isinstance(current_section, dict) else {}
+        if isinstance(proposed, dict):
+            merged_section.update(proposed)
+        current[section] = merged_section
+    return current
+
+
+def _section_update_has_content(section: str, proposed: Any, removed_ids: list[str] | None) -> bool:
+    """Is there any real content to stage, or is the proposal effectively empty?"""
+    if section in _LIST_SECTION_KEYS:
+        if removed_ids:
+            return True
+        return any(
+            isinstance(item, dict) and any(
+                key != "id" and str(value or "").strip()
+                for key, value in item.items()
+            )
+            for item in (proposed or [])
+        )
+    return isinstance(proposed, dict) and any(str(value or "").strip() for value in proposed.values())
+
+
+def validate_section_update(
+    current_data: dict[str, Any] | None,
+    section: str,
+    proposed: Any,
+    history: list[dict[str, Any]] | None = None,
+    user_message: str = "",
+    removed_ids: list[str] | None = None,
+) -> tuple[dict[str, Any] | None, list[str], str]:
+    """Validate a section-level change proposed by the AI service's ``update_section`` tool.
+
+    ``proposed`` is scoped to a single top-level resume section (basics/summary/education/
+    skills/work/projects/awards/custom_sections/layout). List sections are merged by item
+    id (:func:`merge_section_update`) so only the named entries change; dict sections merge
+    field-level. The same numeric anti-hallucination guard as :func:`validate_basics_field_update`
+    then applies to the merged snapshot, and the full merged resume is returned to be staged
+    as a pending change (it is NOT persisted here).
+
+    Returns ``(merged, suggestions, issue)`` — ``merged`` is ``None`` when ``issue`` is set.
+    """
+    if section not in _LIST_SECTION_KEYS and section not in _DICT_SECTION_KEYS:
+        return None, [], f"不支持修改的简历模块：{section}"
+    if not _section_update_has_content(section, proposed, removed_ids):
+        return None, [], "未提供需要修改的模块内容"
+
+    merged = merge_section_update(current_data, section, proposed, removed_ids)
+    if merged == (current_data or {}):
+        return None, [], "模型没有生成实际内容变化，未创建待确认修改。"
+
+    payload: dict[str, Any] = {
+        "resume": {"resume_data": current_data or {}},
+        "history": history or [],
+        "user_message": user_message,
+        "attachments": [],
+    }
+    if _unverified_numeric_claims(payload, merged):
+        return None, [], "检测到方案包含简历和对话中未提供的量化结果，已阻止写入。"
+    suggestions = _actual_change_suggestions(current_data, merged)
+    return merged, suggestions, ""
+
+
+def validate_propose_change(
+    current_data: dict[str, Any] | None,
+    updates: list[dict[str, Any]] | None,
+    history: list[dict[str, Any]] | None = None,
+    user_message: str = "",
+) -> tuple[dict[str, Any] | None, list[str], str]:
+    """Validate an atomic change spanning several sections (``propose_change`` tool).
+
+    ``updates`` is a list of ``{section, proposed, removed_ids?}`` entries covering the
+    whole scope the agent wants to stage. Each is id-bounded-merged onto the SAME running
+    snapshot, then a single numeric anti-hallucination guard runs over the final result.
+    This lets the agent declare a change to multiple modules at once (the "change scope")
+    without the model re-emitting an entire resume — and without one section's change
+    being validated against a stale snapshot.
+
+    Returns ``(merged, suggestions, issue)`` — ``merged`` is ``None`` when ``issue`` is set.
+    """
+    if not isinstance(updates, list) or not updates:
+        return None, [], "未提供需要修改的内容"
+
+    merged = deepcopy(current_data or {})
+    for entry in updates:
+        if not isinstance(entry, dict):
+            return None, [], "非法的修改提案"
+        section = entry.get("section")
+        proposed = entry.get("proposed")
+        removed_ids = entry.get("removed_ids")
+        if (
+            section not in _LIST_SECTION_KEYS
+            and section not in _DICT_SECTION_KEYS
+        ):
+            return None, [], f"不支持修改的简历模块：{section}"
+        if not _section_update_has_content(section, proposed, removed_ids):
+            return None, [], "未提供需要修改的模块内容"
+        merged = merge_section_update(merged, section, proposed, removed_ids)
+
+    if merged == (current_data or {}):
+        return None, [], "模型没有生成实际内容变化，未创建待确认修改。"
+
+    payload: dict[str, Any] = {
+        "resume": {"resume_data": current_data or {}},
+        "history": history or [],
+        "user_message": user_message,
+        "attachments": [],
+    }
+    if _unverified_numeric_claims(payload, merged):
+        return None, [], "检测到方案包含简历和对话中未提供的量化结果，已阻止写入。"
+    suggestions = _actual_change_suggestions(current_data, merged)
+    return merged, suggestions, ""
+
+
+def get_section_context(current_data: dict[str, Any] | None, section: str) -> dict[str, Any]:
+    """Return the requested section(s) from the resume, safely.
+
+    ``section`` may be a single top-level key or a comma-separated list. Returns the
+    matched sections keyed by section name so the AI service can read a section on demand
+    without shipping the whole resume. Unknown keys are omitted.
+    """
+    data = current_data or {}
+    wanted = [part.strip() for part in str(section).split(",") if part.strip()]
+    result: dict[str, Any] = {}
+    for key in wanted:
+        if key in _LIST_SECTION_KEYS and isinstance(data.get(key), list):
+            result[key] = data.get(key)
+        elif key in _DICT_SECTION_KEYS and isinstance(data.get(key), dict):
+            result[key] = data.get(key)
+    return result
+
+
 def _actual_change_suggestions(
     current_data: dict[str, Any] | None,
     optimized_data: dict[str, Any] | None,

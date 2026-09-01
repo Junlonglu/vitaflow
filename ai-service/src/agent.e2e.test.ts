@@ -75,4 +75,60 @@ describe("agent loop -> update_basics_field tool (Faux)", () => {
       runtime.dispose();
     }
   });
+
+  it("executes the update_section tool and surfaces the section pending_change", async () => {
+    const runtime = await createFauxRuntime();
+    const config = loadConfig();
+
+    let callbackHit = false;
+    let postedBody: Record<string, unknown> | undefined;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      callbackHit = true;
+      if (init?.body) postedBody = JSON.parse(init.body as string) as Record<string, unknown>;
+      assert.match(String(url), /\/api\/ai\/service\/tool\/update-section/);
+      return successResponse({
+        ok: true,
+        optimized_resume_data: {
+          basics: { name: "张三", title: "后端工程师", location: "广州", phone: "13800138000" },
+          work: [
+            { id: "work_1", company: "A 公司", role: "实习", duration: "2020-2021" },
+            { id: "work_2", company: "B 公司", role: "前端", duration: "2021-2022" },
+          ],
+        },
+        suggestions: ["已修改：实习/工作经历（2 条变为 2 条：A 公司）"],
+      });
+    }) as typeof fetch;
+
+    try {
+      const events = await collect({
+        message: "帮我把 A 公司的经历改成实习经历",
+        systemPrompt: "你是简历助手。",
+        config,
+        runtime,
+        userId: 7,
+        resumeId: 3,
+        toolPlan: { name: "update_section", args: { section: "work", proposed: [{ id: "work_1", role: "实习" }] } },
+      });
+
+      assert.equal(callbackHit, true, "the update_section tool called back FastAPI");
+      assert.deepEqual(postedBody, {
+        user_id: 7,
+        resume_id: 3,
+        section: "work",
+        proposed: [{ id: "work_1", role: "实习" }],
+      });
+      const result = events.find((event) => event.type === "result") as { type: "result"; data: Record<string, unknown> } | undefined;
+      assert.ok(result, "expected a result event");
+      const pending = result.data.pending_change as { optimized_resume_data: { work: Array<{ role: string; company?: string }> }; suggestions: string[] } | undefined;
+      assert.ok(pending, "result should carry the section pending_change");
+      assert.equal(pending.optimized_resume_data.work[0].role, "实习");
+      // The sibling work_2 must be untouched by the id-bounded merge.
+      assert.equal(pending.optimized_resume_data.work[1].company, "B 公司");
+      assert.deepEqual(pending.suggestions, ["已修改：实习/工作经历（2 条变为 2 条：A 公司）"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+      runtime.dispose();
+    }
+  });
 });

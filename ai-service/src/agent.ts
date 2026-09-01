@@ -13,6 +13,7 @@ import type { Model } from "@earendil-works/pi-ai/compat";
 import type { ServiceConfig } from "./config.js";
 import type { FauxRuntime, FauxToolPlan } from "./faux.js";
 import { createUpdateBasicsFieldTool, type BasicsToolState } from "./tools/basics.js";
+import { createSectionTools, type SectionToolsState } from "./tools/sections.js";
 
 export type ChatStreamEvent =
   | { type: "start"; data: Record<string, unknown> }
@@ -59,10 +60,12 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
   // ~/.pi/agent so the service never picks up unrelated auth/models/skills.
   const agentDir = join(cwd, ".pi-agent");
 
-  // The update_basics_field tool records the validated pending payload here so we
-  // can echo it onto the result event deterministically (independent of what
+  // The field-level and section tools record the validated pending payload here so
+  // we can echo it onto the result event deterministically (independent of what
   // prose the model weaves into its answer). FastAPI persists it as a pending row.
-  const toolState: BasicsToolState = { pendingChange: null };
+  // Both tool families write into the SAME state object, so whichever tool fires
+  // this turn is the one whose payload the result event carries.
+  const toolState: BasicsToolState & SectionToolsState = { pendingChange: null };
   const basicsTool = createUpdateBasicsFieldTool(
     {
       fetch: globalThis.fetch,
@@ -73,6 +76,14 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     },
     toolState,
   );
+  const sectionTools = createSectionTools({
+    fetch: globalThis.fetch,
+    fastapiBaseUrl: config.fastapiBaseUrl,
+    serviceToken: config.serviceToken,
+    userId,
+    resumeId,
+    state: toolState,
+  });
 
   let resultSent = false;
   const sendResult = (text: string) => {
@@ -103,11 +114,13 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     modelRuntime: runtime.modelRuntime,
     sessionManager: SessionManager.inMemory(cwd),
     resourceLoader: loader,
-    // Only the field-level basics-change tool is exposed. Built-in read/bash/edit
-    // tools stay off: the agent modifies the resume through this one tool instead
-    // of touching the filesystem, keeping a single validated mutation path.
-    tools: ["update_basics_field"],
-    customTools: [basicsTool],
+    // Only the resume-modification tools are exposed. Built-in read/bash/edit tools
+    // stay off: the agent modifies the resume through these tools instead of touching
+    // the filesystem, keeping a single validated mutation path. The read-only
+    // get_resume_context is exposed too so the agent can inspect a section before
+    // changing it (still no filesystem access).
+    tools: ["update_basics_field", "update_section", "propose_change", "get_resume_context"],
+    customTools: [basicsTool, ...sectionTools],
     // The faux model reports reasoning:false; pinning thinking off keeps the
     // agent loop on the plain text path (the default level can produce an empty
     // assistant message with a non-reasoning model).

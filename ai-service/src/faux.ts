@@ -85,26 +85,43 @@ function toolAdviceFactory() {
 }
 
 /**
- * Heuristic used only by the Faux demo to decide whether to exercise the
- * update_basics_field tool with a real model absent. A real model emits the tool
- * call on its own; this simply maps a "把X改成Y" request to a basic field so the
- * deterministic provider can drive the same code path in a demo.
+ * Heuristic used only by the Faux demo to decide whether to exercise a tool with a
+ * real model absent. A real model emits the tool call on its own; this maps common
+ * phrasings to one tool so the deterministic provider can drive the same code path.
  */
-function detectBasicsChange(message: string): FauxToolPlan | null {
-  const match = message.match(/把([^，。！？\s]+)改成([^，。！？\s]+)/);
-  if (!match) return null;
-  const subject = match[1];
-  const value = match[2];
-  let field: string | null = null;
-  if (subject.includes("城市") || subject.includes("地点") || subject === "地方") field = "location";
-  else if (subject.includes("电话") || subject.includes("手机")) field = "phone";
-  else if (subject.includes("邮箱") || subject.includes("邮件")) field = "email";
-  else if (subject.includes("薪资")) field = "expected_salary";
-  else if (subject.includes("姓名") || subject === "名字") field = "name";
-  else if (subject.includes("职位") || subject.includes("方向") || subject.includes("岗位")) field = "title";
-  else if (subject.includes("学历")) field = "highest_degree";
-  if (!field) return null;
-  return { name: "update_basics_field", args: { basics: { [field]: value } } };
+function detectToolPlan(message: string): FauxToolPlan | null {
+  // "把X改成Y" → a field-level basics change.
+  const basicsMatch = message.match(/把([^，。！？\s]+)改成([^，。！？\s]+)/);
+  if (basicsMatch) {
+    const subject = basicsMatch[1];
+    const value = basicsMatch[2];
+    let field: string | null = null;
+    if (subject.includes("城市") || subject.includes("地点") || subject === "地方") field = "location";
+    else if (subject.includes("电话") || subject.includes("手机")) field = "phone";
+    else if (subject.includes("邮箱") || subject.includes("邮件")) field = "email";
+    else if (subject.includes("薪资")) field = "expected_salary";
+    else if (subject.includes("姓名") || subject === "名字") field = "name";
+    else if (subject.includes("职位") || subject.includes("方向") || subject.includes("岗位")) field = "title";
+    else if (subject.includes("学历")) field = "highest_degree";
+    if (field) return { name: "update_basics_field", args: { basics: { [field]: value } } };
+  }
+
+  // "把...经历改成实习" → a section-level change (list item by id).
+  const sectionMatch = message.match(/(?:经历|项目|简历中|公司|项目经历)[^。！？]*(改成|改为)实习/);
+  if (sectionMatch) {
+    return {
+      name: "update_section",
+      args: { section: "work", proposed: [{ id: "work_1", role: "实习" }] },
+    };
+  }
+
+  // "读取一下工作经历" → on-demand section read.
+  if (message.includes("读取") && (message.includes("经历") || message.includes("项目"))) {
+    const section = message.includes("项目") ? "projects" : "work";
+    return { name: "get_resume_context", args: { sections: [section] } };
+  }
+
+  return null;
 }
 
 export async function createFauxRuntime(): Promise<FauxRuntime> {
@@ -146,7 +163,7 @@ export async function createFauxRuntime(): Promise<FauxRuntime> {
     model: faux.getModel(),
     modelRuntime,
     prepare: (systemPrompt: string, message = "", toolPlan?: FauxToolPlan) => {
-      const plan = toolPlan ?? detectBasicsChange(message);
+      const plan = toolPlan ?? detectToolPlan(message);
       if (plan) {
         // Two steps: an assistant message carrying the tool call, then a follow-up
         // reply that reads the tool result the loop injects back.

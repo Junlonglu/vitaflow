@@ -14,4 +14,6 @@ backend/logs/*.log
 !backend/storage/exports/.gitkeep
 !backend/storage/uploads/.gitkeep
 .idea/
-.vscode/.claude/settings.local.json
+.vscode/
+.claude/settings.local.json
+.scratch/

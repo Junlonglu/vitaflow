@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.exceptions import AppException
 from app.core.request_utils import get_client_ip
@@ -54,6 +55,7 @@ from app.services.ai_chat_service import (
     stream_chat_message,
 )
 from app.services.ai_config_service import bind_ai_runtime_config, get_active_ai_config, get_ai_config_by_id, get_default_chat_ai_config, public_ai_capability
+from app.services.ai_service_client import ai_service_chat_events
 from app.services.ai_task_service import create_ai_task, run_tracked_ai, tracked_ai_events
 from app.services.app_settings_service import get_setting
 from app.services.flow_points_service import (
@@ -193,6 +195,24 @@ def user_visible_task_model_name(task: AiTask | None) -> str | None:
 def stream_events(events: Iterable[dict[str, Any]]) -> StreamingResponse:
     def iterator():
         for event in events:
+            yield json.dumps(event, ensure_ascii=False) + "\n"
+
+    return StreamingResponse(
+        iterator(),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+def _ai_service_stream_response(content: str) -> StreamingResponse:
+    """Proxy a chat request to the AI service and relay its NDJSON stream."""
+    events = ai_service_chat_events(content)
+
+    async def iterator():
+        async for event in events:
             yield json.dumps(event, ensure_ascii=False) + "\n"
 
     return StreamingResponse(
@@ -520,6 +540,13 @@ def resume_chat_send_stream(
     current_user: User = Depends(get_current_user),
 ):
     resume = get_resume(db, current_user.id, resume_id)
+    if settings.ai_service_enabled:
+        # 骨架（只读对话）：整条链路代理到 Node AI 服务，前端播放其事件流。
+        # 计费与消息落库由后续票实现；此处不创建 task，避免与旧链路耦合。
+        content = (payload.content or "").strip()
+        if not content:
+            return stream_events(iter([{"type": "error", "message": "请输入要咨询的问题"}]))
+        return _ai_service_stream_response(content)
     task = new_task(db, current_user, "ai_chat", payload, resume_id=resume_id)
     return stream_events(
         tracked_ai_events(

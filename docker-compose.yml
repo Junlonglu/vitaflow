@@ -42,6 +42,17 @@ services:
       - redis-data:/data
     restart: unless-stopped
 
+  ai-service:
+    build: ./ai-service
+    container_name: vitaflow-ai-service
+    profiles: ["ai-service"]
+    ports:
+      - "8300:8300"
+    environment:
+      PI_PROVIDER: faux
+      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-}
+    restart: unless-stopped
+
 volumes:
   mysql-data:
   minio-data:

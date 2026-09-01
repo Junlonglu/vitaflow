@@ -7,6 +7,7 @@
 - VitaFlow 是前后端分离的智能简历平台。
 - 后端位于 `backend/`，使用 FastAPI、SQLAlchemy、Alembic、MySQL、Redis、LangChain/LangGraph、Jinja2、Playwright/WeasyPrint、python-docx。
 - 前端位于 `frontend/`，使用 Vue 3、TypeScript、Vite、Vue Router、Pinia、Tailwind CSS。
+- AI 服务位于 `ai-service/`，是承载 pi-agent 运行时的 Node 旁路服务（`@earendil-works/pi-coding-agent@0.83.0` 锁版）。FastAPI 通过 HTTP/SSE 代理调用它，认证、数据库、计费仍归 FastAPI。详见 `docs/pi-agent重构设计.md`。
 - 后端接口统一挂载在 `/api` 下，响应结构应保持 `{ code, message, data }`。
 - 简历预览和 PDF 导出共用后端 HTML 渲染服务，改模板、样式、预览或导出逻辑时要同时考虑浏览器预览、PDF、Word 的一致性。
 
@@ -97,6 +98,15 @@ python -m playwright install chromium
 ```bash
 cd frontend
 npm install
+```
+
+AI 服务（pi-agent 旁路）：
+
+```bash
+cd ai-service
+npm install
+npm run dev        # tsx watch，端口 8300；env 见 .env.example
+npm run typecheck  # TypeScript 类型检查
 ```
 
 ## 验证要求

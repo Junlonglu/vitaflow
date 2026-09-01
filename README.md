@@ -24,6 +24,7 @@ VitaFlow 是一个面向求职者的智能简历生成与优化平台，提供�
 - 前端：Vue 3、TypeScript、Vite、Vue Router、Pinia、Tailwind CSS
 - 导出：Playwright、Chromium、WeasyPrint、python-docx
 - 存储：MinIO、阿里云 OSS
+- AI 服务：Node.js 旁路服务，承载 pi-agent 运行时（`ai-service/`，见 `docs/pi-agent重构设计.md`）
 
 ## 项目结构
 
@@ -47,6 +48,9 @@ VitaFlow/
 │   ├── alembic.ini                  # Alembic 配置
 │   ├── requirements.txt             # Python 依赖
 │   └── README.md                    # 后端开发与部署说明
+├── ai-service/                      # Node AI 服务（pi-agent 旁路，骨架只读对话）
+│   ├── src/                         # server / agent / faux / prompt / config
+│   └── README.md                    # AI 服务说明与运行方式
 ├── frontend/                        # Vue 3 前端
 │   ├── src/
 │   │   ├── api/                     # Axios 封装及各业务 API

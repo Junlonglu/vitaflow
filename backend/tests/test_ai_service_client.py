@@ -26,9 +26,14 @@ class AiServiceClientTest(unittest.TestCase):
         settings.ai_service_token = self._token
         settings.ai_service_url = self._url
 
-    def _collect(self, transport: httpx.AsyncBaseTransport, message: str = "你好") -> list[dict]:
+    def _collect(
+        self,
+        transport: httpx.AsyncBaseTransport,
+        message: str = "你好",
+        context: dict | None = None,
+    ) -> list[dict]:
         async def run() -> list[dict]:
-            return [event async for event in ai_service_chat_events(message, transport=transport)]
+            return [event async for event in ai_service_chat_events(message, context=context, transport=transport)]
 
         return asyncio.run(run())
 
@@ -52,6 +57,23 @@ class AiServiceClientTest(unittest.TestCase):
         self.assertEqual([e["type"] for e in events], ["start", "phase", "delta", "result"])
         self.assertEqual(events[2]["text"], "我已收到你的提问")
         self.assertEqual(events[3]["data"]["assistant_message"]["content"], "我已收到你的提问")
+
+    def test_forwards_context_in_payload(self) -> None:
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["payload"] = json.loads(request.content)
+            return _ndjson_response(['{"type":"start","data":{}}'])
+
+        context = {
+            "resume": {"id": 7, "title": "后端工程师简历", "target_position": "后端工程师"},
+            "history": [{"role": "user", "content": "第一轮：帮我看看简历"}],
+            "pending_change": {"exists": False, "message_id": None, "summary": []},
+        }
+        self._collect(httpx.MockTransport(handler), "第二轮：突出项目经历", context)
+
+        self.assertEqual(captured["payload"]["message"], "第二轮：突出项目经历")
+        self.assertEqual(captured["payload"]["context"], context)
 
     def test_non_200_returns_error_with_detail(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:

@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     ai_service_enabled: bool = False
     ai_service_url: str = "http://127.0.0.1:8300"
     ai_service_token: str = ""
+    # AI 服务上下文注入上限：从 MySQL 读取最近 N 条历史注入 prompt。对齐 LangChain
+    # 对话的 context_messages,仅在 ai_service_enabled 时使用。
+    ai_service_context_messages: int = Field(default=12, ge=1, le=40)
     ai_chat_change_timeout: int = Field(default=180, gt=0)
     ai_model_io_log_enabled: bool = True
     ai_model_io_log_path: str = "logs/ai_model_io.log"

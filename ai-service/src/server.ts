@@ -11,7 +11,7 @@ import express from "express";
 import { runChat, type ChatStreamEvent } from "./agent.js";
 import { loadConfig } from "./config.js";
 import { createFauxRuntime, type FauxRuntime } from "./faux.js";
-import { DEFAULT_SYSTEM_PROMPT } from "./prompt.js";
+import { buildContextPrompt, DEFAULT_SYSTEM_PROMPT, type AiServiceContext } from "./prompt.js";
 
 const config = loadConfig();
 const app = express();
@@ -65,9 +65,11 @@ app.post("/v1/chat", async (req, res) => {
     res.status(400).json({ type: "error", message: "message 不能为空" });
     return;
   }
+  const context: AiServiceContext | null =
+    typeof req.body?.context === "object" && req.body.context !== null ? req.body.context : null;
   const systemPrompt = typeof req.body?.system_prompt === "string" && req.body.system_prompt.trim()
     ? req.body.system_prompt
-    : DEFAULT_SYSTEM_PROMPT;
+    : buildContextPrompt(DEFAULT_SYSTEM_PROMPT, context);
 
   res.status(200);
   res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");

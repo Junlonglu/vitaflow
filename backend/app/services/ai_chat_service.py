@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import AsyncIterator
 from copy import deepcopy
 from datetime import datetime
 from typing import Any
@@ -9,6 +10,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
+from app.core.config import settings
 from app.core.exceptions import AppException
 from app.models.ai_chat import AiChatMessage, AiChatSession
 from app.models.resume import Resume
@@ -26,6 +28,7 @@ from app.services.ai.chains import (
     strip_thinking_text,
 )
 from app.services.ai_config_service import get_active_ai_config
+from app.services.ai_service_client import ai_service_chat_events
 
 
 SECTION_LABELS = {
@@ -327,6 +330,107 @@ def _save_assistant_message(
     db.commit()
     db.refresh(assistant_message)
     return _message_out(assistant_message)
+
+
+def build_ai_service_context(
+    db: Session,
+    user: User,
+    resume: Resume,
+    *,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """Build the context block injected into the AI service prompt.
+
+    Mirrors the shape FastAPI reads from MySQL: resume snapshot, the recent chat
+    history (capped at ``settings.ai_service_context_messages``) and the
+    outstanding pending-change summary. The AI service renders this into the
+    system prompt and never touches MySQL itself, keeping the Node session
+    stateless while MySQL remains the single source of truth.
+    """
+    context_limit = limit or max(1, min(int(settings.ai_service_context_messages or 12), 40))
+    history = list_chat_messages(db, user.id, resume.id, limit=context_limit + 8)
+    pending_change = db.scalar(
+        select(AiChatMessage)
+        .where(
+            AiChatMessage.user_id == user.id,
+            AiChatMessage.resume_id == resume.id,
+            AiChatMessage.role == "assistant",
+            AiChatMessage.action_status == "pending",
+            AiChatMessage.optimized_resume_data.is_not(None),
+        )
+        .order_by(AiChatMessage.id.desc())
+    )
+    resume_data = resume.resume_data or {}
+    basics = resume_data.get("basics") if isinstance(resume_data.get("basics"), dict) else {}
+    return {
+        "resume": {
+            "id": resume.id,
+            "title": resume.title,
+            "target_position": basics.get("title", ""),
+            "summary": _resume_intent_summary(resume.resume_data),
+            "resume_data": resume.resume_data,
+        },
+        "history": [{"role": item.role, "content": item.content} for item in history[-context_limit:]],
+        "pending_change": {
+            "exists": pending_change is not None,
+            "message_id": pending_change.id if pending_change else None,
+            "summary": pending_change.suggestions if pending_change else [],
+        },
+    }
+
+
+async def stream_ai_service_chat(
+    db: Session,
+    user: User,
+    resume: Resume,
+    content: str,
+    attachments: list[dict[str, Any]] | None = None,
+) -> AsyncIterator[dict[str, Any]]:
+    """Stream a chat turn backed by the Node AI service.
+
+    Builds the context from MySQL (resume snapshot, recent history, pending
+    change), persists the user message, relays the AI service's NDJSON stream,
+    accumulates the assistant text and, on ``result``, persists the assistant
+    message and rewrites ``result.data.assistant_message`` with the DB row. MySQL
+    stays the single source of truth and the AI service stays stateless.
+    """
+    message = (content or "").strip()
+    if not message:
+        yield {"type": "error", "message": "请输入要咨询的问题"}
+        return
+
+    session = get_or_create_chat_session(db, user.id, resume.id)
+    context = build_ai_service_context(db, user, resume)
+    user_message = AiChatMessage(
+        session_id=session.id,
+        user_id=user.id,
+        resume_id=resume.id,
+        role="user",
+        content=message,
+        attachments=attachments or [],
+        suggestions=[],
+        optimized_resume_data=None,
+    )
+    db.add(user_message)
+    db.commit()
+    db.refresh(user_message)
+
+    text_parts: list[str] = []
+    events = ai_service_chat_events(message, context=context)
+    try:
+        async for event in events:
+            event_type = event.get("type")
+            if event_type == "delta":
+                text_parts.append(event.get("text", ""))
+                yield event
+            elif event_type == "result":
+                reply = "".join(text_parts)
+                assistant = _save_assistant_message(db, session, user, resume, reply, [], None)
+                yield {"type": "result", "data": {"assistant_message": assistant.model_dump(mode="json")}}
+            else:
+                yield event
+    except Exception as exc:
+        yield {"type": "error", "message": f"AI 对话处理失败：{exc}"}
 
 
 def _latest_pending_change(db: Session, user_id: int, resume_id: int) -> AiChatMessage | None:

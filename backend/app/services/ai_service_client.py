@@ -36,6 +36,7 @@ def _http_timeout() -> httpx.Timeout:
 async def ai_service_chat_events(
     message: str,
     system_prompt: str | None = None,
+    context: dict[str, Any] | None = None,
     *,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
@@ -44,6 +45,10 @@ async def ai_service_chat_events(
     The returned events match the frontend's existing stream contract
     (``start`` / ``phase`` / ``delta`` / ``result`` / ``error``), so the proxy is
     transparent to the client.
+
+    ``context`` carries the resume snapshot, recent chat history and pending
+    change summary -- the state the AI service renders into the prompt. It is
+    optional: the skeleton can run with no context (pure dialogue).
     """
     if not settings.ai_service_token:
         yield {"type": "error", "message": "AI 服务令牌未配置，无法调用 AI 服务"}
@@ -52,6 +57,8 @@ async def ai_service_chat_events(
     payload: dict[str, Any] = {"message": message}
     if system_prompt:
         payload["system_prompt"] = system_prompt
+    if context:
+        payload["context"] = context
 
     url = f"{settings.ai_service_url.rstrip('/')}/v1/chat"
     headers = {"Authorization": f"Bearer {settings.ai_service_token}"}

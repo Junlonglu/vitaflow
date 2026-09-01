@@ -49,13 +49,13 @@ from app.services.ai.graphs import optimize_by_jd_graph
 from app.services.ai_chat_service import (
     clear_chat_messages,
     list_chat_messages,
+    stream_ai_service_chat,
     stream_regenerate_chat_message,
     resolve_chat_change,
     send_chat_message,
     stream_chat_message,
 )
 from app.services.ai_config_service import bind_ai_runtime_config, get_active_ai_config, get_ai_config_by_id, get_default_chat_ai_config, public_ai_capability
-from app.services.ai_service_client import ai_service_chat_events
 from app.services.ai_task_service import create_ai_task, run_tracked_ai, tracked_ai_events
 from app.services.app_settings_service import get_setting
 from app.services.flow_points_service import (
@@ -207,13 +207,27 @@ def stream_events(events: Iterable[dict[str, Any]]) -> StreamingResponse:
     )
 
 
-def _ai_service_stream_response(content: str) -> StreamingResponse:
-    """Proxy a chat request to the AI service and relay its NDJSON stream."""
-    events = ai_service_chat_events(content)
+def _ai_service_stream_response(
+    db: Session,
+    user: User,
+    resume: Resume,
+    content: str,
+    attachments: list[dict[str, Any]] | None = None,
+) -> StreamingResponse:
+    """Proxy a chat turn to the AI service, persisting messages in MySQL.
+
+    The AI service stream is transparent to the client except that the
+    ``result`` event's ``assistant_message`` is the DB-backed row (MySQL is the
+    single source of truth for the UI message list).
+    """
+    events = stream_ai_service_chat(db, user, resume, content, attachments)
 
     async def iterator():
-        async for event in events:
-            yield json.dumps(event, ensure_ascii=False) + "\n"
+        try:
+            async for event in events:
+                yield json.dumps(event, ensure_ascii=False) + "\n"
+        except Exception as exc:  # defensive: never let a relay failure surface as a raw 500
+            yield json.dumps({"type": "error", "message": f"AI 对话处理失败：{exc}"}, ensure_ascii=False) + "\n"
 
     return StreamingResponse(
         iterator(),
@@ -541,12 +555,14 @@ def resume_chat_send_stream(
 ):
     resume = get_resume(db, current_user.id, resume_id)
     if settings.ai_service_enabled:
-        # 骨架（只读对话）：整条链路代理到 Node AI 服务，前端播放其事件流。
-        # 计费与消息落库由后续票实现；此处不创建 task，避免与旧链路耦合。
+        # 只读对话代理到 Node AI 服务，前端播放其事件流。context（简历快照 + 最近
+        # N 条历史 + 待确认变更摘要）由 FastAPI 从 MySQL 读出并注入，AI 服务保持
+        # 无状态；消息在 MySQL 落库，UI 列表读取现有会话表。
         content = (payload.content or "").strip()
         if not content:
             return stream_events(iter([{"type": "error", "message": "请输入要咨询的问题"}]))
-        return _ai_service_stream_response(content)
+        attachments = [item.model_dump() for item in payload.attachments]
+        return _ai_service_stream_response(db, current_user, resume, content, attachments)
     task = new_task(db, current_user, "ai_chat", payload, resume_id=resume_id)
     return stream_events(
         tracked_ai_events(

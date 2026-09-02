@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-from contextlib import contextmanager
-from contextvars import ContextVar
 from dataclasses import asdict, dataclass
 from decimal import Decimal
 from typing import Any
@@ -24,7 +22,6 @@ logger = logging.getLogger(__name__)
 
 AI_CONFIG_CACHE_KEY = f"{settings.redis_key_prefix}:ai:active-model-config"
 AI_CONFIG_CACHE_SECONDS = 300
-_runtime_config_var: ContextVar["AiRuntimeConfig | None"] = ContextVar("ai_runtime_config", default=None)
 
 
 @dataclass
@@ -131,15 +128,6 @@ def invalidate_ai_config_cache() -> None:
         logger.warning("Failed to invalidate AI config cache", exc_info=True)
 
 
-@contextmanager
-def bind_ai_runtime_config(config: AiRuntimeConfig):
-    token = _runtime_config_var.set(config)
-    try:
-        yield
-    finally:
-        _runtime_config_var.reset(token)
-
-
 def _select_active_config(session: Session) -> AiModelConfig | None:
     return session.scalar(
         select(AiModelConfig)
@@ -220,10 +208,6 @@ def get_ai_config_by_pi_model_ref(db: Session, pi_model_ref: str) -> AiRuntimeCo
 
 
 def get_active_ai_config(db: Session | None = None) -> AiRuntimeConfig:
-    scoped = _runtime_config_var.get()
-    if scoped:
-        return scoped
-
     cached = _read_cached_config()
     if cached:
         return cached

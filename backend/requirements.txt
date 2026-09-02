@@ -22,6 +22,3 @@ bleach
 minio
 oss2
 httpx
-langchain
-langchain-openai
-langgraph

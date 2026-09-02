@@ -57,30 +57,6 @@ DEFAULT_POINT_RULES: dict[str, dict[str, Any]] = {
         "points_per_million_input_tokens": 1000,
         "points_per_million_output_tokens": 1000,
     },
-    "jd_optimize": {
-        "display_name": "JD 优化",
-        "points_per_call": 50,
-        "points_per_1k_tokens": 0,
-        "points_per_million_tokens": 0,
-        "points_per_million_input_tokens": 0,
-        "points_per_million_output_tokens": 0,
-    },
-    "resume_translate": {
-        "display_name": "简历翻译",
-        "points_per_call": 50,
-        "points_per_1k_tokens": 0,
-        "points_per_million_tokens": 0,
-        "points_per_million_input_tokens": 0,
-        "points_per_million_output_tokens": 0,
-    },
-    "section_optimize": {
-        "display_name": "AI 润色",
-        "points_per_call": 20,
-        "points_per_1k_tokens": 0,
-        "points_per_million_tokens": 0,
-        "points_per_million_input_tokens": 0,
-        "points_per_million_output_tokens": 0,
-    },
 }
 
 ACTIVE_AI_FEATURE_TYPES = set(DEFAULT_POINT_RULES.keys())

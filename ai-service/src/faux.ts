@@ -15,6 +15,7 @@ import { registerFauxProvider, fauxAssistantMessage, fauxToolCall, getApiProvide
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { ImageContent, Model } from "@earendil-works/pi-ai/compat";
 import { commandToolPlan, detectQuickCommand } from "./commands.js";
+import type { TaskType } from "./taskPrompts.js";
 
 /** A canned tool call the deterministic faux model should make this turn. */
 export interface FauxToolPlan {
@@ -39,6 +40,14 @@ export interface FauxRuntime {
    * same read-then-propose tool chain as a typed change.
    */
   prepare: (systemPrompt: string, message?: string, toolPlan?: FauxToolPlanStep, images?: ImageContent[]) => void;
+  /**
+   * Program the response queue for a one-shot task turn (ticket 09): the faux
+   * model answers with a single minimal-but-legal task JSON, exercising the same
+   * accumulate → parse → result path a real model drives. ``replyOverride``
+   * queues arbitrary text instead — the seam that lets tests exercise runTask's
+   * unparseable-output error path.
+   */
+  prepareTask: (task: TaskType, replyOverride?: string) => void;
   dispose: () => void;
 }
 
@@ -163,6 +172,24 @@ function imageChangePlan(): FauxToolPlan[] {
   ];
 }
 
+/** Deterministic minimal task result; _normalize_resume_data fills locale defaults. */
+function taskReply(task: TaskType): string {
+  const base = {
+    resume_data: {
+      basics: {},
+      layout: { section_order: ["basics"], hidden_sections: [], section_titles: {} },
+    },
+    language: "zh-CN",
+    template_id: "tech",
+    template_config: {},
+    explanation: "Faux 演示模式生成的占位简历，未接入真实模型。",
+  };
+  if (task === "import_resume") {
+    base.explanation = "Faux 演示模式导入的占位简历，未接入真实模型。";
+  }
+  return JSON.stringify(base, null, 2);
+}
+
 export async function createFauxRuntime(): Promise<FauxRuntime> {
   // Single provider instance shared across requests. The response queue is
   // re-programmed per agent turn via prepare(); the factory is stateless, so a
@@ -216,6 +243,9 @@ export async function createFauxRuntime(): Promise<FauxRuntime> {
         return;
       }
       faux.setResponses([replyFactory(systemPrompt)]);
+    },
+    prepareTask: (task: TaskType, replyOverride?: string) => {
+      faux.setResponses([fauxAssistantMessage(replyOverride ?? taskReply(task))]);
     },
     dispose: () => faux.unregister(),
   };

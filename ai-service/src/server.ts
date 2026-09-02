@@ -10,12 +10,13 @@ import { join } from "node:path";
 import { timingSafeEqual } from "node:crypto";
 import express from "express";
 import type { ImageContent } from "@earendil-works/pi-ai/compat";
-import { runChat, type ChatRuntime, type ChatStreamEvent } from "./agent.js";
+import { runChat, runTask, type ChatRuntime, type ChatStreamEvent } from "./agent.js";
 import { reportUsage } from "./billing.js";
 import { loadConfig } from "./config.js";
 import { createFauxRuntime } from "./faux.js";
 import { buildContextPrompt, DEFAULT_SYSTEM_PROMPT, type AiServiceContext } from "./prompt.js";
 import { createRealRuntime } from "./real.js";
+import { buildTaskPrompts, isTaskType } from "./taskPrompts.js";
 
 const config = loadConfig();
 const app = express();
@@ -135,6 +136,42 @@ app.post("/v1/chat", async (req, res) => {
       console.error("[vitaflow-ai] usage report failed:", err);
     }
   }
+});
+
+// One-shot task endpoint (ticket 09): generate/import. The prompt lives here
+// (taskPrompts.ts); FastAPI only sends the parsed input payload. Usage rides the
+// result event — FastAPI settles the task synchronously, so unlike /v1/chat there
+// is deliberately NO reportUsage callback (avoids task_type hardcoding and the
+// import resume_id race).
+app.post("/v1/task", async (req, res) => {
+  if (!authorize(req)) {
+    res.status(401).json({ type: "error", message: "未授权：需要有效的服务令牌" });
+    return;
+  }
+  const task = req.body?.task;
+  if (!isTaskType(task)) {
+    res.status(400).json({ type: "error", message: "task 必须是 generate_resume 或 import_resume" });
+    return;
+  }
+  const inputPayload = req.body?.input;
+  if (!inputPayload || typeof inputPayload !== "object" || Array.isArray(inputPayload)) {
+    res.status(400).json({ type: "error", message: "input 不能为空" });
+    return;
+  }
+  const modelRef = typeof req.body?.model === "string" && req.body.model.trim() ? req.body.model.trim() : undefined;
+  const { systemPrompt, message } = buildTaskPrompts(task, inputPayload);
+
+  res.status(200);
+  res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const controller = new AbortController();
+  res.on("close", () => controller.abort());
+
+  await runTask({ task, message, systemPrompt, config, runtime, modelRef }, (event) => sendEvent(res, event), controller.signal);
+  res.end();
 });
 
 let runtime: ChatRuntime;

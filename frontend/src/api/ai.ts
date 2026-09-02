@@ -1,6 +1,5 @@
 import request from "./request"
 
-export const generateResumeApi = (data: any) => request.post("/ai/generate-resume", data)
 export type AiChatAttachment = { url: string; name?: string; content_type?: string; object_name?: string }
 export type AiChatModelOption = {
   id: number
@@ -63,7 +62,6 @@ export type FlowPointSummary = {
 export type FlowPointTransaction = { id: number; feature_type: string; points_delta: number; balance_after: number; tokens_used: number; model_name?: string | null; description: string; create_time: string }
 
 export const getResumeChatMessagesApi = (resumeId: number) => request.get(`/ai/resume-chat/${resumeId}/messages`)
-export const sendResumeChatMessageApi = (resumeId: number, data: { content: string; attachments?: AiChatAttachment[]; model_config_id?: number | null }) => request.post(`/ai/resume-chat/${resumeId}/messages`, data)
 export const clearResumeChatMessagesApi = (resumeId: number) => request.delete(`/ai/resume-chat/${resumeId}/messages`)
 export const decideResumeChatChangeApi = (resumeId: number, messageId: number, action: "apply" | "reject") =>
   request.post(`/ai/resume-chat/${resumeId}/messages/${messageId}/decision`, { action })

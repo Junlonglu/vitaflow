@@ -60,13 +60,11 @@ class Settings(BaseSettings):
     ai_timeout: int = 60
     ai_max_tokens: int = Field(default=8192, gt=0)
 
-    # Node「AI 服务」（pi-agent 旁路服务）。ai_service_enabled 打开后，
-    # 简历对话流式接口改为代理转发到 AI 服务；关闭时保留原 LangChain 链路。
-    ai_service_enabled: bool = False
+    # Node「AI 服务」（pi-agent 旁路服务）：AI 对话与一次性任务（生成/导入）
+    # 均代理到该服务，由 Node 侧承载 pi-agent 运行时。
     ai_service_url: str = "http://127.0.0.1:8300"
     ai_service_token: str = ""
-    # AI 服务上下文注入上限：从 MySQL 读取最近 N 条历史注入 prompt。对齐 LangChain
-    # 对话的 context_messages,仅在 ai_service_enabled 时使用。
+    # AI 服务上下文注入上限：从 MySQL 读取最近 N 条历史注入 prompt。
     ai_service_context_messages: int = Field(default=12, ge=1, le=40)
     ai_chat_change_timeout: int = Field(default=180, gt=0)
     ai_model_io_log_enabled: bool = True

@@ -14,9 +14,10 @@ from app.models.ai_task import AiTask
 from app.models.user import User
 from app.schemas.resume import ResumeCreate, ResumeOut, ResumeShareUpdate, ResumeUpdate, ResumeVersionCreate, default_template_config
 from app.schemas.resume_starter import ResumeStarterCreateRequest
-from app.services.ai.chains import import_resume_chain
-from app.services.ai.token_usage import activate_token_tracker, estimate_tokens, merge_token_usage, reset_token_tracker
+from app.services.ai.token_usage import build_token_usage
 from app.services.ai_config_service import get_active_ai_config
+from app.services.ai_service_client import ai_service_task_result
+from app.services.resume_normalization import normalize_resume_data
 from app.services.flow_points_service import POINT_ZERO, precheck_flow_points, settle_task_flow_points
 from app.services.preview_service import render_resume_html
 from app.services.pdf_export_service import get_pdf_path
@@ -106,7 +107,6 @@ def import_resume_file(
     current_user: User = Depends(get_current_user),
 ):
     task: AiTask | None = None
-    tracker_token = None
     try:
         upload_files = files if isinstance(files, list) else [files]
         text = extract_resume_text_from_uploads(upload_files)
@@ -144,29 +144,43 @@ def import_resume_file(
         db.commit()
         db.refresh(task)
 
-        tracker, tracker_token = activate_token_tracker(request_tokens)
-        result = import_resume_chain(payload)
-        result_language = normalize_resume_language(result.language or detected_language)
-        token_usage = tracker.snapshot()
-        template_id = str(template_id or result.template_id or "tech")
+        # One-shot task via the Node AI service (ticket 09): the service parses
+        # the model JSON and echoes real token usage on the result, so the task
+        # settles synchronously without the LangChain token tracker.
+        result, usage_entries = ai_service_task_result(
+            "import_resume",
+            payload,
+            model_ref=ai_config.pi_model_ref,
+        )
+        if not isinstance(result.get("resume_data"), dict):
+            raise AppException("AI 返回的导入结果缺少 resume_data")
+        result["resume_data"] = normalize_resume_data(result["resume_data"], payload)
+        token_usage = build_token_usage(
+            sum(int(item.get("input_tokens") or 0) for item in usage_entries),
+            sum(int(item.get("output_tokens") or 0) for item in usage_entries),
+            usage_entries,
+            estimated=False,
+        )
+        result_language = normalize_resume_language(result.get("language") or detected_language)
+        template_id = str(template_id or result.get("template_id") or "tech")
         template_config = default_template_config(template_id)
 
         resume = create_resume(
             db,
             current_user.id,
             ResumeCreate(
-                title=_imported_resume_title(result.resume_data, display_filename or "导入简历", result_language),
+                title=_imported_resume_title(result["resume_data"], display_filename or "导入简历", result_language),
                 language=result_language,
                 template_id=template_id,
-                resume_data=result.resume_data,
+                resume_data=result["resume_data"],
                 template_config=template_config,
             ),
         )
         task.resume_id = resume.id
         task.status = "success"
-        task.output_data = result.model_dump(mode="json")
+        task.output_data = result
         task.tokens_used = int(token_usage.get("total_tokens") or 0)
-        task.input_data = merge_token_usage(task.input_data or {}, token_usage)
+        task.input_data = {**(task.input_data or {}), "token_usage": token_usage}
         db.add(task)
         db.commit()
         db.refresh(task)
@@ -178,14 +192,9 @@ def import_resume_file(
         _mark_import_task_failed(db, task, exc.message)
         raise
     except Exception as exc:
-        message = str(exc).strip()
-        if "Input to ChatPromptTemplate is missing variables" in message:
-            message = "简历导入提示词变量配置错误，请联系管理员检查 AI 配置"
+        message = str(exc).strip() or "请稍后重试"
         _mark_import_task_failed(db, task, message)
-        raise AppException(f"简历导入失败：{message or '请稍后重试'}") from exc
-    finally:
-        if tracker_token is not None:
-            reset_token_tracker(tracker_token)
+        raise AppException(f"简历导入失败：{message}") from exc
 
 
 @router.get("/{resume_id}")

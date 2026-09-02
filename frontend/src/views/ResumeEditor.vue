@@ -1227,27 +1227,6 @@ function handleFocusOut(event: Event) {
   animation: ai-orbit 3s ease-in-out infinite;
 }
 
-.ai-workbench-layer {
-  background:
-    radial-gradient(circle at 50% 8%, rgba(99,102,241,0.10), transparent 38%),
-    rgba(24,24,27,0.38);
-  backdrop-filter: blur(12px);
-}
-.ai-workbench::after {
-  position: absolute;
-  inset: 0;
-  z-index: 20;
-  border-radius: inherit;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
-  content: "";
-  pointer-events: none;
-}
-.ai-workbench-aurora {
-  background:
-    radial-gradient(circle at 20% 0%, rgba(124,58,237,0.12), transparent 34%),
-    radial-gradient(circle at 60% -20%, rgba(14,165,233,0.11), transparent 38%),
-    radial-gradient(circle at 90% 10%, rgba(16,185,129,0.10), transparent 32%);
-}
 .ai-core::before,
 .ai-core::after {
   position: absolute;
@@ -1258,19 +1237,6 @@ function handleFocusOut(event: Event) {
   animation: ai-core-pulse 2.8s ease-out infinite;
 }
 .ai-core::after { animation-delay: 1.4s; }
-
-.ai-workbench-enter-active,
-.ai-workbench-leave-active { transition: opacity 0.4s ease; }
-.ai-workbench-enter-active .ai-workbench,
-.ai-workbench-leave-active .ai-workbench { transition: transform 0.52s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease, clip-path 0.52s cubic-bezier(0.16, 1, 0.3, 1); }
-.ai-workbench-enter-from,
-.ai-workbench-leave-to { opacity: 0; }
-.ai-workbench-enter-from .ai-workbench,
-.ai-workbench-leave-to .ai-workbench {
-  opacity: 0;
-  transform: translate(32%, -46%) scale(0.1);
-  clip-path: inset(0 0 86% 82% round 999px);
-}
 
 .ai-content-enter-active,
 .ai-content-leave-active { transition: opacity 0.2s ease, transform 0.28s cubic-bezier(0.16, 1, 0.3, 1); }
@@ -1314,18 +1280,11 @@ function handleFocusOut(event: Event) {
 
 @media (max-width: 767px) {
   .workspace-surface--ai { transform: scale(0.99); }
-  .ai-workbench-enter-from .ai-workbench,
-  .ai-workbench-leave-to .ai-workbench {
-    transform: translateY(90%) scale(0.96);
-    clip-path: inset(88% 3% 0 3% round 28px);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .workspace-surface,
-  .ai-launcher,
-  .ai-workbench-enter-active .ai-workbench,
-  .ai-workbench-leave-active .ai-workbench { transition-duration: 0.01ms !important; }
+  .ai-launcher { transition-duration: 0.01ms !important; }
   .ai-launcher-orb::after,
   .ai-core::before,
   .ai-core::after,

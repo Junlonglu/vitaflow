@@ -1,6 +1,5 @@
 import hmac
 import json
-from collections.abc import Callable, Iterable
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
@@ -21,51 +20,38 @@ from app.models.resume import Resume
 from app.models.user import User
 from app.schemas.ai import (
     GenerateResumeRequest,
-    JdOptimizeRequest,
-    OptimizeSectionRequest,
-    TranslateResumeRequest,
 )
 from app.schemas.ai_chat import (
     AiChatDecisionRequest,
     AiChatDecisionResponse,
     AiChatRegenerateRequest,
     AiChatSendRequest,
-    AiChatSendResponse,
-)
-from app.services.ai.chains import (
-    generate_resume_chain,
-    generate_resume_stream,
-    optimize_by_jd_chain,
-    optimize_by_jd_stream,
-    optimize_section_chain,
-    optimize_section_stream,
-    translate_resume_chain,
-    translate_resume_stream,
 )
 from app.services.ai.token_usage import build_token_usage, normalize_token_usage
-from app.services.ai.graphs import optimize_by_jd_graph
 from app.services.ai_chat_service import (
     clear_chat_messages,
     list_chat_messages,
     stream_ai_service_chat,
-    stream_regenerate_chat_message,
+    stream_ai_service_regenerate,
     resolve_chat_change,
-    send_chat_message,
-    stream_chat_message,
     validate_basics_field_update,
     validate_section_update,
     validate_propose_change,
     get_section_context,
 )
 from app.services.ai_config_service import (
-    bind_ai_runtime_config,
     get_active_ai_config,
     get_ai_config_by_id,
     get_ai_config_by_pi_model_ref,
     get_default_chat_ai_config,
     public_ai_capability,
 )
-from app.services.ai_task_service import create_ai_task, finish_ai_task, run_tracked_ai, tracked_ai_events
+from app.services.ai_service_client import ai_service_task_events
+from app.services.ai_task_service import (
+    ai_task_usage_payload,
+    create_ai_task,
+    finish_ai_task,
+)
 from app.services.app_settings_service import get_setting
 from app.services.flow_points_service import (
     ACTIVE_AI_FEATURE_TYPES,
@@ -76,8 +62,8 @@ from app.services.flow_points_service import (
     point_number,
     redeem_flow_points,
 )
+from app.services.resume_normalization import normalize_resume_data
 from app.services.resume_service import get_resume
-from app.services.resume_locale import resolve_resume_language
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -193,7 +179,6 @@ def new_task(db: Session, user: User, task_type: str, payload: Any, resume_id: i
         input_data=metadata,
         model_name=config.model,
     )
-    task._runtime_ai_config = config  # type: ignore[attr-defined]
     if not charge_on_finish:
         consume_flow_points(
             db,
@@ -205,30 +190,6 @@ def new_task(db: Session, user: User, task_type: str, payload: Any, resume_id: i
             description=f"{ai_feature_label(task_type)}调用扣减",
         )
     return task
-
-
-def run_with_task_model(task: AiTask, callback):
-    config = getattr(task, "_runtime_ai_config", None)
-    if not config:
-        return callback()
-    with bind_ai_runtime_config(config):
-        return callback()
-
-
-def stream_with_task_model(task: AiTask, event_factory: Callable[[], Iterable[dict[str, Any]]]):
-    config = getattr(task, "_runtime_ai_config", None)
-    if not config:
-        yield from event_factory()
-        return
-    with bind_ai_runtime_config(config):
-        iterator = iter(event_factory())
-    while True:
-        try:
-            with bind_ai_runtime_config(config):
-                event = next(iterator)
-        except StopIteration:
-            return
-        yield event
 
 
 def ai_feature_label(task_type: str) -> str:
@@ -256,13 +217,9 @@ def user_visible_task_model_name(task: AiTask | None) -> str | None:
     return str(input_data.get("model_name") or "AI 对话模型")
 
 
-def stream_events(events: Iterable[dict[str, Any]]) -> StreamingResponse:
-    def iterator():
-        for event in events:
-            yield json.dumps(event, ensure_ascii=False) + "\n"
-
+def _ndjson_stream_response(iterator) -> StreamingResponse:
     return StreamingResponse(
-        iterator(),
+        iterator,
         media_type="application/x-ndjson",
         headers={
             "Cache-Control": "no-cache, no-transform",
@@ -294,14 +251,76 @@ def _ai_service_stream_response(
         except Exception as exc:  # defensive: never let a relay failure surface as a raw 500
             yield json.dumps({"type": "error", "message": f"AI 对话处理失败：{exc}"}, ensure_ascii=False) + "\n"
 
-    return StreamingResponse(
-        iterator(),
-        media_type="application/x-ndjson",
-        headers={
-            "Cache-Control": "no-cache, no-transform",
-            "X-Accel-Buffering": "no",
-        },
-    )
+    return _ndjson_stream_response(iterator())
+
+
+def _ai_service_task_stream_response(
+    db: Session,
+    task: AiTask,
+    task_type: str,
+    input_payload: dict[str, Any],
+    *,
+    model_ref: str | None = None,
+    normalize_context: dict[str, Any] | None = None,
+) -> StreamingResponse:
+    """Proxy a one-shot AI-service task (ticket 09) and settle its Flow Points.
+
+    The AI service parses the model's JSON output and echoes aggregated
+    per-model token usage on the ``result`` event, so this relay settles the
+    pre-created AiTask synchronously — the same finish/refund path the legacy
+    LangChain stream used, minus the estimated-token tracker.
+    """
+    events = ai_service_task_events(task_type, input_payload, model_ref=model_ref)
+
+    async def iterator():
+        finished = False
+        try:
+            async for event in events:
+                event_type = event.get("type")
+                if event_type == "result":
+                    result_data = event.get("data") or {}
+                    usage_entries = event.get("usage") or []
+                    if not isinstance(result_data.get("resume_data"), dict):
+                        message = "AI 返回的生成结果缺少 resume_data"
+                        finish_ai_task(db, task, "failed", error_message=message)
+                        finished = True
+                        yield json.dumps({"type": "error", "message": message}, ensure_ascii=False) + "\n"
+                        return
+                    result_data["resume_data"] = normalize_resume_data(result_data["resume_data"], normalize_context or {})
+                    token_usage = build_token_usage(
+                        sum(int(item.get("input_tokens") or 0) for item in usage_entries),
+                        sum(int(item.get("output_tokens") or 0) for item in usage_entries),
+                        usage_entries,
+                        estimated=False,
+                    )
+                    finish_ai_task(
+                        db,
+                        task,
+                        "success",
+                        output_data={"stream": True, "result": result_data},
+                        token_usage=token_usage,
+                    )
+                    db.refresh(task)
+                    finished = True
+                    yield json.dumps(
+                        {"type": "result", "data": {**result_data, "usage": ai_task_usage_payload(task)}},
+                        ensure_ascii=False,
+                    ) + "\n"
+                elif event_type == "error":
+                    finish_ai_task(db, task, "failed", error_message=str(event.get("message") or "AI 调用失败"))
+                    finished = True
+                    yield json.dumps(event, ensure_ascii=False) + "\n"
+                else:
+                    yield json.dumps(event, ensure_ascii=False) + "\n"
+        except Exception as exc:  # defensive: never let a relay failure surface as a raw 500
+            if not finished:
+                finish_ai_task(db, task, "failed", error_message=str(exc) or "AI 调用失败")
+            yield json.dumps({"type": "error", "message": f"AI 任务处理失败：{exc}"}, ensure_ascii=False) + "\n"
+        finally:
+            if not finished:
+                finish_ai_task(db, task, "failed", error_message="前端连接已断开，AI 流式响应未完成")
+
+    return _ndjson_stream_response(iterator())
 
 
 def page_data(items: list[dict[str, Any]], total: int, page: int, page_size: int) -> dict[str, Any]:
@@ -480,87 +499,19 @@ def redeem_points(
     )
 
 
-@router.post("/generate-resume")
-def generate_resume(payload: GenerateResumeRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    task = new_task(db, current_user, "generate_resume", payload)
-    result = run_tracked_ai(db, task, lambda: run_with_task_model(task, lambda: generate_resume_chain(ai_payload(payload))))
-    return success(result.model_dump())
-
-
 @router.post("/generate-resume/stream")
 def generate_resume_stream_api(payload: GenerateResumeRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # 先解析模型配置再扣点建任务：解析失败时直接报错，不留一个永远 pending、
+    # 无法退款的任务。
+    config = get_active_ai_config(db)
     task = new_task(db, current_user, "generate_resume", payload)
-    return stream_events(tracked_ai_events(db, task, stream_with_task_model(task, lambda: generate_resume_stream(ai_payload(payload)))))
-
-
-@router.post("/optimize-section")
-def optimize_section(payload: OptimizeSectionRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    task = new_task(db, current_user, "section_optimize", payload)
-    result = run_tracked_ai(db, task, lambda: run_with_task_model(task, lambda: optimize_section_chain(ai_payload(payload))))
-    return success(result.model_dump())
-
-
-@router.post("/optimize-section/stream")
-def optimize_section_stream_api(payload: OptimizeSectionRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    task = new_task(db, current_user, "section_optimize", payload)
-    return stream_events(tracked_ai_events(db, task, stream_with_task_model(task, lambda: optimize_section_stream(ai_payload(payload)))))
-
-
-@router.post("/optimize-by-jd")
-def optimize_by_jd(payload: JdOptimizeRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    task = new_task(db, current_user, "jd_optimize", payload)
-    result = run_tracked_ai(db, task, lambda: run_with_task_model(task, lambda: optimize_by_jd_graph(payload.resume_data, payload.job_description)))
-    return success(result.model_dump())
-
-
-@router.post("/optimize-by-jd/stream")
-def optimize_by_jd_stream_api(payload: JdOptimizeRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    task = new_task(db, current_user, "jd_optimize", payload)
-    return stream_events(tracked_ai_events(db, task, stream_with_task_model(task, lambda: optimize_by_jd_stream(ai_payload(payload)))))
-
-
-@router.post("/optimize-by-jd-single")
-def optimize_by_jd_single(payload: JdOptimizeRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    task = new_task(db, current_user, "jd_optimize", payload)
-    result = run_tracked_ai(db, task, lambda: run_with_task_model(task, lambda: optimize_by_jd_chain(ai_payload(payload))))
-    return success(result.model_dump())
-
-
-def _translate_input(payload: TranslateResumeRequest) -> dict[str, Any]:
-    data = ai_payload(payload)
-    source_language = resolve_resume_language(payload.current_language, payload.resume_data)
-    if source_language == payload.target_language:
-        raise AppException("目标语言与当前简历语言相同")
-    data["source_language"] = source_language
-    return data
-
-
-@router.post("/translate-resume")
-def translate_resume(payload: TranslateResumeRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if payload.resume_id is not None:
-        get_resume(db, current_user.id, payload.resume_id)
-    input_data = _translate_input(payload)
-    task = new_task(db, current_user, "resume_translate", payload)
-    result = run_tracked_ai(
+    return _ai_service_task_stream_response(
         db,
         task,
-        lambda: run_with_task_model(task, lambda: translate_resume_chain(input_data)),
-    )
-    return success(result.model_dump())
-
-
-@router.post("/translate-resume/stream")
-def translate_resume_stream_api(payload: TranslateResumeRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if payload.resume_id is not None:
-        get_resume(db, current_user.id, payload.resume_id)
-    input_data = _translate_input(payload)
-    task = new_task(db, current_user, "resume_translate", payload)
-    return stream_events(
-        tracked_ai_events(
-            db,
-            task,
-            stream_with_task_model(task, lambda: translate_resume_stream(input_data)),
-        )
+        "generate_resume",
+        ai_payload(payload),
+        model_ref=config.pi_model_ref,
+        normalize_context=ai_payload(payload),
     )
 
 
@@ -568,34 +519,6 @@ def translate_resume_stream_api(payload: TranslateResumeRequest, db: Session = D
 def resume_chat_messages(resume_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     get_resume(db, current_user.id, resume_id)
     return success([item.model_dump() for item in list_chat_messages(db, current_user.id, resume_id)])
-
-
-@router.post("/resume-chat/{resume_id}/messages")
-def resume_chat_send(
-    resume_id: int,
-    payload: AiChatSendRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    resume = get_resume(db, current_user.id, resume_id)
-    task = new_task(db, current_user, "ai_chat", payload, resume_id=resume_id)
-    messages, assistant_message = run_tracked_ai(
-        db,
-        task,
-        lambda: run_with_task_model(
-            task,
-            lambda: send_chat_message(
-                db,
-                current_user,
-                resume,
-                payload.content,
-                [item.model_dump() for item in payload.attachments],
-            ),
-        ),
-    )
-    return success(
-        AiChatSendResponse(messages=messages, assistant_message=assistant_message).model_dump()
-    )
 
 
 @router.post("/resume-chat/{resume_id}/messages/stream")
@@ -606,32 +529,17 @@ def resume_chat_send_stream(
     current_user: User = Depends(get_current_user),
 ):
     resume = get_resume(db, current_user.id, resume_id)
-    if settings.ai_service_enabled:
-        # 只读对话代理到 Node AI 服务，前端播放其事件流。context（简历快照 + 最近
-        # N 条历史 + 待确认变更摘要）由 FastAPI 从 MySQL 读出并注入，AI 服务保持
-        # 无状态；消息在 MySQL 落库，UI 列表读取现有会话表。
-        content = (payload.content or "").strip()
-        if not content:
-            return stream_events(iter([{"type": "error", "message": "请输入要咨询的问题"}]))
-        attachments = [item.model_dump() for item in payload.attachments]
-        return _ai_service_stream_response(db, current_user, resume, content, attachments, payload.model_config_id)
-    task = new_task(db, current_user, "ai_chat", payload, resume_id=resume_id)
-    return stream_events(
-        tracked_ai_events(
-            db,
-            task,
-            stream_with_task_model(
-                task,
-                lambda: stream_chat_message(
-                    db,
-                    current_user,
-                    resume,
-                    payload.content,
-                    [item.model_dump() for item in payload.attachments],
-                ),
-            ),
-        )
-    )
+    # 对话代理到 Node AI 服务，前端播放其事件流。context（简历快照 + 最近
+    # N 条历史 + 待确认变更摘要）由 FastAPI 从 MySQL 读出并注入，AI 服务保持
+    # 无状态；消息在 MySQL 落库，UI 列表读取现有会话表。
+    content = (payload.content or "").strip()
+    if not content:
+        async def empty_message():
+            yield json.dumps({"type": "error", "message": "请输入要咨询的问题"}, ensure_ascii=False) + "\n"
+
+        return _ndjson_stream_response(empty_message())
+    attachments = [item.model_dump() for item in payload.attachments]
+    return _ai_service_stream_response(db, current_user, resume, content, attachments, payload.model_config_id)
 
 
 @router.post("/resume-chat/{resume_id}/messages/{message_id}/regenerate/stream")
@@ -643,31 +551,26 @@ def resume_chat_regenerate_stream(
     current_user: User = Depends(get_current_user),
 ):
     resume = get_resume(db, current_user.id, resume_id)
-    task_payload = AiChatSendRequest(
-        content=(payload.content if payload and payload.content is not None else f"重新生成消息 {message_id}"),
-        attachments=(payload.attachments if payload and payload.attachments is not None else []),
+    events = stream_ai_service_regenerate(
+        db,
+        current_user,
+        resume,
+        message_id,
+        override_content=payload.content if payload and payload.content is not None else None,
+        override_attachments=[item.model_dump() for item in payload.attachments]
+        if payload and payload.attachments is not None
+        else None,
         model_config_id=payload.model_config_id if payload else None,
     )
-    task = new_task(db, current_user, "ai_chat", task_payload, resume_id=resume_id)
-    return stream_events(
-        tracked_ai_events(
-            db,
-            task,
-            stream_with_task_model(
-                task,
-                lambda: stream_regenerate_chat_message(
-                    db,
-                    current_user,
-                    resume,
-                    message_id,
-                    override_content=payload.content if payload and payload.content is not None else None,
-                    override_attachments=[item.model_dump() for item in payload.attachments]
-                    if payload and payload.attachments is not None
-                    else None,
-                ),
-            ),
-        )
-    )
+
+    async def iterator():
+        try:
+            async for event in events:
+                yield json.dumps(event, ensure_ascii=False) + "\n"
+        except Exception as exc:  # defensive: never let a relay failure surface as a raw 500
+            yield json.dumps({"type": "error", "message": f"AI 对话处理失败：{exc}"}, ensure_ascii=False) + "\n"
+
+    return _ndjson_stream_response(iterator())
 
 
 @router.post("/resume-chat/{resume_id}/messages/{message_id}/decision")

@@ -145,3 +145,85 @@ async def ai_service_chat_events(
         yield {"type": "error", "message": f"转发 AI 服务消息失败：{exc}"}
     finally:
         await client.aclose()
+
+
+async def ai_service_task_events(
+    task_type: str,
+    input_payload: dict[str, Any],
+    *,
+    model_ref: str | None = None,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> AsyncIterator[dict[str, Any]]:
+    """Stream NDJSON events for a one-shot task (generate / import, ticket 09).
+
+    Unlike the chat turn, a task carries no resume tools and no callback
+    billing: the AI service parses the model's JSON output itself and echoes
+    the aggregated per-model token usage back on the ``result`` event, so
+    FastAPI settles Flow Points synchronously in the same request.
+    """
+    if not settings.ai_service_token:
+        yield {"type": "error", "message": "AI 服务令牌未配置，无法调用 AI 服务"}
+        return
+
+    payload: dict[str, Any] = {"task": task_type, "input": input_payload}
+    if model_ref:
+        payload["model"] = model_ref
+
+    url = f"{settings.ai_service_url.rstrip('/')}/v1/task"
+    headers = {"Authorization": f"Bearer {settings.ai_service_token}"}
+
+    client = httpx.AsyncClient(transport=transport, timeout=_http_timeout())
+    try:
+        async with client.stream("POST", url, json=payload, headers=headers) as resp:
+            if resp.status_code != 200:
+                raw = await resp.aread()
+                detail = _extract_error(raw)
+                yield {
+                    "type": "error",
+                    "message": detail or f"AI 服务返回异常状态码 {resp.status_code}",
+                }
+                return
+            async for line in resp.aiter_lines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(event, dict):
+                    yield event
+    except httpx.HTTPError as exc:
+        yield {"type": "error", "message": f"AI 服务连接失败：{exc}"}
+    except Exception as exc:
+        yield {"type": "error", "message": f"调用 AI 服务任务失败：{exc}"}
+    finally:
+        await client.aclose()
+
+
+async def ai_service_task_result(
+    task_type: str,
+    input_payload: dict[str, Any],
+    *,
+    model_ref: str | None = None,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Run a one-shot task to completion and return ``(result_data, usage)``.
+
+    Raises :class:`AppException` with the AI service's message on failure so the
+    caller can settle the AiTask as failed (points refund path).
+    """
+    from app.core.exceptions import AppException
+
+    data: dict[str, Any] | None = None
+    usage: list[dict[str, Any]] = []
+    async for event in ai_service_task_events(task_type, input_payload, model_ref=model_ref, transport=transport):
+        event_type = event.get("type")
+        if event_type == "result":
+            data = event.get("data") or {}
+            usage = event.get("usage") or []
+        elif event_type == "error":
+            raise AppException(str(event.get("message") or "AI 任务失败"))
+    if data is None:
+        raise AppException("AI 服务未返回任务结果")
+    return data, usage

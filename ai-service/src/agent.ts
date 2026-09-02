@@ -17,6 +17,7 @@ import type { ModelUsage } from "./usage.js";
 import { createUsageAggregator } from "./usage.js";
 import { resolveRealModel } from "./real.js";
 import { buildQuickCommandTemplates } from "./commands.js";
+import type { TaskType } from "./taskPrompts.js";
 import { createUpdateBasicsFieldTool, type BasicsToolState } from "./tools/basics.js";
 import { createSectionTools, type SectionToolsState } from "./tools/sections.js";
 
@@ -27,7 +28,9 @@ export type ChatStreamEvent =
   | { type: "start"; data: Record<string, unknown> }
   | { type: "phase"; phase: string; text: string }
   | { type: "delta"; text: string }
-  | { type: "result"; data: Record<string, unknown> }
+  // Tasks (ticket 09) attach the aggregated per-model usage here; FastAPI reads
+  // it off the result event to settle the task's Flow Points synchronously.
+  | { type: "result"; data: Record<string, unknown>; usage?: ModelUsage[] }
   | { type: "error"; message: string };
 
 export interface AgentInput {
@@ -61,6 +64,38 @@ export interface AgentInput {
 }
 
 type Emit = (event: ChatStreamEvent) => void;
+
+/** One-shot task input (ticket 09): generate/import, no tools, single JSON answer. */
+export interface TaskAgentInput {
+  task: TaskType;
+  message: string;
+  systemPrompt: string;
+  config: ServiceConfig;
+  runtime: ChatRuntime;
+  modelRef?: string;
+  /** Faux only: queue this text instead of the canned task JSON (test seam). */
+  fauxReplyOverride?: string;
+}
+
+/**
+ * Models like to wrap JSON in markdown fences or leave trailing commas despite
+ * the prompt forbidding both; strip them before parsing.
+ */
+function parseModelJson(text: string): unknown {
+  let cleaned = text.trim();
+  const fence = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fence) cleaned = fence[1].trim();
+  // Drop the leading prose some models emit before the opening brace.
+  const firstBrace = cleaned.indexOf("{");
+  const lastBrace = cleaned.lastIndexOf("}");
+  if (firstBrace > 0 || (lastBrace !== -1 && lastBrace < cleaned.length - 1)) {
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+    }
+  }
+  cleaned = cleaned.replace(/,\s*([}\]])/g, "$1");
+  return JSON.parse(cleaned);
+}
 
 /** Wrap a quick-command template definition into a full pi-agent PromptTemplate. */
 function toPromptTemplate(raw: { name: string; description: string; argumentHint: string; filePath: string; content: string }): PromptTemplate {
@@ -280,6 +315,150 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     // always sends a result, so resultSent alone can't distinguish failure);
     // failed turns return no usage, mirroring the legacy rule that refunds them.
     if (resultSent && !sawError) {
+      reportedUsage = usage.snapshot();
+    }
+  }
+  return reportedUsage;
+}
+
+/**
+ * Drive a one-shot task turn (generate/import, ticket 09): a toolless session
+ * answers once with a single JSON object that FastAPI parses into the task
+ * result. Usage rides the result event — FastAPI settles the task synchronously,
+ * so unlike runChat there is no billing callback here.
+ */
+export async function runTask(input: TaskAgentInput, emit: Emit, signal?: AbortSignal): Promise<ModelUsage[]> {
+  const { task, message, systemPrompt, config, runtime, modelRef } = input;
+  const cwd = process.cwd();
+  const agentDir = join(cwd, ".pi-agent");
+
+  let model = runtime.kind === "faux" ? runtime.model : undefined;
+  if (runtime.kind === "real") {
+    const resolved = resolveRealModel(runtime, modelRef);
+    if (!resolved.model) {
+      emit({ type: "error", message: resolved.error ?? "模型不可用" });
+      return [];
+    }
+    model = resolved.model;
+  }
+  if (!model) {
+    emit({ type: "error", message: "没有可用的模型" });
+    return [];
+  }
+
+  const loader = new DefaultResourceLoader({
+    cwd,
+    agentDir,
+    systemPromptOverride: () => systemPrompt,
+    appendSystemPromptOverride: () => [],
+    noContextFiles: true,
+    noSkills: true,
+  });
+  await loader.reload();
+
+  const { session, modelFallbackMessage } = await createAgentSession({
+    cwd,
+    model,
+    modelRuntime: runtime.modelRuntime,
+    sessionManager: SessionManager.inMemory(cwd),
+    resourceLoader: loader,
+    // One-shot tasks answer from the prompt alone: no resume tools, no built-in
+    // coding tools, nothing to call back into FastAPI.
+    tools: [],
+    thinkingLevel: "off",
+  });
+
+  if (modelFallbackMessage) {
+    emit({ type: "error", message: `模型不可用：${modelFallbackMessage}` });
+    return [];
+  }
+
+  let text = "";
+  let turnTimer: NodeJS.Timeout | undefined;
+  let reportedUsage: ModelUsage[] = [];
+  let sawError = false;
+  let resultSent = false;
+  const usage = createUsageAggregator();
+  const abortHandler = () => {
+    void session.abort();
+  };
+
+  const unsubscribe = session.subscribe((event) => {
+    if (event.type === "message_update") {
+      const ae = event.assistantMessageEvent;
+      if (ae?.type === "text_delta") {
+        text += ae.delta;
+        emit({ type: "delta", text: ae.delta });
+      }
+    }
+    if (event.type === "message_end" && event.message?.role === "assistant") {
+      const am = event.message;
+      if (am.usage) {
+        usage.add(
+          {
+            provider: am.provider,
+            model: am.model,
+            input: am.usage.input,
+            output: am.usage.output,
+            cacheRead: am.usage.cacheRead,
+            cacheWrite: am.usage.cacheWrite,
+            totalTokens: am.usage.totalTokens,
+          },
+          { stopReason: am.stopReason },
+        );
+      }
+    }
+    if (event.type === "agent_settled") {
+      try {
+        const parsed = parseModelJson(text);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          throw new Error("AI 返回的内容不是 JSON 对象");
+        }
+        resultSent = true;
+        // Faux tasks are a local demo: strip their usage so FastAPI does not bill
+        // the task on a provider that consumed nothing real (same rule as /v1/chat).
+        emit({ type: "result", data: parsed as Record<string, unknown>, usage: usage.snapshot().filter((entry) => entry.provider !== "faux") });
+      } catch {
+        sawError = true;
+        resultSent = true;
+        emit({ type: "error", message: "AI 返回的内容无法解析为合法 JSON，请重试" });
+      }
+    }
+  });
+
+  signal?.addEventListener("abort", abortHandler, { once: true });
+
+  emit({ type: "start", data: {} });
+  emit({ type: "phase", phase: "generating", text: "正在生成简历内容" });
+
+  if (runtime.kind === "faux") {
+    runtime.prepareTask(task, input.fauxReplyOverride);
+  }
+  turnTimer = setTimeout(() => void session.abort(), config.turnTimeoutMs);
+
+  try {
+    await session.prompt(message);
+  } catch (err) {
+    sawError = true;
+    const messageText = err instanceof Error ? err.message : String(err);
+    if (!resultSent) {
+      resultSent = true;
+      emit({ type: "error", message: messageText || "AI 服务内部错误" });
+    }
+  } finally {
+    if (turnTimer) clearTimeout(turnTimer);
+    if (typeof signal?.removeEventListener === "function") {
+      signal.removeEventListener("abort", abortHandler);
+    }
+    // agent_settled normally parsed and emitted the result; if it never fired,
+    // fail loudly rather than leaving FastAPI waiting for a result that cannot come.
+    if (!resultSent) {
+      resultSent = true;
+      emit({ type: "error", message: "AI 任务未完成，请重试" });
+    }
+    unsubscribe();
+    session.dispose();
+    if (!sawError) {
       reportedUsage = usage.snapshot();
     }
   }

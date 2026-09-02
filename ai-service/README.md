@@ -14,6 +14,10 @@
 - 服务间鉴权：静态令牌（`Authorization: Bearer <token>`）。
 - 真实 Provider（models.json / deepseek）为后续票接入，当前返回 501。
 
+## 对话快捷指令（/润色 · /翻译 · /优化 · /生成）
+
+四个高频操作做成对话内快捷指令。它们以 pi-agent PromptTemplate 注册，`/润色 工作经历`、`/优化 <JD>` 等在 `session.prompt` 时自动展开（`$@` 代入参数），模型随后走与自然语言相同的工具/校验链路：`get_resume_context` → `update_section`/`propose_change` → FastAPI 数值校验 → 待确认修改。详见 `docs/本地开发环境启动指南.md` 的「对话内快捷指令」表。
+
 ## 运行
 
 ```bash

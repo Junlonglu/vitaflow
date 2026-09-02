@@ -132,3 +132,120 @@ describe("agent loop -> update_basics_field tool (Faux)", () => {
     }
   });
 });
+
+describe("agent loop -> quick commands (Faux)", () => {
+  it("drives a /润色 command through update_section and surfaces the pending_change", async () => {
+    const runtime = await createFauxRuntime();
+    const config = loadConfig();
+
+    let callbackHit = false;
+    let postedBody: Record<string, unknown> | undefined;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      callbackHit = true;
+      if (init?.body) postedBody = JSON.parse(init.body as string) as Record<string, unknown>;
+      assert.match(String(url), /\/api\/ai\/service\/tool\/update-section/);
+      return successResponse({
+        ok: true,
+        optimized_resume_data: {
+          basics: { name: "张三", title: "后端工程师", location: "广州", phone: "13800138000" },
+          work: [
+            { id: "work_1", company: "A 公司", role: "后端", description: "<p>润色后的描述</p>" },
+            { id: "work_2", company: "B 公司", role: "前端" },
+          ],
+        },
+        suggestions: ["已修改：实习/工作经历（2 条变为 2 条：A 公司）"],
+      });
+    }) as typeof fetch;
+
+    try {
+      // No explicit toolPlan: the /润色 command is detected from the message.
+      const events = await collect({
+        message: "/润色 工作经历",
+        systemPrompt: "你是简历助手。",
+        config,
+        runtime,
+        userId: 7,
+        resumeId: 3,
+      });
+
+      assert.equal(callbackHit, true, "the /润色 command drove update_section");
+      assert.deepEqual(postedBody, {
+        user_id: 7,
+        resume_id: 3,
+        section: "work",
+        proposed: [{ id: "work_1", description: "<p>【润色后的描述】</p>" }],
+      });
+      const result = events.find((event) => event.type === "result") as { type: "result"; data: Record<string, unknown> } | undefined;
+      assert.ok(result, "expected a result event");
+      const pending = result.data.pending_change as { optimized_resume_data: { work: Array<{ description: string }> }; suggestions: string[] } | undefined;
+      assert.ok(pending, "result should carry the pending_change");
+      assert.match(pending.optimized_resume_data.work[0].description, /润色后的描述/);
+    } finally {
+      globalThis.fetch = originalFetch;
+      runtime.dispose();
+    }
+  });
+
+  it("drives a /优化 command through a multi-step read-then-propose chain", async () => {
+    const runtime = await createFauxRuntime();
+    const config = loadConfig();
+
+    // Route by URL so both the read (GET) and the propose (POST) callbacks resolve.
+    const calls: Array<{ url: string; body?: Record<string, unknown> }> = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      const urlStr = String(url);
+      const entry: { url: string; body?: Record<string, unknown> } = { url: urlStr };
+      if (init?.body) entry.body = JSON.parse(init.body as string) as Record<string, unknown>;
+      calls.push(entry);
+      if (urlStr.includes("get-resume-context")) {
+        return successResponse({
+          ok: true,
+          sections: { work: [{ id: "work_1", company: "A 公司", role: "后端", description: "<p>原描述</p>" }] },
+        });
+      }
+      assert.match(urlStr, /\/api\/ai\/service\/tool\/propose-change/);
+      return successResponse({
+        ok: true,
+        optimized_resume_data: {
+          basics: { name: "张三", title: "后端工程师", location: "广州", phone: "13800138000" },
+          work: [
+            { id: "work_1", company: "A 公司", role: "后端", description: "<p>JD 定向优化后的工作描述</p>" },
+            { id: "work_2", company: "B 公司", role: "前端" },
+          ],
+        },
+        suggestions: ["已修改：实习/工作经历（2 条变为 2 条：A 公司）"],
+      });
+    }) as typeof fetch;
+
+    try {
+      const events = await collect({
+        message: "/优化 应聘后端工程师，要求熟悉 Python、FastAPI",
+        systemPrompt: "你是简历助手。",
+        config,
+        runtime,
+        userId: 7,
+        resumeId: 3,
+      });
+
+      // Multi-step: read the target sections first, then propose the JD-aware change.
+      assert.equal(calls.length, 2, "/优化 makes two tool callbacks");
+      assert.match(calls[0].url, /get-resume-context.*sections=work/);
+      assert.match(calls[1].url, /propose-change/);
+      assert.deepEqual(calls[1].body?.updates as unknown[], [
+        { section: "work", proposed: [{ id: "work_1", description: "<p>【JD 定向优化后的工作描述】</p>" }] },
+      ]);
+
+      const result = events.find((event) => event.type === "result") as { type: "result"; data: Record<string, unknown> } | undefined;
+      assert.ok(result, "expected a result event");
+      const pending = result.data.pending_change as { optimized_resume_data: { work: Array<{ description: string }> }; suggestions: string[] } | undefined;
+      assert.ok(pending, "result should carry the pending_change");
+      assert.match(pending.optimized_resume_data.work[0].description, /JD 定向优化后的工作描述/);
+      assert.ok(result.data.assistant_message, "result carries the assistant reply");
+    } finally {
+      globalThis.fetch = originalFetch;
+      runtime.dispose();
+    }
+  });
+});

@@ -8,10 +8,11 @@
  *   {"type":"result","data":{assistant_message}}  {"type":"error","message"}
  */
 import { join } from "node:path";
-import { createAgentSession, DefaultResourceLoader, SessionManager } from "@earendil-works/pi-coding-agent";
+import { createAgentSession, createSyntheticSourceInfo, DefaultResourceLoader, SessionManager, type PromptTemplate } from "@earendil-works/pi-coding-agent";
 import type { Model } from "@earendil-works/pi-ai/compat";
 import type { ServiceConfig } from "./config.js";
-import type { FauxRuntime, FauxToolPlan } from "./faux.js";
+import type { FauxRuntime, FauxToolPlanStep } from "./faux.js";
+import { buildQuickCommandTemplates } from "./commands.js";
 import { createUpdateBasicsFieldTool, type BasicsToolState } from "./tools/basics.js";
 import { createSectionTools, type SectionToolsState } from "./tools/sections.js";
 
@@ -31,13 +32,26 @@ export interface AgentInput {
   userId: number;
   resumeId: number;
   /**
-   * Only used by the Faux provider: the canned tool call the deterministic model
-   * should make this turn. Undefined for the real provider.
+   * Only used by the Faux provider: the canned tool call(s) the deterministic model
+   * should make this turn (a single plan or a multi-step sequence). Undefined for
+   * the real provider, which decides its own tool calls.
    */
-  toolPlan?: FauxToolPlan;
+  toolPlan?: FauxToolPlanStep;
 }
 
 type Emit = (event: ChatStreamEvent) => void;
+
+/** Wrap a quick-command template definition into a full pi-agent PromptTemplate. */
+function toPromptTemplate(raw: { name: string; description: string; argumentHint: string; filePath: string; content: string }): PromptTemplate {
+  return {
+    name: raw.name,
+    description: raw.description,
+    argumentHint: raw.argumentHint || undefined,
+    filePath: raw.filePath,
+    sourceInfo: createSyntheticSourceInfo(raw.filePath, { source: "sdk", scope: "temporary" }),
+    content: raw.content,
+  };
+}
 
 function buildAssistantMessage(text: string, now: number) {
   return {
@@ -105,6 +119,14 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     appendSystemPromptOverride: () => [],
     noContextFiles: true,
     noSkills: true,
+    // Register the /润色 · /翻译 · /优化 · /生成 quick commands as pi-agent prompt
+    // templates so a slash-prefixed message auto-expands into the directive below,
+    // with the user's parameters substituted into $1/$@. Natural-language messages
+    // (no leading slash) are unaffected.
+    promptsOverride: (base) => ({
+      prompts: [...base.prompts, ...buildQuickCommandTemplates().map(toPromptTemplate)],
+      diagnostics: base.diagnostics,
+    }),
   });
   await loader.reload();
 

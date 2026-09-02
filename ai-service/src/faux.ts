@@ -14,6 +14,7 @@
 import { registerFauxProvider, fauxAssistantMessage, fauxToolCall, getApiProvider } from "@earendil-works/pi-ai/compat";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { Model } from "@earendil-works/pi-ai/compat";
+import { commandToolPlan, detectQuickCommand } from "./commands.js";
 
 /** A canned tool call the deterministic faux model should make this turn. */
 export interface FauxToolPlan {
@@ -21,16 +22,20 @@ export interface FauxToolPlan {
   args: Record<string, unknown>;
 }
 
+/** A sequence of canned tool calls a real model would make for one turn (e.g. /优化). */
+export type FauxToolPlanStep = FauxToolPlan | FauxToolPlan[];
+
 export interface FauxRuntime {
   model: Model<string>;
   modelRuntime: ModelRuntime;
   /**
    * Reprogram the response queue for the next agent turn. When a change is
    * detected in ``message`` (or an explicit ``toolPlan`` is passed), the faux
-   * model first emits a tool call, then a follow-up reply; otherwise it emits
-   * plain deterministic prose.
+   * model emits one tool call per plan step, then a follow-up reply; a multi-step
+   * plan (e.g. /优化 reads context then proposes a change) drives the agent loop
+   * through each tool in turn. Otherwise it emits plain deterministic prose.
    */
-  prepare: (systemPrompt: string, message?: string, toolPlan?: FauxToolPlan) => void;
+  prepare: (systemPrompt: string, message?: string, toolPlan?: FauxToolPlanStep) => void;
   dispose: () => void;
 }
 
@@ -87,9 +92,18 @@ function toolAdviceFactory() {
 /**
  * Heuristic used only by the Faux demo to decide whether to exercise a tool with a
  * real model absent. A real model emits the tool call on its own; this maps common
- * phrasings to one tool so the deterministic provider can drive the same code path.
+ * phrasings (and the four quick commands) to tools so the deterministic provider can
+ * drive the same code path.
  */
-function detectToolPlan(message: string): FauxToolPlan | null {
+function detectToolPlan(message: string): FauxToolPlanStep | null {
+  // A quick command (/润色 · /翻译 · /优化 · /生成) maps to a deterministic tool
+  // sequence, so the demo exercises the same command → tool → validation chain.
+  const command = detectQuickCommand(message);
+  if (command) {
+    const plan = commandToolPlan(command);
+    return plan.length ? plan : null;
+  }
+
   // "把X改成Y" → a field-level basics change.
   const basicsMatch = message.match(/把([^，。！？\s]+)改成([^，。！？\s]+)/);
   if (basicsMatch) {
@@ -162,13 +176,15 @@ export async function createFauxRuntime(): Promise<FauxRuntime> {
   return {
     model: faux.getModel(),
     modelRuntime,
-    prepare: (systemPrompt: string, message = "", toolPlan?: FauxToolPlan) => {
+    prepare: (systemPrompt: string, message = "", toolPlan?: FauxToolPlanStep) => {
       const plan = toolPlan ?? detectToolPlan(message);
       if (plan) {
-        // Two steps: an assistant message carrying the tool call, then a follow-up
-        // reply that reads the tool result the loop injects back.
+        // One tool-call step per plan step, then a follow-up reply that reads the
+        // LAST tool result the loop injects back. A multi-step plan (e.g. /优化:
+        // get_resume_context then propose_change) advances the queue once per tool.
+        const steps = Array.isArray(plan) ? plan : [plan];
         faux.setResponses([
-          fauxAssistantMessage([fauxToolCall(plan.name, plan.args)]),
+          ...steps.map((step) => fauxAssistantMessage([fauxToolCall(step.name, step.args)])),
           toolAdviceFactory(),
         ]);
         return;

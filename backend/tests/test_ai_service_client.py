@@ -1,6 +1,8 @@
 import asyncio
+import base64
 import json
 import unittest
+from unittest.mock import patch
 
 import httpx
 
@@ -31,9 +33,15 @@ class AiServiceClientTest(unittest.TestCase):
         transport: httpx.AsyncBaseTransport,
         message: str = "你好",
         context: dict | None = None,
+        attachments: list[dict] | None = None,
     ) -> list[dict]:
         async def run() -> list[dict]:
-            return [event async for event in ai_service_chat_events(message, context=context, transport=transport)]
+            return [
+                event
+                async for event in ai_service_chat_events(
+                    message, context=context, transport=transport, attachments=attachments
+                )
+            ]
 
         return asyncio.run(run())
 
@@ -74,6 +82,60 @@ class AiServiceClientTest(unittest.TestCase):
 
         self.assertEqual(captured["payload"]["message"], "第二轮：突出项目经历")
         self.assertEqual(captured["payload"]["context"], context)
+
+    def test_forwards_attachments_as_base64_image_blocks(self) -> None:
+        captured: dict = {}
+        raw = b"\x89PNG\r\n\x1a\nfakepngbytes"  # a small stand-in image payload
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["payload"] = json.loads(request.content)
+            return _ndjson_response(['{"type":"start","data":{}}'])
+
+        attachments = [
+            {
+                "url": "http://127.0.0.1:9000/vitaflow/ai-chat/1.png",
+                "name": "简历截图.png",
+                "object_name": "ai-chat/1.png",
+                "content_type": "image/png",
+            }
+        ]
+        with patch("app.services.ai_service_client.read_uploaded_file", return_value=(raw, "image/png")):
+            self._collect(httpx.MockTransport(handler), "帮我照图片改简历", attachments=attachments)
+
+        images = captured["payload"]["images"]
+        self.assertEqual(len(images), 1, "one image attachment becomes one ImageContent block")
+        self.assertEqual(images[0]["type"], "image")
+        self.assertEqual(images[0]["mimeType"], "image/png")
+        self.assertEqual(images[0]["data"], base64.b64encode(raw).decode("ascii"))
+
+    def test_omits_images_key_when_no_attachments(self) -> None:
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["payload"] = json.loads(request.content)
+            return _ndjson_response(['{"type":"start","data":{}}'])
+
+        self._collect(httpx.MockTransport(handler), "这份简历怎么样？")
+        self.assertNotIn("images", captured["payload"], "text-only requests never carry images")
+
+    def test_skips_unresolvable_or_non_image_attachments(self) -> None:
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["payload"] = json.loads(request.content)
+            return _ndjson_response(['{"type":"start","data":{}}'])
+
+        attachments = [
+            # non-image content_type → dropped
+            {"url": "http://x/notes.txt", "object_name": "ai-chat/1.txt", "content_type": "text/plain"},
+            # image type but object_name missing → dropped (no bytes to read)
+            {"url": "http://x/2.png", "content_type": "image/png"},
+            # image type with object_name → kept, but read fails → dropped without raising
+            {"url": "http://x/3.png", "object_name": "ai-chat/missing.png", "content_type": "image/png"},
+        ]
+        with patch("app.services.ai_service_client.read_uploaded_file", side_effect=OSError("no object")):
+            self._collect(httpx.MockTransport(handler), "按图片改", attachments=attachments)
+        self.assertNotIn("images", captured["payload"], "no resolvable image → no images key")
 
     def test_non_200_returns_error_with_detail(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:

@@ -18,6 +18,15 @@
 
 四个高频操作做成对话内快捷指令。它们以 pi-agent PromptTemplate 注册，`/润色 工作经历`、`/优化 <JD>` 等在 `session.prompt` 时自动展开（`$@` 代入参数），模型随后走与自然语言相同的工具/校验链路：`get_resume_context` → `update_section`/`propose_change` → FastAPI 数值校验 → 待确认修改。详见 `docs/本地开发环境启动指南.md` 的「对话内快捷指令」表。
 
+## 多模态图片输入（/上传图片）
+
+求职者上传简历图片/截图后，FastAPI 代理把 MinIO/OSS 对象解析成 **base64** 的 `ImageContent[]`，随 `images` 字段传给本服务；`server.ts` 解析后经 `session.prompt(text, { images })` 原生附加给模型，模型据此走**相同的** section 工具与待确认链路（不另建管线）。
+
+- **图片必须是 base64**：pi 的 provider 把 `ImageContent.data` 当作裸 base64，自己拼 `data:<mime>;base64,<data>` 的 data-URL（openai-completions 等）。所以代理在 FastAPI 侧读对象字节→base64，本服务不做任何存储读取。
+- **模型需声明 image 输入**：provider 只有 `Model.input` 含 `"image"` 时才转发图片块。真实 vision 模型（如 deepseek-v4-flash-vision-exp）的 `models.json` 须写 `"input": ["text","image"]`；否则图片被静默丢弃。Faux 模型默认 `["text","image"]`。
+- **多模态开关**：FastAPI 代理在 `supports_multimodal=false` 时直接拒绝图片（报错而非静默丢弃），返回与旧 LangChain 链路一致的提示。纯文本请求不带 `images` 键，行为不受影响。
+- **实测结论**：图片→改动走同一工具/校验链，Faux 演示用确定性序列（`get_resume_context` → `propose_change`）验证代码路径。**真实模型（deepseek-v4-flash-vision-exp）对图片的识别与多步调用需 Docker MySQL + API Key 联调（环境阻断）**；受 image 输入声明与 base64 data-URL 两项约束，理论兼容、待实测。
+
 ## 运行
 
 ```bash

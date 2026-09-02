@@ -9,7 +9,7 @@
  */
 import { join } from "node:path";
 import { createAgentSession, createSyntheticSourceInfo, DefaultResourceLoader, SessionManager, type PromptTemplate } from "@earendil-works/pi-coding-agent";
-import type { Model } from "@earendil-works/pi-ai/compat";
+import type { ImageContent, Model } from "@earendil-works/pi-ai/compat";
 import type { ServiceConfig } from "./config.js";
 import type { FauxRuntime, FauxToolPlanStep } from "./faux.js";
 import { buildQuickCommandTemplates } from "./commands.js";
@@ -37,6 +37,14 @@ export interface AgentInput {
    * the real provider, which decides its own tool calls.
    */
   toolPlan?: FauxToolPlanStep;
+  /**
+   * Image attachments (ticket 06) forwarded from the FastAPI proxy. The proxy
+   * resolves each uploaded attachment into a base64 ImageContent block; a vision
+   * model sees it natively and drives the SAME section tools, while a text-only
+   * model silently drops the block (pi returns no image when Model.input has no
+   * "image"), so the conversation survives either way.
+   */
+  images?: ImageContent[];
 }
 
 type Emit = (event: ChatStreamEvent) => void;
@@ -68,7 +76,7 @@ function buildAssistantMessage(text: string, now: number) {
 
 /** Drive one agent turn, emitting NDJSON events as the model streams. */
 export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSignal): Promise<void> {
-  const { message, systemPrompt, config, runtime, userId, resumeId, toolPlan } = input;
+  const { message, systemPrompt, config, runtime, userId, resumeId, toolPlan, images } = input;
   const cwd = process.cwd();
   // Isolate the agent config from whatever lives in the developer's global
   // ~/.pi/agent so the service never picks up unrelated auth/models/skills.
@@ -182,11 +190,15 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
   // plan the agent loop runs one LLM call (no tools); with a plan (or a change the
   // faux runtime detects in the message) the faux model emits a tool call, the
   // loop executes it, and then consumes the follow-up reply.
-  runtime.prepare(systemPrompt, message, toolPlan);
+  runtime.prepare(systemPrompt, message, toolPlan, images);
   turnTimer = setTimeout(() => void session.abort(), config.turnTimeoutMs);
 
   try {
-    await session.prompt(message);
+    // Attach any uploaded images as multimodal content so a vision model sees them
+    // natively. A text-only model simply ignores the block, keeping the text path
+    // intact (ticket 06, acceptance criterion 3).
+    const promptOptions = images?.length ? { images } : undefined;
+    await session.prompt(message, promptOptions);
   } catch (err) {
     const messageText = err instanceof Error ? err.message : String(err);
     if (!resultSent) {

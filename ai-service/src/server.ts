@@ -8,6 +8,7 @@
 import "dotenv/config";
 import { timingSafeEqual } from "node:crypto";
 import express from "express";
+import type { ImageContent } from "@earendil-works/pi-ai/compat";
 import { runChat, type ChatStreamEvent } from "./agent.js";
 import { loadConfig } from "./config.js";
 import { createFauxRuntime, type FauxRuntime } from "./faux.js";
@@ -15,9 +16,31 @@ import { buildContextPrompt, DEFAULT_SYSTEM_PROMPT, type AiServiceContext } from
 
 const config = loadConfig();
 const app = express();
-app.use(express.json());
+// Raised above the 100kb default: a 5MB uploaded image arrives as ~6.7MB base64
+// (ticket 06). Allowed image types cap at 5MB server-side, so 20mb is safe.
+app.use(express.json({ limit: "20mb" }));
 
 const TOKEN_HEADERS = ["authorization", "x-ai-service-token"] as const;
+
+/** Coerce a request body's images into pi-agent ImageContent blocks, dropping junk. */
+function parseImages(value: unknown): ImageContent[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const images = value
+    .filter((item) => item && typeof item === "object")
+    .map((item) => {
+      const candidate = item as { data?: unknown; mimeType?: unknown };
+      if (
+        typeof candidate.data !== "string" ||
+        typeof candidate.mimeType !== "string" ||
+        !candidate.mimeType.startsWith("image/")
+      ) {
+        return null;
+      }
+      return { type: "image" as const, data: candidate.data, mimeType: candidate.mimeType };
+    })
+    .filter((item): item is ImageContent => item !== null);
+  return images.length ? images : undefined;
+}
 
 function tokenMatches(provided: string | undefined): boolean {
   if (!config.serviceToken) return false;
@@ -61,6 +84,11 @@ app.post("/v1/chat", async (req, res) => {
   }
 
   const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+  // Each uploaded image arrives as { data: <base64>, mimeType }; the FastAPI proxy
+  // resolves the MinIO object into base64 so pi-agent can attach it natively.
+  const images = parseImages(req.body?.images);
+  // Text is required, matching the backend contract (the proxy only ever sends a
+  // non-empty message; images are an accompanying attachment, not a substitute).
   if (!message) {
     res.status(400).json({ type: "error", message: "message 不能为空" });
     return;
@@ -83,7 +111,7 @@ app.post("/v1/chat", async (req, res) => {
   res.on("close", () => controller.abort());
 
   await runChat(
-    { message, systemPrompt, config, runtime, userId, resumeId },
+    { message, systemPrompt, config, runtime, userId, resumeId, images },
     (event) => sendEvent(res, event),
     controller.signal,
   );

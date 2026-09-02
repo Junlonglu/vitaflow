@@ -399,6 +399,26 @@ async def stream_ai_service_chat(
         yield {"type": "error", "message": "请输入要咨询的问题"}
         return
 
+    # Multimodal guard: only forward uploaded images when the active model can see
+    # them. A text-only model silently drops image blocks, which would make the user
+    # think their picture was used — so refuse up front instead (mirrors the
+    # LangChain path's gate in _chat_context).
+    # Match the proxy's drop predicate (_attachment_image_blocks): only a real
+    # image (url + image content_type) triggers the multimodal guard, so a stray
+    # non-image attachment never rejects what is otherwise a text-only turn.
+    image_attachments = [
+        item
+        for item in (attachments or [])
+        if isinstance(item, dict)
+        and item.get("url")
+        and (item.get("content_type") or "").startswith("image/")
+    ]
+    if image_attachments:
+        model_config = get_active_ai_config(db)
+        if not model_config.supports_multimodal:
+            yield {"type": "error", "message": "当前模型未开启多模态能力，暂不支持在对话中上传图片"}
+            return
+
     session = get_or_create_chat_session(db, user.id, resume.id)
     context = build_ai_service_context(db, user, resume)
     user_message = AiChatMessage(
@@ -416,7 +436,9 @@ async def stream_ai_service_chat(
     db.refresh(user_message)
 
     text_parts: list[str] = []
-    events = ai_service_chat_events(message, context=context, user_id=user.id, resume_id=resume.id)
+    events = ai_service_chat_events(
+        message, context=context, user_id=user.id, resume_id=resume.id, attachments=attachments
+    )
     try:
         async for event in events:
             event_type = event.get("type")

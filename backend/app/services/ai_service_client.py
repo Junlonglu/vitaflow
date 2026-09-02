@@ -4,10 +4,16 @@ This is the single integration seam of the refactor: FastAPI forwards a chat
 request to the AI service and relays its NDJSON event stream back to the
 browser unchanged. The AI service owns the agent loop and the streamed text;
 FastAPI owns auth, database and (in a later ticket) billing.
+
+Building the outgoing payload is also this client's job, including resolving
+uploaded image attachments into base64 ``ImageContent`` blocks so the Node side
+can attach them natively (ticket 06). FastAPI owns the storage read; the Node
+service stays free of any MinIO/OSS knowledge.
 """
 
 from __future__ import annotations
 
+import base64
 import json
 from collections.abc import AsyncIterator
 from typing import Any
@@ -15,6 +21,7 @@ from typing import Any
 import httpx
 
 from app.core.config import settings
+from app.services.storage.storage_service import read_uploaded_file
 
 
 def _extract_error(raw: bytes) -> str:
@@ -33,6 +40,35 @@ def _http_timeout() -> httpx.Timeout:
     return httpx.Timeout(connect=5, read=180, write=10, pool=5)
 
 
+def _attachment_image_blocks(attachments: list[dict[str, Any]] | None) -> list[dict[str, str]]:
+    """Resolve uploaded image attachments into pi-agent ``ImageContent`` blocks.
+
+    Each attachment carries a MinIO/OSS ``object_name``; we read the bytes and
+    base64-encode them so the Node AI service can attach them natively (pi builds
+    ``data:<mime>;base64,<data>`` for the provider). Non-image, or an attachment
+    we cannot resolve, is skipped — a bad image must never break a text-only turn.
+    """
+    blocks: list[dict[str, str]] = []
+    for item in attachments or []:
+        if not isinstance(item, dict):
+            continue
+        url = item.get("url")
+        content_type = (item.get("content_type") or "").strip()
+        object_name = item.get("object_name")
+        # Only images the user actually uploaded reach this point; the url is the
+        # frontend's marker of an image attachment, so guard on it too.
+        if not url or not content_type.startswith("image/") or not object_name:
+            continue
+        # content_type is already guaranteed image/* above, so carry it through
+        # unchanged; the storage-read content type is not needed.
+        try:
+            content, _ = read_uploaded_file(object_name)
+        except Exception:
+            continue
+        blocks.append({"type": "image", "data": base64.b64encode(content).decode("ascii"), "mimeType": content_type})
+    return blocks
+
+
 async def ai_service_chat_events(
     message: str,
     system_prompt: str | None = None,
@@ -41,6 +77,7 @@ async def ai_service_chat_events(
     resume_id: int | None = None,
     *,
     transport: httpx.AsyncBaseTransport | None = None,
+    attachments: list[dict[str, Any]] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Stream NDJSON chat events from the AI service, yielding event dicts.
 
@@ -67,6 +104,11 @@ async def ai_service_chat_events(
         payload["user_id"] = user_id
     if resume_id is not None:
         payload["resume_id"] = resume_id
+    # Uploaded images → base64 ImageContent blocks so the agent sees them natively
+    # (ticket 06). Absent attachments, no "images" key is sent — text-only unchanged.
+    image_blocks = _attachment_image_blocks(attachments)
+    if image_blocks:
+        payload["images"] = image_blocks
 
     url = f"{settings.ai_service_url.rstrip('/')}/v1/chat"
     headers = {"Authorization": f"Bearer {settings.ai_service_token}"}

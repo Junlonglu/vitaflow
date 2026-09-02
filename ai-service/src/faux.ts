@@ -13,7 +13,7 @@
  */
 import { registerFauxProvider, fauxAssistantMessage, fauxToolCall, getApiProvider } from "@earendil-works/pi-ai/compat";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import type { Model } from "@earendil-works/pi-ai/compat";
+import type { ImageContent, Model } from "@earendil-works/pi-ai/compat";
 import { commandToolPlan, detectQuickCommand } from "./commands.js";
 
 /** A canned tool call the deterministic faux model should make this turn. */
@@ -34,8 +34,10 @@ export interface FauxRuntime {
    * model emits one tool call per plan step, then a follow-up reply; a multi-step
    * plan (e.g. /优化 reads context then proposes a change) drives the agent loop
    * through each tool in turn. Otherwise it emits plain deterministic prose.
+   * ``images`` (ticket 06) feeds the image-aware plan so an attachment rides the
+   * same read-then-propose tool chain as a typed change.
    */
-  prepare: (systemPrompt: string, message?: string, toolPlan?: FauxToolPlanStep) => void;
+  prepare: (systemPrompt: string, message?: string, toolPlan?: FauxToolPlanStep, images?: ImageContent[]) => void;
   dispose: () => void;
 }
 
@@ -83,7 +85,7 @@ function toolAdviceFactory() {
     });
     const summary = contentText(lastToolMessage?.content as unknown);
     return fauxAssistantMessage(
-      `我已调用「修改基本信息」工具。${summary ? summary + "。" : "系统已生成一份待确认的修改方案。"}` +
+      `我已调用简历修改工具。${summary ? summary + "。" : "系统已生成一份待确认的修改方案。"}` +
         `\n\n请查看并确认该修改，确认后才会写入简历。`,
     );
   };
@@ -95,7 +97,7 @@ function toolAdviceFactory() {
  * phrasings (and the four quick commands) to tools so the deterministic provider can
  * drive the same code path.
  */
-function detectToolPlan(message: string): FauxToolPlanStep | null {
+function detectToolPlan(message: string, images?: ImageContent[]): FauxToolPlanStep | null {
   // A quick command (/润色 · /翻译 · /优化 · /生成) maps to a deterministic tool
   // sequence, so the demo exercises the same command → tool → validation chain.
   const command = detectQuickCommand(message);
@@ -135,7 +137,29 @@ function detectToolPlan(message: string): FauxToolPlanStep | null {
     return { name: "get_resume_context", args: { sections: [section] } };
   }
 
+  // An uploaded image with no more-specific gesture: the vision model would read
+  // the picture and propose a change. The deterministic stand-in reads the resume
+  // context first, then stages a change — the SAME tool chain a typed request uses,
+  // so the picture path is not a separate pipeline (ticket 06). (command already
+  // returned above, so an image never outvotes a typed /quick-command or gesture.)
+  if (images?.length) {
+    return imageChangePlan();
+  }
+
   return null;
+}
+
+/** The deterministic two-step plan an image attachment drives: read, then propose. */
+function imageChangePlan(): FauxToolPlan[] {
+  return [
+    { name: "get_resume_context", args: { sections: ["work", "projects", "summary", "skills"] } },
+    {
+      name: "propose_change",
+      args: {
+        updates: [{ section: "work", proposed: [{ id: "work_1", description: "<p>【依据图片内容的工作描述】</p>" }] }],
+      },
+    },
+  ];
 }
 
 export async function createFauxRuntime(): Promise<FauxRuntime> {
@@ -176,8 +200,8 @@ export async function createFauxRuntime(): Promise<FauxRuntime> {
   return {
     model: faux.getModel(),
     modelRuntime,
-    prepare: (systemPrompt: string, message = "", toolPlan?: FauxToolPlanStep) => {
-      const plan = toolPlan ?? detectToolPlan(message);
+    prepare: (systemPrompt: string, message = "", toolPlan?: FauxToolPlanStep, images?: ImageContent[]) => {
+      const plan = toolPlan ?? detectToolPlan(message, images);
       if (plan) {
         // One tool-call step per plan step, then a follow-up reply that reads the
         // LAST tool result the loop injects back. A multi-step plan (e.g. /优化:

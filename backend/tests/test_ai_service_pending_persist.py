@@ -66,6 +66,59 @@ def _faux_events(*_args, **_kwargs):
     return gen()
 
 
+class StreamAiServiceMultimodalTest(unittest.TestCase):
+    """The pi-agent path only forwards uploaded images to a vision-capable model
+    (ticket 06 acceptance criterion 3): a non-multimodal model must get a clear
+    error, never a silently-dropped image."""
+
+    def test_rejects_image_when_model_not_multimodal(self) -> None:
+        config = SimpleNamespace(supports_multimodal=False)
+        user = SimpleNamespace(id=7)
+        resume = SimpleNamespace(id=3, title="后端简历", resume_data={"basics": {}})
+        attachments = [{"url": "http://127.0.0.1:9000/vitaflow/ai-chat/1.png", "object_name": "ai-chat/1.png", "content_type": "image/png"}]
+
+        with (
+            patch.object(ai_chat_service, "get_active_ai_config", return_value=config),
+            patch.object(ai_chat_service, "ai_service_chat_events", side_effect=_faux_events) as events,
+        ):
+            results = _drain_events(stream_ai_service_chat(_DbStub(), user, resume, "按图片改简历", attachments))
+
+        self.assertEqual(results[0]["type"], "error")
+        self.assertIn("多模态", results[0]["message"])
+        events.assert_not_called()
+
+    def test_forwards_attachments_when_model_is_multimodal(self) -> None:
+        config = SimpleNamespace(supports_multimodal=True)
+        session = SimpleNamespace(id=42, update_time=None)
+        user = SimpleNamespace(id=7)
+        resume = SimpleNamespace(id=3, title="后端简历", resume_data={"basics": {"name": "张三"}})
+        attachments = [{"url": "http://127.0.0.1:9000/vitaflow/ai-chat/1.png", "object_name": "ai-chat/1.png", "content_type": "image/png"}]
+
+        captured: dict = {}
+
+        def faux_events(*_args, **_kwargs):
+            captured["attachments"] = _kwargs.get("attachments")
+
+            async def gen():
+                yield {"type": "delta", "text": "我看到了图片"}
+                yield {"type": "result", "data": {}}
+
+            return gen()
+
+        with (
+            patch.object(ai_chat_service, "get_active_ai_config", return_value=config),
+            patch.object(ai_chat_service, "get_or_create_chat_session", return_value=session),
+            patch.object(ai_chat_service, "build_ai_service_context", return_value={"resume": {}, "history": [], "pending_change": {}}),
+            patch.object(ai_chat_service, "ai_service_chat_events", side_effect=faux_events),
+            patch.object(ai_chat_service, "_save_assistant_message", side_effect=lambda *a, **k: SimpleNamespace(model_dump=lambda *_a, **_k: {"id": 1, "content": "我看到了图片"})),
+        ):
+            _drain_events(stream_ai_service_chat(_DbStub(), user, resume, "按图片改简历", attachments))
+
+        # The proxy forwards the attachment so the Node side can resolve it into a
+        # base64 ImageContent block for the model.
+        self.assertEqual(captured["attachments"], attachments)
+
+
 class StreamAiServicePendingPersistTest(unittest.TestCase):
     def test_persists_pending_payload_when_result_carries_pending_change(self):
         captured = {}

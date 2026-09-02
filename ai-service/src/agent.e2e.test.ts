@@ -249,3 +249,109 @@ describe("agent loop -> quick commands (Faux)", () => {
     }
   });
 });
+
+describe("agent loop -> multimodal image input (Faux)", () => {
+  // A tiny valid base64 payload stands in for a real uploaded image. The Faux
+  // provider never decodes it; what matters is that the image reaches the session
+  // as an ImageContent block and, with no more-specific gesture in the message,
+  // drives the SAME read-then-propose tool chain as /优化 — proving the picture
+  // path is not a separate pipeline (acceptance criterion 1 + 2).
+  const imageBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42m\
+NkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+  it("drives a read-context-then-propose chain from an image attachment", async () => {
+    const runtime = await createFauxRuntime();
+    const config = loadConfig();
+
+    const calls: Array<{ url: string; body?: Record<string, unknown> }> = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      const urlStr = String(url);
+      const entry: { url: string; body?: Record<string, unknown> } = { url: urlStr };
+      if (init?.body) entry.body = JSON.parse(init.body as string) as Record<string, unknown>;
+      calls.push(entry);
+      if (urlStr.includes("get-resume-context")) {
+        return successResponse({
+          ok: true,
+          sections: { work: [{ id: "work_1", company: "A 公司", role: "数据专员", description: "<p>原描述</p>" }] },
+        });
+      }
+      assert.match(urlStr, /\/api\/ai\/service\/tool\/propose-change/);
+      return successResponse({
+        ok: true,
+        optimized_resume_data: {
+          basics: { name: "张三", title: "后端工程师", location: "广州", phone: "13800138000" },
+          work: [
+            { id: "work_1", company: "A 公司", role: "数据专员", description: "<p>【依据图片内容的工作描述】</p>" },
+            { id: "work_2", company: "B 公司", role: "前端" },
+          ],
+        },
+        suggestions: ["已修改：实习/工作经历（2 条变为 2 条：A 公司）"],
+      });
+    }) as typeof fetch;
+
+    try {
+      const events = await collect({
+        message: "请根据我上传的简历截图补充工作描述",
+        systemPrompt: "你是简历助手。",
+        config,
+        runtime,
+        userId: 7,
+        resumeId: 3,
+        images: [{ type: "image", data: imageBase64, mimeType: "image/png" }],
+      });
+
+      // Image drives the same multi-step chain as a text request: read the resume
+      // sections, then propose a change (which FastAPI validates into a pending row).
+      assert.equal(calls.length, 2, "an image request makes two tool callbacks");
+      assert.match(calls[0].url, /get-resume-context.*sections=work/);
+      assert.match(calls[1].url, /propose-change/);
+
+      const result = events.find((event) => event.type === "result") as { type: "result"; data: Record<string, unknown> } | undefined;
+      assert.ok(result, "expected a result event");
+      const pending = result.data.pending_change as { optimized_resume_data: { work: Array<{ description: string }> }; suggestions: string[] } | undefined;
+      assert.ok(pending, "image-derived change rides the same pending_change channel");
+      assert.match(pending.optimized_resume_data.work[0].description, /依据图片内容/);
+      assert.ok(result.data.assistant_message, "result carries a reply");
+    } finally {
+      globalThis.fetch = originalFetch;
+      runtime.dispose();
+    }
+  });
+
+  it("leaves the text-only path untouched when no image is attached", async () => {
+    const runtime = await createFauxRuntime();
+    const config = loadConfig();
+
+    const originalFetch = globalThis.fetch;
+    let callbackHit = false;
+    globalThis.fetch = (async () => {
+      // Not expected: an image-less natural-language question uses the plain reply
+      // factory, so no tool should fire.
+      callbackHit = true;
+      return successResponse({ ok: false });
+    }) as typeof fetch;
+
+    try {
+      const events = await collect({
+        message: "这份简历怎么样？",
+        systemPrompt: "你是简历助手。",
+        config,
+        runtime,
+        userId: 7,
+        resumeId: 3,
+        // No images: the message has no slash command and no change gesture, so the
+        // Faux runtime must NOT invent an image plan.
+      });
+
+      assert.equal(callbackHit, false, "no tool fires for a plain text question");
+      const result = events.find((event) => event.type === "result") as { type: "result"; data: Record<string, unknown> } | undefined;
+      assert.ok(result, "expected a result event");
+      assert.equal(result.data.pending_change, undefined, "no pending change for a plain text question");
+      assert.ok((result.data.assistant_message as { content: string }).content.length > 0);
+    } finally {
+      globalThis.fetch = originalFetch;
+      runtime.dispose();
+    }
+  });
+});

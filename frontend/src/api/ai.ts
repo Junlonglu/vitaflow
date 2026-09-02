@@ -1,9 +1,6 @@
 import request from "./request"
 
 export const generateResumeApi = (data: any) => request.post("/ai/generate-resume", data)
-export const scoreResumeApi = (data: any) => request.post("/ai/score-resume", data)
-export const optimizeSectionApi = (data: any) => request.post("/ai/optimize-section", data)
-export const optimizeByJdApi = (data: any) => request.post("/ai/optimize-by-jd", data)
 export type AiChatAttachment = { url: string; name?: string; content_type?: string; object_name?: string }
 export type AiChatModelOption = {
   id: number
@@ -182,10 +179,6 @@ async function postAiStream<T = any>(path: string, data: any, callbacks: StreamC
 }
 
 export const generateResumeStreamApi = (data: any, callbacks?: StreamCallbacks) => postAiStream("/ai/generate-resume/stream", data, callbacks)
-export const scoreResumeStreamApi = (data: any, callbacks?: StreamCallbacks) => postAiStream("/ai/score-resume/stream", data, callbacks)
-export const optimizeSectionStreamApi = (data: any, callbacks?: StreamCallbacks) => postAiStream("/ai/optimize-section/stream", data, callbacks)
-export const optimizeByJdStreamApi = (data: any, callbacks?: StreamCallbacks) => postAiStream("/ai/optimize-by-jd/stream", data, callbacks)
-export const translateResumeStreamApi = (data: any, callbacks?: StreamCallbacks) => postAiStream("/ai/translate-resume/stream", data, callbacks)
 export const sendResumeChatMessageStreamApi = (resumeId: number, data: { content: string; attachments?: AiChatAttachment[]; model_config_id?: number | null }, callbacks?: StreamCallbacks) =>
   postAiStream(`/ai/resume-chat/${resumeId}/messages/stream`, data, callbacks)
 export const regenerateResumeChatMessageStreamApi = (

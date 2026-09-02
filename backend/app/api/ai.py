@@ -23,7 +23,6 @@ from app.schemas.ai import (
     GenerateResumeRequest,
     JdOptimizeRequest,
     OptimizeSectionRequest,
-    ScoreResumeRequest,
     TranslateResumeRequest,
 )
 from app.schemas.ai_chat import (
@@ -40,8 +39,6 @@ from app.services.ai.chains import (
     optimize_by_jd_stream,
     optimize_section_chain,
     optimize_section_stream,
-    score_resume_chain,
-    score_resume_stream,
     translate_resume_chain,
     translate_resume_stream,
 )
@@ -494,19 +491,6 @@ def generate_resume(payload: GenerateResumeRequest, db: Session = Depends(get_db
 def generate_resume_stream_api(payload: GenerateResumeRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     task = new_task(db, current_user, "generate_resume", payload)
     return stream_events(tracked_ai_events(db, task, stream_with_task_model(task, lambda: generate_resume_stream(ai_payload(payload)))))
-
-
-@router.post("/score-resume")
-def score_resume(payload: ScoreResumeRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    task = new_task(db, current_user, "resume_score", payload)
-    result = run_tracked_ai(db, task, lambda: run_with_task_model(task, lambda: score_resume_chain(ai_payload(payload))))
-    return success(result.model_dump())
-
-
-@router.post("/score-resume/stream")
-def score_resume_stream_api(payload: ScoreResumeRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    task = new_task(db, current_user, "resume_score", payload)
-    return stream_events(tracked_ai_events(db, task, stream_with_task_model(task, lambda: score_resume_stream(ai_payload(payload)))))
 
 
 @router.post("/optimize-section")

@@ -30,7 +30,6 @@ from app.services.ai.prompts import (
     JSON_REPAIR_PROMPT,
     OPTIMIZE_SECTION_PROMPT,
     RESUME_TRANSLATE_PROMPT,
-    SCORE_RESUME_PROMPT,
 )
 from app.services.ai.schemas import (
     JdOptimizeResult,
@@ -38,7 +37,6 @@ from app.services.ai.schemas import (
     ResumeGenerateResult,
     ResumeTranslateResult,
     ResumeChatResult,
-    ResumeScoreResult,
     SectionOptimizeResult,
 )
 from app.services.ai.token_usage import (
@@ -91,16 +89,6 @@ DEFAULT_FIELD_CONFIG = {
     "github": {"label": "代码仓库", "icon": "Github", "row": 2, "order": 3},
     "expected_salary": {"label": "期望薪资", "icon": "Briefcase", "row": 2, "order": 4},
 }
-
-SCORE_DIMENSIONS = [
-    ("信息完整度", 0.10),
-    ("岗位匹配度", 0.20),
-    ("项目经历质量", 0.20),
-    ("技能表达质量", 0.15),
-    ("语言专业度", 0.15),
-    ("结构清晰度", 0.10),
-    ("ATS 友好度", 0.10),
-]
 
 CHAT_CHANGE_SCOPES = {"none", "partial", "full_replace", "reorder"}
 CHAT_TARGET_SECTIONS = {
@@ -554,37 +542,6 @@ def localize_ai_text(value: str) -> str:
     return result
 
 
-def _normalize_score_detail(value: Any, fallback_dimension: str = "评分维度") -> dict[str, Any]:
-    if not isinstance(value, dict):
-        score = _safe_int(value, 0)
-        comment = "" if score else str(value)
-        return {"dimension": fallback_dimension, "score": max(0, min(score, 100)), "max_score": 100, "comment": _clean_score_text(_localize_field_names(comment))}
-    comment = (
-        value.get("comment")
-        or value.get("suggestion")
-        or value.get("advice")
-        or value.get("reason")
-        or value.get("analysis")
-        or value.get("feedback")
-        or value.get("description")
-        or value.get("问题")
-        or value.get("建议")
-        or ""
-    )
-    score = _safe_int(value.get("score", value.get("得分", value.get("points", value.get("value", 0)))), 0)
-    max_score = _safe_int(value.get("max_score", value.get("max", value.get("满分", value.get("total", 100)))), 100) or 100
-    if max_score != 100 and max_score > 0:
-        score = int(round(score / max_score * 100))
-        max_score = 100
-    score = max(0, min(score, max_score))
-    return {
-        "dimension": _localize_field_names(str(value.get("dimension") or value.get("name") or fallback_dimension)),
-        "score": score,
-        "max_score": max_score,
-        "comment": _clean_score_text(_localize_field_names(_stringify_summary(comment))),
-    }
-
-
 def _looks_like_resume_data(data: dict[str, Any]) -> bool:
     return "basics" in data and "layout" in data
 
@@ -852,56 +809,6 @@ def _normalize_ai_payload(data: dict[str, Any], schema: type[T], payload: Option
 
     if schema is ResumeTranslateResult:
         return _normalize_translation_payload(data, payload)
-
-    if schema is ResumeScoreResult:
-        if isinstance(data.get("result"), dict):
-            nested = data["result"]
-            data = {**nested, **{key: value for key, value in data.items() if key != "result"}}
-        data["summary"] = _clean_score_text(_localize_field_names(_stringify_summary(data.get("summary", ""))))
-        if isinstance(data.get("details"), dict):
-            details = []
-            for dimension, value in data["details"].items():
-                details.append(_normalize_score_detail(value, str(dimension)))
-            data["details"] = details
-        elif isinstance(data.get("details"), list):
-            data["details"] = [_normalize_score_detail(item, f"评分维度 {index + 1}") for index, item in enumerate(data["details"])]
-        else:
-            data["details"] = []
-        data.setdefault("details", [])
-        if len(data["details"]) >= len(SCORE_DIMENSIONS):
-            data["details"] = data["details"][: len(SCORE_DIMENSIONS)]
-            for detail, (dimension, _) in zip(data["details"], SCORE_DIMENSIONS):
-                detail["dimension"] = dimension
-            weighted_score = int(
-                round(sum(detail["score"] * weight for detail, (_, weight) in zip(data["details"], SCORE_DIMENSIONS)))
-            )
-        else:
-            weighted_score = 0
-        detail_average = int(round(sum(item["score"] for item in data["details"]) / len(data["details"]))) if data["details"] else 0
-        score = _safe_int(data.get("score", 0), 0)
-        if weighted_score > 0:
-            score = weighted_score
-        elif (data.get("score") is None or data.get("score") == "" or score == 0) and detail_average > 0:
-            score = detail_average
-        data["score"] = max(0, min(score, 100))
-        data["level"] = (
-            "优秀"
-            if data["score"] >= 90
-            else "良好"
-            if data["score"] >= 80
-            else "合格"
-            if data["score"] >= 70
-            else "待优化"
-            if data["score"] >= 60
-            else "需重点完善"
-        )
-        data.setdefault("strengths", [])
-        data.setdefault("weaknesses", [])
-        data.setdefault("missing_keywords", [])
-        data.setdefault("suggestions", [])
-        for key in ["strengths", "weaknesses", "missing_keywords", "suggestions"]:
-            data[key] = _clean_score_text(_localize_field_names(data.get(key, [])))
-        return data
 
     if schema is JdOptimizeResult:
         if "optimized_resume_data" not in data:
@@ -1385,10 +1292,6 @@ def import_resume_chain(payload: dict[str, Any]) -> ResumeGenerateResult:
     return result
 
 
-def score_resume_chain(payload: dict[str, Any]) -> ResumeScoreResult:
-    return _invoke_json(SCORE_RESUME_PROMPT, payload, ResumeScoreResult)
-
-
 def optimize_section_chain(payload: dict[str, Any]) -> SectionOptimizeResult:
     return _invoke_json(OPTIMIZE_SECTION_PROMPT, payload, SectionOptimizeResult)
 
@@ -1427,10 +1330,6 @@ def resume_chat_action_reply_stream(payload: dict[str, Any]):
 
 def generate_resume_stream(payload: dict[str, Any]):
     return stream_json_events(GENERATE_RESUME_PROMPT, payload, ResumeGenerateResult)
-
-
-def score_resume_stream(payload: dict[str, Any]):
-    return stream_json_events(SCORE_RESUME_PROMPT, payload, ResumeScoreResult)
 
 
 def optimize_section_stream(payload: dict[str, Any]):

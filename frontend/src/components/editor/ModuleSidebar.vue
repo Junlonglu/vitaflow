@@ -5,7 +5,7 @@ defineOptions({
   inheritAttrs: false
 })
 import { useScroll } from "@vueuse/core"
-import { ArrowDown, ArrowUp, Eye, EyeOff, GripVertical, Plus, Trash2, LayoutList, ChevronDown, ChevronLeft, ChevronRight, Sparkles, PanelLeftClose, PanelLeftOpen, Settings, X } from "lucide-vue-next"
+import { ArrowDown, ArrowUp, Eye, EyeOff, GripVertical, Plus, Trash2, LayoutList, ChevronDown, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen, Settings, X } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
 import Input from "@/components/ui/input/Input.vue"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
@@ -54,8 +54,8 @@ onUnmounted(() => {
   if (resizeHandler) window.removeEventListener('resize', resizeHandler)
 })
 
-const props = defineProps<{ data: ResumeData; current: string; optimizeLoading?: boolean; formExpanded?: boolean }>()
-const emit = defineEmits<{ select: [key: string]; change: []; addCustom: [presetType?: string]; removeCustom: [key: string]; optimize: []; togglePanel: [] }>()
+const props = defineProps<{ data: ResumeData; current: string; formExpanded?: boolean }>()
+const emit = defineEmits<{ select: [key: string]; change: []; addCustom: [presetType?: string]; removeCustom: [key: string]; togglePanel: [] }>()
 const builtIn = ["basics", "summary", "education", "skills", "work", "projects", "awards"]
 let draggingKey = ""
 const orderedSections = computed(() => ["basics", ...(props.data.layout?.section_order || []).filter((item) => item !== "basics")])

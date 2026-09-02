@@ -1,13 +1,11 @@
 <script setup lang="ts">
-import { PanelLeftClose, Sparkles, Pencil } from "lucide-vue-next"
-import Button from "@/components/ui/button/Button.vue"
+import { PanelLeftClose, Pencil } from "lucide-vue-next"
 import Switch from "@/components/ui/switch/Switch.vue"
 import BasicInfoForm from "./BasicInfoForm.vue"
 import SectionListForm from "./SectionListForm.vue"
 import SummaryForm from "./SummaryForm.vue"
 import CustomSectionForm from "./CustomSectionForm.vue"
 import StyleConfigPanel from "./StyleConfigPanel.vue"
-import SectionOptimizeInline from "./SectionOptimizeInline.vue"
 import type { ResumeData, TemplateConfig } from "@/types/resume"
 import { effectiveFieldLabel } from "@/utils/resumeLocale"
 
@@ -17,21 +15,11 @@ const props = defineProps<{
   current: string
   language: string
   showStyle: boolean
-  optimizeResult?: any
-  optimizePreview?: any
-  optimizeLoading?: boolean
-  optimizeError?: string
-  optimizeStreamText?: string
   isWide?: boolean
 }>()
-const emit = defineEmits<{ change: []; optimize: []; applyOptimize: []; clearOptimize: [] }>()
+const emit = defineEmits<{ change: [] }>()
 function customSection() {
   return props.data.custom_sections.find((item) => item.id === props.current)
-}
-
-function currentSectionValue() {
-  if ((props.data as any)[props.current] !== undefined) return (props.data as any)[props.current]
-  return customSection()
 }
 
 function skillsOptions() {
@@ -101,29 +89,10 @@ function hasCustomTechStack() {
             <Pencil class="absolute right-2 h-3.5 w-3.5 text-zinc-400 pointer-events-none opacity-40 transition-opacity group-hover:opacity-100 peer-focus:opacity-0" />
           </div>
         </div>
-        <div class="flex items-center gap-2">
-          <Button v-if="current !== 'basics'" size="sm" variant="outline" class="h-7 md:h-8 text-xs md:text-sm border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 shadow-sm transition-all" :disabled="optimizeLoading" @click="$emit('optimize')">
-            <Sparkles class="h-3.5 w-3.5 mr-1 md:mr-1.5 text-zinc-500" /> AI 润色
-          </Button>
-        </div>
       </div>
-      
+
       <!-- Form Content -->
       <div class="p-2.5 md:p-5 pb-20 md:pb-5 flex-1 shrink-0">
-      <SectionOptimizeInline
-        v-if="current !== 'basics' && (optimizeLoading || optimizeError || optimizeResult)"
-        :section-key="current"
-        :section-title="data.layout.section_titles[current] || current"
-        :current-value="currentSectionValue()"
-        :result="optimizeResult"
-        :preview="optimizePreview"
-        :loading="optimizeLoading"
-        :error="optimizeError"
-        :stream-text="optimizeStreamText"
-        @apply="$emit('applyOptimize')"
-        @retry="$emit('optimize')"
-        @clear="$emit('clearOptimize')"
-      />
       <StyleConfigPanel v-if="showStyle" :config="config" class="mb-4" @change="$emit('change')" />
       <BasicInfoForm v-if="current === 'basics'" :basics="data.basics" @change="$emit('change')" />
       <SummaryForm v-else-if="current === 'summary'" :summary="data.summary" @change="$emit('change')" />

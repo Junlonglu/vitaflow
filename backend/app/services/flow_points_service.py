@@ -57,14 +57,6 @@ DEFAULT_POINT_RULES: dict[str, dict[str, Any]] = {
         "points_per_million_input_tokens": 1000,
         "points_per_million_output_tokens": 1000,
     },
-    "resume_score": {
-        "display_name": "简历诊断",
-        "points_per_call": 30,
-        "points_per_1k_tokens": 0,
-        "points_per_million_tokens": 0,
-        "points_per_million_input_tokens": 0,
-        "points_per_million_output_tokens": 0,
-    },
     "jd_optimize": {
         "display_name": "JD 优化",
         "points_per_call": 50,

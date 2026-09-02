@@ -19,13 +19,6 @@ class GenerateResumeRequest(BaseModel):
     style: str = "技术型"
 
 
-class ScoreResumeRequest(BaseModel):
-    resume_id: Optional[int] = None
-    resume_data: dict[str, Any]
-    target_position: str = ""
-    job_description: str = ""
-
-
 class OptimizeSectionRequest(BaseModel):
     resume_id: Optional[int] = None
     section_type: str

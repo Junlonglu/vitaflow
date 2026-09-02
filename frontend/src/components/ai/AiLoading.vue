@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue"
-import { Sparkles, CheckCircle2, Bot, FileSearch, ScanLine, Languages } from "lucide-vue-next"
+import { Sparkles, CheckCircle2 } from "lucide-vue-next"
 
 const props = defineProps<{ title?: string; description?: string; streamText?: string }>()
 
@@ -9,53 +9,15 @@ type Stage = {
   patterns: string[]
 }
 
-const stageCatalog: Record<string, Stage[]> = {
-  generate: [
-    { label: "解析岗位与个人信息", patterns: ["target_position", "personal_info", "目标岗位"] },
-    { label: "整理基本信息", patterns: ["basics", "field_config", "name", "phone", "email"] },
-    { label: "撰写个人简介", patterns: ["summary", "个人简介", "content"] },
-    { label: "梳理教育与技能", patterns: ["education", "skills", "keywords", "教育", "技能"] },
-    { label: "生成经历与项目亮点", patterns: ["work", "projects", "highlights", "项目", "经历"] },
-    { label: "检查结构并准备创建", patterns: ["layout", "section_order", "template_config", "explanation"] },
-  ],
-  score: [
-    { label: "读取简历内容", patterns: ["resume_data", "basics", "summary"] },
-    { label: "评估核心维度", patterns: ["details", "dimension", "score", "岗位匹配"] },
-    { label: "整理优势与不足", patterns: ["strengths", "weaknesses", "missing_keywords"] },
-    { label: "生成可执行建议", patterns: ["suggestions", "comment", "summary"] },
-  ],
-  jd: [
-    { label: "解析岗位描述", patterns: ["job_description", "job_keywords", "岗位"] },
-    { label: "比对简历匹配度", patterns: ["match_analysis", "score", "缺口", "匹配"] },
-    { label: "重写相关模块", patterns: ["optimized_resume_data", "summary", "skills", "projects", "work"] },
-    { label: "整理采纳建议", patterns: ["suggestions", "changes", "score"] },
-  ],
-  section: [
-    { label: "读取当前模块", patterns: ["section_type", "section_title", "section_content"] },
-    { label: "保留原有条目", patterns: ["id", "optimized_section"] },
-    { label: "润色表达与关键词", patterns: ["keywords", "highlights", "description", "content"] },
-    { label: "整理可写入内容", patterns: ["changes", "suggestions", "optimized_section"] },
-  ],
-  translate: [
-    { label: "读取并分析原简历结构", patterns: ["parsing", "source_language"] },
-    { label: "全文多语种对照翻译", patterns: ["translating", "target_language"] },
-    { label: "保护实体与专业术语", patterns: ["preserving", "entities"] },
-    { label: "重构页面布局与格式", patterns: ["formatting", "layout"] },
-  ],
-}
+const stages: Stage[] = [
+  { label: "解析岗位与个人信息", patterns: ["target_position", "personal_info", "目标岗位"] },
+  { label: "整理基本信息", patterns: ["basics", "field_config", "name", "phone", "email"] },
+  { label: "撰写个人简介", patterns: ["summary", "个人简介", "content"] },
+  { label: "梳理教育与技能", patterns: ["education", "skills", "keywords", "教育", "技能"] },
+  { label: "生成经历与项目亮点", patterns: ["work", "projects", "highlights", "项目", "经历"] },
+  { label: "检查结构并准备创建", patterns: ["layout", "section_order", "template_config", "explanation"] },
+]
 
-const mode = computed<string>(() => {
-  const title = props.title || ""
-  if (title.includes("生成简历")) return "generate"
-  if (title.includes("评分")) return "score"
-  if (title.includes("JD")) return "jd"
-  if (title.includes("润色")) return "section"
-  if (title.includes("翻译")) return "translate"
-  if (title.includes("打磨")) return "chat"
-  return "generate"
-})
-
-const stages = computed(() => stageCatalog[mode.value] || stageCatalog.generate)
 const elapsedIndex = ref(0)
 let timer: ReturnType<typeof window.setInterval> | null = null
 
@@ -68,14 +30,14 @@ function startTimer() {
   stopTimer()
   elapsedIndex.value = 0
   timer = window.setInterval(() => {
-    const maxIndex = Math.max(0, stages.value.length - 2)
+    const maxIndex = Math.max(0, stages.length - 2)
     elapsedIndex.value = Math.min(maxIndex, elapsedIndex.value + 1)
     if (elapsedIndex.value >= maxIndex) stopTimer()
   }, 4200)
 }
 
 watch(
-  () => [props.title, stages.value.length],
+  () => props.title,
   () => startTimer(),
   { immediate: true },
 )
@@ -85,29 +47,16 @@ onBeforeUnmount(stopTimer)
 const activeIndex = computed(() => {
   const text = props.streamText || ""
   let index = elapsedIndex.value
-  stages.value.forEach((stage, stageIndex) => {
+  stages.forEach((stage, stageIndex) => {
     if (stage.patterns.some((pattern) => text.includes(pattern))) index = Math.max(index, stageIndex)
   })
-  return Math.min(index, stages.value.length - 1)
+  return Math.min(index, stages.length - 1)
 })
 
 const progress = computed(() => {
-  const stepProgress = Math.round(((activeIndex.value + 1) / stages.value.length) * 88)
+  const stepProgress = Math.round(((activeIndex.value + 1) / stages.length) * 88)
   const extra = props.streamText ? 8 : 0
   return Math.min(96, Math.max(12, stepProgress + extra))
-})
-
-const currentActivity = computed(() => {
-  const current = stages.value[activeIndex.value]?.label || "处理内容"
-  return `正在${current.replace(/^正在/, "")}...`
-})
-
-const IconComponent = computed(() => {
-  if (mode.value === 'jd') return FileSearch
-  if (mode.value === 'score') return ScanLine
-  if (mode.value === 'chat') return Bot
-  if (mode.value === 'translate') return Languages
-  return Sparkles
 })
 </script>
 
@@ -118,7 +67,7 @@ const IconComponent = computed(() => {
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-4">
             <span class="flex h-12 w-12 items-center justify-center rounded-[16px] bg-white text-zinc-700 shadow-[0_8px_24px_rgba(0,0,0,0.06)] ring-1 ring-zinc-200/60" style="view-transition-name: ai-hero-icon;">
-              <component :is="IconComponent" class="h-6 w-6" stroke-width="1.5" />
+              <Sparkles class="h-6 w-6" stroke-width="1.5" />
             </span>
             <div>
               <div class="text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-600/80">AI AGENT</div>

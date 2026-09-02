@@ -87,15 +87,15 @@ const topics: HelpTopic[] = [
   },
   {
     id: "ai",
-    title: "AI 优化",
-    description: "AI 能帮助生成初稿、诊断问题、润色模块，并根据 JD 做匹配优化。",
+    title: "AI 助手",
+    description: "Flow Agent 对话是 AI 能力的统一入口：生成初稿、润色、翻译、JD 优化和图片导入都在对话里完成。",
     icon: Bot,
     accent: "bg-violet-50 text-violet-700 ring-1 ring-violet-100",
     steps: [
       "没有完整简历时，可以先用 AI 生成基础内容，再人工补充细节和数据。",
-      "简历评分会给出整体诊断、亮点、短板和可执行的修改建议。",
-      "模块润色适合优化经历表达，建议保留真实数据和关键业务结果。",
-      "JD 优化会对照岗位描述强化匹配度，生成结果需要逐条确认后再应用。",
+      "编辑页右侧的 AI 助手支持自然语言修改简历，每处修改写入前都可以审阅。",
+      "对话内使用 /润色 /翻译 /优化 /生成 快捷指令可直达对应能力。",
+      "支持上传简历截图，AI 会依据图片内容补充或修改对应模块。",
     ],
   },
   {
@@ -127,7 +127,7 @@ const topics: HelpTopic[] = [
   {
     id: "points",
     title: "Flow Points",
-    description: "Flow Points 用于 AI 生成、导入解析、诊断和优化等智能能力。",
+    description: "Flow Points 用于 AI 生成、导入解析和对话修改等智能能力。",
     icon: FlowPointIcon,
     accent: "bg-cyan-50 text-cyan-700 ring-1 ring-cyan-100",
     steps: [

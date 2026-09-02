@@ -11,24 +11,6 @@ class ResumeGenerateResult(BaseModel):
     explanation: str = ""
 
 
-class ScoreDetail(BaseModel):
-    dimension: str = "评分维度"
-    score: int = 0
-    max_score: int = 100
-    comment: str = ""
-
-
-class ResumeScoreResult(BaseModel):
-    score: int
-    level: str
-    summary: str
-    details: list[ScoreDetail] = Field(default_factory=list)
-    strengths: list[str] = Field(default_factory=list)
-    weaknesses: list[str] = Field(default_factory=list)
-    missing_keywords: list[str] = Field(default_factory=list)
-    suggestions: list[str] = Field(default_factory=list)
-
-
 class SectionOptimizeResult(BaseModel):
     optimized_section: Any
     changes: list[str] = Field(default_factory=list)

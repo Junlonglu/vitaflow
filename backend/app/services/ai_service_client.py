@@ -78,6 +78,7 @@ async def ai_service_chat_events(
     *,
     transport: httpx.AsyncBaseTransport | None = None,
     attachments: list[dict[str, Any]] | None = None,
+    model_ref: str | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Stream NDJSON chat events from the AI service, yielding event dicts.
 
@@ -109,6 +110,10 @@ async def ai_service_chat_events(
     image_blocks = _attachment_image_blocks(attachments)
     if image_blocks:
         payload["images"] = image_blocks
+    # pi model ref (ticket 07): routes the turn to the mapped model in the Node
+    # service's models.json and keys the per-model usage report for billing.
+    if model_ref:
+        payload["model"] = model_ref
 
     url = f"{settings.ai_service_url.rstrip('/')}/v1/chat"
     headers = {"Authorization": f"Bearer {settings.ai_service_token}"}

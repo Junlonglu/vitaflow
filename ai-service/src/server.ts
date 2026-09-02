@@ -6,13 +6,16 @@
  * events back. It holds no state and can be scaled horizontally.
  */
 import "dotenv/config";
+import { join } from "node:path";
 import { timingSafeEqual } from "node:crypto";
 import express from "express";
 import type { ImageContent } from "@earendil-works/pi-ai/compat";
-import { runChat, type ChatStreamEvent } from "./agent.js";
+import { runChat, type ChatRuntime, type ChatStreamEvent } from "./agent.js";
+import { reportUsage } from "./billing.js";
 import { loadConfig } from "./config.js";
-import { createFauxRuntime, type FauxRuntime } from "./faux.js";
+import { createFauxRuntime } from "./faux.js";
 import { buildContextPrompt, DEFAULT_SYSTEM_PROMPT, type AiServiceContext } from "./prompt.js";
+import { createRealRuntime } from "./real.js";
 
 const config = loadConfig();
 const app = express();
@@ -78,10 +81,6 @@ app.post("/v1/chat", async (req, res) => {
     res.status(401).json({ type: "error", message: "未授权：需要有效的服务令牌" });
     return;
   }
-  if (config.provider !== "faux") {
-    res.status(501).json({ type: "error", message: "当前骨架仅支持 faux 模式，真实 Provider 尚未接入" });
-    return;
-  }
 
   const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
   // Each uploaded image arrives as { data: <base64>, mimeType }; the FastAPI proxy
@@ -93,6 +92,8 @@ app.post("/v1/chat", async (req, res) => {
     res.status(400).json({ type: "error", message: "message 不能为空" });
     return;
   }
+  // pi model ref the proxy resolved from AiModelConfig.pi_model_ref (ticket 07).
+  const modelRef = typeof req.body?.model === "string" && req.body.model.trim() ? req.body.model.trim() : undefined;
   const context: AiServiceContext | null =
     typeof req.body?.context === "object" && req.body.context !== null ? req.body.context : null;
   const userId = Number.isInteger(req.body?.user_id) ? req.body.user_id : 0;
@@ -110,18 +111,37 @@ app.post("/v1/chat", async (req, res) => {
   const controller = new AbortController();
   res.on("close", () => controller.abort());
 
-  await runChat(
-    { message, systemPrompt, config, runtime, userId, resumeId, images },
+  const usage = await runChat(
+    { message, systemPrompt, config, runtime, modelRef, userId, resumeId, images },
     (event) => sendEvent(res, event),
     controller.signal,
   );
   res.end();
+  // End-of-request billing (ticket 07): hand the aggregated per-model usage to
+  // FastAPI, which settles Flow Points with the same rules as the legacy path.
+  // Faux turns are a local demo — they carry no real provider's usage and must
+  // not be billed (FastAPI would fall back to the default ai_chat rule).
+  // Fire-and-forget: a billing hiccup must never fail a turn the user already
+  // received, but it is still awaited briefly so process shutdown sees it.
+  const billableUsage = usage.filter((entry) => entry.provider !== "faux");
+  if (billableUsage.length) {
+    try {
+      const ok = await reportUsage(
+        { fetch: globalThis.fetch, fastapiBaseUrl: config.fastapiBaseUrl, serviceToken: config.serviceToken },
+        { user_id: userId, resume_id: resumeId, usage: billableUsage },
+      );
+      if (!ok) console.error("[vitaflow-ai] usage report rejected by FastAPI");
+    } catch (err) {
+      console.error("[vitaflow-ai] usage report failed:", err);
+    }
+  }
 });
 
-let runtime: FauxRuntime;
+let runtime: ChatRuntime;
 
 async function main() {
-  runtime = await createFauxRuntime();
+  const agentDir = join(process.cwd(), ".pi-agent");
+  runtime = config.provider === "real" ? await createRealRuntime(agentDir) : await createFauxRuntime();
   app.listen(config.port, () => {
     console.log(`[vitaflow-ai] listening on :${config.port} provider=${config.provider}`);
   });

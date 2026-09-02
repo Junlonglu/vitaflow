@@ -26,6 +26,7 @@ export interface FauxToolPlan {
 export type FauxToolPlanStep = FauxToolPlan | FauxToolPlan[];
 
 export interface FauxRuntime {
+  kind: "faux";
   model: Model<string>;
   modelRuntime: ModelRuntime;
   /**
@@ -198,6 +199,7 @@ export async function createFauxRuntime(): Promise<FauxRuntime> {
   });
 
   return {
+    kind: "faux",
     model: faux.getModel(),
     modelRuntime,
     prepare: (systemPrompt: string, message = "", toolPlan?: FauxToolPlanStep, images?: ImageContent[]) => {

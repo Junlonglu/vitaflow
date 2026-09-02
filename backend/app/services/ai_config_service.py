@@ -42,6 +42,7 @@ class AiRuntimeConfig:
     context_messages: int
     is_chat_selectable: bool = True
     sort_order: int = 100
+    pi_model_ref: str | None = None
     chat_points_per_call: float | None = None
     chat_points_per_million_input_tokens: float | None = None
     chat_points_per_million_output_tokens: float | None = None
@@ -93,6 +94,7 @@ def _from_model(item: AiModelConfig) -> AiRuntimeConfig:
         context_messages=max(1, min(int(item.context_messages or 12), 40)),
         is_chat_selectable=bool(getattr(item, "is_chat_selectable", True)),
         sort_order=int(getattr(item, "sort_order", 100) or 100),
+        pi_model_ref=getattr(item, "pi_model_ref", None) or None,
         chat_points_per_call=_decimal_number(getattr(item, "chat_points_per_call", None)),
         chat_points_per_million_input_tokens=_decimal_number(getattr(item, "chat_points_per_million_input_tokens", None)),
         chat_points_per_million_output_tokens=_decimal_number(getattr(item, "chat_points_per_million_output_tokens", None)),
@@ -177,6 +179,44 @@ def get_default_chat_ai_config(db: Session) -> AiRuntimeConfig:
     if not config.api_key:
         raise AppException("未配置大模型 API KEY，请在后台 AI 配置中填写")
     return config
+
+
+def resolve_chat_ai_config(
+    db: Session,
+    user: Any,
+    model_config_id: int | None = None,
+) -> AiRuntimeConfig:
+    """Resolve the chat model config for one request (ticket 07).
+
+    Mirrors the legacy ``new_task`` chat selection: an explicitly requested
+    chat-selectable model wins (admins may pick any model), otherwise the
+    default chat model. The result drives the multimodal guard, the pi model
+    mapping (``pi_model_ref``) and the chat billing override.
+    """
+    is_admin = getattr(user, "role", "") == "admin"
+    if model_config_id:
+        return get_ai_config_by_id(db, int(model_config_id), require_chat_selectable=not is_admin)
+    return get_default_chat_ai_config(db)
+
+
+def get_ai_config_by_pi_model_ref(db: Session, pi_model_ref: str) -> AiRuntimeConfig | None:
+    """Find the model config mapped to a pi model ref (billing granularity).
+
+    The Node AI service reports usage as ``"provider/model"``; the matching
+    config supplies the per-model chat rates. Unmapped refs return None and
+    the caller falls back to the default ai_chat rule instead of losing the
+    charge.
+    """
+    ref = (pi_model_ref or "").strip()
+    if not ref:
+        return None
+    item = db.scalar(
+        select(AiModelConfig)
+        .where(AiModelConfig.pi_model_ref == ref, AiModelConfig.is_active == True)  # noqa: E712
+        .order_by(AiModelConfig.sort_order.asc(), AiModelConfig.id.desc())
+        .limit(1)
+    )
+    return _from_model(item) if item else None
 
 
 def get_active_ai_config(db: Session | None = None) -> AiRuntimeConfig:

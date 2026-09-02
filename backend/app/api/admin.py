@@ -185,6 +185,7 @@ class AiConfigWrite(BaseModel):
     context_messages: int = Field(default=12, ge=1, le=40)
     is_chat_selectable: bool = True
     sort_order: int = Field(default=100, ge=0, le=9999)
+    pi_model_ref: Optional[str] = Field(default=None, max_length=200)
     chat_points_per_call: Optional[Decimal] = Field(default=None, ge=0)
     chat_points_per_million_input_tokens: Optional[Decimal] = Field(default=None, ge=0)
     chat_points_per_million_output_tokens: Optional[Decimal] = Field(default=None, ge=0)
@@ -1318,6 +1319,7 @@ def ai_config_data(item: AiModelConfig) -> dict:
         "context_messages": item.context_messages,
         "is_chat_selectable": bool(getattr(item, "is_chat_selectable", True)),
         "sort_order": int(getattr(item, "sort_order", 100) or 100),
+        "pi_model_ref": getattr(item, "pi_model_ref", None) or None,
         "chat_points_per_call": point_number(item.chat_points_per_call) if item.chat_points_per_call is not None else None,
         "chat_points_per_million_input_tokens": point_number(item.chat_points_per_million_input_tokens) if item.chat_points_per_million_input_tokens is not None else None,
         "chat_points_per_million_output_tokens": point_number(item.chat_points_per_million_output_tokens) if item.chat_points_per_million_output_tokens is not None else None,
@@ -1363,6 +1365,7 @@ def create_ai_config(payload: AiConfigWrite, db: Session = Depends(get_db)):
         context_messages=payload.context_messages,
         is_chat_selectable=payload.is_chat_selectable,
         sort_order=payload.sort_order,
+        pi_model_ref=(payload.pi_model_ref or "").strip() or None,
         chat_points_per_call=point_amount(payload.chat_points_per_call) if payload.chat_points_per_call is not None else None,
         chat_points_per_million_input_tokens=point_amount(payload.chat_points_per_million_input_tokens) if payload.chat_points_per_million_input_tokens is not None else None,
         chat_points_per_million_output_tokens=point_amount(payload.chat_points_per_million_output_tokens) if payload.chat_points_per_million_output_tokens is not None else None,
@@ -1395,6 +1398,7 @@ def update_ai_config(config_id: int, payload: AiConfigWrite, db: Session = Depen
     item.context_messages = payload.context_messages
     item.is_chat_selectable = payload.is_chat_selectable
     item.sort_order = payload.sort_order
+    item.pi_model_ref = (payload.pi_model_ref or "").strip() or None
     item.chat_points_per_call = point_amount(payload.chat_points_per_call) if payload.chat_points_per_call is not None else None
     item.chat_points_per_million_input_tokens = point_amount(payload.chat_points_per_million_input_tokens) if payload.chat_points_per_million_input_tokens is not None else None
     item.chat_points_per_million_output_tokens = point_amount(payload.chat_points_per_million_output_tokens) if payload.chat_points_per_million_output_tokens is not None else None

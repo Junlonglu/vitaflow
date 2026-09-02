@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -45,7 +45,7 @@ from app.services.ai.chains import (
     translate_resume_chain,
     translate_resume_stream,
 )
-from app.services.ai.token_usage import normalize_token_usage
+from app.services.ai.token_usage import build_token_usage, normalize_token_usage
 from app.services.ai.graphs import optimize_by_jd_graph
 from app.services.ai_chat_service import (
     clear_chat_messages,
@@ -60,8 +60,15 @@ from app.services.ai_chat_service import (
     validate_propose_change,
     get_section_context,
 )
-from app.services.ai_config_service import bind_ai_runtime_config, get_active_ai_config, get_ai_config_by_id, get_default_chat_ai_config, public_ai_capability
-from app.services.ai_task_service import create_ai_task, run_tracked_ai, tracked_ai_events
+from app.services.ai_config_service import (
+    bind_ai_runtime_config,
+    get_active_ai_config,
+    get_ai_config_by_id,
+    get_ai_config_by_pi_model_ref,
+    get_default_chat_ai_config,
+    public_ai_capability,
+)
+from app.services.ai_task_service import create_ai_task, finish_ai_task, run_tracked_ai, tracked_ai_events
 from app.services.app_settings_service import get_setting
 from app.services.flow_points_service import (
     ACTIVE_AI_FEATURE_TYPES,
@@ -106,6 +113,27 @@ class ProposeChangeRequest(BaseModel):
     user_id: int
     resume_id: int
     updates: list[dict[str, Any]]
+
+
+class AiServiceUsageEntry(BaseModel):
+    """One model's aggregated usage for a finished chat turn (ticket 07)."""
+
+    provider: str
+    model: str
+    requests: int = Field(default=1, ge=1)
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    total_tokens: int = 0
+
+
+class AiServiceUsageRequest(BaseModel):
+    """End-of-request usage report the Node AI service posts to FastAPI."""
+
+    user_id: int
+    resume_id: int | None = None
+    usage: list[AiServiceUsageEntry]
 
 
 def require_ai_service_token(request: Request) -> None:
@@ -252,6 +280,7 @@ def _ai_service_stream_response(
     resume: Resume,
     content: str,
     attachments: list[dict[str, Any]] | None = None,
+    model_config_id: int | None = None,
 ) -> StreamingResponse:
     """Proxy a chat turn to the AI service, persisting messages in MySQL.
 
@@ -259,7 +288,7 @@ def _ai_service_stream_response(
     ``result`` event's ``assistant_message`` is the DB-backed row (MySQL is the
     single source of truth for the UI message list).
     """
-    events = stream_ai_service_chat(db, user, resume, content, attachments)
+    events = stream_ai_service_chat(db, user, resume, content, attachments, model_config_id)
 
     async def iterator():
         try:
@@ -601,7 +630,7 @@ def resume_chat_send_stream(
         if not content:
             return stream_events(iter([{"type": "error", "message": "请输入要咨询的问题"}]))
         attachments = [item.model_dump() for item in payload.attachments]
-        return _ai_service_stream_response(db, current_user, resume, content, attachments)
+        return _ai_service_stream_response(db, current_user, resume, content, attachments, payload.model_config_id)
     task = new_task(db, current_user, "ai_chat", payload, resume_id=resume_id)
     return stream_events(
         tracked_ai_events(
@@ -805,3 +834,83 @@ def service_get_resume_context(
     resume = get_resume(db, user_id, resume_id)
     ctx = get_section_context(resume.resume_data, sections)
     return success({"ok": True, "sections": ctx})
+
+
+@router.post("/service/usage")
+def report_ai_service_usage(
+    payload: AiServiceUsageRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Settle Flow Points for a finished AI-service chat turn (ticket 07).
+
+    The Node AI service aggregates provider-reported token usage per model from
+    the pi event stream and posts it here once the turn ends. Each entry is
+    billed at its own model granularity: the config mapped by ``pi_model_ref``
+    supplies the chat rates (points_per_call + per-million-token), and the
+    settlement goes through ``settle_task_flow_points`` — the exact ledger path
+    the legacy LangChain chat uses, so balances and transactions reconcile.
+
+    An unmapped ref still bills (never lose a charge) at the default ai_chat
+    rule. Failed turns are never reported, matching the legacy refund rule.
+    """
+    require_ai_service_token(request)
+    user = db.get(User, payload.user_id)
+    if not user:
+        raise AppException("用户不存在", 404)
+
+    entries: list[dict[str, Any]] = []
+    for item in payload.usage:
+        ref = f"{item.provider.strip()}/{item.model.strip()}"
+        config = get_ai_config_by_pi_model_ref(db, ref)
+        token_usage = build_token_usage(
+            item.input_tokens,
+            item.output_tokens,
+            estimated=False,
+        )
+        input_data: dict[str, Any] = {
+            "model": ref,
+            "model_name": config.name if config else ref,
+            "pi_model_ref": ref,
+            "token_usage": token_usage,
+            "billing_override": config.chat_billing_override() if config else None,
+        }
+        task = create_ai_task(
+            db,
+            user.id,
+            "ai_chat",
+            resume_id=payload.resume_id,
+            input_data=input_data,
+            model_name=input_data["model_name"],
+        )
+        try:
+            finish_ai_task(db, task, "success", output_data={"source": "ai_service_usage"}, token_usage=token_usage)
+        except AppException as exc:
+            # 结算不足（402）等失败：按旧链路口径把任务落成 failed（退还预扣），
+            # 不能让已建任务永远悬挂在 pending。
+            finish_ai_task(db, task, "failed", error_message=exc.message)
+            entries.append(
+                {
+                    "pi_model_ref": ref,
+                    "mapped": config is not None,
+                    "model_config_id": config.id if config else None,
+                    "points_used": point_number(task.points_used),
+                    "tokens_used": int(task.tokens_used or 0),
+                    "requests": item.requests,
+                    "billed": False,
+                    "error": exc.message,
+                }
+            )
+            continue
+        entries.append(
+            {
+                "pi_model_ref": ref,
+                "mapped": config is not None,
+                "model_config_id": config.id if config else None,
+                "points_used": point_number(task.points_used),
+                "tokens_used": int(task.tokens_used or 0),
+                "requests": item.requests,
+                "billed": True,
+            }
+        )
+    return success({"entries": entries})

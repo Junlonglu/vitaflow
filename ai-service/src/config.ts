@@ -9,7 +9,7 @@ export interface ServiceConfig {
   port: number;
   /** Shared secret used by the FastAPI proxy to authenticate to this service. */
   serviceToken: string;
-  /** `faux` (default, no network, deterministic) or `real` (not wired in the skeleton). */
+  /** `faux` (default, no network, deterministic) or `real` (loads `.pi-agent/models.json`, ticket 07). */
   provider: "faux" | "real";
   /** Timeout in ms before an agent turn is aborted. */
   turnTimeoutMs: number;

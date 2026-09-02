@@ -14,6 +14,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from app.core.exceptions import AppException
 from app.services import ai_chat_service
 from app.services.ai_chat_service import stream_ai_service_chat
 
@@ -66,19 +67,28 @@ def _faux_events(*_args, **_kwargs):
     return gen()
 
 
+def _stub_chat_config(supports_multimodal: bool = True, pi_model_ref: str | None = "deepseek/deepseek-v4-flash-vision-exp"):
+    return SimpleNamespace(
+        supports_multimodal=supports_multimodal,
+        pi_model_ref=pi_model_ref,
+        chat_billing_override=lambda: {"points_per_call": 5.0, "points_per_million_input_tokens": None, "points_per_million_output_tokens": None},
+    )
+
+
 class StreamAiServiceMultimodalTest(unittest.TestCase):
     """The pi-agent path only forwards uploaded images to a vision-capable model
     (ticket 06 acceptance criterion 3): a non-multimodal model must get a clear
     error, never a silently-dropped image."""
 
     def test_rejects_image_when_model_not_multimodal(self) -> None:
-        config = SimpleNamespace(supports_multimodal=False)
+        config = _stub_chat_config(supports_multimodal=False)
         user = SimpleNamespace(id=7)
         resume = SimpleNamespace(id=3, title="后端简历", resume_data={"basics": {}})
         attachments = [{"url": "http://127.0.0.1:9000/vitaflow/ai-chat/1.png", "object_name": "ai-chat/1.png", "content_type": "image/png"}]
 
         with (
-            patch.object(ai_chat_service, "get_active_ai_config", return_value=config),
+            patch.object(ai_chat_service, "resolve_chat_ai_config", return_value=config),
+            patch.object(ai_chat_service, "precheck_flow_points"),
             patch.object(ai_chat_service, "ai_service_chat_events", side_effect=_faux_events) as events,
         ):
             results = _drain_events(stream_ai_service_chat(_DbStub(), user, resume, "按图片改简历", attachments))
@@ -88,7 +98,7 @@ class StreamAiServiceMultimodalTest(unittest.TestCase):
         events.assert_not_called()
 
     def test_forwards_attachments_when_model_is_multimodal(self) -> None:
-        config = SimpleNamespace(supports_multimodal=True)
+        config = _stub_chat_config(supports_multimodal=True)
         session = SimpleNamespace(id=42, update_time=None)
         user = SimpleNamespace(id=7)
         resume = SimpleNamespace(id=3, title="后端简历", resume_data={"basics": {"name": "张三"}})
@@ -98,6 +108,7 @@ class StreamAiServiceMultimodalTest(unittest.TestCase):
 
         def faux_events(*_args, **_kwargs):
             captured["attachments"] = _kwargs.get("attachments")
+            captured["model_ref"] = _kwargs.get("model_ref")
 
             async def gen():
                 yield {"type": "delta", "text": "我看到了图片"}
@@ -106,7 +117,8 @@ class StreamAiServiceMultimodalTest(unittest.TestCase):
             return gen()
 
         with (
-            patch.object(ai_chat_service, "get_active_ai_config", return_value=config),
+            patch.object(ai_chat_service, "resolve_chat_ai_config", return_value=config),
+            patch.object(ai_chat_service, "precheck_flow_points") as precheck,
             patch.object(ai_chat_service, "get_or_create_chat_session", return_value=session),
             patch.object(ai_chat_service, "build_ai_service_context", return_value={"resume": {}, "history": [], "pending_change": {}}),
             patch.object(ai_chat_service, "ai_service_chat_events", side_effect=faux_events),
@@ -117,6 +129,10 @@ class StreamAiServiceMultimodalTest(unittest.TestCase):
         # The proxy forwards the attachment so the Node side can resolve it into a
         # base64 ImageContent block for the model.
         self.assertEqual(captured["attachments"], attachments)
+        # The mapped pi model ref rides along so the Node service selects the
+        # right model from models.json (ticket 07).
+        self.assertEqual(captured["model_ref"], "deepseek/deepseek-v4-flash-vision-exp")
+        precheck.assert_called_once()
 
 
 class StreamAiServicePendingPersistTest(unittest.TestCase):
@@ -134,6 +150,8 @@ class StreamAiServicePendingPersistTest(unittest.TestCase):
         resume = SimpleNamespace(id=3, title="后端简历", resume_data={"basics": {"location": "广州"}})
 
         with (
+            patch.object(ai_chat_service, "resolve_chat_ai_config", return_value=_stub_chat_config()),
+            patch.object(ai_chat_service, "precheck_flow_points"),
             patch.object(ai_chat_service, "get_or_create_chat_session", return_value=session),
             patch.object(ai_chat_service, "build_ai_service_context", return_value={"resume": {}, "history": [], "pending_change": {}}),
             patch.object(ai_chat_service, "ai_service_chat_events", side_effect=_faux_events),
@@ -171,6 +189,9 @@ class StreamAiServicePendingPersistTest(unittest.TestCase):
         resume = SimpleNamespace(id=3, title="后端简历", resume_data={"basics": {}})
 
         with (
+            # No model configured at all (pure faux demo): the turn runs unmapped
+            # and unbilled — the tolerant resolve path (ticket 07).
+            patch.object(ai_chat_service, "resolve_chat_ai_config", side_effect=AppException("未配置大模型 API KEY")),
             patch.object(ai_chat_service, "get_or_create_chat_session", return_value=session),
             patch.object(ai_chat_service, "build_ai_service_context", return_value={"resume": {}, "history": [], "pending_change": {}}),
             patch.object(ai_chat_service, "ai_service_chat_events", side_effect=faux_events),

@@ -12,9 +12,16 @@ import { createAgentSession, createSyntheticSourceInfo, DefaultResourceLoader, S
 import type { ImageContent, Model } from "@earendil-works/pi-ai/compat";
 import type { ServiceConfig } from "./config.js";
 import type { FauxRuntime, FauxToolPlanStep } from "./faux.js";
+import type { RealRuntime } from "./real.js";
+import type { ModelUsage } from "./usage.js";
+import { createUsageAggregator } from "./usage.js";
+import { resolveRealModel } from "./real.js";
 import { buildQuickCommandTemplates } from "./commands.js";
 import { createUpdateBasicsFieldTool, type BasicsToolState } from "./tools/basics.js";
 import { createSectionTools, type SectionToolsState } from "./tools/sections.js";
+
+/** Faux mode drives the deterministic demo provider; real mode uses models.json. */
+export type ChatRuntime = FauxRuntime | RealRuntime;
 
 export type ChatStreamEvent =
   | { type: "start"; data: Record<string, unknown> }
@@ -27,7 +34,13 @@ export interface AgentInput {
   message: string;
   systemPrompt: string;
   config: ServiceConfig;
-  runtime: FauxRuntime;
+  runtime: ChatRuntime;
+  /**
+   * pi model ref the FastAPI proxy resolved from AiModelConfig.pi_model_ref
+   * (e.g. "deepseek/deepseek-v4-flash-vision-exp"). Only meaningful in real
+   * mode; faux always uses its built-in model.
+   */
+  modelRef?: string;
   /** Identity needed for the tool's FastAPI callback (only the proxy has it). */
   userId: number;
   resumeId: number;
@@ -74,13 +87,35 @@ function buildAssistantMessage(text: string, now: number) {
   };
 }
 
-/** Drive one agent turn, emitting NDJSON events as the model streams. */
-export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSignal): Promise<void> {
-  const { message, systemPrompt, config, runtime, userId, resumeId, toolPlan, images } = input;
+/**
+ * Drive one agent turn, emitting NDJSON events as the model streams.
+ *
+ * Returns the per-model usage the turn consumed, or an empty array when the
+ * turn failed (no result event reached the client) — mirroring the legacy
+ * billing rule that failed turns are never charged.
+ */
+export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSignal): Promise<ModelUsage[]> {
+  const { message, systemPrompt, config, runtime, modelRef, userId, resumeId, toolPlan, images } = input;
   const cwd = process.cwd();
   // Isolate the agent config from whatever lives in the developer's global
   // ~/.pi/agent so the service never picks up unrelated auth/models/skills.
   const agentDir = join(cwd, ".pi-agent");
+
+  // Real mode resolves the per-request model from models.json; faux always
+  // uses its built-in deterministic model.
+  let model = runtime.kind === "faux" ? runtime.model : undefined;
+  if (runtime.kind === "real") {
+    const resolved = resolveRealModel(runtime, modelRef);
+    if (!resolved.model) {
+      emit({ type: "error", message: resolved.error ?? "模型不可用" });
+      return [];
+    }
+    model = resolved.model;
+  }
+  if (!model) {
+    emit({ type: "error", message: "没有可用的模型" });
+    return [];
+  }
 
   // The field-level and section tools record the validated pending payload here so
   // we can echo it onto the result event deterministically (independent of what
@@ -140,7 +175,7 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
 
   const { session, modelFallbackMessage } = await createAgentSession({
     cwd,
-    model: runtime.model,
+    model,
     modelRuntime: runtime.modelRuntime,
     sessionManager: SessionManager.inMemory(cwd),
     resourceLoader: loader,
@@ -159,11 +194,16 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
 
   if (modelFallbackMessage) {
     emit({ type: "error", message: `模型不可用：${modelFallbackMessage}` });
-    return;
+    return [];
   }
 
   let text = "";
   let turnTimer: NodeJS.Timeout | undefined;
+  let reportedUsage: ModelUsage[] = [];
+  let sawError = false;
+  // Every assistant message (one per LLM call, tool rounds included) carries
+  // provider-reported usage; aggregated per model for the billing callback.
+  const usage = createUsageAggregator();
   const abortHandler = () => {
     void session.abort();
   };
@@ -176,6 +216,23 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
         emit({ type: "delta", text: ae.delta });
       }
     }
+    if (event.type === "message_end" && event.message?.role === "assistant") {
+      const am = event.message;
+      if (am.usage) {
+        usage.add(
+          {
+            provider: am.provider,
+            model: am.model,
+            input: am.usage.input,
+            output: am.usage.output,
+            cacheRead: am.usage.cacheRead,
+            cacheWrite: am.usage.cacheWrite,
+            totalTokens: am.usage.totalTokens,
+          },
+          { stopReason: am.stopReason },
+        );
+      }
+    }
     if (event.type === "agent_settled") {
       sendResult(text);
     }
@@ -186,11 +243,14 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
   emit({ type: "start", data: {} });
   emit({ type: "phase", phase: "replying", text: "正在组织回复" });
 
-  // Program the fake response for this turn right before prompting. With no tool
-  // plan the agent loop runs one LLM call (no tools); with a plan (or a change the
-  // faux runtime detects in the message) the faux model emits a tool call, the
-  // loop executes it, and then consumes the follow-up reply.
-  runtime.prepare(systemPrompt, message, toolPlan, images);
+  // Program the fake response for this turn right before prompting (faux only —
+  // a real model decides its own tool calls). With no tool plan the agent loop
+  // runs one LLM call (no tools); with a plan (or a change the faux runtime
+  // detects in the message) the faux model emits a tool call, the loop executes
+  // it, and then consumes the follow-up reply.
+  if (runtime.kind === "faux") {
+    runtime.prepare(systemPrompt, message, toolPlan, images);
+  }
   turnTimer = setTimeout(() => void session.abort(), config.turnTimeoutMs);
 
   try {
@@ -200,6 +260,7 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     const promptOptions = images?.length ? { images } : undefined;
     await session.prompt(message, promptOptions);
   } catch (err) {
+    sawError = true;
     const messageText = err instanceof Error ? err.message : String(err);
     if (!resultSent) {
       resultSent = true;
@@ -215,5 +276,12 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     sendResult(text);
     unsubscribe();
     session.dispose();
+    // Only a turn that completed without an error is billed (the finally block
+    // always sends a result, so resultSent alone can't distinguish failure);
+    // failed turns return no usage, mirroring the legacy rule that refunds them.
+    if (resultSent && !sawError) {
+      reportedUsage = usage.snapshot();
+    }
   }
+  return reportedUsage;
 }

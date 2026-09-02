@@ -10,8 +10,10 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { join } from "node:path";
 import { runChat, type ChatStreamEvent, type AgentInput } from "./agent.js";
 import { createFauxRuntime } from "./faux.js";
+import { createRealRuntime } from "./real.js";
 import { loadConfig } from "./config.js";
 
 function successResponse(data: unknown): Response {
@@ -247,6 +249,64 @@ describe("agent loop -> quick commands (Faux)", () => {
       globalThis.fetch = originalFetch;
       runtime.dispose();
     }
+  });
+});
+
+describe("agent loop -> token usage aggregation (ticket 07)", () => {
+  it("returns per-model usage for a successful faux turn", async () => {
+    const runtime = await createFauxRuntime();
+    const config = loadConfig();
+    try {
+      const usage = await runChat(
+        {
+          message: "早上好",
+          systemPrompt: "你是简历助手。",
+          config,
+          runtime,
+          userId: 7,
+          resumeId: 3,
+        },
+        () => {},
+      );
+
+      assert.equal(usage.length, 1, "one model bucket for a single-model turn");
+      assert.equal(usage[0].provider, "faux");
+      assert.equal(usage[0].model, "faux-1");
+      assert.ok(usage[0].requests >= 1, "at least one LLM call was consumed");
+      assert.ok(usage[0].input_tokens > 0, "faux reports prompt-derived input tokens");
+      assert.ok(usage[0].total_tokens >= usage[0].input_tokens + usage[0].output_tokens);
+    } finally {
+      runtime.dispose();
+    }
+  });
+
+  it("returns no usage when the requested model ref cannot be resolved", async () => {
+    // A ref that no models.json would ever contain, so the lookup fails before
+    // any provider call, the turn errors out and bills nothing — even on a
+    // machine whose real .pi-agent/models.json maps deepseek models.
+    // (RealRuntime holds no disposable resources — the in-memory ModelRuntime
+    // needs no teardown.)
+    const runtime = await createRealRuntime(join(process.cwd(), ".pi-agent"));
+    const config = loadConfig();
+    const events: ChatStreamEvent[] = [];
+
+    const usage = await runChat(
+      {
+        message: "早上好",
+        systemPrompt: "你是简历助手。",
+        config,
+        runtime,
+        modelRef: "no-such-provider/no-such-model",
+        userId: 7,
+        resumeId: 3,
+      },
+      (event) => events.push(event),
+    );
+
+    assert.deepEqual(usage, [], "unresolvable model bills nothing");
+    const error = events.find((event) => event.type === "error");
+    assert.ok(error, "expected an error event");
+    assert.match((error as { message: string }).message, /未在 models\.json 中配置/);
   });
 });
 

@@ -34,12 +34,13 @@ class AiServiceClientTest(unittest.TestCase):
         message: str = "你好",
         context: dict | None = None,
         attachments: list[dict] | None = None,
+        model_ref: str | None = None,
     ) -> list[dict]:
         async def run() -> list[dict]:
             return [
                 event
                 async for event in ai_service_chat_events(
-                    message, context=context, transport=transport, attachments=attachments
+                    message, context=context, transport=transport, attachments=attachments, model_ref=model_ref
                 )
             ]
 
@@ -136,6 +137,32 @@ class AiServiceClientTest(unittest.TestCase):
         with patch("app.services.ai_service_client.read_uploaded_file", side_effect=OSError("no object")):
             self._collect(httpx.MockTransport(handler), "按图片改", attachments=attachments)
         self.assertNotIn("images", captured["payload"], "no resolvable image → no images key")
+
+    def test_forwards_model_ref_as_model_field(self) -> None:
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["payload"] = json.loads(request.content)
+            return _ndjson_response(['{"type":"start","data":{}}'])
+
+        self._collect(
+            httpx.MockTransport(handler),
+            "帮我把地点改成深圳",
+            model_ref="deepseek/deepseek-v4-flash-vision-exp",
+        )
+        # The pi model ref routes the Node side to the mapped models.json entry
+        # and keys the per-model usage report (ticket 07).
+        self.assertEqual(captured["payload"]["model"], "deepseek/deepseek-v4-flash-vision-exp")
+
+    def test_omits_model_field_when_no_model_ref(self) -> None:
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["payload"] = json.loads(request.content)
+            return _ndjson_response(['{"type":"start","data":{}}'])
+
+        self._collect(httpx.MockTransport(handler), "这份简历怎么样？")
+        self.assertNotIn("model", captured["payload"], "unmapped config → no model key (faux default)")
 
     def test_non_200_returns_error_with_detail(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:

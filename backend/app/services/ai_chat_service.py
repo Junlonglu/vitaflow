@@ -27,8 +27,9 @@ from app.services.ai.chains import (
     resume_chat_reply_stream,
     strip_thinking_text,
 )
-from app.services.ai_config_service import get_active_ai_config
+from app.services.ai_config_service import resolve_chat_ai_config
 from app.services.ai_service_client import ai_service_chat_events
+from app.services.flow_points_service import precheck_flow_points
 
 
 SECTION_LABELS = {
@@ -385,6 +386,7 @@ async def stream_ai_service_chat(
     resume: Resume,
     content: str,
     attachments: list[dict[str, Any]] | None = None,
+    model_config_id: int | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Stream a chat turn backed by the Node AI service.
 
@@ -393,16 +395,27 @@ async def stream_ai_service_chat(
     accumulates the assistant text and, on ``result``, persists the assistant
     message and rewrites ``result.data.assistant_message`` with the DB row. MySQL
     stays the single source of truth and the AI service stays stateless.
+
+    The chat model config (selected or default) drives the multimodal guard,
+    the pi model mapping sent to the Node service (``pi_model_ref``) and the
+    same points_per_call precheck the legacy path applies (ticket 07). It is
+    resolved tolerantly: with no model configured at all (pure faux demo) the
+    turn still runs, unmapped and unbilled.
     """
     message = (content or "").strip()
     if not message:
         yield {"type": "error", "message": "请输入要咨询的问题"}
         return
 
-    # Multimodal guard: only forward uploaded images when the active model can see
-    # them. A text-only model silently drops image blocks, which would make the user
-    # think their picture was used — so refuse up front instead (mirrors the
-    # LangChain path's gate in _chat_context).
+    try:
+        model_config = resolve_chat_ai_config(db, user, model_config_id)
+    except AppException:
+        model_config = None
+
+    # Multimodal guard: only forward uploaded images when the selected model can
+    # see them. A text-only model silently drops image blocks, which would make
+    # the user think their picture was used — so refuse up front instead
+    # (mirrors the LangChain path's gate in _chat_context).
     # Match the proxy's drop predicate (_attachment_image_blocks): only a real
     # image (url + image content_type) triggers the multimodal guard, so a stray
     # non-image attachment never rejects what is otherwise a text-only turn.
@@ -413,11 +426,21 @@ async def stream_ai_service_chat(
         and item.get("url")
         and (item.get("content_type") or "").startswith("image/")
     ]
-    if image_attachments:
-        model_config = get_active_ai_config(db)
-        if not model_config.supports_multimodal:
-            yield {"type": "error", "message": "当前模型未开启多模态能力，暂不支持在对话中上传图片"}
-            return
+    if image_attachments and model_config and not model_config.supports_multimodal:
+        yield {"type": "error", "message": "当前模型未开启多模态能力，暂不支持在对话中上传图片"}
+        return
+
+    # Legacy parity (charge_on_finish): precheck the points_per_call floor up
+    # front so an empty balance fails the turn before any model call; the exact
+    # token-based charge settles later via the /service/usage callback.
+    if model_config:
+        precheck_flow_points(
+            db,
+            user,
+            "ai_chat",
+            input_tokens=0,
+            pricing_override=model_config.chat_billing_override(),
+        )
 
     session = get_or_create_chat_session(db, user.id, resume.id)
     context = build_ai_service_context(db, user, resume)
@@ -437,7 +460,12 @@ async def stream_ai_service_chat(
 
     text_parts: list[str] = []
     events = ai_service_chat_events(
-        message, context=context, user_id=user.id, resume_id=resume.id, attachments=attachments
+        message,
+        context=context,
+        user_id=user.id,
+        resume_id=resume.id,
+        attachments=attachments,
+        model_ref=model_config.pi_model_ref if model_config else None,
     )
     try:
         async for event in events:

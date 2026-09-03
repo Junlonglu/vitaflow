@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { computed } from "vue"
 import { Check, Plus, Sparkles, Trash2, Zap } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
+import Select from "@/components/ui/select/Select.vue"
 import type { AdminAiConfig, AdminCatalogModel } from "@/api/admin"
 
 interface AiConfigForm {
@@ -39,6 +41,14 @@ function modelById(ref: string | null | undefined): AdminCatalogModel | undefine
 function supportsImages(ref: string | null | undefined): boolean {
   return (modelById(ref)?.input ?? []).includes("image")
 }
+
+const catalogModelOptions = computed(() => [
+  { label: "（未选择）", value: "" },
+  ...props.catalogModels.map((model) => ({
+    label: `${model.name}（${model.ref}）${model.input.includes("image") ? " · 多模态" : ""}`,
+    value: model.ref,
+  })),
+])
 </script>
 
 <template>
@@ -85,10 +95,7 @@ function supportsImages(ref: string | null | undefined): boolean {
       <div class="mt-5 space-y-4">
         <label class="block space-y-1.5 text-sm font-medium text-zinc-700">策略名称<input v-model="configForm.name" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
         <label class="block space-y-1.5 text-sm font-medium text-zinc-700">目录模型
-          <select v-if="catalogModels.length" v-model="configForm.model_ref" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900">
-            <option value="">（未选择）</option>
-            <option v-for="model in catalogModels" :key="model.ref" :value="model.ref">{{ model.name }}（{{ model.ref }}）{{ model.input.includes("image") ? " · 多模态" : "" }}</option>
-          </select>
+          <Select v-if="catalogModels.length" v-model="configForm.model_ref" :options="catalogModelOptions" placeholder="（未选择）" class="!h-10 !rounded-xl text-sm" />
           <input v-else v-model="configForm.model_ref" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="provider/model，例如 faux/demo" />
           <span class="block text-xs font-normal text-zinc-400">{{ catalogModels.length ? "模型来自 AI 服务目录（模型目录板块维护）；对话按它路由模型，计费也按它归集" : "模型目录暂不可用，请检查 AI 服务后刷新" }}</span>
         </label>

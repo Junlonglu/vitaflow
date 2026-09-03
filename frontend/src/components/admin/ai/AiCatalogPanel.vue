@@ -2,7 +2,8 @@
 import { Check, Eye, EyeOff, KeyRound, Pencil, Plus, Server, Trash2 } from "lucide-vue-next"
 import { computed, ref } from "vue"
 import Button from "@/components/ui/button/Button.vue"
-import type { AdminCatalogProvider, AdminCatalogProviderWrite, AdminCatalogModelWrite } from "@/api/admin"
+import Select from "@/components/ui/select/Select.vue"
+import { getAdminCatalogEnvKeysApi, type AdminCatalogProvider, type AdminCatalogProviderWrite, type AdminCatalogModelWrite } from "@/api/admin"
 
 const props = defineProps<{
   providers: AdminCatalogProvider[]
@@ -25,6 +26,41 @@ const providerEditingKey = ref<string | null>(null)
 const providerForm = ref({ key: "", name: "", base_url: "", api_key: "" })
 const showProviderKey = ref(false)
 
+// API Key 双模式：引用 AI 服务进程的 *_API_KEY 环境变量（推荐，密钥不落盘）或直接输入明文。
+const envKeys = ref<string[]>([])
+const envKeysLoaded = ref(false)
+const keyMode = ref<"env" | "plain">("env")
+const envKeyOptions = computed(() => envKeys.value.map((name) => ({ label: `$${name}`, value: `$${name}` })))
+
+async function loadEnvKeys() {
+  if (!envKeysLoaded.value) {
+    try {
+      const data = await getAdminCatalogEnvKeysApi()
+      envKeys.value = data.env_keys || []
+    } catch {
+      envKeys.value = []
+    }
+    envKeysLoaded.value = true
+  }
+  keyMode.value = envKeys.value.length ? "env" : "plain"
+}
+
+function openCreateProvider() {
+  providerEditingKey.value = null
+  providerForm.value = { key: "", name: "", base_url: "", api_key: "" }
+  void loadEnvKeys().then(() => {
+    providerDialogOpen.value = true
+  })
+}
+
+function openEditProvider(provider: AdminCatalogProvider) {
+  providerEditingKey.value = provider.key
+  providerForm.value = { key: provider.key, name: provider.name, base_url: provider.base_url, api_key: "" }
+  void loadEnvKeys().then(() => {
+    providerDialogOpen.value = true
+  })
+}
+
 const modelDialogOpen = ref(false)
 const modelEditing = ref<{ providerKey: string; modelId: string } | null>(null)
 const modelForm = ref<{ providerKey: string; id: string; name: string; reasoning: boolean; input: string[]; context_window: string; max_tokens: string }>({
@@ -38,18 +74,6 @@ const modelForm = ref<{ providerKey: string; id: string; name: string; reasoning
 })
 
 const fauxProvider = computed(() => props.providerMode === "faux")
-
-function openCreateProvider() {
-  providerEditingKey.value = null
-  providerForm.value = { key: "", name: "", base_url: "", api_key: "" }
-  providerDialogOpen.value = true
-}
-
-function openEditProvider(provider: AdminCatalogProvider) {
-  providerEditingKey.value = provider.key
-  providerForm.value = { key: provider.key, name: provider.name, base_url: provider.base_url, api_key: "" }
-  providerDialogOpen.value = true
-}
 
 function submitProvider() {
   const form = providerForm.value
@@ -107,6 +131,12 @@ function toggleInput(kind: "text" | "image") {
   const list = modelForm.value.input
   modelForm.value.input = list.includes(kind) ? list.filter((item) => item !== kind) : [...list, kind]
 }
+
+function onRefresh() {
+  envKeysLoaded.value = false
+  void loadEnvKeys()
+  emit("refresh")
+}
 </script>
 
 <template>
@@ -117,7 +147,7 @@ function toggleInput(kind: "text" | "image") {
         <p class="mt-0.5 text-xs text-zinc-400">由 AI 服务持有（models.json）；此处维护服务商与模型，模型策略从这里选择</p>
       </div>
       <div class="flex items-center gap-2">
-        <Button variant="outline" size="sm" :disabled="saving" @click="emit('refresh')">刷新</Button>
+        <Button variant="outline" size="sm" :disabled="saving" @click="onRefresh">刷新</Button>
         <Button v-if="!fauxProvider" size="sm" @click="openCreateProvider"><Plus class="mr-1.5 h-4 w-4" />新增服务商</Button>
       </div>
     </div>
@@ -169,7 +199,21 @@ function toggleInput(kind: "text" | "image") {
           <label class="block space-y-1.5 text-sm font-medium text-zinc-700">标识 key<input v-model="providerForm.key" :disabled="!!providerEditingKey" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 disabled:bg-zinc-50 disabled:text-zinc-400" placeholder="deepseek" /></label>
           <label class="block space-y-1.5 text-sm font-medium text-zinc-700">名称<input v-model="providerForm.name" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="DeepSeek" /></label>
           <label class="block space-y-1.5 text-sm font-medium text-zinc-700">Base URL<input v-model="providerForm.base_url" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="https://api.deepseek.com/v1" /></label>
-          <label class="block space-y-1.5 text-sm font-medium text-zinc-700">API Key<div class="relative"><input v-model="providerForm.api_key" :type="showProviderKey ? 'text' : 'password'" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white pl-3 pr-10 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" :placeholder="providerEditingKey ? '留空保持不变' : '可留空，稍后补充'" /><button type="button" class="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-zinc-400 hover:text-zinc-700" @click="showProviderKey = !showProviderKey"><Eye v-if="!showProviderKey" class="h-4 w-4" /><EyeOff v-else class="h-4 w-4" /></button></div></label>
+          <div class="space-y-1.5 text-sm font-medium text-zinc-700">
+            <span class="flex items-center justify-between">API Key
+              <span class="flex gap-0.5 rounded-lg bg-zinc-100 p-0.5 text-xs font-medium">
+                <button type="button" class="rounded-md px-2.5 py-0.5 transition-colors" :class="keyMode === 'env' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'" @click="keyMode = 'env'">环境变量</button>
+                <button type="button" class="rounded-md px-2.5 py-0.5 transition-colors" :class="keyMode === 'plain' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'" @click="keyMode = 'plain'">明文</button>
+              </span>
+            </span>
+            <Select v-if="keyMode === 'env' && envKeys.length" v-model="providerForm.api_key" :options="envKeyOptions" placeholder="选择环境变量" class="!h-10 !rounded-xl text-sm" />
+            <input v-else-if="keyMode === 'env'" disabled class="block h-10 w-full cursor-not-allowed rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-400" placeholder="未检测到 *_API_KEY 环境变量，请切换为明文" />
+            <div v-else class="relative">
+              <input v-model="providerForm.api_key" :type="showProviderKey ? 'text' : 'password'" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white pl-3 pr-10 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" :placeholder="providerEditingKey ? '留空保持不变' : '可留空，稍后补充'" />
+              <button type="button" class="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-zinc-400 hover:text-zinc-700" @click="showProviderKey = !showProviderKey"><Eye v-if="!showProviderKey" class="h-4 w-4" /><EyeOff v-else class="h-4 w-4" /></button>
+            </div>
+            <span class="block text-xs font-normal text-zinc-400">{{ keyMode === "env" ? "引用 AI 服务进程的环境变量（$VAR），密钥不落盘" : "明文将写入模型目录文件，建议仅在调试时使用" }}</span>
+          </div>
         </div>
         <div class="mt-5 flex justify-end gap-2">
           <Button variant="outline" size="sm" @click="providerDialogOpen = false">取消</Button>

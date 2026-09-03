@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import {
   CatalogError,
+  listApiKeyEnvNames,
   maskApiKey,
   mutateCatalog,
   readCatalog,
@@ -13,6 +14,18 @@ import {
   validateProviderBody,
   validateProviderKey,
 } from "./catalog.js";
+
+test("listApiKeyEnvNames returns sorted *_API_KEY names only, never values", () => {
+  const names = listApiKeyEnvNames({
+    DEEPSEEK_API_KEY: "sk-secret",
+    SILICONFLOW_API_KEY: "sk-other",
+    lowercase_api_key: "sk-no",
+    AI_SERVICE_TOKEN: "token",
+    PATH: "whatever",
+  });
+  assert.deepEqual(names, ["DEEPSEEK_API_KEY", "SILICONFLOW_API_KEY"]);
+  assert.equal(JSON.stringify(names).includes("sk-secret"), false);
+});
 
 async function tempAgentDir(): Promise<string> {
   return mkdtemp(join(tmpdir(), "vitaflow-catalog-"));

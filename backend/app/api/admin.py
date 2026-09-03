@@ -1458,6 +1458,12 @@ def get_ai_catalog():
     return success(call_catalog("GET", "/v1/catalog"))
 
 
+@router.get("/ai-catalog/env-keys")
+def get_ai_catalog_env_keys():
+    """Env var NAMES (never values) usable as $VAR apiKey references, for the admin picker."""
+    return success(call_catalog("GET", "/v1/catalog/env-keys"))
+
+
 @router.post("/ai-catalog/providers")
 def create_catalog_provider(payload: CatalogProviderWrite):
     body = {"key": payload.key.strip(), "name": payload.name.strip(), "baseUrl": payload.base_url.strip(), "apiKey": payload.api_key.strip()}

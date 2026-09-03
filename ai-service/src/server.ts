@@ -13,6 +13,7 @@ import type { ImageContent } from "@earendil-works/pi-ai/compat";
 import {
   CatalogError,
   fauxCatalog,
+  listApiKeyEnvNames,
   mutateCatalog,
   readCatalog,
   renderProviders,
@@ -140,6 +141,15 @@ app.get("/v1/catalog", async (req, res) => {
   } catch (err) {
     handleCatalogError(res, err);
   }
+});
+
+// Admin UX helper for $VAR apiKey references: env var NAMES only, values never leave the process.
+app.get("/v1/catalog/env-keys", (req, res) => {
+  if (!authorize(req)) {
+    res.status(401).json({ type: "error", message: "未授权：需要有效的服务令牌" });
+    return;
+  }
+  res.json({ env_keys: listApiKeyEnvNames() });
 });
 
 app.post("/v1/catalog/providers", async (req, res) => {

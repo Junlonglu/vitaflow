@@ -326,6 +326,7 @@ export const createAdminAiConfigApi = (data: Partial<AdminAiConfig>) => request.
 export const updateAdminAiConfigApi = (id: number, data: Partial<AdminAiConfig>) => request.put<AdminAiConfigSaveResult, AdminAiConfigSaveResult>(`/admin/ai-configs/${id}`, data)
 export const deleteAdminAiConfigApi = (id: number) => request.delete(`/admin/ai-configs/${id}`)
 export const getAdminAiCatalogApi = () => request.get<AdminCatalog, AdminCatalog>("/admin/ai-catalog")
+export const getAdminCatalogEnvKeysApi = () => request.get<{ env_keys: string[] }, { env_keys: string[] }>("/admin/ai-catalog/env-keys")
 export const createAdminCatalogProviderApi = (data: AdminCatalogProviderWrite) => request.post<AdminCatalog, AdminCatalog>("/admin/ai-catalog/providers", data)
 export const updateAdminCatalogProviderApi = (key: string, data: { name: string; base_url: string; api_key?: string }) =>
   request.put<AdminCatalog, AdminCatalog>(`/admin/ai-catalog/providers/${encodeURIComponent(key)}`, data)

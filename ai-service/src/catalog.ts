@@ -141,6 +141,15 @@ export function maskApiKey(key: string | undefined): string | null {
   return `${trimmed.slice(0, 3)}***${trimmed.slice(-4)}`;
 }
 
+const API_KEY_ENV_RE = /^[A-Z][A-Z0-9_]*_API_KEY$/;
+
+/** Names (never values) of *_API_KEY env vars, offered to the admin UI for $VAR references. */
+export function listApiKeyEnvNames(env: NodeJS.ProcessEnv = process.env): string[] {
+  return Object.keys(env)
+    .filter((name) => API_KEY_ENV_RE.test(name))
+    .sort();
+}
+
 export function renderProviders(catalog: CatalogFile): CatalogProviderView[] {
   return Object.entries(catalog.providers || {}).map(([key, provider]) => ({
     key,

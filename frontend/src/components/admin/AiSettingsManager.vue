@@ -42,6 +42,7 @@ interface AiConfigForm {
   context_messages: number
   is_chat_selectable: boolean
   sort_order: number
+  pi_model_ref: string
   chat_points_per_call: string
   chat_points_per_million_input_tokens: string
   chat_points_per_million_output_tokens: string
@@ -115,6 +116,7 @@ const configForm = ref<AiConfigForm>({
   context_messages: 12,
   is_chat_selectable: true,
   sort_order: 100,
+  pi_model_ref: "",
   chat_points_per_call: "",
   chat_points_per_million_input_tokens: "",
   chat_points_per_million_output_tokens: "",
@@ -197,6 +199,7 @@ function resetConfigForm(item?: AdminAiConfig) {
     context_messages: Number(item?.context_messages ?? 12),
     is_chat_selectable: item?.is_chat_selectable ?? true,
     sort_order: Number(item?.sort_order ?? 100),
+    pi_model_ref: item?.pi_model_ref ?? "",
     chat_points_per_call: item?.chat_points_per_call == null ? "" : String(item.chat_points_per_call),
     chat_points_per_million_input_tokens: item?.chat_points_per_million_input_tokens == null ? "" : String(item.chat_points_per_million_input_tokens),
     chat_points_per_million_output_tokens: item?.chat_points_per_million_output_tokens == null ? "" : String(item.chat_points_per_million_output_tokens),

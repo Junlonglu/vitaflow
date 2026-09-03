@@ -170,6 +170,7 @@ export interface AdminAiConfig {
   context_messages: number
   is_chat_selectable: boolean
   sort_order: number
+  pi_model_ref?: string | null
   chat_points_per_call?: number | null
   chat_points_per_million_input_tokens?: number | null
   chat_points_per_million_output_tokens?: number | null

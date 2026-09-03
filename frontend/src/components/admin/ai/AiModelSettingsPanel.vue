@@ -17,6 +17,7 @@ interface AiConfigForm {
   context_messages: number
   is_chat_selectable: boolean
   sort_order: number
+  pi_model_ref: string
   chat_points_per_call: string
   chat_points_per_million_input_tokens: string
   chat_points_per_million_output_tokens: string
@@ -71,6 +72,7 @@ defineEmits<{
           <div class="mt-3.5 flex flex-wrap gap-1.5">
             <span class="inline-flex items-center whitespace-nowrap rounded-md border border-zinc-200/50 bg-zinc-100/80 px-2 py-0.5 text-[10px] font-medium text-zinc-600">排序 {{ item.sort_order ?? 100 }}</span>
             <span class="inline-flex items-center whitespace-nowrap rounded-md border border-zinc-200/50 bg-zinc-100/80 px-2 py-0.5 text-[10px] font-medium text-zinc-600">{{ item.supports_multimodal ? "多模态" : "仅文本" }}</span>
+            <span v-if="item.pi_model_ref" class="inline-flex max-w-[160px] items-center gap-1 whitespace-nowrap rounded-md border border-blue-200/60 bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700" :title="item.pi_model_ref"><Sparkles class="h-3 w-3 shrink-0" /><span class="truncate">{{ item.pi_model_ref }}</span></span>
             <span class="inline-flex items-center whitespace-nowrap rounded-md border border-zinc-200/50 bg-zinc-100/80 px-2 py-0.5 text-[10px] font-medium text-zinc-600">{{ item.context_messages }}条上下文</span>
             <span class="inline-flex items-center whitespace-nowrap rounded-md border border-zinc-200/50 bg-zinc-100/80 px-2 py-0.5 text-[10px] font-medium text-zinc-600">{{ item.is_chat_selectable ? "助手可选" : "默认" }}</span>
             <span class="inline-flex items-center whitespace-nowrap rounded-md border border-zinc-200/50 bg-zinc-100/80 px-2 py-0.5 text-[10px] font-medium text-zinc-600">{{ item.has_api_key ? "配Key" : "无Key" }}</span>
@@ -86,6 +88,7 @@ defineEmits<{
         <label class="block space-y-1.5 text-sm font-medium text-zinc-700">配置名称<input v-model="configForm.name" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
         <label class="block space-y-1.5 text-sm font-medium text-zinc-700">API URL<input v-model="configForm.base_url" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="https://api.openai.com/v1" /></label>
         <label class="block space-y-1.5 text-sm font-medium text-zinc-700">模型名称<input v-model="configForm.model" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="gpt-4.1-mini" /></label>
+        <label class="block space-y-1.5 text-sm font-medium text-zinc-700">pi 模型引用<div class="relative"><input v-model="configForm.pi_model_ref" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="deepseek/deepseek-chat" /><span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-300">provider/model</span></div><span class="block text-xs font-normal text-zinc-400">对应 AI 服务 models.json 里的模型（provider/model）；对话按它路由模型，计费也按它归集，留空则按默认规则计费</span></label>
         <label class="block space-y-1.5 text-sm font-medium text-zinc-700">API Key<div class="relative"><input v-model="configForm.api_key" :type="showKey ? 'text' : 'password'" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white pl-3 pr-10 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="新建配置必填，编辑可留空" /><button type="button" class="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-zinc-400 hover:text-zinc-700" @click="showKey = !showKey"><Eye v-if="!showKey" class="h-4 w-4" /><EyeOff v-else class="h-4 w-4" /></button></div></label>
         <div class="grid gap-4 pt-1 sm:grid-cols-2 lg:grid-cols-4">
           <label class="space-y-1.5 text-sm font-medium text-zinc-700">温度<input v-model.number="configForm.temperature" type="number" step="0.1" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>

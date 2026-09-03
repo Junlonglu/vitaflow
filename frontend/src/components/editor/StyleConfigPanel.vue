@@ -119,7 +119,7 @@ function resetDefaultStyle() {
 }
 </script>
 <template>
-  <div class="space-y-4 rounded-lg border border-gray-200 bg-white p-4">
+  <div class="space-y-4 rounded-lg border border-zinc-200 bg-white p-4">
     <div class="flex items-center justify-between gap-3">
       <h3 class="text-sm font-semibold">样式设置</h3>
       <Button size="sm" variant="outline" class="h-8 shrink-0 border-zinc-200 text-xs text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900" @click="resetDefaultStyle">

@@ -1,1 +1,1 @@
-<template><div class="h-px w-full bg-gray-200" /></template>
+<template><div class="h-px w-full bg-zinc-200" /></template>

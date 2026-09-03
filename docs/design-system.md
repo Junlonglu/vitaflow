@@ -42,6 +42,7 @@
 | 类 | 用途 |
 |---|---|
 | `rounded-full` | 徽标、pill、圆形图标底 |
+| `rounded-md` | 内联小徽标（text-[10px] 级）、自绘复选框、下拉选项 |
 | `rounded-lg` | 按钮、小控件 |
 | `rounded-xl` | 输入框、卡片、下拉面板、toast |
 | `rounded-2xl` | 大面板、弹窗、管理后台分区卡片 |
@@ -77,6 +78,7 @@
 **规则**：
 - 主按钮 = `bg-zinc-900 text-white hover:bg-zinc-800`；蓝色不是主操作色，禁止把主按钮改成蓝底。
 - 语义色只允许上表色值；需要浅底时用对应 `-50` 色。
+- 唯一扩展：能力/标签类徽标允许 `purple`（`bg-purple-50 border-purple-200/60 text-purple-700`，如「多模态」标签）；purple 不得用于按钮、文字正文或状态反馈。
 - 灰阶一律 `zinc`。`gray-*` 是存量偏差，新代码禁止。
 
 ### 2.2 背景分层
@@ -126,9 +128,9 @@
 - 尺寸：`sm` = `h-8 px-3`；`md` = `h-10 px-4`；`icon` = `h-9 w-9`。统一 `rounded-lg text-sm font-medium`，`disabled:opacity-50`。
 - 规则：同一操作区（弹窗底部、卡片尾部）按钮高度必须一致；危险操作旁必须配取消按钮。
 
-### 3.2 弹窗 — 模式基准 `ui/dialog/ConfirmDialog.vue`
+### 3.2 弹窗 — 统一外壳 `ui/dialog/AppDialog.vue`
 
-所有自建弹窗必须遵循此结构（存量手写弹窗见文末改造项）：
+所有弹窗必须基于 `AppDialog`（Teleport + 遮罩 `bg-zinc-950/40 backdrop-blur-sm` + `rounded-2xl shadow-xl max-h-[90vh]` + 头部/底部结构），通过 props 定制：`open`（v-model:open）、`title`/`description`（默认头部）、`maxWidthClass`、`bodyClass`/`headerClass`/`footerClass`、`showClose`/`overlayClose`；`#icon` 插槽加头部图标，`#header`/`#footer` 插槽全自定义。确认类弹窗用 `ConfirmDialog`（已构建于 AppDialog 之上）。默认头部 = title/description + 右上 X；默认底部容器 = `border-t border-zinc-100 bg-zinc-50 px-5 py-4`。
 
 ```
 <Teleport to="body">
@@ -154,14 +156,12 @@
 |---|---|---|
 | Input | `ui/input/Input.vue` | `h-10 w-full rounded-xl border-zinc-200 px-3.5 text-[14px]`，hover `border-zinc-300`，focus `border-zinc-500`，`placeholder:text-zinc-400` |
 | Textarea | `ui/textarea/Textarea.vue` | 同 Input 圆角/边框风格 |
-| Select | `ui/select/Select.vue` | radix-vue SelectRoot；默认 `h-9 border-zinc-200 shadow-sm`，**打开态** `border-zinc-900 ring-1 ring-zinc-900`；`ghost` variant `h-8` 透明底用于工具栏内嵌下拉；面板 `rounded-xl border-zinc-200 shadow-lg z-[200]`，选中项 `focus:bg-zinc-100` |
+| Select | `ui/select/Select.vue` | radix-vue SelectRoot；默认 `h-10 border-zinc-200 shadow-sm`，**打开态** `border-zinc-900 ring-1 ring-zinc-900`；`ghost` variant `h-8` 透明底用于工具栏内嵌下拉；面板 `rounded-xl border-zinc-200 shadow-lg z-[200]`，选中项 `focus:bg-zinc-100` |
 | Label | `ui/label/Label.vue` | 表单标签 |
 | Switch | `ui/switch/Switch.vue` | 布尔开关 |
 | DateTimePicker | `ui/DateTimePicker.vue` | 日期时间选择 |
 
-**已知不一致（目标态待定）**：Input `h-10` vs Select `h-9`——同排布局时以 Input 高度为准对齐（用 wrapper 补齐），统一改高度属存量改造项。
-
-**规则**：表单标签一律配 `Label`；错误文案 `text-sm text-red-600 mt-1.5`；表单纵向间距 `space-y-4` 起步。
+**规则**：表单控件高度统一 `h-10`（ghost 档 `h-8` 仅用于工具栏内嵌）；表单标签一律配 `Label`；错误文案 `text-sm text-red-600 mt-1.5`；表单纵向间距 `space-y-4` 起步。
 
 ### 3.4 展示组件
 
@@ -236,12 +236,14 @@
 
 > 文档即目标态；以下偏差按表逐项勾销，改造时同步更新本表。
 
-| # | 位置 | 现状 | 目标 | 改造方式 | 风险 |
-|---|---|---|---|---|---|
-| 1 | `tailwind.config.js` + `components.json` | v4 不读取该配置，`primary: #2563eb` 等为死配置；`components.json` tailwind 段仍引用它 | 删除 `tailwind.config.js`，`components.json` 的 tailwind 段清空/移除；`baseColor: "slate"` 改 `"zinc"` | 直接删除（无运行时引用） | 低 |
-| 2 | 全库 30 处 `gray-*`（17 文件） | 与 zinc 混用，含核心组件 Button/Card/Badge/Label/Separator/Switch/Avatar/Alert | 全部替换为对应 `zinc-*` | 机械替换 + `npx vue-tsc --noEmit` + 逐页目检 | 低（数量少） |
-| 3 | 手写弹窗：`AiGenerateDialog`、`AnnouncementModal`、`PointsAdjustModal`、`CreateResumeModal`、`ResumeShareDialog`、`AvatarCropperModal` | 各自手写 Teleport/遮罩/按钮区，细节漂移 | 统一到 ConfirmDialog 结构模式（3.2）；表单类弹窗可抽 `FormDialog` 变体 | 逐个重构，保留各自业务内容 | 中（需逐个回归） |
-| 4 | `ui/dialog/Dialog.vue` | 空壳（仅 slot，无实现） | 删除（radix-vue Dialog 需要时再按 3.6 生成） | 直接删除 | 低 |
-| 5 | 表单控件高度 | Input `h-10` vs Select `h-9`，同排不齐 | 统一为 `h-10`（Select 默认档提高，ghost 档不变） | 改 Select 触发器高度 + 目检所有同排场景 | 中（视觉回归） |
-| 6 | 任意字号值 | 大量 `text-[14px]`（与 `text-sm` 等价）、`text-[16px]` 等 | 新代码用阶梯；存量遇改即换，不专项清理 | 渐进 | 低 |
-| 7 | body 背景 `#f7f8fb` | 非 Tailwind 色阶值（zinc-50 是 `#fafafa`） | 保留（首页观感依赖此值），在 index.css 注释说明与 zinc-50 的关系 | 加注释 | 低 |
+| # | 位置 | 现状 | 目标 | 改造方式 | 风险 | 状态 |
+|---|---|---|---|---|---|---|
+| 1 | `tailwind.config.js` + `components.json` | v4 不读取该配置，`primary: #2563eb` 等为死配置；`components.json` tailwind 段仍引用它 | 删除 `tailwind.config.js`，`components.json` 的 tailwind 段清空/移除；`baseColor: "slate"` 改 `"zinc"` | 直接删除（无运行时引用） | 低 | 已完成 |
+| 2 | 全库 30 处 `gray-*`（17 文件） | 与 zinc 混用，含核心组件 Button/Card/Badge/Label/Separator/Switch/Avatar/Alert | 全部替换为对应 `zinc-*` | 机械替换 + `npx vue-tsc --noEmit` + 逐页目检 | 低（数量少） | 已完成 |
+| 3 | 手写弹窗外壳：ResumeList 内联 AI 生成壳（AiGenerateDialog 仅表单体）、`AnnouncementModal`、`PointsAdjustModal`、`CreateResumeModal`、`ResumeShareDialog`、`AvatarCropperModal` | 各自手写 Teleport/遮罩/按钮区，z 层（50/80/90/100/120）、圆角、阴影漂移 | 统一迁移到 `AppDialog`（3.2）；`ConfirmDialog` 重建其上 | 已抽取 AppDialog 并逐个迁移，保留业务内容 | 中（需逐个回归） | 已完成 |
+| 4 | `ui/dialog/Dialog.vue` | 空壳（仅 slot，无实现） | 删除（radix-vue Dialog 需要时再按 3.6 生成） | 直接删除 | 低 | 已完成 |
+| 5 | 表单控件高度 | Input `h-10` vs Select `h-9`，同排不齐 | 统一为 `h-10`（Select 默认档提高，ghost 档不变） | 改 Select 触发器高度 + 目检所有同排场景 | 中（视觉回归） | 已完成 |
+| 6 | 任意字号值 | 大量 `text-[14px]`（与 `text-sm` 等价）、`text-[16px]` 等 | 新代码用阶梯；存量遇改即换，不专项清理 | 渐进 | 低 | 渐进中 |
+| 7 | body 背景 `#f7f8fb` | 非 Tailwind 色阶值（zinc-50 是 `#fafafa`） | 保留（首页观感依赖此值），在 index.css 注释说明与 zinc-50 的关系 | 加注释 | 低 | 已完成 |
+
+> 附带修复（审计 ticket 1~11 新增/重写组件时发现）：`ResumeAiChatPanel` 与 `ResumeList` 各自内造 toast → 统一 `showGlobalToast`；AI 图片灯箱 `z-[9999]` → 弹窗档 `z-[100]`；`PointsAdjustModal` 主按钮 blue-600 → zinc-900（黑主蓝辅）、输入聚焦蓝环 → zinc。

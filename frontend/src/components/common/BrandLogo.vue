@@ -33,8 +33,8 @@ const titleClass = computed(() => {
 })
 
 const subtitleClass = computed(() => (props.size === "lg" ? "text-sm" : "text-[11px]"))
-const textToneClass = computed(() => (props.tone === "light" ? "text-white" : "text-gray-950"))
-const subToneClass = computed(() => (props.tone === "light" ? "text-gray-300" : "text-gray-500"))
+const textToneClass = computed(() => (props.tone === "light" ? "text-white" : "text-zinc-950"))
+const subToneClass = computed(() => (props.tone === "light" ? "text-zinc-300" : "text-zinc-500"))
 const iconAccent = computed(() => "#2563eb")
 </script>
 

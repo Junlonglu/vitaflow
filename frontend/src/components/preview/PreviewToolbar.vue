@@ -5,8 +5,8 @@ defineProps<{ scale: number }>()
 defineEmits<{ zoomIn: []; zoomOut: [] }>()
 </script>
 <template>
-  <div class="flex h-12 items-center justify-between border-b border-gray-200 bg-white px-4">
-    <span class="text-sm text-gray-500">简历预览 · {{ Math.round(scale * 100) }}%</span>
+  <div class="flex h-12 items-center justify-between border-b border-zinc-200 bg-white px-4">
+    <span class="text-sm text-zinc-500">简历预览 · {{ Math.round(scale * 100) }}%</span>
     <div class="flex gap-2">
       <Button size="icon" variant="outline" @click="$emit('zoomOut')"><ZoomOut class="h-4 w-4" /></Button>
       <Button size="icon" variant="outline" @click="$emit('zoomIn')"><ZoomIn class="h-4 w-4" /></Button>

@@ -79,7 +79,7 @@ const updateValue = (strVal: string) => {
     <SelectTrigger 
       class="flex w-full items-center justify-between rounded-md px-3 text-sm ring-offset-white placeholder:text-zinc-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 transition-all"
       :class="[
-        ghost ? 'h-8 bg-transparent border-none shadow-none text-zinc-600 hover:text-zinc-900 data-[state=open]:text-zinc-900 focus:ring-0 focus:outline-none font-medium' : 'h-9 border border-zinc-200 bg-white shadow-sm hover:border-zinc-300 data-[state=open]:border-zinc-900 data-[state=open]:ring-1 data-[state=open]:ring-zinc-900 focus:ring-1 focus:ring-zinc-900',
+        ghost ? 'h-8 bg-transparent border-none shadow-none text-zinc-600 hover:text-zinc-900 data-[state=open]:text-zinc-900 focus:ring-0 focus:outline-none font-medium' : 'h-10 border border-zinc-200 bg-white shadow-sm hover:border-zinc-300 data-[state=open]:border-zinc-900 data-[state=open]:ring-1 data-[state=open]:ring-zinc-900 focus:ring-1 focus:ring-zinc-900',
         props.class
       ]"
     >

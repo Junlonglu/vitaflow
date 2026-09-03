@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref } from "vue"
 import { useRouter } from "vue-router"
-import { Megaphone, X, History, Check } from "lucide-vue-next"
+import { Megaphone, History, Check } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
+import AppDialog from "@/components/ui/dialog/AppDialog.vue"
 import { dismissAnnouncementApi, type AnnouncementItem } from "@/api/announcement"
 
 const props = defineProps<{ announcement: AnnouncementItem }>()
@@ -36,28 +37,37 @@ function formatDate(value?: string) {
 </script>
 
 <template>
-  <div class="fixed inset-0 z-[80] flex items-center justify-center bg-zinc-950/45 p-4 backdrop-blur-sm" @click.self="close">
-    <section role="dialog" aria-modal="true" aria-labelledby="announcement-title" class="flex max-h-[86vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-      <header class="flex items-start justify-between border-b border-zinc-100 px-6 py-5">
-        <div class="flex min-w-0 gap-3"><span class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zinc-900 text-white"><Megaphone class="h-4 w-4" /></span><div class="min-w-0"><h2 id="announcement-title" class="text-lg font-semibold tracking-tight text-zinc-900">{{ announcement.title }}</h2><p class="mt-1 text-xs text-zinc-400">{{ formatDate(announcement.published_at) }}</p></div></div>
-        <button class="rounded-lg p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700" aria-label="关闭公告" @click="close"><X class="h-5 w-5" /></button>
-      </header>
-      <div class="announcement-content min-h-0 flex-1 overflow-y-auto px-6 py-5 text-sm leading-7 text-zinc-700 break-words whitespace-pre-wrap" v-html="announcement.content"></div>
-      <footer class="flex flex-col gap-4 border-t border-zinc-100 bg-zinc-50 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <label class="group flex cursor-pointer select-none items-center gap-2.5 text-sm font-medium text-zinc-600 transition-colors hover:text-zinc-900">
-          <div class="relative flex h-5 w-5 items-center justify-center rounded-md border border-zinc-300 bg-white transition-all duration-200 group-hover:border-zinc-400" :class="{ '!border-zinc-900 !bg-zinc-900 shadow-sm': neverShowAgain }">
-            <Check v-if="neverShowAgain" class="h-3.5 w-3.5 text-white stroke-[3]" />
-          </div>
-          <input v-model="neverShowAgain" type="checkbox" class="sr-only" />
-          <span>下次不再提示</span>
-        </label>
-        <div class="flex items-center gap-3">
-          <Button variant="outline" :disabled="closing" @click="goToAllAnnouncements"><History class="h-4 w-4" />全部公告</Button>
-          <Button :disabled="closing" @click="close"><Check class="h-4 w-4" />{{ closing ? '处理中…' : '我知道了' }}</Button>
+  <AppDialog
+    :open="true"
+    :title="announcement.title"
+    :description="formatDate(announcement.published_at)"
+    max-width-class="max-w-xl"
+    panel-class="max-h-[86vh]"
+    header-class="border-b border-zinc-100 px-6 py-5"
+    body-class="announcement-content min-h-0 flex-1 overflow-y-auto px-6 py-5 text-sm leading-7 text-zinc-700 break-words whitespace-pre-wrap"
+    footer-class="flex flex-col gap-4 border-t border-zinc-100 bg-zinc-50 px-6 py-4 sm:flex-row sm:items-center sm:justify-between"
+    @update:open="close"
+  >
+    <template #icon>
+      <span class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zinc-900 text-white"><Megaphone class="h-4 w-4" /></span>
+    </template>
+
+    <div v-html="announcement.content"></div>
+
+    <template #footer>
+      <label class="group flex cursor-pointer select-none items-center gap-2.5 text-sm font-medium text-zinc-600 transition-colors hover:text-zinc-900">
+        <div class="relative flex h-5 w-5 items-center justify-center rounded-md border border-zinc-300 bg-white transition-all duration-200 group-hover:border-zinc-400" :class="{ '!border-zinc-900 !bg-zinc-900 shadow-sm': neverShowAgain }">
+          <Check v-if="neverShowAgain" class="h-3.5 w-3.5 text-white stroke-[3]" />
         </div>
-      </footer>
-    </section>
-  </div>
+        <input v-model="neverShowAgain" type="checkbox" class="sr-only" />
+        <span>下次不再提示</span>
+      </label>
+      <div class="flex items-center gap-3">
+        <Button variant="outline" :disabled="closing" @click="goToAllAnnouncements"><History class="h-4 w-4" />全部公告</Button>
+        <Button :disabled="closing" @click="close"><Check class="h-4 w-4" />{{ closing ? '处理中…' : '我知道了' }}</Button>
+      </div>
+    </template>
+  </AppDialog>
 </template>
 
 <style scoped>

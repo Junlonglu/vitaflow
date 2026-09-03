@@ -2,6 +2,7 @@
 import { nextTick, ref, watch } from "vue"
 import { AlertCircle, ArrowRight, Briefcase, ChevronLeft, ChevronRight, FileUp, LayoutTemplate, Sparkles, X } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
+import AppDialog from "@/components/ui/dialog/AppDialog.vue"
 import TemplatePreview from "@/components/templates/TemplatePreview.vue"
 import type { TemplateItem } from "@/api/template"
 import type { ResumeStarterIndustry, ResumeStarterLevel, ResumeStarterRole } from "@/api/resumeStarter"
@@ -51,7 +52,7 @@ const emit = defineEmits<{
   selectTemplate: [templateId: string]
 }>()
 
-const modalBody = ref<HTMLElement | null>(null)
+const dialogRef = ref<{ bodyEl: HTMLElement | null } | null>(null)
 
 const titleMap = {
   import: "选择导入模板",
@@ -60,7 +61,7 @@ const titleMap = {
 
 function resetScroll() {
   nextTick(() => {
-    if (modalBody.value) modalBody.value.scrollTop = 0
+    if (dialogRef.value?.bodyEl) dialogRef.value.bodyEl.scrollTop = 0
   })
 }
 
@@ -84,33 +85,34 @@ watch(
 </script>
 
 <template>
-  <Transition name="modal-fade">
-    <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-zinc-950/40 p-4 backdrop-blur-sm" @click="emit('close')">
-      <section
-        class="my-auto flex max-h-[90vh] w-full flex-col overflow-hidden rounded-[24px] border border-zinc-200 bg-white shadow-xl transform"
-        :class="templateSelectMode === 'create' && createMode === 'entry' ? 'max-w-3xl' : 'max-w-5xl'"
-        @click.stop
-      >
-        <div class="flex shrink-0 items-start justify-between gap-4 border-b border-zinc-100 bg-white px-5 py-4 sm:px-7 sm:py-5">
-          <div class="flex min-w-0 items-start gap-2.5">
-            <button
-              v-if="['import', 'blank'].includes(templateSelectMode) || createMode === 'starter'"
-              class="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-900"
-              @click="emit('back')"
-            >
-              <ChevronLeft class="h-5 w-5" />
-            </button>
-            <div class="min-w-0">
-              <h2 class="text-xl font-bold tracking-tight text-zinc-950">{{ modalTitle() }}</h2>
-              <p class="mt-1 truncate text-xs leading-5 text-zinc-500">{{ modalDescription() }}</p>
-            </div>
-          </div>
-          <button class="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700" @click="emit('close')">
-            <X class="h-5 w-5" />
+  <AppDialog
+    ref="dialogRef"
+    :open="open"
+    :max-width-class="templateSelectMode === 'create' && createMode === 'entry' ? 'max-w-3xl' : 'max-w-5xl'"
+    body-class="min-h-0 flex-1 overflow-y-auto bg-zinc-50/50 p-3 thin-scrollbar sm:p-5"
+    @update:open="(value) => !value && emit('close')"
+  >
+    <template #header>
+      <div class="flex shrink-0 items-start justify-between gap-4 border-b border-zinc-100 bg-white px-5 py-4 sm:px-7 sm:py-5">
+        <div class="flex min-w-0 items-start gap-2.5">
+          <button
+            v-if="['import', 'blank'].includes(templateSelectMode) || createMode === 'starter'"
+            class="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-900"
+            @click="emit('back')"
+          >
+            <ChevronLeft class="h-5 w-5" />
           </button>
+          <div class="min-w-0">
+            <h2 class="text-xl font-bold tracking-tight text-zinc-950">{{ modalTitle() }}</h2>
+            <p class="mt-1 truncate text-xs leading-5 text-zinc-500">{{ modalDescription() }}</p>
+          </div>
         </div>
+        <button class="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700" @click="emit('close')">
+          <X class="h-5 w-5" />
+        </button>
+      </div>
+    </template>
 
-        <div ref="modalBody" class="min-h-0 flex-1 overflow-y-auto bg-zinc-50/50 p-3 thin-scrollbar sm:p-5">
           <div v-if="templateSelectMode === 'create' && createMode === 'entry'" class="mx-auto max-w-3xl">
             <div class="grid gap-3 sm:grid-cols-3">
               <button class="group flex min-h-40 flex-col justify-between rounded-2xl border border-zinc-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-md active:scale-[0.99]" @click="emit('openStarter')">
@@ -314,35 +316,5 @@ watch(
               </div>
             </div>
           </div>
-        </div>
-      </section>
-    </div>
-  </Transition>
+  </AppDialog>
 </template>
-
-<style scoped>
-.modal-fade-enter-active,
-.modal-fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-.modal-fade-enter-from,
-.modal-fade-leave-to {
-  opacity: 0;
-}
-.modal-fade-enter-active > div,
-.modal-fade-leave-active > div,
-.modal-fade-enter-active section,
-.modal-fade-leave-active section {
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
-}
-.modal-fade-enter-from > div,
-.modal-fade-enter-from section {
-  transform: scale(0.96) translateY(10px);
-  opacity: 0;
-}
-.modal-fade-leave-to > div,
-.modal-fade-leave-to section {
-  transform: scale(0.96) translateY(10px);
-  opacity: 0;
-}
-</style>

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch, computed } from "vue"
-import { CheckCircle2, LoaderCircle, SendHorizontal, Bot, Search, Target, Wand2, Scissors, Trash2, X, ImagePlus, XCircle, Copy, Check, RotateCcw, Cpu, AlertCircle } from "lucide-vue-next"
+import { CheckCircle2, LoaderCircle, SendHorizontal, Bot, Search, Target, Wand2, Scissors, Trash2, X, ImagePlus, XCircle, Copy, Check, RotateCcw, Cpu } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
 import Select from "@/components/ui/select/Select.vue"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
 import { renderMarkdown } from "@/lib/markdown"
 import { uploadAiChatImageApi } from "@/api/file"
+import { showGlobalToast } from "@/utils/toast"
 import type { AiChatAttachment, AiChatModelOption } from "@/api/ai"
 
 type ChatMessage = {
@@ -237,23 +238,11 @@ const previewImageUrl = ref("")
 function openPreview(url: string) { previewImageUrl.value = url }
 function closePreview() { previewImageUrl.value = "" }
 
-const toastMessage = ref("")
-
 watch(
   () => props.error,
   (newErr) => {
-    if (newErr) {
-      toastMessage.value = newErr
-      setTimeout(() => {
-        if (toastMessage.value === newErr) {
-          toastMessage.value = ""
-        }
-      }, 4000)
-    } else {
-      toastMessage.value = ""
-    }
+    if (newErr) showGlobalToast(newErr, "error")
   },
-  { immediate: true },
 )
 </script>
 
@@ -389,7 +378,7 @@ watch(
   <!-- Image Preview Lightbox -->
   <Teleport to="body">
     <Transition name="fade">
-      <div v-if="previewImageUrl" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" @click="closePreview">
+      <div v-if="previewImageUrl" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" @click="closePreview">
         <button type="button" class="absolute top-6 right-6 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white/80 backdrop-blur-md transition-all hover:bg-white/20 hover:text-white active:scale-95 ring-1 ring-white/20" title="关闭预览" @click.stop="closePreview">
           <X class="h-6 w-6" stroke-width="2" />
         </button>
@@ -397,29 +386,9 @@ watch(
       </div>
     </Transition>
   </Teleport>
-
-  <!-- Error Toast -->
-  <Teleport to="body">
-    <Transition name="toast-slide">
-      <div v-if="toastMessage" class="fixed bottom-12 left-1/2 -translate-x-1/2 z-[10000] flex w-max max-w-[90vw] items-center gap-2 rounded-xl bg-zinc-900 px-5 py-3 text-sm font-medium text-white shadow-xl border border-zinc-800">
-        <AlertCircle class="h-4 w-4 shrink-0 text-red-400" />
-        <span class="break-words">{{ toastMessage }}</span>
-      </div>
-    </Transition>
-  </Teleport>
 </template>
 
 <style scoped>
-.toast-slide-enter-active,
-.toast-slide-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.toast-slide-enter-from,
-.toast-slide-leave-to {
-  opacity: 0;
-  transform: translate(-50%, 20px) scale(0.95);
-}
-
 .chat-markdown :deep(p) { margin: 0 0 0.6rem; }
 .chat-markdown :deep(p:last-child),
 .chat-markdown :deep(ul:last-child),

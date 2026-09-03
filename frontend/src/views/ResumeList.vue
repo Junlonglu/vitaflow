@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue"
 import { useRouter } from "vue-router"
-import { AlertCircle, CheckCircle2, Plus, Sparkles, X } from "lucide-vue-next"
+import { Plus, Sparkles } from "lucide-vue-next"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
+import AppDialog from "@/components/ui/dialog/AppDialog.vue"
 import ResumeImportProgress from "@/components/resume/ResumeImportProgress.vue"
 import ResumeCard from "@/components/resume/ResumeCard.vue"
 import CreateResumeModal from "@/components/resume/CreateResumeModal.vue"
@@ -19,6 +20,7 @@ import AnnouncementModal from "@/components/announcement/AnnouncementModal.vue"
 import { getCurrentAnnouncementApi, type AnnouncementItem } from "@/api/announcement"
 import { importResumeFileApi } from "@/api/resume"
 import { listResumeStartersApi, type ResumeStarterIndustry, type ResumeStarterLevel, type ResumeStarterRole } from "@/api/resumeStarter"
+import { showGlobalToast } from "@/utils/toast"
 
 const router = useRouter()
 const store = useResumeStore()
@@ -36,7 +38,6 @@ const aiInitialTargetPosition = ref("")
 const aiInitialPersonalInfo = ref("")
 const aiInitialStyle = ref("技术型")
 const aiTemplateId = ref("tech")
-const toastMessage = ref("")
 const announcement = ref<AnnouncementItem | null>(null)
 const flowPointSummary = ref<FlowPointSummary | null>(null)
 const importFileInput = ref<HTMLInputElement | null>(null)
@@ -426,12 +427,7 @@ function goToEdit(id: number) {
 }
 
 function showToast(message: string) {
-  toastMessage.value = message
-  setTimeout(() => {
-    if (toastMessage.value === message) {
-      toastMessage.value = ""
-    }
-  }, 2500)
+  showGlobalToast(message, message.includes("成功") ? "success" : "error")
 }
 
 function stopImportProgress() {
@@ -519,15 +515,6 @@ async function confirmDelete() {
   <AppLayout>
     <AnnouncementModal v-if="announcement" :announcement="announcement" @close="announcement = null" />
     <main class="mx-auto max-w-7xl px-4 sm:px-6 py-4 md:py-10 relative">
-      <!-- Toast Notification -->
-      <Transition name="toast-slide">
-        <div v-if="toastMessage" class="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] flex w-max max-w-[90vw] items-center gap-2 rounded-xl bg-zinc-900 px-5 py-3 text-sm font-medium text-white shadow-xl border border-zinc-800">
-          <CheckCircle2 v-if="toastMessage.includes('成功')" class="h-4 w-4 shrink-0 text-emerald-400" />
-          <AlertCircle v-else class="h-4 w-4 shrink-0 text-red-400" />
-          <span class="break-words">{{ toastMessage }}</span>
-        </div>
-      </Transition>
-
       <ResumeImportProgress
         :open="importingResume"
         :progress="importProgress"
@@ -594,34 +581,30 @@ async function confirmDelete() {
       />
 
       <!-- AI Generation Modal -->
-      <Transition name="modal-fade">
-        <div v-if="showAiCreate" class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/40 backdrop-blur-sm p-4">
-          <div class="flex max-h-[calc(100vh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl transform transition-all" @click.stop>
-            <div class="shrink-0 flex items-center justify-between border-b border-zinc-100 px-6 py-5 bg-zinc-50/50">
-              <div>
-                <h2 class="text-lg font-semibold text-zinc-900 tracking-tight flex items-center gap-2">
-                  <Sparkles class="w-4 h-4 text-zinc-700"/> AI 智能生成
-                </h2>
-                <p class="mt-1 text-xs text-zinc-500">输入基础信息，AI 将为你提炼出彩简历</p>
-              </div>
-              <button class="p-2 text-zinc-400 hover:bg-zinc-200/50 hover:text-zinc-600 rounded-full transition-colors" @click="showAiCreate = false">
-                <X class="h-5 w-5" />
-              </button>
-            </div>
-            <div class="min-h-0 flex-1 p-4 sm:p-6 thin-scrollbar" :class="aiLoading ? 'overflow-hidden' : 'overflow-y-auto'">
-              <p v-if="aiError" class="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">{{ aiError }}</p>
-              <AiGenerateDialog
-                :loading="aiLoading"
-                :stream-text="aiStreamText"
-                :initial-target-position="aiInitialTargetPosition"
-                :initial-personal-info="aiInitialPersonalInfo"
-                :initial-style="aiInitialStyle"
-                @generate="requestGenerateWithPoints"
-              />
-            </div>
-          </div>
-        </div>
-      </Transition>
+      <AppDialog
+        :open="showAiCreate"
+        title="AI 智能生成"
+        description="输入基础信息，AI 将为你提炼出彩简历"
+        :overlay-close="false"
+        max-width-class="max-w-lg"
+        header-class="border-b border-zinc-100 px-6 py-5 bg-zinc-50/50"
+        :body-class="aiLoading ? 'min-h-0 flex-1 overflow-hidden p-4 sm:p-6 thin-scrollbar' : 'min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 thin-scrollbar'"
+        @update:open="(value) => (showAiCreate = value)"
+      >
+        <template #icon>
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700"><Sparkles class="h-4 w-4" /></span>
+        </template>
+
+        <p v-if="aiError" class="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">{{ aiError }}</p>
+        <AiGenerateDialog
+          :loading="aiLoading"
+          :stream-text="aiStreamText"
+          :initial-target-position="aiInitialTargetPosition"
+          :initial-personal-info="aiInitialPersonalInfo"
+          :initial-style="aiInitialStyle"
+          @generate="requestGenerateWithPoints"
+        />
+      </AppDialog>
 
 
       <!-- Resume List -->
@@ -684,51 +667,3 @@ async function confirmDelete() {
   </AppLayout>
 </template>
 
-<style scoped>
-.modal-fade-enter-active,
-.modal-fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-.modal-fade-enter-from,
-.modal-fade-leave-to {
-  opacity: 0;
-}
-.modal-fade-enter-active > div,
-.modal-fade-leave-active > div,
-.modal-fade-enter-active section,
-.modal-fade-leave-active section {
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
-}
-.modal-fade-enter-from > div,
-.modal-fade-enter-from section {
-  transform: scale(0.96) translateY(10px);
-  opacity: 0;
-}
-.modal-fade-leave-to > div,
-.modal-fade-leave-to section {
-  transform: scale(0.96) translateY(10px);
-  opacity: 0;
-}
-/* Modal Scale Transition */
-.modal-scale-enter-active,
-.modal-scale-leave-active {
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.modal-scale-enter-from,
-.modal-scale-leave-to {
-  opacity: 0;
-  transform: scale(0.96) translateY(10px);
-}
-
-/* Toast Transition */
-.toast-slide-enter-active,
-.toast-slide-leave-active {
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.toast-slide-enter-from,
-.toast-slide-leave-to {
-  opacity: 0;
-  transform: translate(-50%, 20px);
-}
-
-</style>

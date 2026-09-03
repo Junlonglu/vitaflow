@@ -21,7 +21,7 @@ async function submit() {
 </script>
 <template>
   <div class="flex min-h-screen items-center justify-center bg-[#f7f8fb] px-6">
-    <div class="w-full max-w-md rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
+    <div class="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-8 shadow-sm">
       <RouterLink to="/" class="inline-flex rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
         <BrandLogo />
       </RouterLink>
@@ -33,7 +33,7 @@ async function submit() {
         <div><Label>邮箱验证码</Label><Input v-model="form.verification_code" inputmode="numeric" maxlength="6" /></div>
         <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
         <Button class="w-full" @click="submit">注册</Button>
-        <RouterLink class="block text-center text-sm text-gray-500 hover:text-gray-900" to="/login">已有账号？去登录</RouterLink>
+        <RouterLink class="block text-center text-sm text-zinc-500 hover:text-zinc-900" to="/login">已有账号？去登录</RouterLink>
       </div>
     </div>
   </div>

@@ -3,9 +3,9 @@
   "style": "default",
   "typescript": true,
   "tailwind": {
-    "config": "tailwind.config.js",
+    "config": "",
     "css": "src/styles/index.css",
-    "baseColor": "slate",
+    "baseColor": "zinc",
     "cssVariables": false
   },
   "aliases": {

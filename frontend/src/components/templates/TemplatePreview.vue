@@ -43,6 +43,6 @@ onBeforeUnmount(() => observer?.disconnect())
       tabindex="-1"
       scrolling="no"
     />
-    <div v-else class="flex h-full items-center justify-center text-sm text-gray-400">暂无预览</div>
+    <div v-else class="flex h-full items-center justify-center text-sm text-zinc-400">暂无预览</div>
   </div>
 </template>

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
-import { Check, Clock3, Copy, ExternalLink, Link2, RefreshCw, ShieldCheck, X } from "lucide-vue-next"
+import { Check, Clock3, Copy, ExternalLink, Link2, RefreshCw, ShieldCheck } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
+import AppDialog from "@/components/ui/dialog/AppDialog.vue"
 import DateTimePicker from "@/components/ui/DateTimePicker.vue"
 import Select from "@/components/ui/select/Select.vue"
 import { getResumeShareApi, updateResumeShareApi, type ResumeShareSettings } from "@/api/resume"
@@ -134,25 +135,24 @@ watch(
 </script>
 
 <template>
-  <Teleport to="body">
-    <Transition name="share-dialog">
-      <div v-if="open" class="fixed inset-0 z-[120] flex items-center justify-center bg-zinc-950/45 p-4 backdrop-blur-sm" @click.self="$emit('update:open', false)">
-        <section class="w-full max-w-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden rounded-[24px] border border-zinc-200 bg-white shadow-[0_28px_90px_-28px_rgba(0,0,0,0.4)]">
-          <header class="flex shrink-0 items-start justify-between gap-4 border-b border-zinc-100 px-4 sm:px-6 py-4 sm:py-5 bg-white z-10">
-            <div class="flex items-start gap-3.5">
-              <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-zinc-900 text-white"><Link2 class="h-5 w-5" /></span>
-              <div>
-                <h2 class="text-lg font-semibold tracking-tight text-zinc-950">分享简历</h2>
-                <p class="mt-1 text-sm text-zinc-500">只有持有有效链接的人可以查看，无法编辑。</p>
-              </div>
-            </div>
-            <button class="rounded-full p-2 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700" title="关闭" @click="$emit('update:open', false)"><X class="h-5 w-5" /></button>
-          </header>
+  <AppDialog
+    :open="open"
+    title="分享简历"
+    description="只有持有有效链接的人可以查看，无法编辑。"
+    max-width-class="max-w-xl"
+    header-class="border-b border-zinc-100 px-4 py-4 sm:px-6 sm:py-5"
+    body-class="overflow-y-auto space-y-5 p-4 sm:p-6"
+    footer-class="flex shrink-0 items-center justify-end gap-3 border-t border-zinc-100 bg-zinc-50 px-4 py-3 sm:px-6 sm:py-4"
+    @update:open="(value) => $emit('update:open', value)"
+  >
+    <template #icon>
+      <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-900 text-white"><Link2 class="h-5 w-5" /></span>
+    </template>
 
-          <div v-if="loading" class="flex h-72 items-center justify-center">
-            <RefreshCw class="h-6 w-6 animate-spin text-zinc-400" />
-          </div>
-          <div v-else class="flex-1 overflow-y-auto space-y-5 p-4 sm:p-6">
+    <div v-if="loading" class="flex h-72 items-center justify-center">
+      <RefreshCw class="h-6 w-6 animate-spin text-zinc-400" />
+    </div>
+    <div v-else class="space-y-5">
             <div class="flex items-center justify-between gap-4 rounded-2xl border border-zinc-200 bg-zinc-50/70 px-4 py-3.5">
               <span class="flex items-center gap-3">
                 <ShieldCheck class="h-5 w-5 text-zinc-600" />
@@ -237,25 +237,11 @@ watch(
                 <Button variant="outline" size="sm" class="h-9 bg-white" @click="openSharePage"><ExternalLink class="mr-1.5 h-4 w-4" />查看分享页</Button>
               </div>
             </div>
-          </div>
+    </div>
 
-          <footer v-if="!loading" class="flex shrink-0 items-center justify-end gap-3 border-t border-zinc-100 bg-zinc-50 px-4 sm:px-6 py-3 sm:py-4 z-10">
-            <Button variant="outline" class="h-10 px-5 text-xs sm:text-sm" @click="$emit('update:open', false)">取消</Button>
-            <Button class="h-10 px-5 text-xs sm:text-sm" :disabled="saving" @click="saveSettings(false)">{{ saving ? "保存中..." : enabled ? "保存并开启" : "关闭分享" }}</Button>
-          </footer>
-        </section>
-      </div>
-    </Transition>
-  </Teleport>
+    <template v-if="!loading" #footer>
+      <Button variant="outline" class="h-10 px-5 text-xs sm:text-sm" @click="$emit('update:open', false)">取消</Button>
+      <Button class="h-10 px-5 text-xs sm:text-sm" :disabled="saving" @click="saveSettings(false)">{{ saving ? "保存中..." : enabled ? "保存并开启" : "关闭分享" }}</Button>
+    </template>
+  </AppDialog>
 </template>
-
-<style scoped>
-.share-dialog-enter-active,
-.share-dialog-leave-active { transition: opacity 0.2s ease; }
-.share-dialog-enter-active section,
-.share-dialog-leave-active section { transition: transform 0.25s ease, opacity 0.2s ease; }
-.share-dialog-enter-from,
-.share-dialog-leave-to { opacity: 0; }
-.share-dialog-enter-from section,
-.share-dialog-leave-to section { opacity: 0; transform: translateY(10px) scale(0.98); }
-</style>

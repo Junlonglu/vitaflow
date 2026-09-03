@@ -31,6 +31,8 @@ const envKeys = ref<string[]>([])
 const envKeysLoaded = ref(false)
 const keyMode = ref<"env" | "plain">("env")
 const envKeyOptions = computed(() => envKeys.value.map((name) => ({ label: `$${name}`, value: `$${name}` })))
+const providerErrors = ref({ key: "", name: "", base_url: "" })
+const modelErrors = ref({ id: "", name: "", input: "" })
 
 async function loadEnvKeys() {
   if (!envKeysLoaded.value) {
@@ -48,6 +50,7 @@ async function loadEnvKeys() {
 function openCreateProvider() {
   providerEditingKey.value = null
   providerForm.value = { key: "", name: "", base_url: "", api_key: "" }
+  providerErrors.value = { key: "", name: "", base_url: "" }
   void loadEnvKeys().then(() => {
     providerDialogOpen.value = true
   })
@@ -56,6 +59,7 @@ function openCreateProvider() {
 function openEditProvider(provider: AdminCatalogProvider) {
   providerEditingKey.value = provider.key
   providerForm.value = { key: provider.key, name: provider.name, base_url: provider.base_url, api_key: "" }
+  providerErrors.value = { key: "", name: "", base_url: "" }
   void loadEnvKeys().then(() => {
     providerDialogOpen.value = true
   })
@@ -77,13 +81,18 @@ const fauxProvider = computed(() => props.providerMode === "faux")
 
 function submitProvider() {
   const form = providerForm.value
-  if (!form.name.trim() || !form.base_url.trim()) return
+  const errors = { key: "", name: "", base_url: "" }
+  if (!providerEditingKey.value && !form.key.trim()) errors.key = "请填写标识 key"
+  if (!form.name.trim()) errors.name = "请填写名称"
+  if (!form.base_url.trim()) errors.base_url = "请填写 Base URL"
+  else if (!/^https?:\/\//i.test(form.base_url.trim())) errors.base_url = "Base URL 需以 http(s):// 开头"
+  providerErrors.value = errors
+  if (errors.key || errors.name || errors.base_url) return
   if (providerEditingKey.value) {
     const data: { name: string; base_url: string; api_key?: string } = { name: form.name.trim(), base_url: form.base_url.trim() }
     if (form.api_key.trim()) data.api_key = form.api_key.trim()
     emit("updateProvider", providerEditingKey.value, data)
   } else {
-    if (!form.key.trim()) return
     emit("createProvider", { key: form.key.trim(), name: form.name.trim(), base_url: form.base_url.trim(), api_key: form.api_key.trim() })
   }
   providerDialogOpen.value = false
@@ -92,6 +101,7 @@ function submitProvider() {
 function openCreateModel(providerKey: string) {
   modelEditing.value = null
   modelForm.value = { providerKey, id: "", name: "", reasoning: false, input: ["text"], context_window: "", max_tokens: "" }
+  modelErrors.value = { id: "", name: "", input: "" }
   modelDialogOpen.value = true
 }
 
@@ -106,12 +116,18 @@ function openEditModel(providerKey: string, model: AdminCatalogProvider["models"
     context_window: model.context_window != null ? String(model.context_window) : "",
     max_tokens: model.max_tokens != null ? String(model.max_tokens) : "",
   }
+  modelErrors.value = { id: "", name: "", input: "" }
   modelDialogOpen.value = true
 }
 
 function submitModel() {
   const form = modelForm.value
-  if (!form.id.trim() || !form.name.trim() || !form.input.length) return
+  const errors = { id: "", name: "", input: "" }
+  if (!form.id.trim()) errors.id = "请填写模型 id"
+  if (!form.name.trim()) errors.name = "请填写显示名称"
+  if (!form.input.length) errors.input = "至少选择一种输入类型"
+  modelErrors.value = errors
+  if (errors.id || errors.name || errors.input) return
   const data: AdminCatalogModelWrite = {
     id: form.id.trim(),
     name: form.name.trim(),
@@ -196,11 +212,11 @@ function onRefresh() {
       <div class="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
         <h4 class="text-lg font-semibold text-zinc-900">{{ providerEditingKey ? "编辑服务商" : "新增服务商" }}</h4>
         <div class="mt-4 space-y-3">
-          <label class="block space-y-1.5 text-sm font-medium text-zinc-700">标识 key<input v-model="providerForm.key" :disabled="!!providerEditingKey" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 disabled:bg-zinc-50 disabled:text-zinc-400" placeholder="deepseek" /></label>
-          <label class="block space-y-1.5 text-sm font-medium text-zinc-700">名称<input v-model="providerForm.name" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="DeepSeek" /></label>
-          <label class="block space-y-1.5 text-sm font-medium text-zinc-700">Base URL<input v-model="providerForm.base_url" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="https://api.deepseek.com/v1" /></label>
+          <label class="block space-y-1.5 text-sm font-medium text-zinc-700">标识 key<span class="text-red-500">*</span><input v-model="providerForm.key" :disabled="!!providerEditingKey" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 disabled:bg-zinc-50 disabled:text-zinc-400" placeholder="例如 deepseek" /><p v-if="providerErrors.key" class="text-xs font-normal text-red-600">{{ providerErrors.key }}</p></label>
+          <label class="block space-y-1.5 text-sm font-medium text-zinc-700">名称<span class="text-red-500">*</span><input v-model="providerForm.name" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="例如 DeepSeek" /><p v-if="providerErrors.name" class="text-xs font-normal text-red-600">{{ providerErrors.name }}</p></label>
+          <label class="block space-y-1.5 text-sm font-medium text-zinc-700">Base URL<span class="text-red-500">*</span><input v-model="providerForm.base_url" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="https://api.deepseek.com/v1" /><p v-if="providerErrors.base_url" class="text-xs font-normal text-red-600">{{ providerErrors.base_url }}</p></label>
           <div class="space-y-1.5 text-sm font-medium text-zinc-700">
-            <span class="flex items-center justify-between">API Key
+            <span class="flex items-center justify-between"><span>API Key<span class="ml-1 text-xs font-normal text-zinc-400">可选，留空稍后补</span></span>
               <span class="flex gap-0.5 rounded-lg bg-zinc-100 p-0.5 text-xs font-medium">
                 <button type="button" class="rounded-md px-2.5 py-0.5 transition-colors" :class="keyMode === 'env' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'" @click="keyMode = 'env'">环境变量</button>
                 <button type="button" class="rounded-md px-2.5 py-0.5 transition-colors" :class="keyMode === 'plain' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'" @click="keyMode = 'plain'">明文</button>
@@ -226,9 +242,9 @@ function onRefresh() {
       <div class="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
         <h4 class="text-lg font-semibold text-zinc-900">{{ modelEditing ? "编辑模型" : "新增模型" }}<span class="ml-2 text-sm font-normal text-zinc-400">{{ modelForm.providerKey }}</span></h4>
         <div class="mt-4 space-y-3">
-          <label class="block space-y-1.5 text-sm font-medium text-zinc-700">模型 id<input v-model="modelForm.id" :disabled="!!modelEditing" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 disabled:bg-zinc-50 disabled:text-zinc-400" placeholder="deepseek-chat" /></label>
-          <label class="block space-y-1.5 text-sm font-medium text-zinc-700">显示名称<input v-model="modelForm.name" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="DeepSeek Chat" /></label>
-          <div class="space-y-1.5 text-sm font-medium text-zinc-700">输入类型
+          <label class="block space-y-1.5 text-sm font-medium text-zinc-700">模型 id<span class="text-red-500">*</span><input v-model="modelForm.id" :disabled="!!modelEditing" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 disabled:bg-zinc-50 disabled:text-zinc-400" placeholder="例如 deepseek-chat" /><p v-if="modelErrors.id" class="text-xs font-normal text-red-600">{{ modelErrors.id }}</p></label>
+          <label class="block space-y-1.5 text-sm font-medium text-zinc-700">显示名称<span class="text-red-500">*</span><input v-model="modelForm.name" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="例如 DeepSeek Chat" /><p v-if="modelErrors.name" class="text-xs font-normal text-red-600">{{ modelErrors.name }}</p></label>
+          <div class="space-y-1.5 text-sm font-medium text-zinc-700">输入类型<span class="text-red-500">*</span>
             <div class="flex gap-2 pt-1">
               <label class="group flex cursor-pointer select-none items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2 text-xs font-medium text-zinc-600 transition-colors hover:text-zinc-900">
                 <div class="relative flex h-4 w-4 items-center justify-center rounded border border-zinc-300 bg-white" :class="{ '!border-zinc-900 !bg-zinc-900': modelForm.input.includes('text') }"><Check v-if="modelForm.input.includes('text')" class="h-3 w-3 text-white stroke-[3]" /></div>
@@ -239,6 +255,7 @@ function onRefresh() {
                 <input type="checkbox" class="sr-only" :checked="modelForm.input.includes('image')" @change="toggleInput('image')" /><span>图片（多模态）</span>
               </label>
             </div>
+            <p v-if="modelErrors.input" class="text-xs font-normal text-red-600">{{ modelErrors.input }}</p>
           </div>
           <div class="grid gap-3 sm:grid-cols-2">
             <label class="space-y-1.5 text-sm font-medium text-zinc-700">上下文窗口<input v-model="modelForm.context_window" type="number" min="1" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="可选" /></label>

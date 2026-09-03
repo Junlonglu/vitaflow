@@ -13,6 +13,7 @@ service stays free of any MinIO/OSS knowledge.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 from collections.abc import AsyncIterator
@@ -227,6 +228,16 @@ async def ai_service_task_result(
     if data is None:
         raise AppException("AI 服务未返回任务结果")
     return data, usage
+
+
+def ai_service_task_result_sync(
+    task_type: str,
+    input_payload: dict[str, Any],
+    *,
+    model_ref: str | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Sync bridge for threadpool (``def``) routes: run the async one-shot task on a fresh loop."""
+    return asyncio.run(ai_service_task_result(task_type, input_payload, model_ref=model_ref))
 
 
 def _catalog_headers() -> dict[str, str]:

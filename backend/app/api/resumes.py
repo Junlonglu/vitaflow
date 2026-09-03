@@ -14,9 +14,9 @@ from app.models.ai_task import AiTask
 from app.models.user import User
 from app.schemas.resume import ResumeCreate, ResumeOut, ResumeShareUpdate, ResumeUpdate, ResumeVersionCreate, default_template_config
 from app.schemas.resume_starter import ResumeStarterCreateRequest
-from app.services.ai.token_usage import build_token_usage
+from app.services.ai.token_usage import build_token_usage, estimate_tokens
 from app.services.ai_config_service import get_active_ai_config
-from app.services.ai_service_client import ai_service_task_result
+from app.services.ai_service_client import ai_service_task_result_sync
 from app.services.resume_normalization import normalize_resume_data
 from app.services.flow_points_service import POINT_ZERO, precheck_flow_points, settle_task_flow_points
 from app.services.preview_service import render_resume_html
@@ -147,7 +147,7 @@ def import_resume_file(
         # One-shot task via the Node AI service (ticket 09): the service parses
         # the model JSON and echoes real token usage on the result, so the task
         # settles synchronously without the LangChain token tracker.
-        result, usage_entries = ai_service_task_result(
+        result, usage_entries = ai_service_task_result_sync(
             "import_resume",
             payload,
             model_ref=ai_config.model_ref,

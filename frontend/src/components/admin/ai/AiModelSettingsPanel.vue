@@ -45,7 +45,7 @@ function supportsImages(ref: string | null | undefined): boolean {
 const catalogModelOptions = computed(() => [
   { label: "（未选择）", value: "" },
   ...props.catalogModels.map((model) => ({
-    label: `${model.name}（${model.ref}）${model.input.includes("image") ? " · 多模态" : ""}`,
+    label: `${model.ref}${model.input.includes("image") ? " · 多模态" : ""}`,
     value: model.ref,
   })),
 ])

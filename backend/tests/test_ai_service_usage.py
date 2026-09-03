@@ -114,7 +114,7 @@ class AiServiceUsageEndpointTest(unittest.TestCase):
             task_arg.tokens_used = 210
 
         with (
-            patch.object(ai_module, "get_ai_config_by_pi_model_ref", return_value=config) as lookup,
+            patch.object(ai_module, "get_ai_config_by_model_ref", return_value=config) as lookup,
             patch.object(ai_module, "create_ai_task", side_effect=fake_create_ai_task),
             patch.object(ai_module, "finish_ai_task", side_effect=fake_finish_ai_task),
         ):
@@ -155,7 +155,7 @@ class AiServiceUsageEndpointTest(unittest.TestCase):
     def test_bills_unmapped_ref_at_default_rule(self):
         task = _stub_task()
         with (
-            patch.object(ai_module, "get_ai_config_by_pi_model_ref", return_value=None),
+            patch.object(ai_module, "get_ai_config_by_model_ref", return_value=None),
             patch.object(ai_module, "create_ai_task", side_effect=lambda db, user_id, task_type, **kwargs: task),
             patch.object(ai_module, "finish_ai_task", side_effect=lambda db, t, status, **kw: setattr(t, "points_used", 0.5)),
         ):
@@ -183,7 +183,7 @@ class AiServiceUsageEndpointTest(unittest.TestCase):
             task_arg.points_used = 0
 
         with (
-            patch.object(ai_module, "get_ai_config_by_pi_model_ref", return_value=None),
+            patch.object(ai_module, "get_ai_config_by_model_ref", return_value=None),
             patch.object(ai_module, "create_ai_task", side_effect=lambda db, user_id, task_type, **kwargs: task),
             patch.object(ai_module, "finish_ai_task", side_effect=fake_finish),
         ):
@@ -205,7 +205,7 @@ class AiServiceUsageEndpointTest(unittest.TestCase):
         app.include_router(ai_router, prefix="/api")
         app.dependency_overrides[get_db] = lambda: app_db
 
-        with patch.object(ai_module, "get_ai_config_by_pi_model_ref", return_value=None):
+        with patch.object(ai_module, "get_ai_config_by_model_ref", return_value=None):
             resp = TestClient(app).post(
                 "/api/ai/service/usage", json=_USAGE_PAYLOAD, headers={"x-ai-service-token": "test-token"}
             )

@@ -12,7 +12,7 @@ capturing the call to _save_assistant_message.
 import asyncio
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from app.core.exceptions import AppException
 from app.services import ai_chat_service
@@ -67,12 +67,17 @@ def _faux_events(*_args, **_kwargs):
     return gen()
 
 
-def _stub_chat_config(supports_multimodal: bool = True, pi_model_ref: str | None = "deepseek/deepseek-v4-flash-vision-exp"):
+def _stub_chat_config(model_ref: str | None = "deepseek/deepseek-v4-flash-vision-exp"):
     return SimpleNamespace(
-        supports_multimodal=supports_multimodal,
-        pi_model_ref=pi_model_ref,
+        model_ref=model_ref,
         chat_billing_override=lambda: {"points_per_call": 5.0, "points_per_million_input_tokens": None, "points_per_million_output_tokens": None},
     )
+
+
+def _caps_patch(multimodal: bool | None = None):
+    """Patch the catalog capability lookup (ticket 11): None → permissive empty map."""
+    capabilities = {} if multimodal is None else {"deepseek/deepseek-v4-flash-vision-exp": {"multimodal": multimodal}}
+    return patch.object(ai_chat_service, "get_catalog_capabilities", new=AsyncMock(return_value=capabilities))
 
 
 class StreamAiServiceMultimodalTest(unittest.TestCase):
@@ -81,7 +86,7 @@ class StreamAiServiceMultimodalTest(unittest.TestCase):
     error, never a silently-dropped image."""
 
     def test_rejects_image_when_model_not_multimodal(self) -> None:
-        config = _stub_chat_config(supports_multimodal=False)
+        config = _stub_chat_config()
         user = SimpleNamespace(id=7)
         resume = SimpleNamespace(id=3, title="后端简历", resume_data={"basics": {}})
         attachments = [{"url": "http://127.0.0.1:9000/vitaflow/ai-chat/1.png", "object_name": "ai-chat/1.png", "content_type": "image/png"}]
@@ -89,6 +94,7 @@ class StreamAiServiceMultimodalTest(unittest.TestCase):
         with (
             patch.object(ai_chat_service, "resolve_chat_ai_config", return_value=config),
             patch.object(ai_chat_service, "precheck_flow_points"),
+            _caps_patch(multimodal=False),
             patch.object(ai_chat_service, "ai_service_chat_events", side_effect=_faux_events) as events,
         ):
             results = _drain_events(stream_ai_service_chat(_DbStub(), user, resume, "按图片改简历", attachments))
@@ -98,7 +104,7 @@ class StreamAiServiceMultimodalTest(unittest.TestCase):
         events.assert_not_called()
 
     def test_forwards_attachments_when_model_is_multimodal(self) -> None:
-        config = _stub_chat_config(supports_multimodal=True)
+        config = _stub_chat_config()
         session = SimpleNamespace(id=42, update_time=None)
         user = SimpleNamespace(id=7)
         resume = SimpleNamespace(id=3, title="后端简历", resume_data={"basics": {"name": "张三"}})
@@ -119,6 +125,7 @@ class StreamAiServiceMultimodalTest(unittest.TestCase):
         with (
             patch.object(ai_chat_service, "resolve_chat_ai_config", return_value=config),
             patch.object(ai_chat_service, "precheck_flow_points") as precheck,
+            _caps_patch(),
             patch.object(ai_chat_service, "get_or_create_chat_session", return_value=session),
             patch.object(ai_chat_service, "build_ai_service_context", return_value={"resume": {}, "history": [], "pending_change": {}}),
             patch.object(ai_chat_service, "ai_service_chat_events", side_effect=faux_events),
@@ -152,6 +159,7 @@ class StreamAiServicePendingPersistTest(unittest.TestCase):
         with (
             patch.object(ai_chat_service, "resolve_chat_ai_config", return_value=_stub_chat_config()),
             patch.object(ai_chat_service, "precheck_flow_points"),
+            _caps_patch(),
             patch.object(ai_chat_service, "get_or_create_chat_session", return_value=session),
             patch.object(ai_chat_service, "build_ai_service_context", return_value={"resume": {}, "history": [], "pending_change": {}}),
             patch.object(ai_chat_service, "ai_service_chat_events", side_effect=_faux_events),
@@ -192,6 +200,7 @@ class StreamAiServicePendingPersistTest(unittest.TestCase):
             # No model configured at all (pure faux demo): the turn runs unmapped
             # and unbilled — the tolerant resolve path (ticket 07).
             patch.object(ai_chat_service, "resolve_chat_ai_config", side_effect=AppException("未配置大模型 API KEY")),
+            _caps_patch(),
             patch.object(ai_chat_service, "get_or_create_chat_session", return_value=session),
             patch.object(ai_chat_service, "build_ai_service_context", return_value={"resume": {}, "history": [], "pending_change": {}}),
             patch.object(ai_chat_service, "ai_service_chat_events", side_effect=faux_events),

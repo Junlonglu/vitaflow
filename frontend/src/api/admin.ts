@@ -160,24 +160,56 @@ export interface AdminAnnouncement {
 export interface AdminAiConfig {
   id: number
   name: string
-  provider: string
-  base_url: string
-  model: string
-  temperature: number
-  timeout: number
-  max_tokens?: number | null
-  supports_multimodal: boolean
+  model_ref?: string | null
   context_messages: number
   is_chat_selectable: boolean
   sort_order: number
-  pi_model_ref?: string | null
   chat_points_per_call?: number | null
   chat_points_per_million_input_tokens?: number | null
   chat_points_per_million_output_tokens?: number | null
   is_active: boolean
-  has_api_key: boolean
   create_time: string
   update_time: string
+}
+
+export interface AdminCatalogModel {
+  id: string
+  name: string
+  ref: string
+  input: string[]
+  context_window: number | null
+  max_tokens: number | null
+}
+
+export interface AdminCatalogProvider {
+  key: string
+  name: string
+  base_url: string
+  api: string
+  api_key_masked: string | null
+  editable: boolean
+  models: AdminCatalogModel[]
+}
+
+export interface AdminCatalog {
+  provider_mode: "faux" | "real"
+  providers: AdminCatalogProvider[]
+}
+
+export interface AdminCatalogProviderWrite {
+  key: string
+  name: string
+  base_url: string
+  api_key?: string
+}
+
+export interface AdminCatalogModelWrite {
+  id: string
+  name: string
+  reasoning?: boolean
+  input?: string[]
+  context_window?: number | null
+  max_tokens?: number | null
 }
 
 export interface AdminPointRule {
@@ -284,10 +316,26 @@ export const createAdminAnnouncementApi = (data: { title: string; content: strin
 export const updateAdminAnnouncementApi = (id: number, data: { title: string; content: string; status: "draft" | "published" }) => request.put<AdminAnnouncement, AdminAnnouncement>(`/admin/announcements/${id}`, data)
 export const updateAdminAnnouncementStatusApi = (id: number, status: "draft" | "published") => request.patch<AdminAnnouncement, AdminAnnouncement>(`/admin/announcements/${id}/status`, { status })
 export const deleteAdminAnnouncementApi = (id: number) => request.delete(`/admin/announcements/${id}`)
+export interface AdminAiConfigSaveResult {
+  config: AdminAiConfig
+  warning?: string
+}
+
 export const getAdminAiConfigsApi = () => request.get<AdminAiConfig[], AdminAiConfig[]>("/admin/ai-configs")
-export const createAdminAiConfigApi = (data: Partial<AdminAiConfig> & { api_key?: string }) => request.post<AdminAiConfig, AdminAiConfig>("/admin/ai-configs", data)
-export const updateAdminAiConfigApi = (id: number, data: Partial<AdminAiConfig> & { api_key?: string }) => request.put<AdminAiConfig, AdminAiConfig>(`/admin/ai-configs/${id}`, data)
+export const createAdminAiConfigApi = (data: Partial<AdminAiConfig>) => request.post<AdminAiConfigSaveResult, AdminAiConfigSaveResult>("/admin/ai-configs", data)
+export const updateAdminAiConfigApi = (id: number, data: Partial<AdminAiConfig>) => request.put<AdminAiConfigSaveResult, AdminAiConfigSaveResult>(`/admin/ai-configs/${id}`, data)
 export const deleteAdminAiConfigApi = (id: number) => request.delete(`/admin/ai-configs/${id}`)
+export const getAdminAiCatalogApi = () => request.get<AdminCatalog, AdminCatalog>("/admin/ai-catalog")
+export const createAdminCatalogProviderApi = (data: AdminCatalogProviderWrite) => request.post<AdminCatalog, AdminCatalog>("/admin/ai-catalog/providers", data)
+export const updateAdminCatalogProviderApi = (key: string, data: { name: string; base_url: string; api_key?: string }) =>
+  request.put<AdminCatalog, AdminCatalog>(`/admin/ai-catalog/providers/${encodeURIComponent(key)}`, data)
+export const deleteAdminCatalogProviderApi = (key: string) => request.delete<AdminCatalog, AdminCatalog>(`/admin/ai-catalog/providers/${encodeURIComponent(key)}`)
+export const createAdminCatalogModelApi = (providerKey: string, data: AdminCatalogModelWrite) =>
+  request.post<AdminCatalog, AdminCatalog>(`/admin/ai-catalog/providers/${encodeURIComponent(providerKey)}/models`, data)
+export const updateAdminCatalogModelApi = (providerKey: string, modelId: string, data: Partial<AdminCatalogModelWrite>) =>
+  request.put<AdminCatalog, AdminCatalog>(`/admin/ai-catalog/providers/${encodeURIComponent(providerKey)}/models/${encodeURIComponent(modelId)}`, data)
+export const deleteAdminCatalogModelApi = (providerKey: string, modelId: string) =>
+  request.delete<AdminCatalog, AdminCatalog>(`/admin/ai-catalog/providers/${encodeURIComponent(providerKey)}/models/${encodeURIComponent(modelId)}`)
 export const getAdminPointRulesApi = () => request.get<AdminPointRule[], AdminPointRule[]>("/admin/point-rules")
 export const updateAdminPointRuleApi = (
   featureType: string,

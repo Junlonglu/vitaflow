@@ -227,3 +227,45 @@ async def ai_service_task_result(
     if data is None:
         raise AppException("AI 服务未返回任务结果")
     return data, usage
+
+
+def _catalog_headers() -> dict[str, str]:
+    if not settings.ai_service_token:
+        from app.core.exceptions import AppException
+
+        raise AppException("AI 服务令牌未配置，无法访问模型目录")
+    return {"Authorization": f"Bearer {settings.ai_service_token}"}
+
+
+def _catalog_url(path: str) -> str:
+    return f"{settings.ai_service_url.rstrip('/')}{path}"
+
+
+def call_catalog(method: str, path: str, json_body: dict[str, Any] | None = None) -> Any:
+    """Sync catalog proxy for admin routes (ticket 11).
+
+    Returns the parsed JSON body; raises :class:`AppException` carrying the AI
+    service's message on any non-2xx so the admin UI sees the real reason.
+    """
+    from app.core.exceptions import AppException
+
+    with httpx.Client(timeout=httpx.Timeout(connect=5, read=30, write=10, pool=5)) as client:
+        resp = client.request(method, _catalog_url(path), json=json_body, headers=_catalog_headers())
+    if resp.status_code >= 400:
+        raise AppException(_extract_error(resp.content) or f"模型目录请求失败（{resp.status_code}）")
+    return resp.json()
+
+
+async def afetch_catalog_providers(*, transport: httpx.AsyncBaseTransport | None = None) -> list[dict[str, Any]]:
+    """Async catalog fetch for capability derivation (multimodal guard).
+
+    Raises on transport/auth failure so callers can decide their own fallback.
+    """
+    async with httpx.AsyncClient(transport=transport, timeout=httpx.Timeout(connect=5, read=30, write=10, pool=5)) as client:
+        resp = await client.get(_catalog_url("/v1/catalog"), headers=_catalog_headers())
+    if resp.status_code >= 400:
+        from app.core.exceptions import AppException
+
+        raise AppException(_extract_error(resp.content) or f"模型目录请求失败（{resp.status_code}）")
+    body = resp.json()
+    return body.get("providers") or []

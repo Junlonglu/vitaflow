@@ -10,7 +10,7 @@ import asyncio
 import unittest
 from contextlib import ExitStack
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from app.core.exceptions import AppException
 from app.services import ai_chat_service
@@ -50,22 +50,28 @@ class _DbStub:
         return None
 
 
-def _stub_chat_config(supports_multimodal: bool = True):
+def _stub_chat_config(model_ref: str | None = "deepseek/deepseek-v4-flash-vision-exp"):
     return SimpleNamespace(
-        supports_multimodal=supports_multimodal,
-        pi_model_ref="deepseek/deepseek-v4-flash-vision-exp",
+        model_ref=model_ref,
         chat_billing_override=lambda: {"points_per_call": 5.0, "points_per_million_input_tokens": None, "points_per_million_output_tokens": None},
     )
+
+
+def _caps_patch(multimodal: bool | None = None):
+    """Patch the catalog capability lookup (ticket 11): None → permissive empty map."""
+    capabilities = {} if multimodal is None else {"deepseek/deepseek-v4-flash-vision-exp": {"multimodal": multimodal}}
+    return patch.object(ai_chat_service, "get_catalog_capabilities", new=AsyncMock(return_value=capabilities))
 
 
 def _fake_save(db, session, user, resume, reply, suggestions, optimized_resume_data):
     return SimpleNamespace(model_dump=lambda *_a, **_k: {"id": 99, "content": reply})
 
 
-def _relay_patches(model_config=None):
+def _relay_patches(model_config=None, capabilities=None):
     return (
         patch.object(ai_chat_service, "resolve_chat_ai_config", return_value=model_config or _stub_chat_config()),
         patch.object(ai_chat_service, "precheck_flow_points"),
+        _caps_patch() if capabilities is None else _caps_patch(capabilities),
         patch.object(ai_chat_service, "get_or_create_chat_session", return_value=SimpleNamespace(id=42, update_time=None)),
         patch.object(ai_chat_service, "build_ai_service_context", return_value={"resume": {}, "history": [], "pending_change": {}}),
         patch.object(ai_chat_service, "flag_modified"),
@@ -191,7 +197,7 @@ class StreamAiServiceRegenerateTest(unittest.TestCase):
         user = SimpleNamespace(id=7)
         resume = SimpleNamespace(id=3, resume_data={})
 
-        patches = _relay_patches(model_config=_stub_chat_config(supports_multimodal=False))
+        patches = _relay_patches(model_config=_stub_chat_config(), capabilities=False)
         with ExitStack() as stack:
             for p in patches:
                 stack.enter_context(p)

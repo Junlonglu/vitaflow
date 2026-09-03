@@ -42,7 +42,8 @@ from app.services.ai_chat_service import (
 from app.services.ai_config_service import (
     get_active_ai_config,
     get_ai_config_by_id,
-    get_ai_config_by_pi_model_ref,
+    get_ai_config_by_model_ref,
+    get_catalog_capabilities_sync,
     get_default_chat_ai_config,
     public_ai_capability,
 )
@@ -157,10 +158,12 @@ def new_task(db: Session, user: User, task_type: str, payload: Any, resume_id: i
         if requested_model_id
         else get_default_chat_ai_config(db) if task_type == "ai_chat" else get_active_ai_config(db)
     )
-    metadata = ai_metadata(task_type, payload, config.model, config.id)
+    metadata = ai_metadata(task_type, payload, config.model_ref or config.name, config.id)
     metadata["model_name"] = config.name
     if task_type == "ai_chat":
-        metadata["supports_multimodal"] = config.supports_multimodal
+        metadata["supports_multimodal"] = get_catalog_capabilities_sync().get(
+            config.model_ref or "", {}
+        ).get("multimodal")
         metadata["billing_override"] = config.chat_billing_override()
     request_tokens = int(metadata.get("request_input_tokens") or 0)
     charge_on_finish = task_type == "ai_chat"
@@ -177,7 +180,7 @@ def new_task(db: Session, user: User, task_type: str, payload: Any, resume_id: i
         task_type,
         resume_id=resume_id if resume_id is not None else getattr(payload, "resume_id", None),
         input_data=metadata,
-        model_name=config.model,
+        model_name=config.model_ref or config.name,
     )
     if not charge_on_finish:
         consume_flow_points(
@@ -352,8 +355,8 @@ def ai_task_data(task: AiTask, resume_title: str | None = None) -> dict[str, Any
 
 
 @router.get("/capability")
-def ai_capability(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return success(public_ai_capability(db, include_all_chat_models=current_user.role == "admin"))
+async def ai_capability(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return success(await public_ai_capability(db, include_all_chat_models=current_user.role == "admin"))
 
 
 @router.get("/records")
@@ -510,7 +513,7 @@ def generate_resume_stream_api(payload: GenerateResumeRequest, db: Session = Dep
         task,
         "generate_resume",
         ai_payload(payload),
-        model_ref=config.pi_model_ref,
+        model_ref=config.model_ref,
         normalize_context=ai_payload(payload),
     )
 
@@ -733,7 +736,7 @@ def report_ai_service_usage(
 
     The Node AI service aggregates provider-reported token usage per model from
     the pi event stream and posts it here once the turn ends. Each entry is
-    billed at its own model granularity: the config mapped by ``pi_model_ref``
+    billed at its own model granularity: the config mapped by ``model_ref``
     supplies the chat rates (points_per_call + per-million-token), and the
     settlement goes through ``settle_task_flow_points`` — the exact ledger path
     the legacy LangChain chat uses, so balances and transactions reconcile.
@@ -749,7 +752,7 @@ def report_ai_service_usage(
     entries: list[dict[str, Any]] = []
     for item in payload.usage:
         ref = f"{item.provider.strip()}/{item.model.strip()}"
-        config = get_ai_config_by_pi_model_ref(db, ref)
+        config = get_ai_config_by_model_ref(db, ref)
         token_usage = build_token_usage(
             item.input_tokens,
             item.output_tokens,

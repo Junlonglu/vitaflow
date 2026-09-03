@@ -919,7 +919,7 @@ const modelFilterOptions = computed(() => {
   const seen = new Set<string>()
   const options = [{ label: '全部模型', value: '' }]
   for (const item of aiModelConfigs.value) {
-    const model = String(item.model || '').trim()
+    const model = String(item.model_ref || '').trim()
     if (!model || seen.has(model)) continue
     seen.add(model)
     const label = item.name && item.name !== model ? `${item.name}` : model

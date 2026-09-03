@@ -127,14 +127,14 @@ def import_resume_file(
             user_id=current_user.id,
             task_type="import_resume",
             status="pending",
-            model_name=ai_config.model,
+            model_name=ai_config.model_ref or ai_config.name,
             input_data={
                 "source": "import_file",
                 "filename": display_filename,
                 "filenames": filenames,
                 "template_id": template_id,
                 "text_length": len(text),
-                "model": ai_config.model,
+                "model": ai_config.model_ref or ai_config.name,
                 "model_config_id": ai_config.id,
                 "model_name": ai_config.name,
                 "request_input_tokens": request_tokens,
@@ -150,7 +150,7 @@ def import_resume_file(
         result, usage_entries = ai_service_task_result(
             "import_resume",
             payload,
-            model_ref=ai_config.pi_model_ref,
+            model_ref=ai_config.model_ref,
         )
         if not isinstance(result.get("resume_data"), dict):
             raise AppException("AI 返回的导入结果缺少 resume_data")

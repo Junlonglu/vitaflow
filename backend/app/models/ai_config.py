@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, DateTime, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -14,18 +14,10 @@ class AiModelConfig(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(80), default="默认模型")
-    provider: Mapped[str] = mapped_column(String(50), default="openai-compatible")
-    base_url: Mapped[str] = mapped_column(String(500))
-    api_key: Mapped[str] = mapped_column(String(1000))
-    model: Mapped[str] = mapped_column(String(120))
-    temperature: Mapped[float] = mapped_column(Float, default=0.7)
-    timeout: Mapped[int] = mapped_column(Integer, default=60)
-    max_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True, default=8192)
-    supports_multimodal: Mapped[bool] = mapped_column(Boolean, default=False)
     context_messages: Mapped[int] = mapped_column(Integer, default=12)
-    # pi 侧模型引用（"provider/model"，对应 Node AI 服务 models.json 里的模型），
-    # 代理按它把每轮对话路由到正确模型，计费也按它归集（ticket 07）。
-    pi_model_ref: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # 模型引用（"provider/model"，指向 AI 服务模型目录 models.json 里的模型，
+    # ADR-0005）：代理按它把每轮对话路由到正确模型，计费也按它归集。
+    model_ref: Mapped[str | None] = mapped_column(String(200), nullable=True)
     is_chat_selectable: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=100)
     chat_points_per_call: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)

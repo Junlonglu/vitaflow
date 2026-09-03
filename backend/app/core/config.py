@@ -53,15 +53,9 @@ class Settings(BaseSettings):
     email_code_send_interval_seconds: int = Field(default=60, gt=0)
     email_code_register_lock_seconds: int = Field(default=30, gt=0)
 
-    ai_api_key: str = ""
-    ai_base_url: str = "https://api.deepseek.com/v1"
-    ai_model: str = "deepseek-chat"
-    ai_temperature: float = 0.7
-    ai_timeout: int = 60
-    ai_max_tokens: int = Field(default=8192, gt=0)
-
     # Node「AI 服务」（pi-agent 旁路服务）：AI 对话与一次性任务（生成/导入）
-    # 均代理到该服务，由 Node 侧承载 pi-agent 运行时。
+    # 均代理到该服务，由 Node 侧承载 pi-agent 运行时。模型目录与 API Key
+    # 由 AI 服务持有（ADR-0005），后端不再保存任何直连模型配置。
     ai_service_url: str = "http://127.0.0.1:8300"
     ai_service_token: str = ""
     # AI 服务上下文注入上限：从 MySQL 读取最近 N 条历史注入 prompt。

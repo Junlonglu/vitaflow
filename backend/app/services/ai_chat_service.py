@@ -17,7 +17,11 @@ from app.models.resume import Resume
 from app.models.resume import ResumeVersion
 from app.models.user import User
 from app.schemas.ai_chat import AiChatMessageOut
-from app.services.ai_config_service import resolve_chat_ai_config
+from app.services.ai_config_service import (
+    capability_supports_images,
+    get_catalog_capabilities,
+    resolve_chat_ai_config,
+)
 from app.services.ai_service_client import ai_service_chat_events
 from app.services.flow_points_service import precheck_flow_points
 from app.services.resume_normalization import localize_ai_text, strip_thinking_text
@@ -211,11 +215,12 @@ def _turn_image_attachments(attachments: list[dict[str, Any]] | None) -> list[di
     ]
 
 
-def _reject_turn_images(model_config, image_attachments: list[dict[str, Any]]) -> str | None:
+def _reject_turn_images(model_config, supports_images: bool, image_attachments: list[dict[str, Any]]) -> str | None:
     # Multimodal guard: only forward uploaded images when the selected model can
-    # see them. A text-only model silently drops image blocks, which would make
-    # the user think their picture was used — so refuse up front instead.
-    if image_attachments and model_config and not model_config.supports_multimodal:
+    # see them (ADR-0005: capability derives from the AI service catalog). A
+    # text-only model silently drops image blocks, which would make the user
+    # think their picture was used — so refuse up front instead.
+    if image_attachments and model_config and not supports_images:
         return "当前模型未开启多模态能力，暂不支持在对话中上传图片"
     return None
 
@@ -259,7 +264,7 @@ async def _stream_ai_service_reply(
         user_id=user.id,
         resume_id=resume.id,
         attachments=user_message.attachments or [],
-        model_ref=model_config.pi_model_ref if model_config else None,
+        model_ref=model_config.model_ref if model_config else None,
     )
     try:
         async for event in events:
@@ -304,7 +309,7 @@ async def stream_ai_service_chat(
     """Stream a chat turn backed by the Node AI service.
 
     The chat model config (selected or default) drives the multimodal guard,
-    the pi model mapping sent to the Node service (``pi_model_ref``) and the
+    the model mapping sent to the Node service (``model_ref``) and the
     points_per_call precheck (ticket 07). It is resolved tolerantly: with no
     model configured at all (pure faux demo) the turn still runs, unmapped and
     unbilled.
@@ -316,7 +321,10 @@ async def stream_ai_service_chat(
 
     model_config = _resolve_turn_model_config(db, user, model_config_id)
     image_attachments = _turn_image_attachments(attachments)
-    image_issue = _reject_turn_images(model_config, image_attachments)
+    supports_images = capability_supports_images(
+        await get_catalog_capabilities(), model_config.model_ref if model_config else None
+    )
+    image_issue = _reject_turn_images(model_config, supports_images, image_attachments)
     if image_issue:
         yield {"type": "error", "message": image_issue}
         return
@@ -381,7 +389,10 @@ async def stream_ai_service_regenerate(
     # 连带把后面的消息历史丢掉。
     model_config = _resolve_turn_model_config(db, user, model_config_id)
     effective_attachments = next_attachments if applying_overrides else (user_message.attachments or [])
-    image_issue = _reject_turn_images(model_config, _turn_image_attachments(effective_attachments))
+    supports_images = capability_supports_images(
+        await get_catalog_capabilities(), model_config.model_ref if model_config else None
+    )
+    image_issue = _reject_turn_images(model_config, supports_images, _turn_image_attachments(effective_attachments))
     if image_issue:
         yield {"type": "error", "message": image_issue}
         return

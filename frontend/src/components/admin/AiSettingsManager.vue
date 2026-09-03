@@ -2,26 +2,37 @@
 import { computed, onMounted, ref, watch } from "vue"
 import { RefreshCw, Settings2, Ticket, Zap, X, Trash2 } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
+import AiCatalogPanel from "@/components/admin/ai/AiCatalogPanel.vue"
 import AiModelSettingsPanel from "@/components/admin/ai/AiModelSettingsPanel.vue"
 import PointRulesSettingsPanel from "@/components/admin/ai/PointRulesSettingsPanel.vue"
 import RedeemCodesSettingsPanel from "@/components/admin/ai/RedeemCodesSettingsPanel.vue"
 import { showGlobalToast } from "@/utils/toast"
 import {
   createAdminAiConfigApi,
+  createAdminCatalogModelApi,
+  createAdminCatalogProviderApi,
   deleteAdminAiConfigApi,
+  deleteAdminCatalogModelApi,
+  deleteAdminCatalogProviderApi,
   deleteAdminRedeemCodeApi,
   generateAdminRedeemCodesApi,
   exportAdminRedeemCodesApi,
+  getAdminAiCatalogApi,
   getAdminAiConfigsApi,
   getAdminPointRulesApi,
   getAdminRedeemCodesApi,
   importAdminRedeemCodesApi,
+  updateAdminCatalogModelApi,
+  updateAdminCatalogProviderApi,
   updateAdminRedeemCodeBatchPriceApi,
   updateAdminAiConfigApi,
   updateAdminPointRuleApi,
   updateAdminRedeemCodeApi,
   updateAdminRedeemCodeStatusApi,
   type AdminAiConfig,
+  type AdminCatalog,
+  type AdminCatalogProviderWrite,
+  type AdminCatalogModelWrite,
   type AdminPointRule,
   type AdminRedeemCode,
   type PageData,
@@ -31,18 +42,10 @@ type SettingsMode = "model" | "rules" | "codes"
 interface AiConfigForm {
   id: number
   name: string
-  provider: string
-  base_url: string
-  api_key: string
-  model: string
-  temperature: number
-  timeout: number
-  max_tokens: string
-  supports_multimodal: boolean
+  model_ref: string
   context_messages: number
   is_chat_selectable: boolean
   sort_order: number
-  pi_model_ref: string
   chat_points_per_call: string
   chat_points_per_million_input_tokens: string
   chat_points_per_million_output_tokens: string
@@ -58,8 +61,8 @@ const error = ref("")
 const configs = ref<AdminAiConfig[]>([])
 const rules = ref<AdminPointRule[]>([])
 const codes = ref<PageData<AdminRedeemCode>>({ items: [], total: 0, page: 1, page_size: 20 })
+const catalog = ref<AdminCatalog | null>(null)
 const activeTab = ref<SettingsMode>(props.mode || "model")
-const showKey = ref(false)
 const savingConfig = ref(false)
 const savingRules = ref(false)
 const generatingCodes = ref(false)
@@ -105,23 +108,19 @@ const codeStatusOptions = [
 const configForm = ref<AiConfigForm>({
   id: 0,
   name: "默认模型",
-  provider: "openai-compatible",
-  base_url: "",
-  api_key: "",
-  model: "",
-  temperature: 0.2,
-  timeout: 60,
-  max_tokens: "",
-  supports_multimodal: false,
+  model_ref: "",
   context_messages: 12,
   is_chat_selectable: true,
   sort_order: 100,
-  pi_model_ref: "",
   chat_points_per_call: "",
   chat_points_per_million_input_tokens: "",
   chat_points_per_million_output_tokens: "",
   is_active: true,
 })
+
+const catalogProviders = computed(() => catalog.value?.providers ?? [])
+const catalogProviderMode = computed<"faux" | "real">(() => catalog.value?.provider_mode ?? "real")
+const catalogModels = computed(() => catalogProviders.value.flatMap((provider) => provider.models))
 
 const redeemForm = ref({
   count: 10,
@@ -163,7 +162,7 @@ const pageMeta = computed(() => {
     return {
       eyebrow: "AI Models",
       title: "模型配置",
-      desc: "配置统一的大模型入口。启用多模态后，AI 对话会自动开放图片上传入口。",
+      desc: "在模型目录维护 AI 服务可用的服务商与模型，在模型策略中选择目录模型并设定价格与启用状态。",
     }
   }
   if (currentTab.value === "rules") {
@@ -188,18 +187,10 @@ function resetConfigForm(item?: AdminAiConfig) {
   configForm.value = {
     id: item?.id || 0,
     name: item?.name || "默认模型",
-    provider: item?.provider || "openai-compatible",
-    base_url: item?.base_url || "",
-    api_key: "",
-    model: item?.model || "",
-    temperature: Number(item?.temperature ?? 0.2),
-    timeout: Number(item?.timeout ?? 60),
-    max_tokens: item?.max_tokens ? String(item.max_tokens) : "",
-    supports_multimodal: Boolean(item?.supports_multimodal),
+    model_ref: item?.model_ref ?? "",
     context_messages: Number(item?.context_messages ?? 12),
     is_chat_selectable: item?.is_chat_selectable ?? true,
     sort_order: Number(item?.sort_order ?? 100),
-    pi_model_ref: item?.pi_model_ref ?? "",
     chat_points_per_call: item?.chat_points_per_call == null ? "" : String(item.chat_points_per_call),
     chat_points_per_million_input_tokens: item?.chat_points_per_million_input_tokens == null ? "" : String(item.chat_points_per_million_input_tokens),
     chat_points_per_million_output_tokens: item?.chat_points_per_million_output_tokens == null ? "" : String(item.chat_points_per_million_output_tokens),
@@ -223,12 +214,14 @@ async function load(page = 1) {
   loading.value = true
   error.value = ""
   try {
-    const [configData, ruleData, codeData] = await Promise.all([
+    const [configData, ruleData, codeData, catalogData] = await Promise.all([
       getAdminAiConfigsApi(),
       getAdminPointRulesApi(),
       getAdminRedeemCodesApi(codeQueryParams(page)),
+      getAdminAiCatalogApi().catch(() => null),
     ])
     configs.value = configData
+    if (catalogData) catalog.value = catalogData
     rules.value = ruleData.map((item) => {
       const legacyRate = Number(item.points_per_million_tokens || 0)
       return {
@@ -257,7 +250,6 @@ async function saveConfig() {
   try {
     const payload = {
       ...configForm.value,
-      max_tokens: configForm.value.max_tokens ? Number(configForm.value.max_tokens) : null,
       sort_order: Number(configForm.value.sort_order || 100),
       chat_points_per_call: configForm.value.chat_points_per_call === "" ? null : Number(configForm.value.chat_points_per_call),
       chat_points_per_million_input_tokens: configForm.value.chat_points_per_million_input_tokens === "" ? null : Number(configForm.value.chat_points_per_million_input_tokens),
@@ -267,8 +259,8 @@ async function saveConfig() {
       ? await updateAdminAiConfigApi(configForm.value.id, payload)
       : await createAdminAiConfigApi(payload)
     await load(codes.value.page)
-    resetConfigForm(saved)
-    showGlobalToast("配置保存成功")
+    resetConfigForm(saved.config)
+    showGlobalToast(saved.warning || "模型策略保存成功")
   } catch (err: any) {
     error.value = err.message || "模型配置保存失败"
     showGlobalToast(error.value, "error")
@@ -282,7 +274,7 @@ async function quickActivateConfig(item: AdminAiConfig) {
   loading.value = true
   error.value = ""
   try {
-    await updateAdminAiConfigApi(item.id, { ...item, is_active: true, api_key: "" })
+    await updateAdminAiConfigApi(item.id, { ...item, is_active: true })
     await load(codes.value.page)
     if (configForm.value.id === item.id) {
       configForm.value.is_active = true
@@ -322,6 +314,82 @@ async function confirmDeleteConfig() {
     showGlobalToast(error.value, "error")
   } finally {
     loading.value = false
+  }
+}
+
+async function refreshCatalog() {
+  try {
+    catalog.value = await getAdminAiCatalogApi()
+  } catch (err: any) {
+    showGlobalToast(err.message || "模型目录加载失败", "error")
+  }
+}
+
+async function createCatalogProvider(data: AdminCatalogProviderWrite) {
+  error.value = ""
+  try {
+    catalog.value = await createAdminCatalogProviderApi(data)
+    showGlobalToast("服务商已创建")
+  } catch (err: any) {
+    error.value = err.message || "服务商创建失败"
+    showGlobalToast(error.value, "error")
+  }
+}
+
+async function updateCatalogProvider(key: string, data: { name: string; base_url: string; api_key?: string }) {
+  error.value = ""
+  try {
+    catalog.value = await updateAdminCatalogProviderApi(key, data)
+    showGlobalToast("服务商已更新")
+  } catch (err: any) {
+    error.value = err.message || "服务商更新失败"
+    showGlobalToast(error.value, "error")
+  }
+}
+
+async function deleteCatalogProvider(key: string) {
+  if (!window.confirm(`确定删除服务商 ${key} 吗？`)) return
+  error.value = ""
+  try {
+    catalog.value = await deleteAdminCatalogProviderApi(key)
+    showGlobalToast("服务商已删除")
+  } catch (err: any) {
+    error.value = err.message || "服务商删除失败"
+    showGlobalToast(error.value, "error")
+  }
+}
+
+async function createCatalogModel(providerKey: string, data: AdminCatalogModelWrite) {
+  error.value = ""
+  try {
+    catalog.value = await createAdminCatalogModelApi(providerKey, data)
+    showGlobalToast("模型已创建")
+  } catch (err: any) {
+    error.value = err.message || "模型创建失败"
+    showGlobalToast(error.value, "error")
+  }
+}
+
+async function updateCatalogModel(providerKey: string, modelId: string, data: AdminCatalogModelWrite) {
+  error.value = ""
+  try {
+    catalog.value = await updateAdminCatalogModelApi(providerKey, modelId, data)
+    showGlobalToast("模型已更新")
+  } catch (err: any) {
+    error.value = err.message || "模型更新失败"
+    showGlobalToast(error.value, "error")
+  }
+}
+
+async function deleteCatalogModel(providerKey: string, modelId: string) {
+  if (!window.confirm(`确定删除模型 ${providerKey}/${modelId} 吗？若被模型策略引用将无法删除。`)) return
+  error.value = ""
+  try {
+    catalog.value = await deleteAdminCatalogModelApi(providerKey, modelId)
+    showGlobalToast("模型已删除")
+  } catch (err: any) {
+    error.value = err.message || "模型删除失败"
+    showGlobalToast(error.value, "error")
   }
 }
 
@@ -557,7 +625,7 @@ watch(
           <p class="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">{{ pageMeta.eyebrow }}</p>
           <h2 class="mt-1 text-xl font-semibold tracking-tight text-zinc-950">{{ pageMeta.title }}</h2>
           <p class="mt-1 text-sm text-zinc-500">{{ pageMeta.desc }}</p>
-          <p class="mt-2 text-xs text-zinc-400">当前使用 {{ activeConfig?.model || "未配置模型" }}，上下文 {{ activeConfig?.context_messages || 0 }} 条，{{ activeConfig?.supports_multimodal ? "支持多模态" : "仅文本" }}。</p>
+          <p class="mt-2 text-xs text-zinc-400">当前使用 {{ activeConfig?.model_ref || activeConfig?.name || "未配置模型" }}，上下文 {{ activeConfig?.context_messages || 0 }} 条。</p>
         </div>
         <div class="flex gap-2">
           <Button variant="outline" size="sm" :disabled="loading" @click="load(codes.page)"><RefreshCw class="h-4 w-4" :class="{ 'animate-spin': loading }" />刷新</Button>
@@ -566,7 +634,7 @@ watch(
       <div v-if="error" class="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ error }}</div>
       <div v-if="!props.mode" class="mt-5 grid gap-3 sm:grid-cols-3">
         <button v-for="item in [
-          { id: 'model', label: '模型配置', desc: 'URL / Key / 模型 / 多模态', icon: Settings2 },
+          { id: 'model', label: '模型配置', desc: '模型目录 + 模型策略', icon: Settings2 },
           { id: 'rules', label: 'Flow Points', desc: '各 AI 功能扣点规则', icon: Zap },
           { id: 'codes', label: '兑换码', desc: '每人限一次，可批量管理', icon: Ticket },
         ]" :key="item.id" class="rounded-xl border px-4 py-3 text-left transition" :class="currentTab === item.id ? 'border-zinc-900 bg-zinc-900 text-white shadow-sm' : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'" @click="setActiveTab(item.id)">
@@ -577,17 +645,30 @@ watch(
       </div>
     </div>
 
-    <AiModelSettingsPanel
-      v-if="currentTab === 'model'"
-      v-model:config-form="configForm"
-      v-model:show-key="showKey"
-      :configs="configs"
-      :saving="savingConfig"
-      @reset="resetConfigForm"
-      @activate="quickActivateConfig"
-      @delete="deleteConfig"
-      @save="saveConfig"
-    />
+    <template v-if="currentTab === 'model'">
+      <AiCatalogPanel
+        :providers="catalogProviders"
+        :provider-mode="catalogProviderMode"
+        :saving="savingConfig"
+        @refresh="refreshCatalog"
+        @create-provider="createCatalogProvider"
+        @update-provider="updateCatalogProvider"
+        @delete-provider="deleteCatalogProvider"
+        @create-model="createCatalogModel"
+        @update-model="updateCatalogModel"
+        @delete-model="deleteCatalogModel"
+      />
+      <AiModelSettingsPanel
+        v-model:config-form="configForm"
+        :configs="configs"
+        :catalog-models="catalogModels"
+        :saving="savingConfig"
+        @reset="resetConfigForm"
+        @activate="quickActivateConfig"
+        @delete="deleteConfig"
+        @save="saveConfig"
+      />
+    </template>
 
     <PointRulesSettingsPanel
       v-else-if="currentTab === 'rules'"
@@ -637,13 +718,13 @@ watch(
         <div class="mb-5 flex items-center justify-between">
           <div class="flex items-center gap-2 text-red-600">
             <Trash2 class="h-5 w-5" />
-            <h3 class="font-semibold text-zinc-900">确认删除配置</h3>
+            <h3 class="font-semibold text-zinc-900">确认删除模型策略</h3>
           </div>
           <button class="rounded-full p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600" @click="configToDelete = null"><X class="h-5 w-5" /></button>
         </div>
         <div class="space-y-4">
           <p class="text-sm text-zinc-600">
-            确定要删除模型配置 <span class="font-semibold text-zinc-900">{{ configToDelete.name }}</span> 吗？此操作不可逆。
+            确定要删除模型策略 <span class="font-semibold text-zinc-900">{{ configToDelete.name }}</span> 吗？此操作不可逆。
           </p>
           <div class="flex items-center justify-end gap-3 pt-2">
             <Button variant="outline" size="sm" class="h-10 px-4" @click="configToDelete = null">取消</Button>

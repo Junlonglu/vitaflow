@@ -625,7 +625,7 @@ watch(
           <p class="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">{{ pageMeta.eyebrow }}</p>
           <h2 class="mt-1 text-xl font-semibold tracking-tight text-zinc-950">{{ pageMeta.title }}</h2>
           <p class="mt-1 text-sm text-zinc-500">{{ pageMeta.desc }}</p>
-          <p class="mt-2 text-xs text-zinc-400">当前使用 {{ activeConfig?.model_ref || activeConfig?.name || "未配置模型" }}，上下文 {{ activeConfig?.context_messages || 0 }} 条。</p>
+          <p class="mt-2 text-xs text-zinc-400">当前使用 {{ activeConfig?.model_ref || activeConfig?.name || "未配置模型" }}，历史消息 {{ activeConfig?.context_messages || 0 }} 条。</p>
         </div>
         <div class="flex gap-2">
           <Button variant="outline" size="sm" :disabled="loading" @click="load(codes.page)"><RefreshCw class="h-4 w-4" :class="{ 'animate-spin': loading }" />刷新</Button>

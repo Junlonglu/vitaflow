@@ -255,7 +255,13 @@ async def _stream_ai_service_reply(
     source of truth and the AI service stays stateless. Shared by send and
     regenerate (ticket 09).
     """
-    context = build_ai_service_context(db, user, resume)
+    context = build_ai_service_context(
+        db,
+        user,
+        resume,
+        # 历史注入条数跟随所选模型策略；未选策略时回退全局默认。
+        limit=model_config.context_messages if model_config else None,
+    )
     text_parts: list[str] = []
     events = ai_service_chat_events(
         user_message.content or "",

@@ -3,6 +3,7 @@ import { computed } from "vue"
 import { Check, Plus, Sparkles, Trash2, Zap } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
 import Select from "@/components/ui/select/Select.vue"
+import FieldTip from "@/components/ui/tooltip/FieldTip.vue"
 import type { AdminAiConfig, AdminCatalogModel } from "@/api/admin"
 
 interface AiConfigForm {
@@ -82,7 +83,7 @@ const catalogModelOptions = computed(() => [
           <div class="mt-3.5 flex flex-wrap gap-1.5">
             <span class="inline-flex items-center whitespace-nowrap rounded-md border border-zinc-200/50 bg-zinc-100/80 px-2 py-0.5 text-[10px] font-medium text-zinc-600">排序 {{ item.sort_order ?? 100 }}</span>
             <span v-if="supportsImages(item.model_ref)" class="inline-flex items-center whitespace-nowrap rounded-md border border-purple-200/60 bg-purple-50 px-2 py-0.5 text-[10px] font-medium text-purple-700">多模态</span>
-            <span class="inline-flex items-center whitespace-nowrap rounded-md border border-zinc-200/50 bg-zinc-100/80 px-2 py-0.5 text-[10px] font-medium text-zinc-600">{{ item.context_messages }}条上下文</span>
+            <span class="inline-flex items-center whitespace-nowrap rounded-md border border-zinc-200/50 bg-zinc-100/80 px-2 py-0.5 text-[10px] font-medium text-zinc-600">历史 {{ item.context_messages }} 条</span>
             <span class="inline-flex items-center whitespace-nowrap rounded-md border border-zinc-200/50 bg-zinc-100/80 px-2 py-0.5 text-[10px] font-medium text-zinc-600">{{ item.is_chat_selectable ? "助手可选" : "默认" }}</span>
           </div>
         </button>
@@ -100,8 +101,8 @@ const catalogModelOptions = computed(() => [
           <span class="block text-xs font-normal text-zinc-400">{{ catalogModels.length ? "模型来自 AI 服务目录（模型目录板块维护）；对话按它路由模型，计费也按它归集" : "模型目录暂不可用，请检查 AI 服务后刷新" }}</span>
         </label>
         <div class="grid gap-4 pt-1 sm:grid-cols-2">
-          <label class="space-y-1.5 text-sm font-medium text-zinc-700">上下文条数<input v-model.number="configForm.context_messages" type="number" min="1" max="40" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
-          <label class="space-y-1.5 text-sm font-medium text-zinc-700">排序值<input v-model.number="configForm.sort_order" type="number" min="0" max="9999" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
+          <label class="space-y-1.5 text-sm font-medium text-zinc-700"><span class="flex items-center gap-1">历史消息条数<FieldTip text="对话每轮注入模型的历史消息条数上限（用户与助手消息合计），超出部分模型不可见；简历正文经工具按需读取，不受此限制。未选择策略时回退全局默认（12 条，硬顶 40）。" /></span><input v-model.number="configForm.context_messages" type="number" min="1" max="40" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
+          <label class="space-y-1.5 text-sm font-medium text-zinc-700"><span class="flex items-center gap-1">排序值<FieldTip text="数字越小越靠前：在「助手可选」且启用的策略中，排序值最小的一个会成为用户未手动选模型时的默认对话模型；策略列表顺序也按它升序。" /></span><input v-model.number="configForm.sort_order" type="number" min="0" max="9999" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
         </div>
         <div class="grid gap-3 pt-2 sm:grid-cols-2">
           <label class="group flex cursor-pointer select-none items-center gap-2.5 rounded-xl border border-zinc-200 bg-zinc-50/50 p-3 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-50 hover:text-zinc-900">

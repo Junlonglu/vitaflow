@@ -577,6 +577,13 @@ def dashboard(db: Session = Depends(get_db)):
         )
         if config.name and str(config.name) != model_name:
             model_item["config_names"].add(str(config.name))
+    # 历史任务的 model_name 口径不一（裸 id / 策略名 / ref）；裸 id 若能唯一映射到已配置 ref 则归并
+    refs_by_model_id: dict[str, list[str]] = {}
+    for config in configured_models:
+        ref = str(getattr(config, "model_ref", None) or "").strip()
+        if ref and "/" in ref:
+            refs_by_model_id.setdefault(ref.split("/", 1)[1], []).append(ref)
+
     for task_type, create_time, fallback_tokens, input_data, raw_model_name, points_used in token_rows:
         usage = normalize_token_usage(input_data, fallback_tokens or 0)
         item = token_by_type.setdefault(str(task_type), {"total": 0, "input": 0, "output": 0})
@@ -590,9 +597,16 @@ def dashboard(db: Session = Depends(get_db)):
             token_summary["today"] += int(usage["total_tokens"])
         input_data = input_data or {}
         config_name = input_data.get("model_name")
-        if not raw_model_name and not config_name:
+        # 聚合键以目录模型 ref（input_data.model，各链路统一写入）为准，与按模型计费同口径
+        model_name = str(input_data.get("model") or "").strip()
+        if model_name and "/" not in model_name:
+            refs = refs_by_model_id.get(model_name, [])
+            if len(refs) == 1:
+                model_name = refs[0]
+        if not model_name:
+            model_name = str(raw_model_name or config_name or "")
+        if not model_name:
             continue
-        model_name = str(raw_model_name or config_name)
         model_key = model_name
         model_item = model_map.setdefault(
             model_key,

@@ -184,7 +184,6 @@ def build_ai_service_context(
             "title": resume.title,
             "target_position": basics.get("title", ""),
             "summary": _resume_intent_summary(resume.resume_data),
-            "resume_data": resume.resume_data,
         },
         "history": [{"role": item.role, "content": item.content} for item in history[-context_limit:]],
         "pending_change": {

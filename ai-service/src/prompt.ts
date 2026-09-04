@@ -44,7 +44,6 @@ export interface AiServiceContext {
     title?: string;
     target_position?: string;
     summary?: { name?: string; target_position?: string; sections?: string[]; layout_order?: string[] };
-    resume_data?: Record<string, unknown>;
   };
   history?: Array<{ role?: string; content?: string }>;
   pending_change?: { exists?: boolean; message_id?: number | null; summary?: string[] };

@@ -95,7 +95,7 @@ async function postSectionUpdate(
     resp = await deps.fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-AI-Service-Token": deps.serviceToken },
-      body: JSON.stringify({ user_id: deps.userId, resume_id: deps.resumeId, ...body }),
+      body: JSON.stringify({ ...body, user_id: deps.userId, resume_id: deps.resumeId }),
     });
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);

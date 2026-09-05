@@ -14,7 +14,7 @@ import ResumeAiChatPanel from "@/components/ai/ResumeAiChatPanel.vue"
 import { normalizeResumeData, useResumeStore } from "@/stores/resume"
 import { useEditorStore, type EditorHistorySnapshot } from "@/stores/editor"
 import { exportPdfApi, exportWordApi } from "@/api/export"
-import { clearResumeChatMessagesApi, decideResumeChatChangeApi, getAiCapabilityApi, getResumeChatMessagesApi, sendResumeChatMessageStreamApi, regenerateResumeChatMessageStreamApi, getFlowPointSummaryApi, type FlowPointSummary, type AiCapability, type AiChatAttachment, type AiChatModelOption } from "@/api/ai"
+import { clearResumeChatMessagesApi, decideResumeChatChangeApi, getAiCapabilityApi, getResumeChatMessagesApi, sendResumeChatMessageStreamApi, regenerateResumeChatMessageStreamApi, getFlowPointSummaryApi, type FlowPointSummary, type AiCapability, type AiChatAttachment, type AiChatModelOption, type ToolStep } from "@/api/ai"
 import { previewHtmlApi } from "@/api/resume"
 import { listTemplatesApi, type TemplateItem } from "@/api/template"
 import TemplatePreview from "@/components/templates/TemplatePreview.vue"
@@ -533,6 +533,23 @@ async function loadAiCapability() {
   }
 }
 
+/** 流式工具步骤按 id upsert：start 插入 running 行，end 原地更新结果状态。 */
+function upsertToolStep(assistant: any, step: ToolStep) {
+  if (!assistant) return
+  const trace: ToolStep[] = assistant.tool_trace || (assistant.tool_trace = [])
+  const existing = trace.find((item) => item.id === step.id && item.status === "start")
+  if (step.status === "start") {
+    if (!existing) trace.push({ ...step })
+    return
+  }
+  if (existing) {
+    existing.status = "end"
+    existing.ok = step.ok
+  } else {
+    trace.push({ ...step })
+  }
+}
+
 async function sendChatMessage(content: string, attachments: AiChatAttachment[] = []) {
   if (!resumeStore.currentResume || chatLoading.value) return
   if (!aiCapabilityLoaded.value) await loadAiCapability()
@@ -545,7 +562,7 @@ async function sendChatMessage(content: string, attachments: AiChatAttachment[] 
   chatError.value = ""
   const stamp = Date.now()
   const pendingUser = { id: `user-${stamp}`, role: "user", content, attachments }
-  const pendingAssistant = { id: `assistant-${stamp}`, role: "assistant", content: "", streaming: true, phase: "replying", phaseText: "正在组织回复" }
+  const pendingAssistant = { id: `assistant-${stamp}`, role: "assistant", content: "", streaming: true, phase: "replying", phaseText: "正在组织回复", tool_trace: [] as ToolStep[] }
   chatMessages.value.push(pendingUser, pendingAssistant)
   const assistantIndex = chatMessages.value.length - 1
   try {
@@ -562,6 +579,7 @@ async function sendChatMessage(content: string, attachments: AiChatAttachment[] 
           const assistant = chatMessages.value[assistantIndex]
           if (assistant) Object.assign(assistant, { phase, phaseText: text })
         },
+        onTool: (step) => upsertToolStep(chatMessages.value[assistantIndex], step),
       },
     )) as any
     const savedAssistant = response?.assistant_message
@@ -646,6 +664,7 @@ async function regenerateChatMessage(message?: any, overrideContent?: string, ov
     streaming: true,
     phase: "understanding_intent",
     phaseText: "正在重新理解这条消息",
+    tool_trace: [] as ToolStep[],
   }
   chatMessages.value.push(pendingAssistant)
   const assistantIndex = chatMessages.value.length - 1
@@ -665,6 +684,7 @@ async function regenerateChatMessage(message?: any, overrideContent?: string, ov
           const assistant = chatMessages.value[assistantIndex]
           if (assistant) Object.assign(assistant, { phase, phaseText: text })
         },
+        onTool: (step: ToolStep) => upsertToolStep(chatMessages.value[assistantIndex], step),
       },
     )) as any
     const assistant = chatMessages.value[assistantIndex]

@@ -72,11 +72,22 @@ export const getFlowPointSummaryApi = () => request.get<FlowPointSummary, FlowPo
 export const getFlowPointTransactionsApi = (params: Record<string, unknown>) => request.get<any, any>("/ai/flow-points/transactions", { params })
 export const redeemFlowPointsApi = (code: string) => request.post<any, any>("/ai/flow-points/redeem", { code })
 
+/** 一次工具调用步骤（ai-service 发出的策展标签，不含原始参数/结果）。 */
+export interface ToolStep {
+  id: string
+  name: string
+  label: string
+  status: "start" | "end"
+  ok?: boolean
+  detail?: string
+}
+
 type StreamCallbacks<T = any> = {
   onConnected?: () => void
   onStart?: () => void
   onDelta?: (text: string) => void
   onPhase?: (phase: string, text: string) => void
+  onTool?: (step: ToolStep) => void
   onResult?: (data: T) => void
 }
 
@@ -145,6 +156,7 @@ async function postAiStream<T = any>(path: string, data: any, callbacks: StreamC
     if (event.type === "start") callbacks.onStart?.()
     if (event.type === "delta") callbacks.onDelta?.(String(event.text || ""))
     if (event.type === "phase") callbacks.onPhase?.(String(event.phase || ""), String(event.text || ""))
+    if (event.type === "tool") callbacks.onTool?.(event.data as ToolStep)
     if (event.type === "result") {
       finalResult = event.data as T
       callbacks.onResult?.(finalResult)

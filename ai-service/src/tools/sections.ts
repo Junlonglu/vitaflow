@@ -74,6 +74,29 @@ function sectionSchema() {
   return Type.Union(RESUME_SECTIONS.map((name) => Type.Literal(name)));
 }
 
+/**
+ * Normalize a sections argument to the comma-separated form FastAPI expects.
+ * Models often pass a JSON-encoded array string ('["skills","awards"]') — the
+ * backend splits on commas only, so the brackets must be unwrapped here or the
+ * read comes back empty and the model retries with a duplicate call.
+ */
+export function normalizeSectionsArg(raw: unknown): string {
+  let value: unknown = raw;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.startsWith("[")) {
+      try {
+        value = JSON.parse(trimmed);
+      } catch {
+        value = trimmed;
+      }
+    }
+  }
+  return Array.isArray(value)
+    ? value.map((item) => String(item).trim()).filter(Boolean).join(",")
+    : String(value ?? "").trim();
+}
+
 /** A single list item the model asks to change; carried through to FastAPI unchanged. */
 function updateItemSchema() {
   return Type.Object({}, { additionalProperties: true, description: "一条列表记录（可按 id 定位，也可含任意字段）" });
@@ -138,6 +161,7 @@ export function createSectionTools(deps: SectionToolsDeps): ToolDefinition[] {
     promptGuidelines: [
       "每次聚焦一个模块，只传该模块需要变化的条目；其它模块的内容不要改动、不要删除。",
       "列表类模块（work/projects/education/skills/awards）按条目 id 定位：把用户对某条记录的修改传给对应 id 的条目，不要重排或重编号已有条目。",
+      "条目只能使用该模块的标准字段：work=company/position/start_date/end_date/description/highlights，projects=name/role/start_date/end_date/tech_stack/description/highlights，education=school/major/degree/start_date/end_date/description，skills=name/keywords/description，awards=name/date/description；自创字段会被校验拦截。",
       "要删除某条记录时，用 removed_ids 指明其 id，不要把该条目从 proposed 里省略。",
       "数值（日期、薪资、时长等）必须是用户或简历中已出现过的，否则系统会拦截。",
       "调用工具后，告诉用户已生成一份待确认修改，需其确认后才会写入；不要声称修改已经生效。",
@@ -182,6 +206,7 @@ export function createSectionTools(deps: SectionToolsDeps): ToolDefinition[] {
     promptGuidelines: [
       "只在用户明确要求改动多个模块时使用；单模块改动用 update_section 更精准。",
       "每个 section 只传需要变化的条目，按 id 定位；未提到的条目保持不变。",
+      "条目只能使用该模块的标准字段（work=company/position/…，skills=name/keywords/description，awards=name/date/description），自创字段会被校验拦截。",
       "数值（日期、薪资、时长等）必须是用户或简历中已出现过的，否则系统会拦截。",
       "调用工具后，告诉用户已生成一份待确认修改，需其确认后才会写入；不要声称修改已经生效。",
     ],
@@ -229,10 +254,7 @@ export function createSectionTools(deps: SectionToolsDeps): ToolDefinition[] {
     parameters: Type.Object({ sections: Type.Union([Type.String(), Type.Array(Type.String())], { description: "模块名，多个用逗号分隔或传数组" }) }),
     prepareArguments: (args: unknown) => {
       const raw = (args ?? {}) as { sections?: unknown };
-      const sections: string = Array.isArray(raw.sections)
-        ? raw.sections.map(String).join(",")
-        : String(raw.sections ?? "");
-      return { sections };
+      return { sections: normalizeSectionsArg(raw.sections) };
     },
     execute: async (_toolCallId, params: { sections: string }, _signal, _onUpdate, _ctx) => {
       const sections = (params?.sections ?? "").trim();

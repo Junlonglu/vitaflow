@@ -7,7 +7,8 @@ import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
 import { renderMarkdown } from "@/lib/markdown"
 import { uploadAiChatImageApi } from "@/api/file"
 import { showGlobalToast } from "@/utils/toast"
-import type { AiChatAttachment, AiChatModelOption } from "@/api/ai"
+import type { AiChatAttachment, AiChatModelOption, ToolStep } from "@/api/ai"
+import ToolSteps from "@/components/ai/ToolSteps.vue"
 
 type ChatMessage = {
   id: number | string
@@ -20,6 +21,7 @@ type ChatMessage = {
   phase?: string
   phaseText?: string
   attachments?: AiChatAttachment[]
+  tool_trace?: ToolStep[]
 }
 
 const props = defineProps<{
@@ -280,13 +282,16 @@ watch(
             <div :class="message.role === 'assistant' ? 'assistant-message-shell' : 'max-w-[90%] md:max-w-[75%] relative'">
               <div class="message-bubble relative text-[13px] md:text-[15px] leading-relaxed transition-all" :class="message.role === 'user' ? 'rounded-[20px] md:rounded-[24px] rounded-tr-[8px] bg-zinc-100 px-4 py-2.5 md:px-5 md:py-3.5 text-zinc-900' : 'rounded-[20px] md:rounded-[24px] rounded-tl-[8px] bg-white px-4.5 py-3.5 md:px-6 md:py-5 text-zinc-800 ring-1 ring-zinc-200/50 shadow-sm'">
                 <p v-if="message.role === 'user'" class="whitespace-pre-wrap break-words">{{ message.content }}</p>
-                <div v-else-if="message.content" class="chat-markdown break-words" v-html="renderMarkdown(message.content)" />
-                <div v-else-if="message.streaming" class="flex min-h-[24px] items-center gap-2.5" aria-label="AI 正在处理">
-                  <div class="flex items-center gap-1.5">
-                    <span v-for="i in 3" :key="i" class="typing-dot h-1.5 w-1.5 rounded-full bg-blue-400" :style="{ animationDelay: `${(i - 1) * 160}ms` }" />
+                <template v-else>
+                  <ToolSteps :steps="message.tool_trace || []" :streaming="message.streaming" />
+                  <div v-if="message.content" class="chat-markdown break-words" v-html="renderMarkdown(message.content)" />
+                  <div v-else-if="message.streaming" class="flex min-h-[24px] items-center gap-2.5" aria-label="AI 正在处理">
+                    <div class="flex items-center gap-1.5">
+                      <span v-for="i in 3" :key="i" class="typing-dot h-1.5 w-1.5 rounded-full bg-blue-400" :style="{ animationDelay: `${(i - 1) * 160}ms` }" />
+                    </div>
+                    <span v-if="message.phaseText" class="text-xs md:text-[13px] font-medium text-blue-500/80 animate-pulse">{{ message.phaseText }}</span>
                   </div>
-                  <span v-if="message.phaseText" class="text-xs md:text-[13px] font-medium text-blue-500/80 animate-pulse">{{ message.phaseText }}</span>
-                </div>
+                </template>
 
                 <div v-if="message.role === 'assistant' && !message.streaming && ['pending', 'applying'].includes(actionStatus(message))" class="mt-4 flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-4">
                   <span class="mr-auto min-w-[180px] text-xs md:text-[13px] font-medium text-zinc-600">是否确认将这些修改写入简历？</span>

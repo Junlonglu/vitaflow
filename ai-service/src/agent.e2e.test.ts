@@ -15,6 +15,7 @@ import { runChat, type ChatStreamEvent, type AgentInput } from "./agent.js";
 import { createFauxRuntime } from "./faux.js";
 import { createRealRuntime } from "./real.js";
 import { loadConfig } from "./config.js";
+import type { ToolTraceEntry } from "./tools/labels.js";
 
 function successResponse(data: unknown): Response {
   return new Response(JSON.stringify({ code: 0, message: "success", data }), {
@@ -72,6 +73,17 @@ describe("agent loop -> update_basics_field tool (Faux)", () => {
       // The assistant_message is the agent's prose reply.
       const assistantMessage = result.data.assistant_message as { content: string };
       assert.ok(assistantMessage.content.length > 0);
+
+      // Tool steps stream as curated `tool` events and ride the result event.
+      const toolEvents = events.filter((event) => event.type === "tool") as Array<{ type: "tool"; data: ToolTraceEntry }>;
+      assert.equal(toolEvents[0]?.data.status, "start");
+      assert.equal(toolEvents[0]?.data.name, "update_basics_field");
+      assert.equal(toolEvents[0]?.data.label, "修改基本信息（所在城市）");
+      assert.equal(toolEvents.find((event) => event.data.status === "end")?.data.ok, true);
+      const trace = result.data.tool_trace as ToolTraceEntry[] | undefined;
+      assert.ok(Array.isArray(trace) && trace.length >= 1, "result should carry the tool_trace");
+      assert.equal(trace[0].label, "修改基本信息（所在城市）");
+      assert.equal(trace[0].ok, true);
     } finally {
       globalThis.fetch = originalFetch;
       runtime.dispose();
@@ -245,6 +257,15 @@ describe("agent loop -> quick commands (Faux)", () => {
       assert.ok(pending, "result should carry the pending_change");
       assert.match(pending.optimized_resume_data.work[0].description, /JD 定向优化后的工作描述/);
       assert.ok(result.data.assistant_message, "result carries the assistant reply");
+
+      // The multi-step chain surfaces one curated step per tool call, in order.
+      const trace = result.data.tool_trace as ToolTraceEntry[] | undefined;
+      assert.ok(Array.isArray(trace) && trace.length === 2, "two tool steps for the read-then-propose chain");
+      assert.equal(trace[0].name, "get_resume_context");
+      assert.match(trace[0].label, /^查阅简历「实习\/工作经历/);
+      assert.equal(trace[1].name, "propose_change");
+      assert.equal(trace[1].label, "生成修改提案（实习/工作经历）");
+      assert.ok(trace.every((entry) => entry.ok === true));
     } finally {
       globalThis.fetch = originalFetch;
       runtime.dispose();

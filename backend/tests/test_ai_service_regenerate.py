@@ -53,6 +53,7 @@ class _DbStub:
 def _stub_chat_config(model_ref: str | None = "deepseek/deepseek-v4-flash-vision-exp"):
     return SimpleNamespace(
         model_ref=model_ref,
+        context_messages=12,
         chat_billing_override=lambda: {"points_per_call": 5.0, "points_per_million_input_tokens": None, "points_per_million_output_tokens": None},
     )
 
@@ -63,7 +64,7 @@ def _caps_patch(multimodal: bool | None = None):
     return patch.object(ai_chat_service, "get_catalog_capabilities", new=AsyncMock(return_value=capabilities))
 
 
-def _fake_save(db, session, user, resume, reply, suggestions, optimized_resume_data):
+def _fake_save(db, session, user, resume, reply, suggestions, optimized_resume_data, tool_trace=None):
     return SimpleNamespace(model_dump=lambda *_a, **_k: {"id": 99, "content": reply})
 
 

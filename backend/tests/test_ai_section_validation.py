@@ -18,8 +18,8 @@ CURRENT = {
     "basics": {"name": "张三", "title": "后端工程师", "location": "广州", "phone": "13800138000"},
     "summary": {"content": "五年前端经验"},
     "work": [
-        {"id": "work_1", "company": "A 公司", "role": "后端", "duration": "2020-2021"},
-        {"id": "work_2", "company": "B 公司", "role": "前端", "duration": "2021-2022"},
+        {"id": "work_1", "company": "A 公司", "position": "后端", "start_date": "2020-2021"},
+        {"id": "work_2", "company": "B 公司", "position": "前端", "start_date": "2021-2022"},
     ],
     "projects": [{"id": "project_1", "name": "项目一"}],
 }
@@ -46,14 +46,36 @@ class ValidateSectionUpdateTest(unittest.TestCase):
         merged, suggestions, issue = validate_section_update(
             CURRENT,
             "work",
-            [{"id": "work_1", "role": "实习"}],
+            [{"id": "work_1", "position": "实习"}],
             _history(),
             "把 A 公司的经历改成实习经历",
         )
         self.assertEqual(issue, "")
         self.assertEqual(len(merged["work"]), 2)
-        self.assertEqual(merged["work"][0]["role"], "实习")
+        self.assertEqual(merged["work"][0]["position"], "实习")
         self.assertEqual(merged["work"][1]["company"], "B 公司")  # sibling untouched
+
+    def test_entry_with_unknown_field_is_blocked(self):
+        # The model invented `items` for a skills entry (the template renders
+        # `keywords`) — a shape the template silently renders as nothing. It must be
+        # blocked with the supported fields named so the model can self-correct.
+        merged, suggestions, issue = validate_section_update(
+            {}, "skills", [{"name": "大模型应用", "items": ["RAG", "LangChain"]}], _history(), "补一下技能"
+        )
+        self.assertIsNone(merged)
+        self.assertEqual(suggestions, [])
+        self.assertIn("items", issue)
+        self.assertIn("keywords", issue)
+
+    def test_award_with_title_field_is_blocked(self):
+        # Same failure class: awards render `name`, not `title` (a mismatch that
+        # produced an empty-looking 荣誉奖项 section in production).
+        merged, suggestions, issue = validate_section_update(
+            {}, "awards", [{"title": "国家奖学金"}], _history(), "加个奖项"
+        )
+        self.assertIsNone(merged)
+        self.assertIn("title", issue)
+        self.assertIn("name", issue)
 
     def test_hallucinated_quantified_result_is_blocked(self):
         # The model invents a time range that appears ONLY in its proposal (never in the
@@ -61,7 +83,7 @@ class ValidateSectionUpdateTest(unittest.TestCase):
         merged, suggestions, issue = validate_section_update(
             CURRENT,
             "work",
-            [{"id": "work_1", "duration": "2023-2024"}],
+            [{"id": "work_1", "start_date": "2023-2024"}],
             [{"role": "user", "content": "把 A 公司经历的时间跨度改一下"}],
             "把 A 公司经历的时间跨度改一下",
         )
@@ -115,19 +137,32 @@ class ValidateSectionUpdateTest(unittest.TestCase):
         self.assertTrue(merged["education"][1]["id"].startswith("edu_"))
 
 
+class MergeListSectionTest(unittest.TestCase):
+    def test_non_dict_legacy_entries_are_preserved(self):
+        # Older resumes may hold plain-string entries; a merge must keep them
+        # verbatim instead of silently emptying the section.
+        from app.services.ai_chat_service import merge_section_update
+
+        current = {"awards": ["旧版字符串奖项", {"id": "award_1", "name": "校奖学金"}]}
+        merged = merge_section_update(current, "awards", [{"name": "国奖"}])
+        self.assertEqual(merged["awards"][0], "旧版字符串奖项")
+        self.assertEqual(len(merged["awards"]), 3)
+        self.assertEqual(merged["awards"][1]["name"], "校奖学金")
+
+
 class ValidateProposeChangeTest(unittest.TestCase):
     def test_applies_multiple_sections_atomically(self):
         merged, suggestions, issue = validate_propose_change(
             CURRENT,
             [
-                {"section": "work", "proposed": [{"id": "work_1", "role": "实习"}]},
+                {"section": "work", "proposed": [{"id": "work_1", "position": "实习"}]},
                 {"section": "basics", "proposed": {"location": "深圳"}},
             ],
             _history(),
             "把 A 公司经历改成实习，并换到深圳",
         )
         self.assertEqual(issue, "")
-        self.assertEqual(merged["work"][0]["role"], "实习")
+        self.assertEqual(merged["work"][0]["position"], "实习")
         self.assertEqual(merged["work"][1]["company"], "B 公司")
         self.assertEqual(merged["basics"]["location"], "深圳")
 
@@ -136,15 +171,25 @@ class ValidateProposeChangeTest(unittest.TestCase):
         merged, suggestions, issue = validate_propose_change(
             CURRENT,
             [
-                {"section": "work", "proposed": [{"id": "work_1", "role": "实习"}]},
-                {"section": "work", "proposed": [{"id": "work_2", "role": "高级前端"}]},
+                {"section": "work", "proposed": [{"id": "work_1", "position": "实习"}]},
+                {"section": "work", "proposed": [{"id": "work_2", "position": "高级前端"}]},
             ],
             _history(),
             "改成两个不同岗位",
         )
         self.assertEqual(issue, "")
-        self.assertEqual(merged["work"][0]["role"], "实习")
-        self.assertEqual(merged["work"][1]["role"], "高级前端")
+        self.assertEqual(merged["work"][0]["position"], "实习")
+        self.assertEqual(merged["work"][1]["position"], "高级前端")
+
+    def test_unknown_field_inside_propose_is_blocked(self):
+        merged, suggestions, issue = validate_propose_change(
+            CURRENT,
+            [{"section": "skills", "proposed": [{"name": "前端", "items": ["Vue"]}]}],
+            _history(),
+            "补一下技能",
+        )
+        self.assertIsNone(merged)
+        self.assertIn("items", issue)
 
     def test_empty_scoped_updates_are_rejected(self):
         for updates in (None, [], [{"section": "nope", "proposed": [{"id": "x"}]}]):
@@ -157,7 +202,7 @@ class ValidateProposeChangeTest(unittest.TestCase):
     def test_hallucinated_number_inside_propose_is_blocked(self):
         merged, suggestions, issue = validate_propose_change(
             CURRENT,
-            [{"section": "work", "proposed": [{"id": "work_1", "duration": "2030-2032"}]}],
+            [{"section": "work", "proposed": [{"id": "work_1", "start_date": "2030-2032"}]}],
             [{"role": "user", "content": "把经历时间改一下"}],
             "把经历时间改一下",
         )

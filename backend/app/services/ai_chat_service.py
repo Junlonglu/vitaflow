@@ -53,6 +53,7 @@ def _message_out(message: AiChatMessage) -> AiChatMessageOut:
             "attachments": message.attachments or [],
             "suggestions": message.suggestions or [],
             "optimized_resume_data": message.optimized_resume_data,
+            "tool_trace": message.tool_trace,
             "action_status": message.action_status or "none",
             "create_time": message.create_time,
         }
@@ -128,6 +129,7 @@ def _save_assistant_message(
     reply: str,
     suggestions: list[str],
     optimized_resume_data: dict[str, Any] | None,
+    tool_trace: list[dict[str, Any]] | None = None,
 ) -> AiChatMessageOut:
     reply = strip_thinking_text(localize_ai_text(reply or "")).strip()
     assistant_message = AiChatMessage(
@@ -138,6 +140,7 @@ def _save_assistant_message(
         content=reply,
         suggestions=suggestions,
         optimized_resume_data=optimized_resume_data,
+        tool_trace=tool_trace or None,
         action_status="pending" if optimized_resume_data else "none",
     )
     session.update_time = datetime.now()
@@ -284,6 +287,11 @@ async def _stream_ai_service_reply(
                 # change so the existing /decision route can apply/reject it.
                 data = event.get("data") or {}
                 pending = data.get("pending_change")
+                # Tool steps the agent executed this turn (curated labels only) are
+                # persisted with the message so history shows the same steps the
+                # user watched live.
+                trace = data.get("tool_trace")
+                tool_trace = [item for item in trace if isinstance(item, dict)] if isinstance(trace, list) else None
                 if isinstance(pending, dict) and pending.get("optimized_resume_data"):
                     assistant = _save_assistant_message(
                         db,
@@ -293,9 +301,10 @@ async def _stream_ai_service_reply(
                         reply,
                         list(pending.get("suggestions") or []),
                         pending.get("optimized_resume_data"),
+                        tool_trace,
                     )
                 else:
-                    assistant = _save_assistant_message(db, session, user, resume, reply, [], None)
+                    assistant = _save_assistant_message(db, session, user, resume, reply, [], None, tool_trace)
                 yield {"type": "result", "data": {"assistant_message": assistant.model_dump(mode="json")}}
             else:
                 yield event
@@ -646,6 +655,38 @@ _SECTION_ITEM_ID_PREFIX = {
 }
 
 
+# Fields a list-section entry may carry (kept in sync with the resume template's
+# renderers and the starter data). The tool schema accepts arbitrary fields, and
+# models occasionally invent shapes the template silently renders as nothing (e.g.
+# a skills entry with `items` instead of `keywords`, an award with `title` instead
+# of `name`) — block them at this trust boundary so bad shapes never reach storage.
+SECTION_ITEM_ALLOWED_FIELDS: dict[str, frozenset[str] | None] = {
+    "education": frozenset({"school", "major", "degree", "start_date", "end_date", "description"}),
+    "skills": frozenset({"name", "keywords", "description"}),
+    "work": frozenset({"company", "position", "start_date", "end_date", "description", "highlights"}),
+    "projects": frozenset({"name", "role", "start_date", "end_date", "tech_stack", "description", "highlights"}),
+    "awards": frozenset({"name", "date", "description"}),
+    # custom_sections entries vary by preset type; the template renders a wide
+    # field superset, so stay permissive there.
+    "custom_sections": None,
+}
+
+
+def _section_item_field_issue(section: str, proposed: Any) -> str:
+    """Reject list entries carrying fields outside the section's canonical shape."""
+    allowed = SECTION_ITEM_ALLOWED_FIELDS.get(section)
+    if allowed is None or not isinstance(proposed, list):
+        return ""
+    for index, item in enumerate(proposed, start=1):
+        if not isinstance(item, dict):
+            continue
+        unknown = sorted(str(key) for key in item if key != "id" and key not in allowed)
+        if unknown:
+            supported = ", ".join(sorted(allowed))
+            return f"第 {index} 条记录包含不支持的字段：{'、'.join(unknown)}（该模块支持的字段：{supported}）"
+    return ""
+
+
 def _section_item_id(section: str, n: int) -> str:
     prefix = _SECTION_ITEM_ID_PREFIX.get(section, section.rstrip("s"))
     return f"{prefix}_{n}"
@@ -667,10 +708,13 @@ def _merge_list_section(section: str, current: list, proposed: list, removed_ids
         return deepcopy(current)
 
     removed = {str(item) for item in (removed_ids or [])}
-    current_items = [item for item in current if isinstance(item, dict)]
-    # First pass over current entries: patch matched, keep the rest as-is.
-    result: list[dict] = []
-    for item in current_items:
+    result: list = []
+    for item in current:
+        if not isinstance(item, dict):
+            # Non-dict legacy entries are preserved verbatim instead of silently
+            # dropped — a drop here could empty a section the user still sees.
+            result.append(deepcopy(item))
+            continue
         item_id = item.get("id")
         if item_id is not None and str(item_id) in removed:
             continue
@@ -689,7 +733,11 @@ def _merge_list_section(section: str, current: list, proposed: list, removed_ids
         result.append(merged_item)
 
     # Second pass: append genuinely new items the model introduced.
-    existing_ids = {str(item.get("id")) for item in result if item.get("id") is not None}
+    existing_ids = {
+        str(item.get("id"))
+        for item in result
+        if isinstance(item, dict) and item.get("id") is not None
+    }
     next_n = 1
     for patch in proposed:
         if not isinstance(patch, dict):
@@ -773,6 +821,9 @@ def validate_section_update(
         return None, [], f"不支持修改的简历模块：{section}"
     if not _section_update_has_content(section, proposed, removed_ids):
         return None, [], "未提供需要修改的模块内容"
+    field_issue = _section_item_field_issue(section, proposed)
+    if field_issue:
+        return None, [], field_issue
 
     merged = merge_section_update(current_data, section, proposed, removed_ids)
     if merged == (current_data or {}):
@@ -824,6 +875,9 @@ def validate_propose_change(
             return None, [], f"不支持修改的简历模块：{section}"
         if not _section_update_has_content(section, proposed, removed_ids):
             return None, [], "未提供需要修改的模块内容"
+        field_issue = _section_item_field_issue(section, proposed)
+        if field_issue:
+            return None, [], field_issue
         merged = merge_section_update(merged, section, proposed, removed_ids)
 
     if merged == (current_data or {}):

@@ -70,6 +70,7 @@ def _faux_events(*_args, **_kwargs):
 def _stub_chat_config(model_ref: str | None = "deepseek/deepseek-v4-flash-vision-exp"):
     return SimpleNamespace(
         model_ref=model_ref,
+        context_messages=12,
         chat_billing_override=lambda: {"points_per_call": 5.0, "points_per_million_input_tokens": None, "points_per_million_output_tokens": None},
     )
 
@@ -146,7 +147,7 @@ class StreamAiServicePendingPersistTest(unittest.TestCase):
     def test_persists_pending_payload_when_result_carries_pending_change(self):
         captured = {}
 
-        def fake_save(db, session, user, resume, reply, suggestions, optimized_resume_data):
+        def fake_save(db, session, user, resume, reply, suggestions, optimized_resume_data, tool_trace=None):
             captured["suggestions"] = suggestions
             captured["optimized_resume_data"] = optimized_resume_data
             captured["reply"] = reply
@@ -187,7 +188,7 @@ class StreamAiServicePendingPersistTest(unittest.TestCase):
 
             return gen()
 
-        def fake_save(db, session, user, resume, reply, suggestions, optimized_resume_data):
+        def fake_save(db, session, user, resume, reply, suggestions, optimized_resume_data, tool_trace=None):
             captured["suggestions"] = suggestions
             captured["optimized_resume_data"] = optimized_resume_data
             return SimpleNamespace(model_dump=lambda *_a, **_k: {"id": 1, "content": reply})

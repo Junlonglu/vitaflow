@@ -32,6 +32,7 @@ class AiChatMessage(Base):
     attachments: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(JSON, nullable=True)
     suggestions: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
     optimized_resume_data: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    tool_trace: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(JSON, nullable=True)
     action_status: Mapped[str] = mapped_column(String(20), default="none")
     create_time: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     update_time: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)

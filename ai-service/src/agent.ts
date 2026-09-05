@@ -5,6 +5,7 @@
  * The contract mirrors the backend's existing chat stream so the frontend can
  * render it unchanged:
  *   {"type":"start", ...} {"type":"phase", ...} {"type":"delta","text":"..."}
+ *   {"type":"tool","data":{id,name,label,status,ok?}}   (tool step progress)
  *   {"type":"result","data":{assistant_message}}  {"type":"error","message"}
  */
 import { join } from "node:path";
@@ -20,6 +21,7 @@ import { buildQuickCommandTemplates } from "./commands.js";
 import type { TaskType } from "./taskPrompts.js";
 import { createUpdateBasicsFieldTool, type BasicsToolState } from "./tools/basics.js";
 import { createSectionTools, type SectionToolsState } from "./tools/sections.js";
+import { toolStepEnd, toolStepLabel, type ToolTraceEntry } from "./tools/labels.js";
 
 /** Faux mode drives the deterministic demo provider; real mode uses models.json. */
 export type ChatRuntime = FauxRuntime | RealRuntime;
@@ -28,6 +30,10 @@ export type ChatStreamEvent =
   | { type: "start"; data: Record<string, unknown> }
   | { type: "phase"; phase: string; text: string }
   | { type: "delta"; text: string }
+  // Tool-call progress (one event per execution start/end): the curated step
+  // label only — raw args/result stay inside ai-service. The backend proxy
+  // forwards these verbatim and the frontend renders them as step rows.
+  | { type: "tool"; data: ToolTraceEntry }
   // Tasks (ticket 09) attach the aggregated per-model usage here; FastAPI reads
   // it off the result event to settle the task's Flow Points synchronously.
   | { type: "result"; data: Record<string, unknown>; usage?: ModelUsage[] }
@@ -158,6 +164,10 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
   // Both tool families write into the SAME state object, so whichever tool fires
   // this turn is the one whose payload the result event carries.
   const toolState: BasicsToolState & SectionToolsState = { pendingChange: null };
+  // Tool steps executed this turn, echoed verbatim onto the result event so the
+  // persisted message shows the same steps the user watched live (same closure
+  // pattern as toolState — the model has no write channel here).
+  const toolTrace: ToolTraceEntry[] = [];
   const basicsTool = createUpdateBasicsFieldTool(
     {
       fetch: globalThis.fetch,
@@ -184,6 +194,9 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     const data: Record<string, unknown> = { assistant_message: buildAssistantMessage(text, Date.now()) };
     if (toolState.pendingChange) {
       data.pending_change = toolState.pendingChange;
+    }
+    if (toolTrace.length) {
+      data.tool_trace = toolTrace;
     }
     emit({ type: "result", data });
   };
@@ -267,6 +280,39 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
           { stopReason: am.stopReason },
         );
       }
+    }
+    // Surface tool activity to the chat UI as curated step rows (never raw
+    // args/result). Start appends a running row; end marks it ok/failed. The
+    // same trace rides the result event so the persisted message matches.
+    if (event.type === "tool_execution_start") {
+      const entry: ToolTraceEntry = {
+        id: event.toolCallId,
+        name: event.toolName,
+        label: toolStepLabel(event.toolName, event.args),
+        status: "start",
+      };
+      toolTrace.push(entry);
+      // Emit a copy: the end handler below mutates the trace entry in place,
+      // and an already-emitted start event must not change under the consumer.
+      emit({ type: "tool", data: { ...entry } });
+    }
+    if (event.type === "tool_execution_end") {
+      const entry = toolTrace.find((item) => item.id === event.toolCallId && item.status === "start");
+      const outcome = toolStepEnd(event.toolName, event.result, event.isError);
+      const settled: ToolTraceEntry = {
+        id: event.toolCallId,
+        name: event.toolName,
+        label: entry?.label ?? toolStepLabel(event.toolName, undefined),
+        status: "end",
+        ok: outcome.ok,
+        ...(outcome.detail ? { detail: outcome.detail } : {}),
+      };
+      if (entry) {
+        entry.status = "end";
+        entry.ok = outcome.ok;
+        entry.detail = settled.detail;
+      }
+      emit({ type: "tool", data: settled });
     }
     if (event.type === "agent_settled") {
       sendResult(text);

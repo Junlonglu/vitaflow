@@ -23,8 +23,8 @@ _RESUME_DATA = {
     "basics": {"name": "张三", "title": "后端工程师", "location": "广州", "phone": "13800138000"},
     "summary": {"content": "五年前端经验"},
     "work": [
-        {"id": "work_1", "company": "A 公司", "role": "后端", "duration": "2020-2021"},
-        {"id": "work_2", "company": "B 公司", "role": "前端", "duration": "2021-2022"},
+        {"id": "work_1", "company": "A 公司", "position": "后端", "start_date": "2020-2021"},
+        {"id": "work_2", "company": "B 公司", "position": "前端", "start_date": "2021-2022"},
     ],
 }
 
@@ -64,7 +64,7 @@ class SectionToolEndpointTest(unittest.TestCase):
         client = _make_client()
         resp = client.post(
             "/api/ai/service/tool/update-section",
-            json={"user_id": 1, "resume_id": 2, "section": "work", "proposed": [{"id": "work_1", "role": "实习"}]},
+            json={"user_id": 1, "resume_id": 2, "section": "work", "proposed": [{"id": "work_1", "position": "实习"}]},
         )
         self.assertEqual(resp.status_code, 401)
 
@@ -74,14 +74,14 @@ class SectionToolEndpointTest(unittest.TestCase):
             client = _make_client()
             resp = client.post(
                 "/api/ai/service/tool/update-section",
-                json={"user_id": 1, "resume_id": 2, "section": "work", "proposed": [{"id": "work_1", "role": "实习"}]},
+                json={"user_id": 1, "resume_id": 2, "section": "work", "proposed": [{"id": "work_1", "position": "实习"}]},
                 headers=self._auth_headers(),
             )
         self.assertEqual(resp.status_code, 200)
         body = resp.json()
         self.assertTrue(body["data"]["ok"])
         work = body["data"]["optimized_resume_data"]["work"]
-        self.assertIn("实习", work[0]["role"])
+        self.assertIn("实习", work[0]["position"])
         self.assertEqual(work[1]["company"], "B 公司")  # sibling untouched
         self.assertTrue(any("实习" in item for item in body["data"]["suggestions"]))
 
@@ -95,7 +95,7 @@ class SectionToolEndpointTest(unittest.TestCase):
                     "user_id": 1,
                     "resume_id": 2,
                     "section": "work",
-                    "proposed": [{"id": "work_1", "duration": "2030-2031"}],
+                    "proposed": [{"id": "work_1", "start_date": "2030-2031"}],
                 },
                 headers=self._auth_headers(),
             )
@@ -157,7 +157,7 @@ class SectionToolEndpointTest(unittest.TestCase):
                     "user_id": 1,
                     "resume_id": 2,
                     "updates": [
-                        {"section": "work", "proposed": [{"id": "work_1", "role": "实习"}]},
+                        {"section": "work", "proposed": [{"id": "work_1", "position": "实习"}]},
                         {"section": "basics", "proposed": {"location": "深圳"}},
                     ],
                 },
@@ -167,7 +167,7 @@ class SectionToolEndpointTest(unittest.TestCase):
         body = resp.json()
         self.assertTrue(body["data"]["ok"])
         data = body["data"]["optimized_resume_data"]
-        self.assertEqual(data["work"][0]["role"], "实习")
+        self.assertEqual(data["work"][0]["position"], "实习")
         self.assertEqual(data["work"][1]["company"], "B 公司")
         self.assertEqual(data["basics"]["location"], "深圳")
 
@@ -180,7 +180,7 @@ class SectionToolEndpointTest(unittest.TestCase):
                 json={
                     "user_id": 1,
                     "resume_id": 2,
-                    "updates": [{"section": "work", "proposed": [{"id": "work_1", "duration": "2030-2032"}]}],
+                    "updates": [{"section": "work", "proposed": [{"id": "work_1", "start_date": "2030-2032"}]}],
                 },
                 headers=self._auth_headers(),
             )

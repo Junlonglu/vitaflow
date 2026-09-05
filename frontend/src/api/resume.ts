@@ -35,7 +35,7 @@ export const createResumeFromStarterApi = (data: { starter_id: string; level_id:
 export const getResumeApi = (id: number) => request.get<ResumeItem, ResumeItem>(`/resumes/${id}`)
 export const updateResumeApi = (id: number, data: Partial<ResumeItem>) => request.put<any, ResumeItem>(`/resumes/${id}`, data)
 export const deleteResumeApi = (id: number) => request.delete(`/resumes/${id}`)
-export const duplicateResumeApi = (id: number) => request.post<any, ResumeItem>(`/resumes/${id}/duplicate`)
+export const duplicateResumeApi = (id: number, data?: { title?: string }) => request.post<any, ResumeItem>(`/resumes/${id}/duplicate`, data)
 export const getResumeShareApi = (id: number) => request.get<ResumeShareSettings, ResumeShareSettings>(`/resumes/${id}/share`)
 export const updateResumeShareApi = (id: number, data: { enabled: boolean; expire_time?: string | null; regenerate_token?: boolean; mask_sensitive?: boolean; custom_token?: string }) =>
   request.put<ResumeShareSettings, ResumeShareSettings>(`/resumes/${id}/share`, data)

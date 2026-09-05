@@ -160,6 +160,10 @@ class ResumeVersionCreate(BaseModel):
     reason: str = "手动保存版本"
 
 
+class ResumeDuplicateRequest(BaseModel):
+    title: Optional[str] = Field(default=None, max_length=120)
+
+
 class ResumeShareUpdate(BaseModel):
     enabled: bool
     expire_time: Optional[datetime] = None

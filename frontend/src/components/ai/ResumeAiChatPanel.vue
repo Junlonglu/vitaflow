@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch, computed } from "vue"
-import { CheckCircle2, LoaderCircle, SendHorizontal, Bot, Search, Target, Wand2, Scissors, Trash2, X, ImagePlus, XCircle, Copy, Check, RotateCcw, Cpu } from "lucide-vue-next"
+import { CheckCircle2, LoaderCircle, SendHorizontal, Bot, Target, Wand2, Trash2, X, ImagePlus, XCircle, Copy, Check, RotateCcw, Cpu, HelpCircle, Languages, Sparkles } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
 import Select from "@/components/ui/select/Select.vue"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
 import { renderMarkdown } from "@/lib/markdown"
 import { uploadAiChatImageApi } from "@/api/file"
 import { showGlobalToast } from "@/utils/toast"
-import type { AiChatAttachment, AiChatModelOption, ToolStep } from "@/api/ai"
+import type { AiChatAttachment, AiChatModelOption, ToolStep, PendingQuestion } from "@/api/ai"
 import ToolSteps from "@/components/ai/ToolSteps.vue"
 import ThinkingProcess from "@/components/ai/ThinkingProcess.vue"
 
@@ -26,6 +26,7 @@ type ChatMessage = {
   thinking?: string
   attachments?: AiChatAttachment[]
   tool_trace?: ToolStep[]
+  pending_questions?: PendingQuestion[]
 }
 
 const props = defineProps<{
@@ -45,6 +46,7 @@ const emit = defineEmits<{
   regenerate: [message: ChatMessage, content: string, attachments?: AiChatAttachment[]]
   confirm: [message: ChatMessage]
   reject: [message: ChatMessage]
+  "answer-questions": [message: ChatMessage]
   "update:selectedModelId": [modelId: number | null]
 }>()
 
@@ -65,11 +67,19 @@ function confirmClear() {
   showClearConfirm.value = false
 }
 
-const quickPrompts = [
-  { text: "这份简历还缺什么？", icon: Search, title: "深度体检", desc: "发现缺失加分项", bg: "bg-blue-50", color: "text-blue-500", ring: "hover:ring-blue-200" },
-  { text: "帮我把个人简介写得更适合当前岗位", icon: Target, title: "重构简介", desc: "更贴合岗位需求", bg: "bg-indigo-50", color: "text-indigo-500", ring: "hover:ring-indigo-200" },
-  { text: "项目经历怎么突出亮点？", icon: Wand2, title: "提炼亮点", desc: "让项目脱颖而出", bg: "bg-violet-50", color: "text-violet-500", ring: "hover:ring-violet-200" },
-  { text: "帮我检查有没有可以删减的内容", icon: Scissors, title: "精简冗余", desc: "去除非核心内容", bg: "bg-rose-50", color: "text-rose-500", ring: "hover:ring-rose-200" }
+/** 与 ai-service buildQuickCommandTemplates 对齐的四个快捷指令。 */
+const QUICK_COMMANDS = [
+  { name: "润色", description: "检查整份简历，找出问题并润色表达", argumentHint: "" },
+  { name: "翻译", description: "整份简历中英互译，结构与事实不变", argumentHint: "" },
+  { name: "JD优化", description: "按岗位描述定向优化，证据缺口会逐条询问", argumentHint: "<岗位描述>" },
+  { name: "生成", description: "根据目标岗位生成结构化简历", argumentHint: "<目标岗位>" },
+]
+
+const quickCommands = [
+  { ...QUICK_COMMANDS[0], icon: Wand2, bg: "bg-violet-50", color: "text-violet-500", ring: "hover:ring-violet-200" },
+  { ...QUICK_COMMANDS[1], icon: Languages, bg: "bg-blue-50", color: "text-blue-500", ring: "hover:ring-blue-200" },
+  { ...QUICK_COMMANDS[2], icon: Target, bg: "bg-indigo-50", color: "text-indigo-500", ring: "hover:ring-indigo-200" },
+  { ...QUICK_COMMANDS[3], icon: Sparkles, bg: "bg-emerald-50", color: "text-emerald-500", ring: "hover:ring-emerald-200" },
 ]
 
 function adjustHeight() {
@@ -134,12 +144,71 @@ function submit(event?: Event) {
   emit("send", text || "请结合我上传的图片分析简历。", sendingAttachments)
 }
 
-function sendQuick(text: string) {
+/** 快捷指令卡：带参数的指令预填到输入框（用户补参数），无参数的直接发送。 */
+function useQuickCommand(cmd: (typeof quickCommands)[number]) {
   if (props.loading) return
-  input.value = ""
   attachments.value = []
   regenerateSource.value = null
-  emit("send", text)
+  if (cmd.argumentHint) {
+    input.value = `/${cmd.name} `
+    inputRef.value?.focus()
+    adjustHeight()
+  } else {
+    input.value = ""
+    emit("send", `/${cmd.name}`)
+  }
+}
+
+/** 斜杠自动补全：输入以 / 开头且还没进入参数段时，弹出指令菜单（Slack/Notion 式）。 */
+const slashDismissed = ref(false)
+const slashActiveIndex = ref(0)
+const slashMatches = computed(() => {
+  const text = input.value
+  if (!text.startsWith("/") || /\s/.test(text.slice(1))) return []
+  const prefix = text.slice(1).toLowerCase()
+  return QUICK_COMMANDS.filter((cmd) => cmd.name.toLowerCase().startsWith(prefix))
+})
+const slashOpen = computed(() => !slashDismissed.value && slashMatches.value.length > 0 && !props.loading)
+
+watch(
+  () => input.value,
+  () => {
+    slashDismissed.value = false
+    slashActiveIndex.value = 0
+  },
+)
+
+function applySlashCommand(cmd: (typeof QUICK_COMMANDS)[number]) {
+  input.value = `/${cmd.name} `
+  inputRef.value?.focus()
+  adjustHeight()
+}
+
+/** 菜单展开时接管 ↑/↓/Tab/Esc；Enter 在 handleEnter 里处理。 */
+function handleSlashNav(event: KeyboardEvent) {
+  if (!slashOpen.value || composing.value || event.isComposing) return
+  if (event.key === "ArrowDown") {
+    event.preventDefault()
+    slashActiveIndex.value = (slashActiveIndex.value + 1) % slashMatches.value.length
+  } else if (event.key === "ArrowUp") {
+    event.preventDefault()
+    slashActiveIndex.value = (slashActiveIndex.value - 1 + slashMatches.value.length) % slashMatches.value.length
+  } else if (event.key === "Tab") {
+    event.preventDefault()
+    applySlashCommand(slashMatches.value[slashActiveIndex.value])
+  } else if (event.key === "Escape") {
+    slashDismissed.value = true
+  }
+}
+
+function handleEnter(event: KeyboardEvent) {
+  if (composing.value || event.isComposing || event.keyCode === 229) return
+  if (slashOpen.value) {
+    event.preventDefault()
+    applySlashCommand(slashMatches.value[slashActiveIndex.value])
+    return
+  }
+  submit(event)
 }
 
 async function startRegenerate(message: ChatMessage) {
@@ -303,15 +372,19 @@ watch(
             <Bot class="relative z-10 h-7 w-7" stroke-width="1.5" />
           </div>
           <h3 class="mt-2.5 text-[20px] font-medium tracking-tight text-zinc-900">简历打磨，现在开始。</h3>
+          <p class="mt-1.5 text-xs text-zinc-400">输入 <span class="rounded bg-zinc-100 px-1 font-mono text-[11px] font-semibold text-zinc-600">/</span> 可唤起快捷指令</p>
           
           <div class="mt-8 grid w-full grid-cols-2 gap-3 px-1">
-            <button v-for="prompt in quickPrompts" :key="prompt.text" class="group relative flex flex-col items-start overflow-hidden rounded-[16px] sm:rounded-[20px] bg-white ring-1 ring-zinc-200/60 p-2.5 sm:p-3.5 text-left transition-all duration-300 active:scale-[0.97] hover:shadow-[0_8px_20px_rgba(0,0,0,0.04)] hover:-translate-y-0.5" :class="prompt.ring" @click="sendQuick(prompt.text)">
-              <div class="absolute -right-6 -top-6 h-20 w-20 rounded-full blur-2xl transition-opacity duration-500 opacity-0 group-hover:opacity-100" :class="prompt.bg"></div>
-              <div class="relative z-10 flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-[10px] sm:rounded-[12px] ring-1 ring-white/50 mb-1.5 sm:mb-2.5 transition-transform duration-300 group-hover:scale-110" :class="[prompt.bg, prompt.color]">
-                <component :is="prompt.icon" class="h-3.5 w-3.5 sm:h-4 sm:w-4" stroke-width="2" />
+            <button v-for="cmd in quickCommands" :key="cmd.name" class="group relative flex flex-col items-start overflow-hidden rounded-[16px] sm:rounded-[20px] bg-white ring-1 ring-zinc-200/60 p-2.5 sm:p-3.5 text-left transition-all duration-300 active:scale-[0.97] hover:shadow-[0_8px_20px_rgba(0,0,0,0.04)] hover:-translate-y-0.5" :class="cmd.ring" @click="useQuickCommand(cmd)">
+              <div class="absolute -right-6 -top-6 h-20 w-20 rounded-full blur-2xl transition-opacity duration-500 opacity-0 group-hover:opacity-100" :class="cmd.bg"></div>
+              <div class="relative z-10 flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-[10px] sm:rounded-[12px] ring-1 ring-white/50 mb-1.5 sm:mb-2.5 transition-transform duration-300 group-hover:scale-110" :class="[cmd.bg, cmd.color]">
+                <component :is="cmd.icon" class="h-3.5 w-3.5 sm:h-4 sm:w-4" stroke-width="2" />
               </div>
-              <div class="relative z-10 text-[12px] sm:text-[13px] font-semibold text-zinc-900">{{ prompt.title }}</div>
-              <div class="relative z-10 mt-0.5 text-[10px] sm:text-[11px] text-zinc-500 line-clamp-1">{{ prompt.desc }}</div>
+              <div class="relative z-10 flex items-center gap-1.5">
+                <span class="font-mono text-[12px] sm:text-[13px] font-semibold text-zinc-900">/{{ cmd.name }}</span>
+                <span v-if="cmd.argumentHint" class="rounded bg-zinc-100 px-1 py-0.5 text-[10px] text-zinc-400">{{ cmd.argumentHint }}</span>
+              </div>
+              <div class="relative z-10 mt-1 text-[10px] sm:text-[11px] leading-relaxed text-zinc-500">{{ cmd.description }}</div>
             </button>
           </div>
         </section>
@@ -338,6 +411,15 @@ watch(
                   </div>
                 </template>
 
+                <div v-if="message.role === 'assistant' && !message.streaming && message.pending_questions?.length" class="mt-4 flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-4">
+                  <span class="mr-auto inline-flex items-center gap-1.5 text-xs md:text-[13px] font-medium text-zinc-600">
+                    <HelpCircle class="h-4 w-4 text-blue-500" />
+                    已向你收集 {{ message.pending_questions.length }} 项补充信息
+                  </span>
+                  <Button v-if="index === messages.length - 1" type="button" size="sm" variant="outline" class="h-8 rounded-full px-3 text-xs md:text-[13px]" @click="emit('answer-questions', message)">
+                    填写补充信息
+                  </Button>
+                </div>
                 <div v-if="message.role === 'assistant' && !message.streaming && ['pending', 'applying'].includes(actionStatus(message))" class="mt-4 flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-4">
                   <span class="mr-auto min-w-[180px] text-xs md:text-[13px] font-medium text-zinc-600">是否确认将这些修改写入简历？</span>
                   <button type="button" class="h-8 rounded-full px-3 text-xs md:text-[13px] font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-50" :disabled="decisionLoadingId === message.id" @click="emit('reject', message)">取消</button>
@@ -380,7 +462,23 @@ watch(
           <p v-if="uploadError" class="w-full text-xs text-red-500">{{ uploadError }}</p>
         </div>
         <div class="relative flex items-start">
-          <textarea ref="inputRef" v-model="input" placeholder="输入你想调整的内容..." rows="1" class="w-full min-h-[32px] sm:min-h-[44px] max-h-[100px] sm:max-h-[160px] resize-none bg-transparent px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-[15px] leading-relaxed text-zinc-800 placeholder:text-zinc-400 border-0 shadow-none focus-visible:ring-0 outline-none" style="scrollbar-width: none;" @input="adjustHeight" @compositionstart="composing = true" @compositionend="composing = false" @keydown.enter.exact.prevent="submit($event)" @paste="handlePaste"></textarea>
+          <div v-if="slashOpen" class="absolute bottom-full left-0 right-0 z-20 mb-2 overflow-hidden rounded-2xl bg-white shadow-[0_12px_40px_rgba(0,0,0,0.12)] ring-1 ring-zinc-200/70">
+            <p class="px-4 pb-1 pt-2.5 text-[11px] font-medium text-zinc-400">快捷指令（↑↓ 选择，Enter 补全）</p>
+            <button
+              v-for="(cmd, i) in slashMatches"
+              :key="cmd.name"
+              type="button"
+              class="flex w-full items-center gap-3 px-4 py-2 text-left transition-colors"
+              :class="i === slashActiveIndex ? 'bg-zinc-100' : 'hover:bg-zinc-50'"
+              @mouseenter="slashActiveIndex = i"
+              @click="applySlashCommand(cmd)"
+            >
+              <span class="shrink-0 rounded-md bg-zinc-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-zinc-700">/{{ cmd.name }}</span>
+              <span class="min-w-0 flex-1 truncate text-xs text-zinc-500">{{ cmd.description }}</span>
+              <span v-if="cmd.argumentHint" class="shrink-0 text-[11px] text-zinc-400">{{ cmd.argumentHint }}</span>
+            </button>
+          </div>
+          <textarea ref="inputRef" v-model="input" placeholder="输入你想调整的内容，或输入 / 使用快捷指令..." rows="1" class="w-full min-h-[32px] sm:min-h-[44px] max-h-[100px] sm:max-h-[160px] resize-none bg-transparent px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-[15px] leading-relaxed text-zinc-800 placeholder:text-zinc-400 border-0 shadow-none focus-visible:ring-0 outline-none" style="scrollbar-width: none;" @input="adjustHeight" @compositionstart="composing = true" @compositionend="composing = false" @keydown="handleSlashNav" @keydown.enter.exact.prevent="handleEnter($event)" @paste="handlePaste"></textarea>
         </div>
         <div class="flex items-center justify-between gap-2 px-2 sm:px-3 pt-2 pb-1">
           <div v-if="chatModels?.length" class="inline-flex max-w-full items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-medium text-zinc-600 ring-1 ring-zinc-200/80 shadow-sm transition-all hover:ring-zinc-300 hover:shadow">

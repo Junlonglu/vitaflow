@@ -64,7 +64,7 @@ def _caps_patch(multimodal: bool | None = None):
     return patch.object(ai_chat_service, "get_catalog_capabilities", new=AsyncMock(return_value=capabilities))
 
 
-def _fake_save(db, session, user, resume, reply, suggestions, optimized_resume_data, tool_trace=None):
+def _fake_save(db, session, user, resume, reply, suggestions, optimized_resume_data, tool_trace=None, pending_questions=None):
     return SimpleNamespace(model_dump=lambda *_a, **_k: {"id": 99, "content": reply})
 
 

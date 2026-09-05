@@ -14,12 +14,14 @@ import ResumeAiChatPanel from "@/components/ai/ResumeAiChatPanel.vue"
 import { normalizeResumeData, useResumeStore } from "@/stores/resume"
 import { useEditorStore, type EditorHistorySnapshot } from "@/stores/editor"
 import { exportPdfApi, exportWordApi } from "@/api/export"
-import { clearResumeChatMessagesApi, decideResumeChatChangeApi, getAiCapabilityApi, getResumeChatMessagesApi, sendResumeChatMessageStreamApi, regenerateResumeChatMessageStreamApi, getFlowPointSummaryApi, type FlowPointSummary, type AiCapability, type AiChatAttachment, type AiChatModelOption, type ToolStep } from "@/api/ai"
-import { previewHtmlApi } from "@/api/resume"
+import { clearResumeChatMessagesApi, decideResumeChatChangeApi, getAiCapabilityApi, getResumeChatMessagesApi, sendResumeChatMessageStreamApi, regenerateResumeChatMessageStreamApi, getFlowPointSummaryApi, type FlowPointSummary, type AiCapability, type AiChatAttachment, type AiChatModelOption, type ToolStep, type PendingQuestion, type QuestionAnswer } from "@/api/ai"
+import { previewHtmlApi, duplicateResumeApi } from "@/api/resume"
 import { listTemplatesApi, type TemplateItem } from "@/api/template"
 import TemplatePreview from "@/components/templates/TemplatePreview.vue"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
 import ResumeShareDialog from "@/components/resume/ResumeShareDialog.vue"
+import QuestionDialog from "@/components/ai/QuestionDialog.vue"
+import SaveAsResumeDialog from "@/components/ai/SaveAsResumeDialog.vue"
 import { showGlobalToast } from "@/utils/toast"
 import { createPresetSection } from "@/utils/resumePresets"
 import { applyResumeLanguage, normalizeResumeLanguage } from "@/utils/resumeLocale"
@@ -122,6 +124,15 @@ const aiCapability = ref<AiCapability | null>(null)
 const flowPointSummary = ref<FlowPointSummary | null>(null)
 const aiCapabilityLoaded = ref(false)
 const chatDecisionLoadingId = ref<number | string | null>(null)
+// 补充信息对话框（ask_user_questions → pending_questions）
+const questionsDialogOpen = ref(false)
+const questionsDialogList = ref<PendingQuestion[]>([])
+// JD优化链路：确认写入后提供「另存为新简历」
+const saveAsDialogOpen = ref(false)
+const saveAsTitle = ref("")
+const saveAsLoading = ref(false)
+const jdOptimizeArmed = ref(false)
+const jdOptimizedMessageId = ref<number | null>(null)
 const selectedChatModelId = ref<number | null>(Number(localStorage.getItem("vitaflow_chat_model_id") || 0) || null)
 const chatModels = computed<AiChatModelOption[]>(() => aiCapability.value?.chat_models || [])
 const selectedChatModel = computed(() => chatModels.value.find((item) => item.id === selectedChatModelId.value) || chatModels.value[0] || null)
@@ -232,6 +243,10 @@ function cancelDebouncedSave() {
 }
 
 onMounted(async () => {
+  await loadResumeEditor()
+})
+
+async function loadResumeEditor() {
   try {
     await resumeStore.fetchResumeDetail(resumeId.value)
     if (!resumeStore.currentResume?.resume_data.layout.section_order.includes(editor.currentSection)) {
@@ -251,6 +266,18 @@ onMounted(async () => {
     showToast("简历不存在或无权限访问", "error")
     router.replace("/")
   }
+}
+
+// 同组件路由跳转（如「另存为新简历」后跳到副本）不会重新挂载，需手动重载
+watch(resumeId, async (newId, oldId) => {
+  if (!newId || newId === oldId) return
+  cancelDebouncedSave()
+  cancelHistoryCommit()
+  editor.setCurrentSection("basics")
+  chatMessages.value = []
+  chatLoading.value = false
+  chatLoaded.value = false
+  await loadResumeEditor()
 })
 
 onBeforeUnmount(() => {
@@ -496,8 +523,39 @@ async function loadChatMessages() {
   try {
     chatMessages.value = (await getResumeChatMessagesApi(resumeId.value)) as unknown as any[]
     chatLoaded.value = true
+    jdOptimizeArmed.value = false
   } catch (error: any) {
     chatError.value = error.message || "对话记录加载失败"
+  }
+}
+
+/** 补充信息框提交：把答案合成一条对话消息，模型据此继续生成提案。 */
+async function submitQuestionAnswers(answers: QuestionAnswer[]) {
+  questionsDialogOpen.value = false
+  const lines = answers.map((item, index) => `${index + 1}. ${item.question}\n答：${item.answer || "（跳过）"}`)
+  await sendChatMessage(`【补充信息】\n${lines.join("\n")}`)
+}
+
+/** 气泡里的「填写补充信息」按钮：仅最新一条待回答消息可打开。 */
+function handleAnswerQuestions(message: any) {
+  if (chatLoading.value || !message?.pending_questions?.length) return
+  questionsDialogList.value = message.pending_questions
+  questionsDialogOpen.value = true
+}
+
+async function confirmSaveAsNewResume(title: string) {
+  if (saveAsLoading.value) return
+  saveAsLoading.value = true
+  try {
+    const created = (await duplicateResumeApi(resumeId.value, { title })) as any
+    saveAsDialogOpen.value = false
+    jdOptimizedMessageId.value = null
+    showGlobalToast("已另存为新简历", "success")
+    router.push(`/resumes/${created.id}/edit`)
+  } catch (error: any) {
+    showGlobalToast(error?.message || "另存失败，请重试", "error")
+  } finally {
+    saveAsLoading.value = false
   }
 }
 
@@ -560,6 +618,7 @@ async function sendChatMessage(content: string, attachments: AiChatAttachment[] 
   flushHistoryCommit()
   chatLoading.value = true
   chatError.value = ""
+  if (content.trim().startsWith("/JD优化")) jdOptimizeArmed.value = true
   const stamp = Date.now()
   const pendingUser = { id: `user-${stamp}`, role: "user", content, attachments }
   const pendingAssistant = { id: `assistant-${stamp}`, role: "assistant", content: "", streaming: true, phase: "replying", phaseText: "正在组织回复", phaseTrail: [] as string[], thinking: "", tool_trace: [] as ToolStep[] }
@@ -593,6 +652,14 @@ async function sendChatMessage(content: string, attachments: AiChatAttachment[] 
     const assistant = chatMessages.value[assistantIndex]
     if (assistant && savedAssistant) Object.assign(assistant, savedAssistant, { streaming: false })
     else if (assistant) assistant.streaming = false
+    if (savedAssistant?.pending_questions?.length) {
+      questionsDialogList.value = savedAssistant.pending_questions
+      questionsDialogOpen.value = true
+    }
+    if (savedAssistant?.action_status === "pending" && jdOptimizeArmed.value) {
+      jdOptimizedMessageId.value = Number(savedAssistant.id) || null
+      jdOptimizeArmed.value = false
+    }
     if (response?.resolved_message) {
       const resolved = chatMessages.value.find((item) => item.id === response.resolved_message.id)
       if (resolved) Object.assign(resolved, response.resolved_message)
@@ -661,6 +728,7 @@ async function regenerateChatMessage(message?: any, overrideContent?: string, ov
   flushHistoryCommit()
   chatLoading.value = true
   chatError.value = ""
+  if (content.trim().startsWith("/JD优化")) jdOptimizeArmed.value = true
   userMessage.content = content || "请结合我上传的图片分析简历。"
   userMessage.attachments = attachments
   chatMessages.value = chatMessages.value.slice(0, userIndex + 1)
@@ -708,6 +776,15 @@ async function regenerateChatMessage(message?: any, overrideContent?: string, ov
       Object.assign(assistant, response.assistant_message, { streaming: false })
     } else if (assistant) {
       assistant.streaming = false
+    }
+    const regeneratedAssistant = response?.assistant_message
+    if (regeneratedAssistant?.pending_questions?.length) {
+      questionsDialogList.value = regeneratedAssistant.pending_questions
+      questionsDialogOpen.value = true
+    }
+    if (regeneratedAssistant?.action_status === "pending" && jdOptimizeArmed.value) {
+      jdOptimizedMessageId.value = Number(regeneratedAssistant.id) || null
+      jdOptimizeArmed.value = false
     }
     if (response?.resolved_message) {
       const resolved = chatMessages.value.find((item) => item.id === response.resolved_message.id)
@@ -767,6 +844,11 @@ async function resolveChatDecision(message: any, action: "apply" | "reject") {
       editor.setSaved(true)
       if (!resumeStore.resumeData?.layout.section_order.includes(editor.currentSection)) editor.setCurrentSection("basics")
       showApplySuccess()
+      if (jdOptimizedMessageId.value !== null && Number(message.id) === jdOptimizedMessageId.value) {
+        jdOptimizedMessageId.value = null
+        saveAsTitle.value = `${resumeStore.currentResume?.title || "简历"} · JD优化`
+        saveAsDialogOpen.value = true
+      }
     }
   } catch (error: any) {
     message.action_status = previousStatus
@@ -1007,7 +1089,7 @@ function handleFocusOut(event: Event) {
           <!-- AI Workbench Mode -->
           <div v-show="mainMode === 'ai'" class="flex flex-col flex-1 min-h-0 overflow-hidden bg-white">
             <div class="relative min-h-0 flex-1 overflow-hidden p-0 md:p-0">
-                <ResumeAiChatPanel v-if="sidePanel === 'chat'" key="chat" v-model:selected-model-id="selectedChatModelId" :chat-models="chatModels" :messages="chatMessages" :loading="chatLoading" :error="chatError" :decision-loading-id="chatDecisionLoadingId" :active="mainMode === 'ai' && sidePanel === 'chat'" :supports-multimodal="supportsChatImages" @send="sendChatMessage" @regenerate="regenerateChatMessage" @clear="clearChatMessages" @confirm="resolveChatDecision($event, 'apply')" @reject="resolveChatDecision($event, 'reject')" />
+                <ResumeAiChatPanel v-if="sidePanel === 'chat'" key="chat" v-model:selected-model-id="selectedChatModelId" :chat-models="chatModels" :messages="chatMessages" :loading="chatLoading" :error="chatError" :decision-loading-id="chatDecisionLoadingId" :active="mainMode === 'ai' && sidePanel === 'chat'" :supports-multimodal="supportsChatImages" @send="sendChatMessage" @regenerate="regenerateChatMessage" @clear="clearChatMessages" @confirm="resolveChatDecision($event, 'apply')" @reject="resolveChatDecision($event, 'reject')" @answer-questions="handleAnswerQuestions" />
             </div>
           </div>
         </div>
@@ -1209,6 +1291,9 @@ function handleFocusOut(event: Event) {
       :resume-id="resumeStore.currentResume.id"
       :resume-title="resumeStore.currentResume.title"
     />
+
+    <QuestionDialog :open="questionsDialogOpen" :questions="questionsDialogList" @close="questionsDialogOpen = false" @submit="submitQuestionAnswers" />
+    <SaveAsResumeDialog :open="saveAsDialogOpen" :default-title="saveAsTitle" :loading="saveAsLoading" @close="saveAsDialogOpen = false" @confirm="confirmSaveAsNewResume" />
   </div>
   <div v-else class="flex h-screen flex-col items-center justify-center bg-zinc-50">
     <div class="h-8 w-8 animate-spin rounded-full border-4 border-zinc-200 border-t-zinc-900 mb-4"></div>

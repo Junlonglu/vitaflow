@@ -1,5 +1,5 @@
 /**
- * In-conversation quick commands (ticket 05): /润色, /翻译, /优化, /生成.
+ * In-conversation quick commands (ticket 05): /润色, /翻译, /JD优化, /生成.
  *
  * The ticket's intent is that four high-frequency resume actions become typed
  * slash commands in the same chat. Each one maps to a pi-agent PromptTemplate so
@@ -31,6 +31,7 @@ export interface QuickCommand {
 const COMMAND_ALIASES: Record<string, QuickCommand["name"]> = {
   润色: "polish",
   翻译: "translate",
+  JD优化: "optimize",
   优化: "optimize",
   生成: "generate",
 };
@@ -39,7 +40,7 @@ const COMMAND_ALIASES: Record<string, QuickCommand["name"]> = {
 export function detectQuickCommand(message: string): QuickCommand | null {
   const text = (message ?? "").trim();
   if (!text.startsWith("/")) return null;
-  const match = text.match(/^\/(润色|翻译|优化|生成)\s*(.*)$/);
+  const match = text.match(/^\/(润色|翻译|JD优化|优化|生成)\s*(.*)$/);
   if (!match) return null;
   const rawName = match[1];
   const argsText = match[2].trim();
@@ -138,12 +139,13 @@ export function buildQuickCommandTemplates(): Array<{
 }> {
   const polishContent = `# 润色指令
 
-用户使用了 /润色 快捷指令，希望对简历的「$@」模块做表达润色（只改善措辞，不改变事实）。
+用户使用了 /润色 快捷指令，希望对简历做检查与表达润色（只改善措辞，不改变事实）。若指令带了参数（当前参数：$@；为空表示检查全部），只检查参数提到的模块；否则检查除基本信息外的全部内容模块。
 
 请执行：
-1. 先调用 get_resume_context 读取目标模块的当前内容与条目 id（sections 传该模块对应的模块键，如 work/projects/education/summary/skills/awards）。
-2. 用 update_section 对需要改善的条目做措辞优化：列表类模块按条目 id 定位，只传需要变化的条目，未提到的条目不触碰；只改善表达，不新增事实、不改写数据，不重排或重编号已有条目。
-3. 完成后用简洁中文告诉用户已生成一份待确认修改，需用户确认后才会写入；不要声称修改已经生效。`;
+1. 先调用 get_resume_context 读取要检查的模块（summary/education/skills/work/projects/awards，有自定义模块时也读取），拿到当前内容与条目 id。
+2. 逐模块检查并输出问题清单：错别字与语病、表达无力（缺动词、缺量化）、重复内容、时间或格式不一致等；每条标注所在模块与条目，没有问题的模块不用提。
+3. 只对需要润色的条目调用 propose_change 生成一份合并的待确认提案：列表模块按条目 id 定位，只传需要变化的条目；只改善表达，不新增事实、不改写数据，不重排或重编号已有条目。
+4. 用简洁中文汇总发现的问题，并告知已生成一份待确认修改，需用户确认后才会写入；不要声称修改已经生效。`;
 
   const translateContent = `# 翻译指令
 
@@ -154,18 +156,20 @@ export function buildQuickCommandTemplates(): Array<{
 2. 用 propose_change 生成一份完整翻译后的待确认方案：专有名词与技术名词保留原文，富文本结构、条目标识与顺序不变，不润色、不扩写、不删减。
 3. 完成后用简洁中文告知用户已生成待确认修改，需用户确认后才会写入。`;
 
-  const optimizeContent = `# JD 优化指令
+  const optimizeContent = `# JD 定向优化指令
 
-用户使用了 /优化 快捷指令，希望根据以下岗位描述（JD）定向优化简历匹配度。请只在「已有证据」边界内优化：不得把 JD 要求写成候选人已经掌握的能力，不得新增事实，不得编造量化结果。
+用户使用了 /JD优化 快捷指令，希望根据以下岗位描述（JD）定向优化简历匹配度。严格在「已有证据」边界内优化：不得把 JD 要求写成候选人已经掌握的能力，不得新增事实，不得编造量化结果。
 
 岗位描述：
 $@
 
 请执行：
-1. 先调用 get_resume_context 读取当前简历（sections 传 work,projects,summary,skills 等需要审视的模块），了解现有内容与条目 id。
-2. 分析 JD 与简历的证据匹配情况：区分「已有证据对应 JD」与「缺失证据 / 待核实缺口」。
-3. 只在已有证据内把表达向 JD 要求靠拢；对需要改动的一个或多个模块调用 propose_change 生成待确认方案（列表模块按 id 定位，未提及条目不触碰，不重排重编号）。
-4. 用简洁中文说明匹配分析与建议，并告知用户已生成待确认修改，需用户确认后才会写入。`;
+1. 先调用 get_resume_context 读取需要审视的模块（work,projects,summary,skills 等），了解现有内容与条目 id。
+2. 输出证据匹配分析：区分「已有证据可直接对应 JD」与「JD 有要求但简历缺证据的缺口」。
+3. 若没有明显缺口：只把已有证据的表达向 JD 要求靠拢，直接进入第 5 步。
+4. 若缺口较大：调用 ask_user_questions 把需要核实的问题一次性提交（每个问题配一个 hint 示例，帮助用户理解要填什么；聚焦"是否真的有可写入的相关经历/材料"，最多 5 个），然后结束回合等待用户在补充信息框作答，不要在同回合继续生成方案。用户回答后，把回答中可信的实事写入提案；仍没有证据的部分保持留白，并在回复中说明哪些 JD 要求没有写入及原因。
+5. 调用 propose_change 生成一份待确认方案：列表模块按 id 定位，未提及条目不触碰，不重排重编号。
+6. 用简洁中文说明匹配分析与建议，并告知用户已生成待确认修改，需用户确认后才会写入；不要声称修改已经生效。`;
 
   const generateContent = `# 生成指令
 
@@ -179,9 +183,9 @@ $@
 3. 告知用户已生成待确认修改，需用户确认后才会写入。`;
 
   return [
-    { name: "润色", description: "润色指定模块的表达", argumentHint: "<模块名，如 工作经历 / 项目经历 / 个人简介>", filePath: "/virtual/prompts/润色.md", content: polishContent },
+    { name: "润色", description: "检查整份简历并润色表达", argumentHint: "", filePath: "/virtual/prompts/润色.md", content: polishContent },
     { name: "翻译", description: "整份简历中英互译", argumentHint: "", filePath: "/virtual/prompts/翻译.md", content: translateContent },
-    { name: "优化", description: "基于粘贴的 JD 定向优化简历匹配度", argumentHint: "<岗位描述>", filePath: "/virtual/prompts/优化.md", content: optimizeContent },
+    { name: "JD优化", description: "基于粘贴的 JD 定向优化简历匹配度", argumentHint: "<岗位描述>", filePath: "/virtual/prompts/JD优化.md", content: optimizeContent },
     { name: "生成", description: "根据目标岗位生成简历", argumentHint: "<目标岗位>", filePath: "/virtual/prompts/生成.md", content: generateContent },
   ];
 }

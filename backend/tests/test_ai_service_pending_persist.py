@@ -147,7 +147,7 @@ class StreamAiServicePendingPersistTest(unittest.TestCase):
     def test_persists_pending_payload_when_result_carries_pending_change(self):
         captured = {}
 
-        def fake_save(db, session, user, resume, reply, suggestions, optimized_resume_data, tool_trace=None):
+        def fake_save(db, session, user, resume, reply, suggestions, optimized_resume_data, tool_trace=None, pending_questions=None):
             captured["suggestions"] = suggestions
             captured["optimized_resume_data"] = optimized_resume_data
             captured["reply"] = reply
@@ -188,7 +188,7 @@ class StreamAiServicePendingPersistTest(unittest.TestCase):
 
             return gen()
 
-        def fake_save(db, session, user, resume, reply, suggestions, optimized_resume_data, tool_trace=None):
+        def fake_save(db, session, user, resume, reply, suggestions, optimized_resume_data, tool_trace=None, pending_questions=None):
             captured["suggestions"] = suggestions
             captured["optimized_resume_data"] = optimized_resume_data
             return SimpleNamespace(model_dump=lambda *_a, **_k: {"id": 1, "content": reply})

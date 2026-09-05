@@ -12,7 +12,7 @@ from app.core.response import success
 from app.core.security import get_current_user
 from app.models.ai_task import AiTask
 from app.models.user import User
-from app.schemas.resume import ResumeCreate, ResumeOut, ResumeShareUpdate, ResumeUpdate, ResumeVersionCreate, default_template_config
+from app.schemas.resume import ResumeCreate, ResumeDuplicateRequest, ResumeOut, ResumeShareUpdate, ResumeUpdate, ResumeVersionCreate, default_template_config
 from app.schemas.resume_starter import ResumeStarterCreateRequest
 from app.services.ai.token_usage import build_token_usage, estimate_tokens
 from app.services.ai_config_service import get_active_ai_config
@@ -214,8 +214,14 @@ def remove(resume_id: int, db: Session = Depends(get_db), current_user: User = D
 
 
 @router.post("/{resume_id}/duplicate")
-def duplicate(resume_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return success(ResumeOut.model_validate(duplicate_resume(db, current_user.id, resume_id)).model_dump())
+def duplicate(
+    resume_id: int,
+    payload: ResumeDuplicateRequest | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    title = payload.title if payload else None
+    return success(ResumeOut.model_validate(duplicate_resume(db, current_user.id, resume_id, title)).model_dump())
 
 
 @router.post("/{resume_id}/versions")

@@ -65,6 +65,10 @@ export function toolStepLabel(toolName: string, args: unknown): string {
       if (updates.length > 3) names.push("…");
       return names.length ? `生成修改提案（${names.join("、")}）` : "生成修改提案";
     }
+    case "ask_user_questions": {
+      const questions = Array.isArray(raw.questions) ? raw.questions : [];
+      return questions.length ? `向你收集补充信息（${questions.length} 项）` : "向你收集补充信息";
+    }
     default:
       return toolName;
   }
@@ -100,6 +104,10 @@ export function toolStepEnd(toolName: string, result: unknown, isError: boolean)
     const sections = (details.sections ?? {}) as Record<string, unknown>;
     const count = Object.keys(sections).length;
     return { ok: true, detail: count ? `已读取 ${count} 个模块` : "该模块暂无内容" };
+  }
+  if (toolName === "ask_user_questions") {
+    const questions = Array.isArray(details.questions) ? details.questions : [];
+    return { ok: true, detail: questions.length ? `已提出 ${questions.length} 个问题，等待用户回答` : "等待用户回答" };
   }
   if (toolName === "update_basics_field" || toolName === "update_section" || toolName === "propose_change") {
     const suggestions = Array.isArray(details.suggestions) ? (details.suggestions as string[]) : [];

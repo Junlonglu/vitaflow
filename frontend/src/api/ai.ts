@@ -82,6 +82,18 @@ export interface ToolStep {
   detail?: string
 }
 
+/** ask_user_questions 产出的一条待回答问题（随 result 落库到 pending_questions）。 */
+export interface PendingQuestion {
+  question: string
+  hint?: string
+}
+
+/** 补充信息框提交的一条回答。 */
+export interface QuestionAnswer {
+  question: string
+  answer: string
+}
+
 type StreamCallbacks<T = any> = {
   onConnected?: () => void
   onStart?: () => void

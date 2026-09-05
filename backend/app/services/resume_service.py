@@ -73,11 +73,11 @@ def delete_resume(db: Session, user_id: int, resume_id: int) -> None:
     db.commit()
 
 
-def duplicate_resume(db: Session, user_id: int, resume_id: int) -> Resume:
+def duplicate_resume(db: Session, user_id: int, resume_id: int, title: str | None = None) -> Resume:
     source = get_resume(db, user_id, resume_id)
     copy = Resume(
         user_id=user_id,
-        title=f"{source.title} 副本",
+        title=(title or "").strip()[:120] or f"{source.title} 副本",
         language=source.language,
         resume_data=source.resume_data,
         template_id=source.template_id,

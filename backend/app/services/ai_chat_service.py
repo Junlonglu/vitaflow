@@ -54,6 +54,7 @@ def _message_out(message: AiChatMessage) -> AiChatMessageOut:
             "suggestions": message.suggestions or [],
             "optimized_resume_data": message.optimized_resume_data,
             "tool_trace": message.tool_trace,
+            "pending_questions": message.pending_questions,
             "action_status": message.action_status or "none",
             "create_time": message.create_time,
         }
@@ -130,6 +131,7 @@ def _save_assistant_message(
     suggestions: list[str],
     optimized_resume_data: dict[str, Any] | None,
     tool_trace: list[dict[str, Any]] | None = None,
+    pending_questions: list[dict[str, Any]] | None = None,
 ) -> AiChatMessageOut:
     reply = strip_thinking_text(localize_ai_text(reply or "")).strip()
     assistant_message = AiChatMessage(
@@ -141,6 +143,7 @@ def _save_assistant_message(
         suggestions=suggestions,
         optimized_resume_data=optimized_resume_data,
         tool_trace=tool_trace or None,
+        pending_questions=pending_questions or None,
         action_status="pending" if optimized_resume_data else "none",
     )
     session.update_time = datetime.now()
@@ -292,6 +295,10 @@ async def _stream_ai_service_reply(
                 # user watched live.
                 trace = data.get("tool_trace")
                 tool_trace = [item for item in trace if isinstance(item, dict)] if isinstance(trace, list) else None
+                # Structured gap questions (ask_user_questions tool) ride the result
+                # event too and are persisted so the answer dialog survives reloads.
+                questions = data.get("pending_questions")
+                pending_questions = [item for item in questions if isinstance(item, dict)] if isinstance(questions, list) else None
                 if isinstance(pending, dict) and pending.get("optimized_resume_data"):
                     assistant = _save_assistant_message(
                         db,
@@ -302,9 +309,10 @@ async def _stream_ai_service_reply(
                         list(pending.get("suggestions") or []),
                         pending.get("optimized_resume_data"),
                         tool_trace,
+                        pending_questions=pending_questions,
                     )
                 else:
-                    assistant = _save_assistant_message(db, session, user, resume, reply, [], None, tool_trace)
+                    assistant = _save_assistant_message(db, session, user, resume, reply, [], None, tool_trace, pending_questions=pending_questions)
                 yield {"type": "result", "data": {"assistant_message": assistant.model_dump(mode="json")}}
             else:
                 yield event

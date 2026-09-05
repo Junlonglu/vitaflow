@@ -22,6 +22,7 @@ import { buildQuickCommandTemplates } from "./commands.js";
 import type { TaskType } from "./taskPrompts.js";
 import { createUpdateBasicsFieldTool, type BasicsToolState } from "./tools/basics.js";
 import { createSectionTools, type SectionToolsState } from "./tools/sections.js";
+import { createAskUserQuestionsTool, createQuestionsState, type QuestionsToolState } from "./tools/questions.js";
 import { toolStepEnd, toolStepLabel, type ToolTraceEntry } from "./tools/labels.js";
 
 /** Faux mode drives the deterministic demo provider; real mode uses models.json. */
@@ -168,6 +169,11 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
   // Both tool families write into the SAME state object, so whichever tool fires
   // this turn is the one whose payload the result event carries.
   const toolState: BasicsToolState & SectionToolsState = { pendingChange: null };
+  // Structured questions asked via ask_user_questions this turn; echoed onto the
+  // result event so FastAPI persists them and the frontend can render its answer
+  // dialog after reload too (same closure pattern as toolState — the model has
+  // no write channel here).
+  const questionsState: QuestionsToolState = createQuestionsState();
   // Tool steps executed this turn, echoed verbatim onto the result event so the
   // persisted message shows the same steps the user watched live (same closure
   // pattern as toolState — the model has no write channel here).
@@ -190,6 +196,7 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     resumeId,
     state: toolState,
   });
+  const questionsTool = createAskUserQuestionsTool(questionsState);
 
   // High-level stage broadcast for the chat UI's progress timeline (ChatGPT-style
   // "what is the model doing"). Stages only ever advance — thinking resuming after
@@ -220,6 +227,9 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     const data: Record<string, unknown> = { assistant_message: buildAssistantMessage(text, Date.now()) };
     if (toolState.pendingChange) {
       data.pending_change = toolState.pendingChange;
+    }
+    if (questionsState.askedQuestions?.length) {
+      data.pending_questions = questionsState.askedQuestions;
     }
     if (toolTrace.length) {
       data.tool_trace = toolTrace;
@@ -258,8 +268,8 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     // the filesystem, keeping a single validated mutation path. The read-only
     // get_resume_context is exposed too so the agent can inspect a section before
     // changing it (still no filesystem access).
-    tools: ["update_basics_field", "update_section", "propose_change", "get_resume_context"],
-    customTools: [basicsTool, ...sectionTools],
+    tools: ["update_basics_field", "update_section", "propose_change", "get_resume_context", "ask_user_questions"],
+    customTools: [basicsTool, ...sectionTools, questionsTool],
     // Thinking streams to the UI only for models that actually support reasoning;
     // non-reasoning models (faux included) stay pinned off — a forced level there
     // can produce an empty assistant message.
@@ -316,7 +326,11 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     // args/result). Start appends a running row; end marks it ok/failed. The
     // same trace rides the result event so the persisted message matches.
     if (event.type === "tool_execution_start") {
-      advanceStage(event.toolName === "get_resume_context" ? "reading" : "drafting");
+      // ask_user_questions ends the turn waiting on the user, so it is not a
+      // drafting step — advancing the stage there would mislabel the timeline.
+      if (event.toolName !== "ask_user_questions") {
+        advanceStage(event.toolName === "get_resume_context" ? "reading" : "drafting");
+      }
       const entry: ToolTraceEntry = {
         id: event.toolCallId,
         name: event.toolName,

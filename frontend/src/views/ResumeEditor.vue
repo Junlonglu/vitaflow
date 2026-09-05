@@ -562,7 +562,7 @@ async function sendChatMessage(content: string, attachments: AiChatAttachment[] 
   chatError.value = ""
   const stamp = Date.now()
   const pendingUser = { id: `user-${stamp}`, role: "user", content, attachments }
-  const pendingAssistant = { id: `assistant-${stamp}`, role: "assistant", content: "", streaming: true, phase: "replying", phaseText: "正在组织回复", tool_trace: [] as ToolStep[] }
+  const pendingAssistant = { id: `assistant-${stamp}`, role: "assistant", content: "", streaming: true, phase: "replying", phaseText: "正在组织回复", phaseTrail: [] as string[], thinking: "", tool_trace: [] as ToolStep[] }
   chatMessages.value.push(pendingUser, pendingAssistant)
   const assistantIndex = chatMessages.value.length - 1
   try {
@@ -577,7 +577,14 @@ async function sendChatMessage(content: string, attachments: AiChatAttachment[] 
         },
         onPhase: (phase, text) => {
           const assistant = chatMessages.value[assistantIndex]
-          if (assistant) Object.assign(assistant, { phase, phaseText: text })
+          if (!assistant) return
+          Object.assign(assistant, { phase, phaseText: text })
+          const trail = assistant.phaseTrail || (assistant.phaseTrail = [])
+          if (text && trail[trail.length - 1] !== text) trail.push(text)
+        },
+        onThinking: (text) => {
+          const assistant = chatMessages.value[assistantIndex]
+          if (assistant) assistant.thinking = (assistant.thinking || "") + text
         },
         onTool: (step) => upsertToolStep(chatMessages.value[assistantIndex], step),
       },
@@ -664,6 +671,8 @@ async function regenerateChatMessage(message?: any, overrideContent?: string, ov
     streaming: true,
     phase: "understanding_intent",
     phaseText: "正在重新理解这条消息",
+    phaseTrail: [] as string[],
+    thinking: "",
     tool_trace: [] as ToolStep[],
   }
   chatMessages.value.push(pendingAssistant)
@@ -682,7 +691,14 @@ async function regenerateChatMessage(message?: any, overrideContent?: string, ov
         },
         onPhase: (phase: string, text: string) => {
           const assistant = chatMessages.value[assistantIndex]
-          if (assistant) Object.assign(assistant, { phase, phaseText: text })
+          if (!assistant) return
+          Object.assign(assistant, { phase, phaseText: text })
+          const trail = assistant.phaseTrail || (assistant.phaseTrail = [])
+          if (text && trail[trail.length - 1] !== text) trail.push(text)
+        },
+        onThinking: (text: string) => {
+          const assistant = chatMessages.value[assistantIndex]
+          if (assistant) assistant.thinking = (assistant.thinking || "") + text
         },
         onTool: (step: ToolStep) => upsertToolStep(chatMessages.value[assistantIndex], step),
       },
@@ -999,7 +1015,7 @@ function handleFocusOut(event: Event) {
         <!-- Resizer Handle -->
         <div
           v-if="!isMobile"
-          class="relative z-30 w-4 -ml-2 h-full cursor-col-resize flex items-center justify-center group"
+          class="relative z-30 w-4 h-full cursor-col-resize flex items-center justify-center group"
           @mousedown="startResize"
         >
            <!-- Subtle hover line -->

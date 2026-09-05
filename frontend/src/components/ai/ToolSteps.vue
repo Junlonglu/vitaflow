@@ -1,41 +1,31 @@
 <script setup lang="ts">
-import { ref, watch } from "vue"
-import { CheckCircle2, ChevronDown, ChevronRight, LoaderCircle, XCircle } from "lucide-vue-next"
+import { CheckCircle2, LoaderCircle, Wrench, XCircle } from "lucide-vue-next"
 import type { ToolStep } from "@/api/ai"
+import LiveRegion from "@/components/ai/LiveRegion.vue"
 
 /**
- * 工具调用步骤行（ChatGPT/Claude 式的活动块）：流式中逐行展开
- * （转圈 → 绿勾/红叉 + 一行结果摘要），随时可折叠，结束后自动收起
- * 为一行摘要，可展开回看。纯展示组件，数据来自 tool 流事件 / tool_trace。
+ * 工具调用步骤行：流式中逐行展开（转圈 → 绿勾/红叉 + 一行结果摘要），
+ * 内容区限高自动吸底，结束后自动收起为一行摘要。纯展示组件，
+ * 数据来自 tool 流事件 / tool_trace。
  */
 const props = defineProps<{
   steps: ToolStep[]
   streaming?: boolean
 }>()
 
-const expanded = ref(true)
-
-// 回合结束自动收起；流式期间用户可手动折叠（再次展开也不受流式状态压制）。
-watch(
-  () => props.streaming,
-  (now, before) => {
-    if (before && now === false) expanded.value = false
-  },
-)
+const lastChange = () => {
+  const last = props.steps[props.steps.length - 1]
+  return `${props.steps.length}-${last?.status ?? ""}-${last?.ok ?? ""}-${last?.detail ?? ""}`
+}
 </script>
 
 <template>
-  <div v-if="steps.length" class="mb-2.5 rounded-xl border border-zinc-100 bg-zinc-50/70">
-    <button
-      type="button"
-      class="flex w-full items-center gap-1.5 px-3 py-2 text-xs font-medium text-zinc-500 transition-colors hover:text-zinc-800"
-      @click="expanded = !expanded"
-    >
-      <ChevronDown v-if="expanded" class="h-3.5 w-3.5" />
-      <ChevronRight v-else class="h-3.5 w-3.5" />
+  <LiveRegion v-if="steps.length" :streaming="streaming" :watch="lastChange()" max-height="max-h-40">
+    <template #header>
+      <Wrench class="h-3.5 w-3.5" />
       <span>{{ streaming ? "正在调用工具" : `已执行 ${steps.length} 步工具操作` }}</span>
-    </button>
-    <div v-show="expanded" class="space-y-1 px-3 pb-2">
+    </template>
+    <div class="space-y-1">
       <div v-for="step in steps" :key="step.id" class="min-w-0">
         <div class="flex items-center gap-2 text-xs">
           <template v-if="step.status === 'end'">
@@ -48,5 +38,5 @@ watch(
         <p v-if="step.detail" class="ml-5.5 mt-0.5 truncate text-[11px]" :class="step.ok ? 'text-zinc-400' : 'text-red-400'">{{ step.detail }}</p>
       </div>
     </div>
-  </div>
+  </LiveRegion>
 </template>

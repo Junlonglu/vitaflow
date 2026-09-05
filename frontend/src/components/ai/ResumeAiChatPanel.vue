@@ -9,6 +9,7 @@ import { uploadAiChatImageApi } from "@/api/file"
 import { showGlobalToast } from "@/utils/toast"
 import type { AiChatAttachment, AiChatModelOption, ToolStep } from "@/api/ai"
 import ToolSteps from "@/components/ai/ToolSteps.vue"
+import ThinkingProcess from "@/components/ai/ThinkingProcess.vue"
 
 type ChatMessage = {
   id: number | string
@@ -20,6 +21,9 @@ type ChatMessage = {
   streaming?: boolean
   phase?: string
   phaseText?: string
+  /** 已广播的阶段文本序列（单调前进），最后一项为当前阶段。 */
+  phaseTrail?: string[]
+  thinking?: string
   attachments?: AiChatAttachment[]
   tool_trace?: ToolStep[]
 }
@@ -198,6 +202,11 @@ function actionStatus(message: ChatMessage) {
   return message.action_status || "pending"
 }
 
+/** 流式进度时间线：已广播的阶段序列；无轨迹时退回单行 phaseText。 */
+function phaseItems(message: ChatMessage): string[] {
+  return message.phaseTrail?.length ? message.phaseTrail : [message.phaseText || "正在处理"]
+}
+
 const lastAssistantIndex = computed(() => {
   for (let i = props.messages.length - 1; i >= 0; i--) {
     if (props.messages[i].role === 'assistant') return i
@@ -283,13 +292,15 @@ watch(
               <div class="message-bubble relative text-[13px] md:text-[15px] leading-relaxed transition-all" :class="message.role === 'user' ? 'rounded-[20px] md:rounded-[24px] rounded-tr-[8px] bg-zinc-100 px-4 py-2.5 md:px-5 md:py-3.5 text-zinc-900' : 'rounded-[20px] md:rounded-[24px] rounded-tl-[8px] bg-white px-4.5 py-3.5 md:px-6 md:py-5 text-zinc-800 ring-1 ring-zinc-200/50 shadow-sm'">
                 <p v-if="message.role === 'user'" class="whitespace-pre-wrap break-words">{{ message.content }}</p>
                 <template v-else>
+                  <ThinkingProcess :text="message.thinking || ''" :streaming="message.streaming" />
                   <ToolSteps :steps="message.tool_trace || []" :streaming="message.streaming" />
                   <div v-if="message.content" class="chat-markdown break-words" v-html="renderMarkdown(message.content)" />
-                  <div v-else-if="message.streaming" class="flex min-h-[24px] items-center gap-2.5" aria-label="AI 正在处理">
-                    <div class="flex items-center gap-1.5">
-                      <span v-for="i in 3" :key="i" class="typing-dot h-1.5 w-1.5 rounded-full bg-blue-400" :style="{ animationDelay: `${(i - 1) * 160}ms` }" />
-                    </div>
-                    <span v-if="message.phaseText" class="text-xs md:text-[13px] font-medium text-blue-500/80 animate-pulse">{{ message.phaseText }}</span>
+                  <div v-else-if="message.streaming" class="flex min-h-[24px] flex-wrap items-center gap-x-2 gap-y-1" aria-label="AI 正在处理">
+                    <template v-for="(item, index) in phaseItems(message)" :key="`${item}-${index}`">
+                      <CheckCircle2 v-if="index < phaseItems(message).length - 1" class="h-3.5 w-3.5 text-emerald-500" />
+                      <LoaderCircle v-else class="h-3.5 w-3.5 animate-spin text-blue-500" />
+                      <span class="text-xs md:text-[13px] font-medium" :class="index < phaseItems(message).length - 1 ? 'text-zinc-400' : 'text-blue-500/80'">{{ item }}</span>
+                    </template>
                   </div>
                 </template>
 

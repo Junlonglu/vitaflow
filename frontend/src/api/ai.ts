@@ -87,6 +87,7 @@ type StreamCallbacks<T = any> = {
   onStart?: () => void
   onDelta?: (text: string) => void
   onPhase?: (phase: string, text: string) => void
+  onThinking?: (text: string) => void
   onTool?: (step: ToolStep) => void
   onResult?: (data: T) => void
 }
@@ -156,6 +157,7 @@ async function postAiStream<T = any>(path: string, data: any, callbacks: StreamC
     if (event.type === "start") callbacks.onStart?.()
     if (event.type === "delta") callbacks.onDelta?.(String(event.text || ""))
     if (event.type === "phase") callbacks.onPhase?.(String(event.phase || ""), String(event.text || ""))
+    if (event.type === "thinking") callbacks.onThinking?.(String(event.text || ""))
     if (event.type === "tool") callbacks.onTool?.(event.data as ToolStep)
     if (event.type === "result") {
       finalResult = event.data as T

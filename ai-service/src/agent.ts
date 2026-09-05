@@ -5,6 +5,7 @@
  * The contract mirrors the backend's existing chat stream so the frontend can
  * render it unchanged:
  *   {"type":"start", ...} {"type":"phase", ...} {"type":"delta","text":"..."}
+ *   {"type":"thinking","text":"..."}   (reasoning models only)
  *   {"type":"tool","data":{id,name,label,status,ok?}}   (tool step progress)
  *   {"type":"result","data":{assistant_message}}  {"type":"error","message"}
  */
@@ -30,6 +31,9 @@ export type ChatStreamEvent =
   | { type: "start"; data: Record<string, unknown> }
   | { type: "phase"; phase: string; text: string }
   | { type: "delta"; text: string }
+  // Reasoning-model thinking stream (never accumulated into the reply text;
+  // the backend strips any thinking artifacts before persisting the content).
+  | { type: "thinking"; text: string }
   // Tool-call progress (one event per execution start/end): the curated step
   // label only — raw args/result stay inside ai-service. The backend proxy
   // forwards these verbatim and the frontend renders them as step rows.
@@ -187,6 +191,28 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     state: toolState,
   });
 
+  // High-level stage broadcast for the chat UI's progress timeline (ChatGPT-style
+  // "what is the model doing"). Stages only ever advance — thinking resuming after
+  // a tool round must not rewind the label — and the mapping lives here at the
+  // event source so the frontend just renders what it receives.
+  const STAGE_ORDER = ["understanding", "thinking", "reading", "drafting", "replying"] as const;
+  type Stage = (typeof STAGE_ORDER)[number];
+  const STAGE_LABEL: Record<Stage, string> = {
+    understanding: "正在理解需求",
+    thinking: "正在深度思考",
+    reading: "正在查阅简历",
+    drafting: "正在生成修改方案",
+    replying: "正在组织回复",
+  };
+  let stageIndex = 0;
+  const advanceStage = (stage: Stage) => {
+    const next = STAGE_ORDER.indexOf(stage);
+    if (next > stageIndex) {
+      stageIndex = next;
+      emit({ type: "phase", phase: stage, text: STAGE_LABEL[stage] });
+    }
+  };
+
   let resultSent = false;
   const sendResult = (text: string) => {
     if (resultSent) return;
@@ -234,10 +260,10 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     // changing it (still no filesystem access).
     tools: ["update_basics_field", "update_section", "propose_change", "get_resume_context"],
     customTools: [basicsTool, ...sectionTools],
-    // The faux model reports reasoning:false; pinning thinking off keeps the
-    // agent loop on the plain text path (the default level can produce an empty
-    // assistant message with a non-reasoning model).
-    thinkingLevel: "off",
+    // Thinking streams to the UI only for models that actually support reasoning;
+    // non-reasoning models (faux included) stay pinned off — a forced level there
+    // can produce an empty assistant message.
+    thinkingLevel: model.reasoning ? "medium" : "off",
   });
 
   if (modelFallbackMessage) {
@@ -261,7 +287,12 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
       const ae = event.assistantMessageEvent;
       if (ae?.type === "text_delta") {
         text += ae.delta;
+        advanceStage("replying");
         emit({ type: "delta", text: ae.delta });
+      }
+      if (ae?.type === "thinking_delta") {
+        advanceStage("thinking");
+        emit({ type: "thinking", text: ae.delta });
       }
     }
     if (event.type === "message_end" && event.message?.role === "assistant") {
@@ -285,6 +316,7 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     // args/result). Start appends a running row; end marks it ok/failed. The
     // same trace rides the result event so the persisted message matches.
     if (event.type === "tool_execution_start") {
+      advanceStage(event.toolName === "get_resume_context" ? "reading" : "drafting");
       const entry: ToolTraceEntry = {
         id: event.toolCallId,
         name: event.toolName,
@@ -322,7 +354,7 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
   signal?.addEventListener("abort", abortHandler, { once: true });
 
   emit({ type: "start", data: {} });
-  emit({ type: "phase", phase: "replying", text: "正在组织回复" });
+  emit({ type: "phase", phase: "understanding", text: STAGE_LABEL.understanding });
 
   // Program the fake response for this turn right before prompting (faux only —
   // a real model decides its own tool calls). With no tool plan the agent loop

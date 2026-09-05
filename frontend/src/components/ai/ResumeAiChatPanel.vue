@@ -161,20 +161,54 @@ function cancelRegenerate() {
   if (inputRef.value) inputRef.value.style.height = 'auto'
 }
 
-async function handleImageChange(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0]
-  if (!file) return
+/** 一次消息最多附带的图片数（与后端 MAX_CHAT_ATTACHMENTS 对齐）。 */
+const MAX_ATTACHMENTS = 9
+
+async function uploadImages(files: File[]) {
+  if (!files.length) return
+  const remaining = MAX_ATTACHMENTS - attachments.value.length
+  if (remaining <= 0) {
+    uploadError.value = `一次最多附带 ${MAX_ATTACHMENTS} 张图片`
+    return
+  }
+  const accepted = files.slice(0, remaining)
   uploadError.value = ""
   uploadingImage.value = true
+  const failed: string[] = []
   try {
-    const result = await uploadAiChatImageApi(file)
-    attachments.value.push({ url: result.url, name: file.name, content_type: file.type, object_name: result.object_name })
-  } catch (err: any) {
-    uploadError.value = err.message || "图片上传失败"
+    for (const file of accepted) {
+      try {
+        const result = await uploadAiChatImageApi(file)
+        attachments.value.push({ url: result.url, name: file.name, content_type: file.type, object_name: result.object_name })
+      } catch {
+        failed.push(file.name || "图片")
+      }
+    }
+    const over = files.length > remaining ? `一次最多附带 ${MAX_ATTACHMENTS} 张图片` : ""
+    const errors = [over, failed.length ? `${failed.join("、")} 上传失败` : ""].filter(Boolean)
+    if (errors.length) uploadError.value = errors.join("；")
   } finally {
     uploadingImage.value = false
-    if (fileInputRef.value) fileInputRef.value.value = ""
   }
+}
+
+async function handleImageChange(event: Event) {
+  const files = Array.from((event.target as HTMLInputElement).files || [])
+  if (!files.length) return
+  await uploadImages(files)
+  if (fileInputRef.value) fileInputRef.value.value = ""
+}
+
+/** Ctrl+V 粘贴剪贴板图片：与文件选择走同一条上传链路。 */
+async function handlePaste(event: ClipboardEvent) {
+  if (!props.supportsMultimodal) return
+  const files = Array.from(event.clipboardData?.items || [])
+    .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => !!file)
+  if (!files.length) return
+  event.preventDefault()
+  await uploadImages(files)
 }
 
 function removeAttachment(index: number) {
@@ -336,10 +370,7 @@ watch(
       </div>
 
       <form class="composer relative mx-3 sm:mx-4 mb-18 sm:mb-4 mt-1 shrink-0 rounded-[18px] sm:rounded-[24px] bg-zinc-50/80 p-1 sm:p-2.5 ring-1 ring-zinc-200/50 transition-all focus-within:bg-white focus-within:ring-blue-200 focus-within:shadow-[0_8px_40px_rgba(16,185,129,0.08)]" @submit.prevent="submit">
-        <div class="relative flex items-start">
-          <textarea ref="inputRef" v-model="input" placeholder="输入你想调整的内容..." rows="1" class="w-full min-h-[32px] sm:min-h-[44px] max-h-[100px] sm:max-h-[160px] resize-none bg-transparent px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-[15px] leading-relaxed text-zinc-800 placeholder:text-zinc-400 border-0 shadow-none focus-visible:ring-0 outline-none" style="scrollbar-width: none;" @input="adjustHeight" @compositionstart="composing = true" @compositionend="composing = false" @keydown.enter.exact.prevent="submit($event)"></textarea>
-        </div>
-        <div v-if="attachments.length || uploadError" class="mb-2 flex flex-wrap gap-2 sm:gap-3 px-2.5 sm:px-3 pt-1">
+        <div v-if="attachments.length || uploadError" class="flex flex-wrap gap-2 sm:gap-3 px-2.5 sm:px-3 pb-1 pt-2">
           <div v-for="(item, index) in attachments" :key="item.url" class="group relative h-14 w-14 sm:h-16 sm:w-16 shrink-0 rounded-xl border border-zinc-200/80 bg-white shadow-sm">
             <img :src="item.url" :alt="item.name || '待发送图片'" class="h-full w-full rounded-xl object-cover" />
             <button type="button" class="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-white text-zinc-400 shadow-[0_2px_8px_rgba(0,0,0,0.08)] ring-1 ring-zinc-200/80 transition hover:text-red-500 hover:scale-110 active:scale-95" title="移除图片" @click="removeAttachment(index)">
@@ -347,6 +378,9 @@ watch(
             </button>
           </div>
           <p v-if="uploadError" class="w-full text-xs text-red-500">{{ uploadError }}</p>
+        </div>
+        <div class="relative flex items-start">
+          <textarea ref="inputRef" v-model="input" placeholder="输入你想调整的内容..." rows="1" class="w-full min-h-[32px] sm:min-h-[44px] max-h-[100px] sm:max-h-[160px] resize-none bg-transparent px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-[15px] leading-relaxed text-zinc-800 placeholder:text-zinc-400 border-0 shadow-none focus-visible:ring-0 outline-none" style="scrollbar-width: none;" @input="adjustHeight" @compositionstart="composing = true" @compositionend="composing = false" @keydown.enter.exact.prevent="submit($event)" @paste="handlePaste"></textarea>
         </div>
         <div class="flex items-center justify-between gap-2 px-2 sm:px-3 pt-2 pb-1">
           <div v-if="chatModels?.length" class="inline-flex max-w-full items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-medium text-zinc-600 ring-1 ring-zinc-200/80 shadow-sm transition-all hover:ring-zinc-300 hover:shadow">
@@ -363,7 +397,7 @@ watch(
           <div v-else class="text-xs text-zinc-400">默认模型</div>
           
           <div class="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            <input ref="fileInputRef" type="file" accept="image/png,image/jpeg,image/webp" class="hidden" @change="handleImageChange" />
+            <input ref="fileInputRef" type="file" accept="image/png,image/jpeg,image/webp" multiple class="hidden" @change="handleImageChange" />
             <button v-if="supportsMultimodal" type="button" class="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-[12px] sm:rounded-[16px] text-zinc-400 transition-all hover:bg-blue-50 hover:text-blue-600 active:scale-95 disabled:opacity-50" :disabled="loading || uploadingImage" title="上传图片" @click="chooseImage">
               <LoaderCircle v-if="uploadingImage" class="h-4 w-4 sm:h-5 sm:w-5 animate-spin" stroke-width="1.5" />
               <ImagePlus v-else class="h-4 w-4 sm:h-5 sm:w-5" stroke-width="1.5" />

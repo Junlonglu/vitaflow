@@ -23,6 +23,7 @@ import {
   validateProviderBody,
   validateProviderKey,
 } from "./catalog.js";
+import { detectQuickCommand } from "./commands.js";
 import { runChat, runTask, type ChatRuntime, type ChatStreamEvent } from "./agent.js";
 import { reportUsage } from "./billing.js";
 import { loadConfig } from "./config.js";
@@ -300,28 +301,52 @@ app.post("/v1/chat", async (req, res) => {
   const controller = new AbortController();
   res.on("close", () => controller.abort());
 
-  const usage = await runChat(
+  const outcome = await runChat(
     { message, systemPrompt, config, runtime, modelRef, userId, resumeId, images },
     (event) => sendEvent(res, event),
     controller.signal,
   );
   res.end();
+  // Feature breakdown (admin dashboard): a leading slash command is detected on
+  // the raw message; everything else counts as free-form chat.
+  const feature = detectQuickCommand(message)?.name ?? "chat";
   // End-of-request billing (ticket 07): hand the aggregated per-model usage to
   // FastAPI, which settles Flow Points with the same rules as the legacy path.
   // Faux turns are a local demo — they carry no real provider's usage and must
   // not be billed (FastAPI would fall back to the default ai_chat rule).
   // Fire-and-forget: a billing hiccup must never fail a turn the user already
   // received, but it is still awaited briefly so process shutdown sees it.
-  const billableUsage = usage.filter((entry) => entry.provider !== "faux");
+  const reportDeps = { fetch: globalThis.fetch, fastapiBaseUrl: config.fastapiBaseUrl, serviceToken: config.serviceToken };
+  const billableUsage = outcome.usage.filter((entry) => entry.provider !== "faux");
   if (billableUsage.length) {
     try {
-      const ok = await reportUsage(
-        { fetch: globalThis.fetch, fastapiBaseUrl: config.fastapiBaseUrl, serviceToken: config.serviceToken },
-        { user_id: userId, resume_id: resumeId, usage: billableUsage },
-      );
+      const ok = await reportUsage(reportDeps, {
+        user_id: userId,
+        resume_id: resumeId,
+        usage: billableUsage,
+        feature,
+        tool_calls: outcome.toolCalls,
+      });
       if (!ok) console.error("[vitaflow-ai] usage report rejected by FastAPI");
     } catch (err) {
       console.error("[vitaflow-ai] usage report failed:", err);
+    }
+  } else if (outcome.failed && runtime.kind !== "faux" && !controller.signal.aborted) {
+    // Failed turn: report it so the admin success rate sees real failures.
+    // Client-initiated aborts (user closed the page) are not model failures
+    // and stay unrecorded, matching the legacy no-refund-needed rule.
+    try {
+      const ok = await reportUsage(reportDeps, {
+        user_id: userId,
+        resume_id: resumeId,
+        usage: [],
+        feature,
+        status: "failed",
+        error_message: outcome.error,
+      });
+      if (!ok) console.error("[vitaflow-ai] failure report rejected by FastAPI");
+    } catch (err) {
+      console.error("[vitaflow-ai] failure report failed:", err);
     }
   }
 });

@@ -17,6 +17,9 @@ class AiTask(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, index=True)
     resume_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True, index=True)
     task_type: Mapped[str] = mapped_column(String(50), index=True)
+    # 对话回合的快捷指令（polish/translate/optimize/generate/greeting/chat），
+    # 非对话任务为 NULL；功能分布按「ai_chat 行取 feature、其余行取 task_type」合并。
+    feature: Mapped[Optional[str]] = mapped_column(String(30), nullable=True, index=True)
     input_data: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
     output_data: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending", index=True)

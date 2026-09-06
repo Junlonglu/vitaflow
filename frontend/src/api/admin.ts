@@ -22,6 +22,7 @@ export interface DashboardData {
   tokens: { total: number; today: number; input: number; output: number; avg_per_task: number }
   points: { consumed: number; today_consumed: number; recharged: number }
   revenue?: { redeemed: number; today_redeemed: number }
+  // 聚合键：对话回合（ai_chat）取 feature（polish/…/chat），其余任务取 task_type
   ai_breakdown: Array<{ task_type: string; total: number; success: number; failed: number; tokens: number; input_tokens: number; output_tokens: number }>
   model_breakdown?: Array<{ model_name: string; model_raw_name?: string; config_names?: string[]; total: number; tokens: number; input_tokens: number; output_tokens: number; points_used: number }>
   section_breakdown: Array<{ section_type: string; total: number; success: number; failed: number }>
@@ -59,6 +60,7 @@ export interface AdminAiTask {
   username: string
   resume_id?: number
   task_type: string
+  feature?: string | null
   status: string
   model_name?: string
   model_config_name?: string | null
@@ -72,6 +74,7 @@ export interface AdminAiTask {
     model?: string
     request_input_tokens?: number
     token_usage?: TokenUsage
+    tool_calls?: number
   }
   output_data?: Record<string, unknown>
   create_time: string

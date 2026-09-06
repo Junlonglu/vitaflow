@@ -278,7 +278,7 @@ describe("agent loop -> token usage aggregation (ticket 07)", () => {
     const runtime = await createFauxRuntime();
     const config = loadConfig();
     try {
-      const usage = await runChat(
+      const outcome = await runChat(
         {
           message: "早上好",
           systemPrompt: "你是简历助手。",
@@ -290,12 +290,13 @@ describe("agent loop -> token usage aggregation (ticket 07)", () => {
         () => {},
       );
 
-      assert.equal(usage.length, 1, "one model bucket for a single-model turn");
-      assert.equal(usage[0].provider, "faux");
-      assert.equal(usage[0].model, "faux-1");
-      assert.ok(usage[0].requests >= 1, "at least one LLM call was consumed");
-      assert.ok(usage[0].input_tokens > 0, "faux reports prompt-derived input tokens");
-      assert.ok(usage[0].total_tokens >= usage[0].input_tokens + usage[0].output_tokens);
+      assert.equal(outcome.failed, false, "a successful faux turn is not failed");
+      assert.equal(outcome.usage.length, 1, "one model bucket for a single-model turn");
+      assert.equal(outcome.usage[0].provider, "faux");
+      assert.equal(outcome.usage[0].model, "faux-1");
+      assert.ok(outcome.usage[0].requests >= 1, "at least one LLM call was consumed");
+      assert.ok(outcome.usage[0].input_tokens > 0, "faux reports prompt-derived input tokens");
+      assert.ok(outcome.usage[0].total_tokens >= outcome.usage[0].input_tokens + outcome.usage[0].output_tokens);
     } finally {
       runtime.dispose();
     }
@@ -311,7 +312,7 @@ describe("agent loop -> token usage aggregation (ticket 07)", () => {
     const config = loadConfig();
     const events: ChatStreamEvent[] = [];
 
-    const usage = await runChat(
+    const outcome = await runChat(
       {
         message: "早上好",
         systemPrompt: "你是简历助手。",
@@ -324,7 +325,8 @@ describe("agent loop -> token usage aggregation (ticket 07)", () => {
       (event) => events.push(event),
     );
 
-    assert.deepEqual(usage, [], "unresolvable model bills nothing");
+    assert.deepEqual(outcome.usage, [], "unresolvable model bills nothing");
+    assert.equal(outcome.failed, true, "unresolvable model marks the turn failed");
     const error = events.find((event) => event.type === "error");
     assert.ok(error, "expected an error event");
     assert.match((error as { message: string }).message, /未在 models\.json 中配置/);

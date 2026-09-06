@@ -99,6 +99,10 @@ class ProposeChangeRequest(BaseModel):
     updates: list[dict[str, Any]]
 
 
+# 对话回合的 feature 取值（与 ai-service 的 QuickCommand name 对齐，chat 为自由对话）。
+AI_CHAT_FEATURES = frozenset({"polish", "translate", "optimize", "generate", "greeting", "chat"})
+
+
 class AiServiceUsageEntry(BaseModel):
     """One model's aggregated usage for a finished chat turn (ticket 07)."""
 
@@ -113,11 +117,22 @@ class AiServiceUsageEntry(BaseModel):
 
 
 class AiServiceUsageRequest(BaseModel):
-    """End-of-request usage report the Node AI service posts to FastAPI."""
+    """End-of-request usage report the Node AI service posts to FastAPI.
+
+    ``feature`` is the quick command the turn ran (polish/translate/optimize/
+    generate/greeting) or "chat" for free-form messages — it powers the admin
+    feature breakdown. ``status="failed"`` turns carry no usage: they only
+    record a failed turn so the success rate reflects real failures instead of
+    silently dropping them (failed turns are never billed).
+    """
 
     user_id: int
     resume_id: int | None = None
-    usage: list[AiServiceUsageEntry]
+    feature: str | None = None
+    tool_calls: int = Field(default=0, ge=0)
+    status: str | None = None
+    error_message: str | None = None
+    usage: list[AiServiceUsageEntry] = Field(default_factory=list)
 
 
 def require_ai_service_token(request: Request) -> None:
@@ -749,6 +764,22 @@ def report_ai_service_usage(
     if not user:
         raise AppException("用户不存在", 404)
 
+    # 对话回合的功能维度：快捷指令取其规范名，自由对话记 "chat"；未知值丢弃。
+    feature = payload.feature if payload.feature in AI_CHAT_FEATURES else None
+
+    # 失败回合：不结算任何积分，只落一条 failed 任务行，让成功率统计反映真实失败。
+    if payload.status == "failed":
+        task = create_ai_task(
+            db,
+            user.id,
+            "ai_chat",
+            resume_id=payload.resume_id,
+            model_name=None,
+            feature=feature,
+        )
+        finish_ai_task(db, task, "failed", error_message=(payload.error_message or "AI 回合失败")[:4000])
+        return success({"entries": []})
+
     entries: list[dict[str, Any]] = []
     for item in payload.usage:
         ref = f"{item.provider.strip()}/{item.model.strip()}"
@@ -765,6 +796,8 @@ def report_ai_service_usage(
             "token_usage": token_usage,
             "billing_override": config.chat_billing_override() if config else None,
         }
+        if payload.tool_calls:
+            input_data["tool_calls"] = payload.tool_calls
         task = create_ai_task(
             db,
             user.id,
@@ -772,6 +805,7 @@ def report_ai_service_usage(
             resume_id=payload.resume_id,
             input_data=input_data,
             model_name=input_data["model_name"],
+            feature=feature,
         )
         try:
             finish_ai_task(db, task, "success", output_data={"source": "ai_service_usage"}, token_usage=token_usage)

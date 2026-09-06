@@ -46,6 +46,13 @@ function taskTypeText(value: string) {
     resume_translate: "简历翻译",
     section_optimize: "模块润色",
     ai_chat: "AI 助手对话",
+    // 对话回合（ai_chat 行）按 feature 拆分后的聚合键
+    polish: "对话 · 润色",
+    translate: "对话 · 翻译",
+    optimize: "对话 · JD优化",
+    generate: "对话 · 生成",
+    greeting: "对话 · 开场白",
+    chat: "对话 · 自由交流",
   } as Record<string, string>)[value] || value
 }
 
@@ -99,9 +106,9 @@ function sectionText(value?: string) {
       </article>
 
       <article class="min-w-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
-        <h2 class="font-semibold text-zinc-900">运行质量</h2><p class="mt-1 text-xs text-zinc-400">核心任务成功率</p>
+        <h2 class="font-semibold text-zinc-900">运行质量</h2><p class="mt-1 text-xs text-zinc-400">AI 回合与导出成功率</p>
         <div class="mt-5 space-y-5">
-          <div v-for="rate in [{ label: 'AI 任务成功率', value: dashboard.rates.ai_success }, { label: '文件导出成功率', value: dashboard.rates.export_success }]" :key="rate.label">
+          <div v-for="rate in [{ label: 'AI 调用成功率', value: dashboard.rates.ai_success }, { label: '文件导出成功率', value: dashboard.rates.export_success }]" :key="rate.label">
             <div class="mb-2 flex justify-between text-sm"><span class="text-zinc-600">{{ rate.label }}</span><strong>{{ rate.value }}%</strong></div>
             <div class="h-2 overflow-hidden rounded-full bg-zinc-100"><div class="h-full rounded-full bg-emerald-500" :style="{ width: `${rate.value}%` }"></div></div>
           </div>
@@ -129,7 +136,7 @@ function sectionText(value?: string) {
 
       <article class="min-w-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
         <h2 class="font-semibold text-zinc-900">AI 功能调用分布</h2>
-        <p class="mt-1 text-xs text-zinc-400">各项能力分别统计成功与失败次数</p>
+        <p class="mt-1 text-xs text-zinc-400">对话按指令拆分，历史任务按原类型统计</p>
         <div class="mt-5 space-y-3">
           <div v-for="item in dashboard.ai_breakdown" :key="item.task_type" class="min-w-0 overflow-hidden rounded-xl border border-zinc-100 bg-zinc-50 p-3 transition hover:bg-zinc-100/80 sm:p-4">
             <div class="flex items-center justify-between gap-1 overflow-hidden sm:gap-2">

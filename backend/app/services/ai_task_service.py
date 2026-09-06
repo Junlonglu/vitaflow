@@ -20,11 +20,13 @@ def create_ai_task(
     resume_id: int | None = None,
     input_data: dict[str, Any] | None = None,
     model_name: str | None = None,
+    feature: str | None = None,
 ) -> AiTask:
     task = AiTask(
         user_id=user_id,
         resume_id=resume_id,
         task_type=task_type,
+        feature=feature,
         input_data=input_data or {},
         model_name=model_name,
         status="pending",

@@ -29,6 +29,8 @@ _PI_REF = "deepseek/deepseek-v4-flash-vision-exp"
 _USAGE_PAYLOAD = {
     "user_id": 7,
     "resume_id": 3,
+    "feature": "polish",
+    "tool_calls": 2,
     "usage": [
         {
             "provider": "deepseek",
@@ -96,13 +98,14 @@ class AiServiceUsageEndpointTest(unittest.TestCase):
         task = _stub_task()
         created: dict = {}
 
-        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None):
+        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None):
             created.update(
                 user_id=user_id,
                 task_type=task_type,
                 resume_id=resume_id,
                 input_data=input_data,
                 model_name=model_name,
+                feature=feature,
             )
             return task
 
@@ -129,7 +132,9 @@ class AiServiceUsageEndpointTest(unittest.TestCase):
         self.assertEqual(created["task_type"], "ai_chat")
         self.assertEqual(created["resume_id"], 3)
         self.assertEqual(created["model_name"], "DeepSeek V4 Flash Vision")
+        self.assertEqual(created["feature"], "polish")
         self.assertEqual(created["input_data"]["pi_model_ref"], _PI_REF)
+        self.assertEqual(created["input_data"]["tool_calls"], 2)
         # The per-model rates ride into the task so settle_task_flow_points
         # computes the exact legacy amount.
         self.assertEqual(
@@ -194,6 +199,42 @@ class AiServiceUsageEndpointTest(unittest.TestCase):
         entry = resp.json()["data"]["entries"][0]
         self.assertFalse(entry["billed"])
         self.assertIn("Flow Points 不足", entry["error"])
+
+    def test_failed_turn_records_failed_task_without_billing(self):
+        # 失败回合回报（usage 为空 + status=failed）：只落一条 failed 任务行让成功率
+        # 反映真实失败，不做任何结算/扣费；未知 feature 丢弃而不是报错。
+        created: dict = {}
+        finished: dict = {}
+
+        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None):
+            created.update(user_id=user_id, task_type=task_type, resume_id=resume_id, feature=feature)
+            return _stub_task()
+
+        def fake_finish_ai_task(db, task_arg, status, error_message=None, output_data=None, token_usage=None):
+            finished.update(status=status, error_message=error_message, token_usage=token_usage)
+
+        with (
+            patch.object(ai_module, "create_ai_task", side_effect=fake_create_ai_task),
+            patch.object(ai_module, "finish_ai_task", side_effect=fake_finish_ai_task),
+        ):
+            resp = self._post(
+                payload={
+                    "user_id": 7,
+                    "resume_id": 3,
+                    "feature": "no_such_feature",
+                    "status": "failed",
+                    "error_message": "模型超时",
+                    "usage": [],
+                }
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(created["task_type"], "ai_chat")
+        self.assertIsNone(created["feature"], "unknown feature values are dropped")
+        self.assertEqual(finished["status"], "failed")
+        self.assertEqual(finished["error_message"], "模型超时")
+        self.assertIsNone(finished["token_usage"], "failed turns are never billed")
+        self.assertEqual(resp.json()["data"]["entries"], [])
 
     def test_unknown_user_is_rejected(self):
         def fake_get(_model, _pk):

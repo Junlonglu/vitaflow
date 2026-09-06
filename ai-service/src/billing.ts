@@ -17,6 +17,13 @@ export interface UsageReportPayload {
   user_id: number;
   resume_id: number;
   usage: import("./usage.js").ModelUsage[];
+  /** Quick command the turn ran (polish/translate/…), or "chat" for free-form. */
+  feature?: string;
+  /** Tool steps executed this turn; recorded on the task row for the admin console. */
+  tool_calls?: number;
+  /** "failed" records a failed turn without billing (no usage is reported then). */
+  status?: "failed";
+  error_message?: string;
 }
 
 export async function reportUsage(deps: UsageReportDeps, payload: UsageReportPayload): Promise<boolean> {

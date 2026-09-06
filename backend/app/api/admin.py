@@ -472,6 +472,13 @@ def page_data(items: list[dict], total: int, page: int, page_size: int) -> dict:
     return {"items": items, "total": total, "page": page, "page_size": page_size}
 
 
+def _breakdown_key(task_type: object, feature: object) -> str:
+    """功能分布的聚合键：对话回合取 feature，其余（feature 为 NULL 的历史任务）取 task_type。"""
+    if str(task_type) == "ai_chat" and feature:
+        return str(feature)
+    return str(task_type)
+
+
 @router.get("/dashboard")
 def dashboard(db: Session = Depends(get_db)):
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -532,14 +539,16 @@ def dashboard(db: Session = Depends(get_db)):
     breakdown_rows = db.execute(
         select(
             AiTask.task_type,
+            AiTask.feature,
             func.count(AiTask.id),
             func.sum(case((AiTask.status == "success", 1), else_=0)),
             func.sum(case((AiTask.status == "failed", 1), else_=0)),
-        ).group_by(AiTask.task_type)
+        ).group_by(AiTask.task_type, AiTask.feature)
     ).all()
     token_rows = db.execute(
         select(
             AiTask.task_type,
+            AiTask.feature,
             AiTask.create_time,
             AiTask.tokens_used,
             AiTask.input_data,
@@ -584,9 +593,9 @@ def dashboard(db: Session = Depends(get_db)):
         if ref and "/" in ref:
             refs_by_model_id.setdefault(ref.split("/", 1)[1], []).append(ref)
 
-    for task_type, create_time, fallback_tokens, input_data, raw_model_name, points_used in token_rows:
+    for task_type, task_feature, create_time, fallback_tokens, input_data, raw_model_name, points_used in token_rows:
         usage = normalize_token_usage(input_data, fallback_tokens or 0)
-        item = token_by_type.setdefault(str(task_type), {"total": 0, "input": 0, "output": 0})
+        item = token_by_type.setdefault(_breakdown_key(task_type, task_feature), {"total": 0, "input": 0, "output": 0})
         item["total"] += int(usage["total_tokens"])
         item["input"] += int(usage["input_tokens"])
         item["output"] += int(usage["output_tokens"])
@@ -628,17 +637,23 @@ def dashboard(db: Session = Depends(get_db)):
         model_item["input_tokens"] = int(model_item["input_tokens"]) + int(usage["input_tokens"])
         model_item["output_tokens"] = int(model_item["output_tokens"]) + int(usage["output_tokens"])
         model_item["points_used"] = point_amount(model_item["points_used"]) + point_amount(points_used or 0)
+    # 功能分布：对话回合（ai_chat）按 feature 拆分（润色/翻译/JD优化/自由对话…），
+    # 其余任务类型沿用 task_type；两个 group-by 在此按同一 key 合并。
+    breakdown_map: dict[str, dict[str, int]] = {}
+    for task_type, task_feature, total, success_count, failed_count in breakdown_rows:
+        item = breakdown_map.setdefault(_breakdown_key(task_type, task_feature), {"total": 0, "success": 0, "failed": 0})
+        item["total"] += int(total)
+        item["success"] += int(success_count or 0)
+        item["failed"] += int(failed_count or 0)
     ai_breakdown = [
         {
-            "task_type": task_type,
-            "total": int(total),
-            "success": int(success_count or 0),
-            "failed": int(failed_count or 0),
-            "tokens": token_by_type.get(str(task_type), {}).get("total", 0),
-            "input_tokens": token_by_type.get(str(task_type), {}).get("input", 0),
-            "output_tokens": token_by_type.get(str(task_type), {}).get("output", 0),
+            "task_type": key,
+            **counts,
+            "tokens": token_by_type.get(key, {}).get("total", 0),
+            "input_tokens": token_by_type.get(key, {}).get("input", 0),
+            "output_tokens": token_by_type.get(key, {}).get("output", 0),
         }
-        for task_type, total, success_count, failed_count in breakdown_rows
+        for key, counts in sorted(breakdown_map.items(), key=lambda value: value[1]["total"], reverse=True)
     ]
     section_rows = db.execute(
         select(AiTask.input_data, AiTask.status).where(AiTask.task_type == "section_optimize")
@@ -718,7 +733,7 @@ def dashboard(db: Session = Depends(get_db)):
                 "shares": db.scalar(select(func.count()).select_from(Resume).where(Resume.share_created_time >= day, Resume.share_created_time < next_day)) or 0,
                 "tokens": sum(
                     int(normalize_token_usage(input_data, fallback_tokens or 0)["total_tokens"])
-                    for _, create_time, fallback_tokens, input_data, _, _ in token_rows
+                    for _, _, create_time, fallback_tokens, input_data, _, _ in token_rows
                     if create_time and day <= create_time < next_day
                 ),
                 "points_consumed": point_number(abs(
@@ -1324,6 +1339,7 @@ def ai_tasks(
             "username": username,
             "resume_id": task.resume_id,
             "task_type": task.task_type,
+            "feature": task.feature,
             "status": task.status,
             **admin_task_model_info(task, configs_by_id, configs_by_model),
             "points_used": point_number(task.points_used),

@@ -76,6 +76,19 @@ export interface AgentInput {
 
 type Emit = (event: ChatStreamEvent) => void;
 
+/**
+ * End-of-turn outcome for billing/reporting (server.ts posts it to FastAPI).
+ * A failed turn carries no usage — failed turns are never billed, but they ARE
+ * reported (status="failed") so the admin success rate reflects real failures.
+ */
+export interface ChatTurnOutcome {
+  usage: ModelUsage[];
+  failed: boolean;
+  error?: string;
+  /** Curated tool steps executed this turn (from toolTrace). */
+  toolCalls: number;
+}
+
 /** One-shot task input (ticket 09): generate/import, no tools, single JSON answer. */
 export interface TaskAgentInput {
   task: TaskType;
@@ -136,11 +149,11 @@ function buildAssistantMessage(text: string, now: number) {
 /**
  * Drive one agent turn, emitting NDJSON events as the model streams.
  *
- * Returns the per-model usage the turn consumed, or an empty array when the
- * turn failed (no result event reached the client) — mirroring the legacy
- * billing rule that failed turns are never charged.
+ * Returns the turn outcome: per-model usage for billing, whether the turn
+ * failed, and the tool step count. Usage is empty on failure — mirroring the
+ * legacy billing rule that failed turns are never charged.
  */
-export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSignal): Promise<ModelUsage[]> {
+export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSignal): Promise<ChatTurnOutcome> {
   const { message, systemPrompt, config, runtime, modelRef, userId, resumeId, toolPlan, images } = input;
   const cwd = process.cwd();
   // Isolate the agent config from whatever lives in the developer's global
@@ -154,13 +167,13 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     const resolved = resolveRealModel(runtime, modelRef);
     if (!resolved.model) {
       emit({ type: "error", message: resolved.error ?? "模型不可用" });
-      return [];
+      return { usage: [], failed: true, error: resolved.error ?? "模型不可用", toolCalls: 0 };
     }
     model = resolved.model;
   }
   if (!model) {
     emit({ type: "error", message: "没有可用的模型" });
-    return [];
+    return { usage: [], failed: true, error: "没有可用的模型", toolCalls: 0 };
   }
 
   // The field-level and section tools record the validated pending payload here so
@@ -278,13 +291,13 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
 
   if (modelFallbackMessage) {
     emit({ type: "error", message: `模型不可用：${modelFallbackMessage}` });
-    return [];
+    return { usage: [], failed: true, error: `模型不可用：${modelFallbackMessage}`, toolCalls: 0 };
   }
 
   let text = "";
   let turnTimer: NodeJS.Timeout | undefined;
-  let reportedUsage: ModelUsage[] = [];
   let sawError = false;
+  let turnError: string | undefined;
   // Every assistant message (one per LLM call, tool rounds included) carries
   // provider-reported usage; aggregated per model for the billing callback.
   const usage = createUsageAggregator();
@@ -388,10 +401,10 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     await session.prompt(message, promptOptions);
   } catch (err) {
     sawError = true;
-    const messageText = err instanceof Error ? err.message : String(err);
+    turnError = err instanceof Error ? err.message : String(err);
     if (!resultSent) {
       resultSent = true;
-      emit({ type: "error", message: messageText || "AI 服务内部错误" });
+      emit({ type: "error", message: turnError || "AI 服务内部错误" });
     }
   } finally {
     if (turnTimer) clearTimeout(turnTimer);
@@ -403,14 +416,14 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     sendResult(text);
     unsubscribe();
     session.dispose();
-    // Only a turn that completed without an error is billed (the finally block
-    // always sends a result, so resultSent alone can't distinguish failure);
-    // failed turns return no usage, mirroring the legacy rule that refunds them.
-    if (resultSent && !sawError) {
-      reportedUsage = usage.snapshot();
-    }
   }
-  return reportedUsage;
+  // Only a turn that completed without an error is billed (the finally block
+  // always sends a result, so resultSent alone can't distinguish failure);
+  // failed turns carry no usage, mirroring the legacy rule that refunds them.
+  if (sawError) {
+    return { usage: [], failed: true, error: turnError, toolCalls: toolTrace.length };
+  }
+  return { usage: usage.snapshot(), failed: false, toolCalls: toolTrace.length };
 }
 
 /**

@@ -1,7 +1,7 @@
 /**
- * In-conversation quick commands (ticket 05): /润色, /翻译, /JD优化, /生成.
+ * In-conversation quick commands (ticket 05): /润色, /翻译, /JD优化, /生成, /开场白.
  *
- * The ticket's intent is that four high-frequency resume actions become typed
+ * The ticket's intent is that high-frequency resume actions become typed
  * slash commands in the same chat. Each one maps to a pi-agent PromptTemplate so
  * the model sees an expanded directive (with the user's parameters substituted
  * in) and then drives the SAME tool/validation chain as natural language —
@@ -19,8 +19,8 @@ import type { FauxToolPlan } from "./faux.js";
 
 /** A parsed quick command: the canonical name plus the raw parameter tokens. */
 export interface QuickCommand {
-  /** Canonical command name (in {polish,translate,optimize,generate}), for code. */
-  name: "polish" | "translate" | "optimize" | "generate";
+  /** Canonical command name (in {polish,translate,optimize,generate,greeting}), for code. */
+  name: "polish" | "translate" | "optimize" | "generate" | "greeting";
   /** The literal trigger the user typed (/后面的词), e.g. 润色. */
   rawName: string;
   /** Whitespace-split parameter tokens following the command, e.g. ["工作经历"]. */
@@ -34,13 +34,14 @@ const COMMAND_ALIASES: Record<string, QuickCommand["name"]> = {
   JD优化: "optimize",
   优化: "optimize",
   生成: "generate",
+  开场白: "greeting",
 };
 
 /** Detect a leading quick command in a user message. Null for natural language. */
 export function detectQuickCommand(message: string): QuickCommand | null {
   const text = (message ?? "").trim();
   if (!text.startsWith("/")) return null;
-  const match = text.match(/^\/(润色|翻译|JD优化|优化|生成)\s*(.*)$/);
+  const match = text.match(/^\/(润色|翻译|JD优化|优化|生成|开场白)\s*(.*)$/);
   if (!match) return null;
   const rawName = match[1];
   const argsText = match[2].trim();
@@ -119,6 +120,9 @@ export function commandToolPlan(command: QuickCommand): FauxToolPlan[] {
       ];
     case "generate":
       return [{ name: "propose_change", args: { updates: [{ section: "summary", proposed: { content: "【基于目标岗位生成的简介】" } }] } }];
+    case "greeting":
+      // 开场白只读不写：读出真实成果后直接输出文本，不走提案链。
+      return [{ name: "get_resume_context", args: { sections: ["summary", "work", "projects", "skills"] } }];
     default:
       return [];
   }
@@ -139,53 +143,60 @@ export function buildQuickCommandTemplates(): Array<{
 }> {
   const polishContent = `# 润色指令
 
-用户使用了 /润色 快捷指令，希望对简历做检查与表达润色（只改善措辞，不改变事实）。若指令带了参数（当前参数：$@；为空表示检查全部），只检查参数提到的模块；否则检查除基本信息外的全部内容模块。
+用户用 /润色 做检查与表达润色（只改善措辞，不改变事实）。检查范围：$@（空 = 除基本信息外的全部内容模块）。
 
 请执行：
-1. 先调用 get_resume_context 读取要检查的模块（summary/education/skills/work/projects/awards，有自定义模块时也读取），拿到当前内容与条目 id。
-2. 逐模块检查并输出问题清单：错别字与语病、表达无力（缺动词、缺量化）、重复内容、时间或格式不一致等；每条标注所在模块与条目，没有问题的模块不用提。
-3. 只对需要润色的条目调用 propose_change 生成一份合并的待确认提案：列表模块按条目 id 定位，只传需要变化的条目；只改善表达，不新增事实、不改写数据，不重排或重编号已有条目。
-4. 用简洁中文汇总发现的问题，并告知已生成一份待确认修改，需用户确认后才会写入；不要声称修改已经生效。`;
+1. get_resume_context 读取范围内模块（summary/education/skills/work/projects/awards 及自定义模块），拿到内容与条目 id。
+2. 逐模块输出问题清单：错别字语病、表达无力、重复、时间或格式不一致；每条标注模块与条目，无问题的模块不提。
+3. 主张审计：核对「主导 / 负责 / 独立完成」等强主张与具体数字是否有内容支撑；拿不准的用 ask_user_questions 一次性核实（每题带 hint，聚焦"有无可支撑的事实或数据"，最多 5 个），明确无支撑的降级为「参与 / 协助」。
+4. 需润色的条目按五段式重写：动作 → 系统能力 → 业务价值 → 结果证据（有可靠数据带数字，否则用定性结果）→ 个人边界。
+5. 只对需润色的条目用 propose_change 生成一份合并的待确认提案：按条目 id 定位，只传变化的条目。`;
 
   const translateContent = `# 翻译指令
 
-用户使用了 /翻译 快捷指令，希望对当前简历做中英互译（只改变语言，不改变结构、事实、数量与顺序）。
+用户用 /翻译 做整份中英互译（只换语言，不改变结构、事实、数量与顺序）。
 
 请执行：
-1. 先调用 get_resume_context 读取需要翻译的模块。
-2. 用 propose_change 生成一份完整翻译后的待确认方案：专有名词与技术名词保留原文，富文本结构、条目标识与顺序不变，不润色、不扩写、不删减。
-3. 完成后用简洁中文告知用户已生成待确认修改，需用户确认后才会写入。`;
+1. get_resume_context 读取需要翻译的模块。
+2. 用 propose_change 生成完整翻译后的待确认方案：专有名词与技术名词保留原文，富文本结构、条目 id 与顺序不变，不润色、不扩写、不删减。`;
 
   const optimizeContent = `# JD 定向优化指令
 
-用户使用了 /JD优化 快捷指令，希望根据以下岗位描述（JD）定向优化简历匹配度。严格在「已有证据」边界内优化：不得把 JD 要求写成候选人已经掌握的能力，不得新增事实，不得编造量化结果。
+用户用 /JD优化 按以下 JD 定向优化匹配度，严格在「已有证据」边界内，不得把 JD 要求写成候选人已经掌握的能力。
 
 岗位描述：
 $@
 
 请执行：
-1. 先调用 get_resume_context 读取需要审视的模块（work,projects,summary,skills 等），了解现有内容与条目 id。
-2. 输出证据匹配分析：区分「已有证据可直接对应 JD」与「JD 有要求但简历缺证据的缺口」。
-3. 若没有明显缺口：只把已有证据的表达向 JD 要求靠拢，直接进入第 5 步。
-4. 若缺口较大：调用 ask_user_questions 把需要核实的问题一次性提交（每个问题配一个 hint 示例，帮助用户理解要填什么；聚焦"是否真的有可写入的相关经历/材料"，最多 5 个），然后结束回合等待用户在补充信息框作答，不要在同回合继续生成方案。用户回答后，把回答中可信的实事写入提案；仍没有证据的部分保持留白，并在回复中说明哪些 JD 要求没有写入及原因。
-5. 调用 propose_change 生成一份待确认方案：列表模块按 id 定位，未提及条目不触碰，不重排重编号。
-6. 用简洁中文说明匹配分析与建议，并告知用户已生成待确认修改，需用户确认后才会写入；不要声称修改已经生效。`;
+1. get_resume_context 读取 work/projects/summary/skills 等，拿到内容与条目 id。
+2. 输出证据匹配分析：区分「已有证据可直接对应」与「JD 有要求但缺证据的缺口」。
+3. 无明显缺口：只把已有证据的表达向 JD 靠拢，直接进入第 5 步。
+4. 缺口较大：用 ask_user_questions 一次性提交核实问题（每题带 hint，聚焦"是否真的有可写入的经历/材料"，最多 5 个）；回答的可信部分写入提案，仍缺证据的保持留白并说明原因。
+5. 生成提案前先输出岗位定位：1—3 句一句话定位，第一句是稳妥版（纯现有证据）；证据撑得起时再给一个进取版，并标注进取版待补的证据。
+6. 用 propose_change 生成待确认方案：按条目 id 定位，未提及条目不触碰。`;
 
   const generateContent = `# 生成指令
 
-用户使用了 /生成 快捷指令，希望生成一份简历。请先在对话中确认必备信息；信息充分时再生成。
-
-目标岗位：$@
+用户用 /生成 生成一份简历。目标岗位：$@（空 = 先确认目标岗位再生成）。
 
 请执行：
-1. 若缺少目标岗位等关键信息，先用一句自然语言询问，不要臆测。
-2. 信息充分时调用 propose_change 把已确认信息结构化生成一份待确认方案（新增条目的 id 在当前模块内唯一，未知的可选事实留空，不编造）。
-3. 告知用户已生成待确认修改，需用户确认后才会写入。`;
+1. 缺目标岗位等关键信息时，先用一句自然语言询问，不要臆测。
+2. 信息充分时用 propose_change 把已确认信息结构化生成待确认方案：新增条目 id 在当前模块内唯一，未知的事实留空，不编造。`;
+
+  const greetingContent = `# 开场白指令
+
+用户用 /开场白 生成求职打招呼开场白（Boss直聘/微信等）。目标岗位或补充说明：$@（空 = 由简历内容判断方向）。
+
+请执行：
+1. get_resume_context 读取 summary/work/projects/skills，找出最能代表候选人的一段真实成果。
+2. 直接输出开场白正文，不调用任何写入工具：80—160 字；先一句身份与求职方向（有参数按参数），再一个真实可核验的成果，最后邀请进一步交流。语气自然谦逊，不堆砌形容词、不复制简历原文。
+3. 找不到拿得出手的成果时写一版保守开场白，正文后附一句：可补充哪类亮点会更有说服力。`;
 
   return [
     { name: "润色", description: "检查整份简历并润色表达", argumentHint: "", filePath: "/virtual/prompts/润色.md", content: polishContent },
     { name: "翻译", description: "整份简历中英互译", argumentHint: "", filePath: "/virtual/prompts/翻译.md", content: translateContent },
     { name: "JD优化", description: "基于粘贴的 JD 定向优化简历匹配度", argumentHint: "<岗位描述>", filePath: "/virtual/prompts/JD优化.md", content: optimizeContent },
     { name: "生成", description: "根据目标岗位生成简历", argumentHint: "<目标岗位>", filePath: "/virtual/prompts/生成.md", content: generateContent },
+    { name: "开场白", description: "生成求职打招呼开场白（Boss直聘/微信）", argumentHint: "", filePath: "/virtual/prompts/开场白.md", content: greetingContent },
   ];
 }

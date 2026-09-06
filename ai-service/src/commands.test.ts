@@ -22,11 +22,12 @@ describe("detectQuickCommand", () => {
     assert.deepEqual(cmd.args, ["工作经历"]);
   });
 
-  it("parses each of the four commands", () => {
+  it("parses each of the five commands", () => {
     assert.equal(detectQuickCommand("/翻译")?.name, "translate");
     assert.equal(detectQuickCommand("/JD优化 后端工程师")?.name, "optimize");
     assert.equal(detectQuickCommand("/生成")?.name, "generate");
     assert.equal(detectQuickCommand("/润色 项目经历")?.name, "polish");
+    assert.equal(detectQuickCommand("/开场白")?.name, "greeting");
   });
 
   it("keeps the bare /优化 alias for the JD optimize command", () => {
@@ -117,14 +118,21 @@ describe("commandToolPlan", () => {
     assert.equal(generate.length, 1);
     assert.equal(generate[0].name, "propose_change");
   });
+
+  it("greeting reads the resume but never writes", () => {
+    const plan = commandToolPlan({ name: "greeting", rawName: "开场白", args: [] });
+    assert.equal(plan.length, 1);
+    assert.equal(plan[0].name, "get_resume_context");
+    assert.ok(plan.every((step) => step.name !== "propose_change" && step.name !== "update_section"));
+  });
 });
 
 describe("buildQuickCommandTemplates", () => {
-  it("defines exactly the four commands with content and params", () => {
+  it("defines exactly the five commands with content and params", () => {
     const templates = buildQuickCommandTemplates();
     assert.deepEqual(
       templates.map((t) => t.name),
-      ["润色", "翻译", "JD优化", "生成"],
+      ["润色", "翻译", "JD优化", "生成", "开场白"],
     );
     for (const t of templates) {
       assert.ok(t.content.length > 0, `${t.name} has content`);
@@ -141,6 +149,8 @@ describe("buildQuickCommandTemplates", () => {
     assert.match(optimize.content, /propose_change/, "optimize proposes a change through the tool chain");
     assert.match(optimize.content, /ask_user_questions/, "optimize asks the user about evidence gaps");
     assert.match(optimize.content, /不得把 JD 要求写成候选人已经掌握的能力/, "optimize stays inside the fact boundary");
+    assert.match(optimize.content, /岗位定位/, "optimize states a positioning before proposing");
+    assert.match(optimize.content, /进取版/, "optimize distinguishes a stretch positioning");
   });
 
   it("the polish template checks the whole resume and lands one merged proposal", () => {
@@ -149,7 +159,18 @@ describe("buildQuickCommandTemplates", () => {
     assert.match(polish.content, /get_resume_context/, "polish reads the resume first");
     assert.match(polish.content, /propose_change/, "polish lands a merged proposal");
     assert.match(polish.content, /问题清单/, "polish reports the issues it found");
-    assert.match(polish.content, /待确认修改/, "polish ends with a pending-change confirm");
+    assert.match(polish.content, /待确认/, "polish lands a pending-change proposal");
+    assert.match(polish.content, /ask_user_questions/, "polish audits strong claims via questions");
+    assert.match(polish.content, /个人边界/, "polish rewrites with the five-part formula");
+  });
+
+  it("the greeting template reads the resume and outputs text without writing", () => {
+    const greeting = buildQuickCommandTemplates().find((t) => t.name === "开场白")!;
+    assert.equal(greeting.argumentHint, "", "greeting takes no required parameter");
+    assert.match(greeting.content, /\$@/, "greeting substitutes the optional target hint");
+    assert.match(greeting.content, /get_resume_context/, "greeting reads the resume for real achievements");
+    assert.match(greeting.content, /80—160 字/, "greeting keeps the 80-160 character window");
+    assert.doesNotMatch(greeting.content, /propose_change/, "greeting never writes");
   });
 
   it("the generate template injects the target role via $@", () => {

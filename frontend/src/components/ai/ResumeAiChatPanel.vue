@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch, computed } from "vue"
-import { CheckCircle2, LoaderCircle, SendHorizontal, Bot, Target, Wand2, Trash2, X, ImagePlus, XCircle, Copy, Check, RotateCcw, Cpu, HelpCircle, Languages, Sparkles } from "lucide-vue-next"
+import { CheckCircle2, LoaderCircle, SendHorizontal, Bot, Target, Wand2, Trash2, X, ImagePlus, XCircle, Copy, Check, RotateCcw, Cpu, HelpCircle, Languages, Sparkles, MessageCircle } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
 import Select from "@/components/ui/select/Select.vue"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
@@ -67,12 +67,13 @@ function confirmClear() {
   showClearConfirm.value = false
 }
 
-/** 与 ai-service buildQuickCommandTemplates 对齐的四个快捷指令。 */
+/** 与 ai-service buildQuickCommandTemplates 对齐的五个快捷指令。 */
 const QUICK_COMMANDS = [
   { name: "润色", description: "检查整份简历，找出问题并润色表达", argumentHint: "" },
   { name: "翻译", description: "整份简历中英互译，结构与事实不变", argumentHint: "" },
   { name: "JD优化", description: "按岗位描述定向优化，证据缺口会逐条询问", argumentHint: "<岗位描述>" },
   { name: "生成", description: "根据目标岗位生成结构化简历", argumentHint: "<目标岗位>" },
+  { name: "开场白", description: "生成 Boss直聘/微信打招呼开场白", argumentHint: "" },
 ]
 
 const quickCommands = [
@@ -80,6 +81,7 @@ const quickCommands = [
   { ...QUICK_COMMANDS[1], icon: Languages, bg: "bg-blue-50", color: "text-blue-500", ring: "hover:ring-blue-200" },
   { ...QUICK_COMMANDS[2], icon: Target, bg: "bg-indigo-50", color: "text-indigo-500", ring: "hover:ring-indigo-200" },
   { ...QUICK_COMMANDS[3], icon: Sparkles, bg: "bg-emerald-50", color: "text-emerald-500", ring: "hover:ring-emerald-200" },
+  { ...QUICK_COMMANDS[4], icon: MessageCircle, bg: "bg-amber-50", color: "text-amber-500", ring: "hover:ring-amber-200" },
 ]
 
 function adjustHeight() {

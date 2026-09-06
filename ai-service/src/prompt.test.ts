@@ -8,6 +8,16 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { buildContextPrompt, DEFAULT_SYSTEM_PROMPT } from "./prompt.js";
 
+describe("DEFAULT_SYSTEM_PROMPT", () => {
+  it("carries the shared expression boundaries and question turn discipline", () => {
+    assert.match(DEFAULT_SYSTEM_PROMPT, /# 表达边界/, "boundaries live in the global prompt so they also cover natural-language requests");
+    assert.match(DEFAULT_SYSTEM_PROMPT, /「主导」「负责」「独立完成」/, "strong verbs need supporting evidence");
+    assert.match(DEFAULT_SYSTEM_PROMPT, /不编造百分比、用户量、收益、延迟或排名/, "no fabricated numbers");
+    assert.match(DEFAULT_SYSTEM_PROMPT, /ask_user_questions[\s\S]*?结束回合等待作答/, "questions end the turn");
+    assert.match(DEFAULT_SYSTEM_PROMPT, /不要声称修改已经生效/, "tool calls never claim to be applied");
+  });
+});
+
 describe("buildContextPrompt", () => {
   it("returns the base prompt unchanged when no context is given", () => {
     assert.equal(buildContextPrompt(DEFAULT_SYSTEM_PROMPT), DEFAULT_SYSTEM_PROMPT);

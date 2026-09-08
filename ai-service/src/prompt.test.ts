@@ -51,6 +51,18 @@ describe("buildContextPrompt", () => {
     assert.match(prompt, /助手：你希望重点优化哪部分？/);
   });
 
+  it("renders the earlier-context summary before recent history", () => {
+    const prompt = buildContextPrompt(DEFAULT_SYSTEM_PROMPT, {
+      context_summary: "用户想投后端岗，薪资期望 25k",
+      history: [{ role: "user", content: "继续刚才的话题" }],
+    });
+    assert.match(prompt, /# 更早的对话摘要/);
+    assert.match(prompt, /用户想投后端岗，薪资期望 25k/);
+    const summaryIdx = prompt.indexOf("# 更早的对话摘要");
+    const historyIdx = prompt.indexOf("# 最近的对话");
+    assert.ok(summaryIdx < historyIdx, "summary precedes recent history");
+  });
+
   it("renders the pending change summary and keeps content order", () => {
     const prompt = buildContextPrompt(DEFAULT_SYSTEM_PROMPT, {
       resume: { title: "前端简历" },

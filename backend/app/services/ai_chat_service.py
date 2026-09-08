@@ -1,30 +1,40 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 import re
 from collections.abc import AsyncIterator
 from copy import deepcopy
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.config import settings
+from app.core.database import SessionLocal
 from app.core.exceptions import AppException
 from app.models.ai_chat import AiChatMessage, AiChatSession
 from app.models.resume import Resume
 from app.models.resume import ResumeVersion
 from app.models.user import User
 from app.schemas.ai_chat import AiChatMessageOut
+from app.services.ai.token_usage import build_token_usage
 from app.services.ai_config_service import (
     capability_supports_images,
     get_catalog_capabilities,
     resolve_chat_ai_config,
 )
-from app.services.ai_service_client import ai_service_chat_events
+from app.services.ai_service_client import ai_service_chat_events, ai_service_task_result
+from app.services.ai_task_service import create_ai_task, finish_ai_task
 from app.services.flow_points_service import precheck_flow_points
 from app.services.resume_normalization import localize_ai_text, strip_thinking_text
+
+logger = logging.getLogger(__name__)
+
+# 单次摘要压缩最多并入的消息条数：更早的留给下一轮增量压缩，避免 token 爆炸。
+_COMPACT_MAX_MESSAGES = 200
 
 
 SECTION_LABELS = {
@@ -100,16 +110,14 @@ def get_or_create_chat_session(db: Session, user_id: int, resume_id: int) -> AiC
     return session
 
 
-def list_chat_messages(db: Session, user_id: int, resume_id: int, limit: int = 80) -> list[AiChatMessageOut]:
+def list_chat_messages(
+    db: Session, user_id: int, resume_id: int, limit: int = 80, after_id: int | None = None
+) -> list[AiChatMessageOut]:
     session = get_or_create_chat_session(db, user_id, resume_id)
-    messages = list(
-        db.scalars(
-            select(AiChatMessage)
-            .where(AiChatMessage.session_id == session.id, AiChatMessage.user_id == user_id)
-            .order_by(AiChatMessage.id.desc())
-            .limit(limit)
-        )
-    )
+    query = select(AiChatMessage).where(AiChatMessage.session_id == session.id, AiChatMessage.user_id == user_id)
+    if after_id is not None:
+        query = query.where(AiChatMessage.id > after_id)
+    messages = list(db.scalars(query.order_by(AiChatMessage.id.desc()).limit(limit)))
     return [_message_out(message) for message in reversed(messages)]
 
 
@@ -160,17 +168,21 @@ def build_ai_service_context(
     resume: Resume,
     *,
     limit: int | None = None,
+    summary: str | None = None,
+    summary_message_id: int | None = None,
 ) -> dict[str, Any]:
     """Build the context block injected into the AI service prompt.
 
     Mirrors the shape FastAPI reads from MySQL: resume snapshot, the recent chat
     history (capped at ``settings.ai_service_context_messages``) and the
-    outstanding pending-change summary. The AI service renders this into the
-    system prompt and never touches MySQL itself, keeping the Node session
-    stateless while MySQL remains the single source of truth.
+    outstanding pending-change summary. ``summary`` is the rolling compaction of
+    everything up to ``summary_message_id`` — injected so long conversations keep
+    their early context. The AI service renders this into the system prompt and
+    never touches MySQL itself, keeping the Node session stateless while MySQL
+    remains the single source of truth.
     """
     context_limit = limit or max(1, min(int(settings.ai_service_context_messages or 12), 40))
-    history = list_chat_messages(db, user.id, resume.id, limit=context_limit + 8)
+    history = list_chat_messages(db, user.id, resume.id, limit=context_limit + 8, after_id=summary_message_id)
     pending_change = db.scalar(
         select(AiChatMessage)
         .where(
@@ -191,6 +203,7 @@ def build_ai_service_context(
             "target_position": basics.get("title", ""),
             "summary": _resume_intent_summary(resume.resume_data),
         },
+        "context_summary": summary or "",
         "history": [{"role": item.role, "content": item.content} for item in history[-context_limit:]],
         "pending_change": {
             "exists": pending_change is not None,
@@ -198,6 +211,98 @@ def build_ai_service_context(
             "summary": pending_change.suggestions if pending_change else [],
         },
     }
+
+
+def _context_message_limit(model_config) -> int:
+    """对话历史注入条数：跟随所选模型策略，未选时回退全局默认（夹在 1..40）。"""
+    configured = model_config.context_messages if model_config else None
+    return max(1, min(int(configured or settings.ai_service_context_messages or 12), 40))
+
+
+async def _compact_chat_context(session_id: int, context_limit: int, model_ref: str | None) -> None:
+    """后台滚动摘要压缩：把窗口外的旧消息增量并进会话摘要。
+
+    在回合结束后的后台任务里运行（asyncio.create_task，fire-and-forget），自开
+    DB 会话；任何失败只落 failed 任务行供观察，绝不影响用户的对话回合。摘要是
+    平台成本：chat_summary 任务行只记 token，不向用户结算积分。
+    """
+    db = SessionLocal()
+    try:
+        session = db.get(AiChatSession, session_id)
+        if not session:
+            return
+        after = session.summary_message_id or 0
+        # desc 取「窗口 + 待压缩上限」条；最新 context_limit 条保留原文，其余是候选。
+        rows = list(
+            db.scalars(
+                select(AiChatMessage)
+                .where(AiChatMessage.session_id == session.id, AiChatMessage.id > after)
+                .order_by(AiChatMessage.id.desc())
+                .limit(context_limit + _COMPACT_MAX_MESSAGES)
+            )
+        )
+        if len(rows) <= context_limit:
+            return
+        # 升序取最旧的至多 _COMPACT_MAX_MESSAGES 条；更早的下一轮继续，不会丢消息。
+        to_compact = list(reversed(rows[context_limit:]))[:_COMPACT_MAX_MESSAGES]
+        new_upto = to_compact[-1].id
+        payload_messages = [{"role": item.role, "content": item.content or ""} for item in to_compact]
+
+        task = create_ai_task(
+            db,
+            session.user_id,
+            "chat_summary",
+            resume_id=session.resume_id,
+            model_name=model_ref or None,
+            input_data={"model": model_ref or "", "messages": len(payload_messages)},
+        )
+        try:
+            data, usage = await ai_service_task_result(
+                "chat_summary",
+                {"previous_summary": session.context_summary or "", "messages": payload_messages},
+                model_ref=model_ref,
+            )
+        except Exception as exc:
+            logger.warning("chat summary compaction failed: %s", exc)
+            finish_ai_task(db, task, "failed", error_message=str(exc)[:4000])
+            return
+
+        token_usage = build_token_usage(
+            sum(int(entry.get("input_tokens") or 0) for entry in usage),
+            sum(int(entry.get("output_tokens") or 0) for entry in usage),
+            estimated=False,
+        )
+        summary_text = str((data or {}).get("summary") or "").strip()
+        # 即使摘要为空也推进 watermark：避免同一段消息被反复压缩成空摘要。
+        session.context_summary = summary_text or None
+        session.summary_message_id = new_upto
+        db.add(session)
+        db.commit()
+        finish_ai_task(
+            db,
+            task,
+            "success",
+            output_data={"source": "chat_summary", "covered_message_id": new_upto, "messages": len(payload_messages)},
+            token_usage=token_usage,
+            settle=False,
+        )
+    except Exception:
+        db.rollback()
+        logger.exception("chat summary compaction crashed")
+    finally:
+        db.close()
+
+
+def _schedule_chat_summary(db: Session, session: AiChatSession, context_limit: int, model_ref: str | None) -> None:
+    """窗口外积压超过阈值时，安排一次后台摘要压缩（fire-and-forget）。"""
+    after = session.summary_message_id or 0
+    pending_count = db.scalar(
+        select(func.count())
+        .select_from(AiChatMessage)
+        .where(AiChatMessage.session_id == session.id, AiChatMessage.id > after)
+    ) or 0
+    if pending_count > context_limit + 8:
+        asyncio.create_task(_compact_chat_context(session.id, context_limit, model_ref))
 
 
 def _resolve_turn_model_config(db: Session, user: User, model_config_id: int | None):
@@ -261,12 +366,15 @@ async def _stream_ai_service_reply(
     source of truth and the AI service stays stateless. Shared by send and
     regenerate (ticket 09).
     """
+    context_limit = _context_message_limit(model_config)
     context = build_ai_service_context(
         db,
         user,
         resume,
         # 历史注入条数跟随所选模型策略；未选策略时回退全局默认。
-        limit=model_config.context_messages if model_config else None,
+        limit=context_limit,
+        summary=session.context_summary,
+        summary_message_id=session.summary_message_id,
     )
     text_parts: list[str] = []
     events = ai_service_chat_events(
@@ -313,6 +421,17 @@ async def _stream_ai_service_reply(
                     )
                 else:
                     assistant = _save_assistant_message(db, session, user, resume, reply, [], None, tool_trace, pending_questions=pending_questions)
+                # 窗口外积压够了就在后台压缩成滚动摘要（下轮生效），不阻塞本回合。
+                # 计数失败只丢一次调度，不能把已收完的回复变成 error 事件。
+                try:
+                    _schedule_chat_summary(
+                        db,
+                        session,
+                        context_limit,
+                        model_config.model_ref if model_config else None,
+                    )
+                except Exception:
+                    logger.warning("schedule chat summary failed", exc_info=True)
                 yield {"type": "result", "data": {"assistant_message": assistant.model_dump(mode="json")}}
             else:
                 yield event

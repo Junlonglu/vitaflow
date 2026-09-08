@@ -44,6 +44,7 @@ def finish_ai_task(
     error_message: str | None = None,
     output_data: dict[str, Any] | None = None,
     token_usage: dict[str, Any] | None = None,
+    settle: bool = True,
 ) -> None:
     # AI services may have used the same session. Clear a failed transaction
     # before persisting the monitoring result, which was already committed at creation.
@@ -60,7 +61,7 @@ def finish_ai_task(
         for transaction in transactions:
             transaction.tokens_used = task.tokens_used
             db.add(transaction)
-    if status == "success":
+    if status == "success" and settle:
         settle_task_flow_points(db, task)
     elif status == "failed":
         _refund_failed_task_points(db, task)

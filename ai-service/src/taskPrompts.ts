@@ -163,10 +163,19 @@ const IMPORT_SYSTEM_PROMPT =
   JSON_RULES +
   RESUME_DATA_SCHEMA_RULES;
 
-export type TaskType = "generate_resume" | "import_resume";
+const CHAT_SUMMARY_SYSTEM_PROMPT =
+  "你是对话记忆压缩器。输入是 previous_summary（已有摘要，可为空）和 messages（这批新对话消息），" +
+  "把它们合并成一段连续摘要，用于让助手在后续对话中记住更早的交流内容。" +
+  "必须保留：用户的目标、偏好、决定、约束和事实（投递岗位、目标公司、薪资数字、时间、不要改动的内容、" +
+  "对简历的具体要求等）；可以丢弃：寒暄、重复表达、助手已执行过的一次性动作细节。" +
+  "与 previous_summary 冲突时以新消息为准，不要删除仍然有效的旧信息。" +
+  "只输出一个 JSON 对象：{\"summary\": \"<300 字以内的中文摘要>\"}；messages 里没有任何值得长期记住的信息时输出 {\"summary\": \"\"}。" +
+  "不要输出解释、markdown 代码块或多余字段。";
+
+export type TaskType = "generate_resume" | "import_resume" | "chat_summary";
 
 export function isTaskType(value: unknown): value is TaskType {
-  return value === "generate_resume" || value === "import_resume";
+  return value === "generate_resume" || value === "import_resume" || value === "chat_summary";
 }
 
 export function buildTaskPrompts(task: TaskType, input: Record<string, unknown>): { systemPrompt: string; message: string } {
@@ -174,6 +183,12 @@ export function buildTaskPrompts(task: TaskType, input: Record<string, unknown>)
     return {
       systemPrompt: GENERATE_SYSTEM_PROMPT,
       message: `${GENERATE_USER_TEMPLATE}${JSON.stringify(input)}`,
+    };
+  }
+  if (task === "chat_summary") {
+    return {
+      systemPrompt: CHAT_SUMMARY_SYSTEM_PROMPT,
+      message: JSON.stringify(input),
     };
   }
   const filename = typeof input.filename === "string" ? input.filename : "";

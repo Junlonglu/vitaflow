@@ -32,7 +32,7 @@ export const DEFAULT_SYSTEM_PROMPT = `你是 VitaFlow 平台的简历 AI 助手�
 - 回答简洁，尽量分点（项目符号）作答，不写长段落。
 - 不用代码块，除非用户明确要求。`;
 
-/** 上下文注入结构：FastAPI 从 MySQL 读取后传入（简历快照 + 最近对话 + 待确认变更）。 */
+/** 上下文注入结构：FastAPI 从 MySQL 读取后传入（简历快照 + 滚动摘要 + 最近对话 + 待确认变更）。 */
 export interface AiServiceContext {
   resume?: {
     id?: number;
@@ -40,6 +40,8 @@ export interface AiServiceContext {
     target_position?: string;
     summary?: { name?: string; target_position?: string; sections?: string[]; layout_order?: string[] };
   };
+  /** 窗口外历史消息的滚动摘要（后台摘要压缩任务产出，可为空）。 */
+  context_summary?: string;
   history?: Array<{ role?: string; content?: string }>;
   pending_change?: { exists?: boolean; message_id?: number | null; summary?: string[] };
 }
@@ -60,6 +62,11 @@ export function buildContextPrompt(basePrompt: string, context?: AiServiceContex
     if (name || target) lines.push(`- 求职者：${[name, target].filter(Boolean).join("｜")}`);
     if (resume?.summary?.sections?.length) lines.push(`- 含模块：${resume.summary.sections.join("、")}`);
     parts.push(lines.join("\n"));
+  }
+
+  const contextSummary = (context.context_summary ?? "").trim();
+  if (contextSummary) {
+    parts.push(`# 更早的对话摘要\n${contextSummary}`);
   }
 
   const history = (context.history ?? []).filter((item) => item?.content);

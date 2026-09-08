@@ -46,7 +46,7 @@ class PendingQuestionsRelayTest(unittest.TestCase):
                     db=None,
                     user=SimpleNamespace(id=1),
                     resume=SimpleNamespace(id=2),
-                    session=SimpleNamespace(id=3),
+                    session=SimpleNamespace(id=3, context_summary=None, summary_message_id=None),
                     user_message=SimpleNamespace(content="/JD优化 后端 JD", attachments=[]),
                     model_config=None,
                 )]

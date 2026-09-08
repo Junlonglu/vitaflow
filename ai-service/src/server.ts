@@ -363,7 +363,7 @@ app.post("/v1/task", async (req, res) => {
   }
   const task = req.body?.task;
   if (!isTaskType(task)) {
-    res.status(400).json({ type: "error", message: "task 必须是 generate_resume 或 import_resume" });
+    res.status(400).json({ type: "error", message: "task 必须是 generate_resume、import_resume 或 chat_summary" });
     return;
   }
   const inputPayload = req.body?.input;

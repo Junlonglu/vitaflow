@@ -53,6 +53,7 @@ function taskTypeText(value: string) {
     generate: "对话 · 生成",
     greeting: "对话 · 开场白",
     chat: "对话 · 自由交流",
+    chat_summary: "对话 · 上下文摘要",
   } as Record<string, string>)[value] || value
 }
 

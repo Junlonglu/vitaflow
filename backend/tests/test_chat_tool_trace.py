@@ -31,7 +31,7 @@ class ToolTraceRelayTest(unittest.TestCase):
                 db=None,
                 user=SimpleNamespace(id=1),
                 resume=SimpleNamespace(id=2),
-                session=SimpleNamespace(id=3),
+                session=SimpleNamespace(id=3, context_summary=None, summary_message_id=None),
                 user_message=SimpleNamespace(content="帮我看下工作经历", attachments=[]),
                 model_config=None,
             ):

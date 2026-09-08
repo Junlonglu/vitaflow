@@ -73,7 +73,7 @@ def _relay_patches(model_config=None, capabilities=None):
         patch.object(ai_chat_service, "resolve_chat_ai_config", return_value=model_config or _stub_chat_config()),
         patch.object(ai_chat_service, "precheck_flow_points"),
         _caps_patch() if capabilities is None else _caps_patch(capabilities),
-        patch.object(ai_chat_service, "get_or_create_chat_session", return_value=SimpleNamespace(id=42, update_time=None)),
+        patch.object(ai_chat_service, "get_or_create_chat_session", return_value=SimpleNamespace(id=42, update_time=None, context_summary=None, summary_message_id=None)),
         patch.object(ai_chat_service, "build_ai_service_context", return_value={"resume": {}, "history": [], "pending_change": {}}),
         patch.object(ai_chat_service, "flag_modified"),
         patch.object(ai_chat_service, "_save_assistant_message", side_effect=_fake_save),

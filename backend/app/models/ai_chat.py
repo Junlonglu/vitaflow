@@ -16,6 +16,10 @@ class AiChatSession(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, index=True)
     resume_id: Mapped[int] = mapped_column(BigInteger, index=True)
     title: Mapped[str] = mapped_column(String(120), default="AI 简历助手")
+    # 滚动摘要压缩：窗口外旧消息的 LLM 摘要 + 覆盖到的最后一条消息 id，
+    # 每轮注入系统提示词（# 更早的对话摘要），让长对话保留早期意图与决定。
+    context_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    summary_message_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     create_time: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     update_time: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 

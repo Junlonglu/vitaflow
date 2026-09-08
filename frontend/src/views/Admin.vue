@@ -256,6 +256,7 @@ function taskTypeText(value: string) {
     resume_translate: "简历翻译",
     section_optimize: "模块润色",
     ai_chat: "AI 助手对话",
+    chat_summary: "对话 · 上下文摘要",
   } as Record<string, string>)[value] || value
 }
 

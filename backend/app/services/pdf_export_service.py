@@ -405,6 +405,11 @@ def _cache_dir() -> Path:
     return path
 
 
+def delete_cached_pdfs(resume_id: int) -> None:
+    for path in _cache_dir().glob(f"resume_{resume_id}_*.pdf"):
+        path.unlink(missing_ok=True)
+
+
 def _renderer_order() -> list[str]:
     renderer = (settings.pdf_renderer or "chromium").strip().lower()
     if renderer == "auto":

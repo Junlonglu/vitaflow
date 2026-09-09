@@ -641,7 +641,7 @@ async function confirmDelete() {
     <ConfirmDialog 
       v-model:open="showDeleteConfirm" 
       title="确认删除该简历吗？" 
-      description="删除后将无法恢复，请谨慎操作。" 
+      description="删除后该简历及其对话记录将一并删除且无法恢复，请谨慎操作。"
       cancel-text="取消"
       destructive
       @confirm="confirmDelete" 

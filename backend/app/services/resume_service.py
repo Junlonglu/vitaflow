@@ -2,8 +2,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppException
+from app.models.ai_chat import AiChatMessage, AiChatSession
 from app.models.resume import Resume, ResumeVersion
 from app.schemas.resume import ResumeCreate, ResumeUpdate, default_template_config
+from app.services.pdf_export_service import delete_cached_pdfs
 from app.services.resume_locale import normalize_resume_language
 
 
@@ -69,6 +71,11 @@ def update_resume(db: Session, user_id: int, resume_id: int, payload: ResumeUpda
 
 def delete_resume(db: Session, user_id: int, resume_id: int) -> None:
     resume = get_resume(db, user_id, resume_id)
+    # 无外键级联：对话记录、版本快照需随简历显式删除（删除确认文案已告知用户）
+    db.query(AiChatMessage).filter(AiChatMessage.resume_id == resume.id).delete(synchronize_session=False)
+    db.query(AiChatSession).filter(AiChatSession.resume_id == resume.id).delete(synchronize_session=False)
+    db.query(ResumeVersion).filter(ResumeVersion.resume_id == resume.id).delete(synchronize_session=False)
+    delete_cached_pdfs(resume.id)
     db.delete(resume)
     db.commit()
 

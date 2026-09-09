@@ -10,6 +10,7 @@
  */
 import { Type } from "typebox";
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { categoryGuidance, envelopeCategory, fetchFailureDetail, toolHttpSignal } from "./http.js";
 
 /** The basics fields the resume editor understands (kept in sync with the backend). */
 export const BASICS_FIELDS = [
@@ -139,15 +140,15 @@ export function createUpdateBasicsFieldTool(
             resume_id: deps.resumeId,
             basics,
           }),
-          signal,
+          signal: toolHttpSignal(signal),
         });
       } catch (err) {
-        const detail = err instanceof Error ? err.message : String(err);
+        const detail = fetchFailureDetail(err);
         return {
           content: [
-            { type: "text", text: `修改校验失败：无法连接后端校验服务（${detail}）。请稍后重试。` },
+            { type: "text", text: `该修改未通过校验，已阻止写入。原因：无法连接后端校验服务（${detail}）。${categoryGuidance("infra")}` },
           ],
-          details: { ok: false, reason: detail },
+          details: { ok: false, reason: detail, category: "infra" },
         };
       }
 
@@ -160,9 +161,10 @@ export function createUpdateBasicsFieldTool(
           (typeof (data as Record<string, unknown>)?.message === "string" &&
             String((data as Record<string, unknown>).message)) ||
           `校验失败（状态码 ${resp.status}）`;
+        const category = envelopeCategory(data);
         return {
-          content: [{ type: "text", text: `该修改未通过校验，已阻止写入。原因：${reason}` }],
-          details: { ok: false, reason },
+          content: [{ type: "text", text: `该修改未通过校验，已阻止写入。原因：${reason}。${categoryGuidance(category)}` }],
+          details: { ok: false, reason, category },
         };
       }
 

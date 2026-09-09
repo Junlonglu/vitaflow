@@ -130,7 +130,7 @@ class StreamAiServiceMultimodalTest(unittest.TestCase):
             patch.object(ai_chat_service, "get_or_create_chat_session", return_value=session),
             patch.object(ai_chat_service, "build_ai_service_context", return_value={"resume": {}, "history": [], "pending_change": {}}),
             patch.object(ai_chat_service, "ai_service_chat_events", side_effect=faux_events),
-            patch.object(ai_chat_service, "_save_assistant_message", side_effect=lambda *a, **k: SimpleNamespace(model_dump=lambda *_a, **_k: {"id": 1, "content": "我看到了图片"})),
+            patch.object(ai_chat_service, "_save_assistant_message", side_effect=lambda *a, **k: SimpleNamespace(timing=None, model_dump=lambda *_a, **_k: {"id": 1, "content": "我看到了图片"})),
         ):
             _drain_events(stream_ai_service_chat(_DbStub(), user, resume, "按图片改简历", attachments))
 
@@ -147,11 +147,11 @@ class StreamAiServicePendingPersistTest(unittest.TestCase):
     def test_persists_pending_payload_when_result_carries_pending_change(self):
         captured = {}
 
-        def fake_save(db, session, user, resume, reply, suggestions, optimized_resume_data, tool_trace=None, pending_questions=None):
+        def fake_save(db, session, user, resume, reply, suggestions, optimized_resume_data, tool_trace=None, pending_questions=None, timing=None):
             captured["suggestions"] = suggestions
             captured["optimized_resume_data"] = optimized_resume_data
             captured["reply"] = reply
-            return SimpleNamespace(model_dump=lambda *_a, **_k: {"id": 1, "content": reply})
+            return SimpleNamespace(timing=None, model_dump=lambda *_a, **_k: {"id": 1, "content": reply})
 
         session = SimpleNamespace(id=42, update_time=None, context_summary=None, summary_message_id=None)
         user = SimpleNamespace(id=7)
@@ -188,10 +188,10 @@ class StreamAiServicePendingPersistTest(unittest.TestCase):
 
             return gen()
 
-        def fake_save(db, session, user, resume, reply, suggestions, optimized_resume_data, tool_trace=None, pending_questions=None):
+        def fake_save(db, session, user, resume, reply, suggestions, optimized_resume_data, tool_trace=None, pending_questions=None, timing=None):
             captured["suggestions"] = suggestions
             captured["optimized_resume_data"] = optimized_resume_data
-            return SimpleNamespace(model_dump=lambda *_a, **_k: {"id": 1, "content": reply})
+            return SimpleNamespace(timing=None, model_dump=lambda *_a, **_k: {"id": 1, "content": reply})
 
         session = SimpleNamespace(id=42, update_time=None, context_summary=None, summary_message_id=None)
         user = SimpleNamespace(id=7)

@@ -19,6 +19,10 @@ export interface ToolTraceEntry {
   ok?: boolean;
   /** Curated outcome line (failure reason / change summary) — never raw payloads. */
   detail?: string;
+  /** Error envelope category on failure (validation/business/infra) — trace aggregation. */
+  category?: string;
+  /** Wall-clock execution time of the tool call in ms (end rows only). */
+  duration_ms?: number;
 }
 
 /** Truncate a free-text fragment for display (defensive against prompt junk). */
@@ -91,14 +95,15 @@ function firstText(result: unknown): string {
  * outcome line. Raw payloads (resume content) are never forwarded — failures
  * surface their reason, mutating tools surface the first change summary.
  */
-export function toolStepEnd(toolName: string, result: unknown, isError: boolean): { ok: boolean; detail?: string } {
+export function toolStepEnd(toolName: string, result: unknown, isError: boolean): { ok: boolean; detail?: string; category?: string } {
   const details = (result as { details?: Record<string, unknown> } | null)?.details ?? {};
   if (isError) {
     return { ok: false, detail: clampText(firstText(result)) || "执行出错" };
   }
   if (details.ok === false) {
     const reason = typeof details.reason === "string" ? details.reason : firstText(result);
-    return { ok: false, detail: clampText(reason) || "校验未通过" };
+    const category = typeof details.category === "string" ? details.category : undefined;
+    return { ok: false, detail: clampText(reason) || "校验未通过", ...(category ? { category } : {}) };
   }
   if (toolName === "get_resume_context") {
     const sections = (details.sections ?? {}) as Record<string, unknown>;

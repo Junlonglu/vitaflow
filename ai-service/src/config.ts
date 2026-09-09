@@ -27,3 +27,10 @@ export function loadConfig(): ServiceConfig {
     fastapiBaseUrl: (process.env.PI_FASTAPI_BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, ""),
   };
 }
+
+/**
+ * Per-attempt timeout for the tools' validation callbacks toward FastAPI. Without
+ * it a hung FastAPI holds the tool (and the whole agent turn) until the turn
+ * timeout; the tool should fail fast with an infra error the model can relay.
+ */
+export const TOOL_HTTP_TIMEOUT_MS = Number(process.env.AI_TOOL_HTTP_TIMEOUT_MS || 15_000);

@@ -97,8 +97,8 @@ export interface TaskAgentInput {
   config: ServiceConfig;
   runtime: ChatRuntime;
   modelRef?: string;
-  /** Faux only: queue this text instead of the canned task JSON (test seam). */
-  fauxReplyOverride?: string;
+  /** Faux only: queue this text (or one per agent turn) instead of the canned task JSON (test seam). */
+  fauxReplyOverride?: string | string[];
 }
 
 /**
@@ -191,6 +191,14 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
   // persisted message shows the same steps the user watched live (same closure
   // pattern as toolState — the model has no write channel here).
   const toolTrace: ToolTraceEntry[] = [];
+  // Per-call start timestamps for step duration (kept off the trace entry so the
+  // raw clock value never leaks into streamed events or the persisted row).
+  const toolStarts = new Map<string, number>();
+  // Turn latency breakdown (dashboard 环节耗时): time to first streamed token
+  // (thinking or text) and cumulative tool execution; generation = total - tools.
+  const turnStart = Date.now();
+  let firstTokenAt: number | undefined;
+  let toolTotalMs = 0;
   const basicsTool = createUpdateBasicsFieldTool(
     {
       fetch: globalThis.fetch,
@@ -237,7 +245,15 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
   const sendResult = (text: string) => {
     if (resultSent) return;
     resultSent = true;
-    const data: Record<string, unknown> = { assistant_message: buildAssistantMessage(text, Date.now()) };
+    const totalMs = Date.now() - turnStart;
+    const data: Record<string, unknown> = {
+      assistant_message: buildAssistantMessage(text, Date.now()),
+      timing: {
+        first_token_ms: firstTokenAt !== undefined ? firstTokenAt - turnStart : null,
+        tool_ms: toolTotalMs,
+        total_ms: totalMs,
+      },
+    };
     if (toolState.pendingChange) {
       data.pending_change = toolState.pendingChange;
     }
@@ -309,11 +325,13 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     if (event.type === "message_update") {
       const ae = event.assistantMessageEvent;
       if (ae?.type === "text_delta") {
+        if (firstTokenAt === undefined) firstTokenAt = Date.now();
         text += ae.delta;
         advanceStage("replying");
         emit({ type: "delta", text: ae.delta });
       }
       if (ae?.type === "thinking_delta") {
+        if (firstTokenAt === undefined) firstTokenAt = Date.now();
         advanceStage("thinking");
         emit({ type: "thinking", text: ae.delta });
       }
@@ -351,11 +369,15 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
         status: "start",
       };
       toolTrace.push(entry);
+      toolStarts.set(event.toolCallId, Date.now());
       // Emit a copy: the end handler below mutates the trace entry in place,
       // and an already-emitted start event must not change under the consumer.
       emit({ type: "tool", data: { ...entry } });
     }
     if (event.type === "tool_execution_end") {
+      const startedAt = toolStarts.get(event.toolCallId);
+      toolStarts.delete(event.toolCallId);
+      if (startedAt !== undefined) toolTotalMs += Date.now() - startedAt;
       const entry = toolTrace.find((item) => item.id === event.toolCallId && item.status === "start");
       const outcome = toolStepEnd(event.toolName, event.result, event.isError);
       const settled: ToolTraceEntry = {
@@ -365,11 +387,15 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
         status: "end",
         ok: outcome.ok,
         ...(outcome.detail ? { detail: outcome.detail } : {}),
+        ...(outcome.category ? { category: outcome.category } : {}),
+        ...(startedAt !== undefined ? { duration_ms: Date.now() - startedAt } : {}),
       };
       if (entry) {
         entry.status = "end";
         entry.ok = outcome.ok;
         entry.detail = settled.detail;
+        entry.category = settled.category;
+        entry.duration_ms = settled.duration_ms;
       }
       emit({ type: "tool", data: settled });
     }
@@ -483,9 +509,29 @@ export async function runTask(input: TaskAgentInput, emit: Emit, signal?: AbortS
   let reportedUsage: ModelUsage[] = [];
   let sawError = false;
   let resultSent = false;
+  // Set by settleParse when the settled output does not parse; the outer flow
+  // consumes it to drive one bounded repair regeneration.
+  let parseFailed = false;
+  let parseError = "";
   const usage = createUsageAggregator();
   const abortHandler = () => {
     void session.abort();
+  };
+
+  const settleParse = () => {
+    try {
+      const parsed = parseModelJson(text);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("AI 返回的内容不是 JSON 对象");
+      }
+      resultSent = true;
+      // Faux tasks are a local demo: strip their usage so FastAPI does not bill
+      // the task on a provider that consumed nothing real (same rule as /v1/chat).
+      emit({ type: "result", data: parsed as Record<string, unknown>, usage: usage.snapshot().filter((entry) => entry.provider !== "faux") });
+    } catch (err) {
+      parseFailed = true;
+      parseError = err instanceof Error ? err.message : String(err);
+    }
   };
 
   const unsubscribe = session.subscribe((event) => {
@@ -514,20 +560,7 @@ export async function runTask(input: TaskAgentInput, emit: Emit, signal?: AbortS
       }
     }
     if (event.type === "agent_settled") {
-      try {
-        const parsed = parseModelJson(text);
-        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-          throw new Error("AI 返回的内容不是 JSON 对象");
-        }
-        resultSent = true;
-        // Faux tasks are a local demo: strip their usage so FastAPI does not bill
-        // the task on a provider that consumed nothing real (same rule as /v1/chat).
-        emit({ type: "result", data: parsed as Record<string, unknown>, usage: usage.snapshot().filter((entry) => entry.provider !== "faux") });
-      } catch {
-        sawError = true;
-        resultSent = true;
-        emit({ type: "error", message: "AI 返回的内容无法解析为合法 JSON，请重试" });
-      }
+      settleParse();
     }
   });
 
@@ -543,6 +576,25 @@ export async function runTask(input: TaskAgentInput, emit: Emit, signal?: AbortS
 
   try {
     await session.prompt(message);
+    // 解析失败时把具体错误喂回模型做一次有界重生成（结构化校验反馈 → 重生成），
+    // 而不是直接让用户重试整个任务。仍失败（或修复回合自身报错）才落 error；
+    // 重试共用同一个 turn 超时预算。
+    if (parseFailed && !resultSent) {
+      text = "";
+      try {
+        await session.prompt(
+          `你上一次的输出无法解析为 JSON（${parseError}）。请重新完成任务：` +
+            `严格只输出一个 JSON 对象，以 { 开头、以 } 结尾，不要包含 markdown 代码围栏、注释或任何解释文字。`,
+        );
+      } catch {
+        // 修复回合自身失败：按解析失败兜底，不让异常细节掩盖原始问题。
+      }
+      if (!resultSent) {
+        sawError = true;
+        resultSent = true;
+        emit({ type: "error", message: "AI 返回的内容无法解析为合法 JSON，请重试" });
+      }
+    }
   } catch (err) {
     sawError = true;
     const messageText = err instanceof Error ? err.message : String(err);

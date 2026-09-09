@@ -103,6 +103,9 @@ class UpdateBasicsFieldEndpointTest(unittest.TestCase):
         body = resp.json()
         self.assertFalse(body["data"]["ok"])
         self.assertIn("量化", body["data"]["reason"])
+        # 统一错误信封：反幻觉拦截属于 business——模型原样重试没有意义。
+        self.assertEqual(body["data"]["category"], "business")
+        self.assertFalse(body["data"]["retryable"])
 
 
 if __name__ == "__main__":

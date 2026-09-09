@@ -12,6 +12,7 @@
  */
 import { Type } from "typebox";
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { categoryGuidance, envelopeCategory, fetchFailureDetail, toolHttpSignal } from "./http.js";
 
 /** Canonical resume section keys, in display order (kept in sync with the backend). */
 export const RESUME_SECTIONS = [
@@ -111,6 +112,7 @@ async function postSectionUpdate(
   deps: SectionToolsDeps,
   path: string,
   body: Record<string, unknown>,
+  signal?: AbortSignal,
 ) {
   const url = `${deps.fastapiBaseUrl.replace(/\/+$/, "")}/api/ai/service/tool/${path}`;
   let resp: Response;
@@ -119,13 +121,15 @@ async function postSectionUpdate(
       method: "POST",
       headers: { "Content-Type": "application/json", "X-AI-Service-Token": deps.serviceToken },
       body: JSON.stringify({ ...body, user_id: deps.userId, resume_id: deps.resumeId }),
+      signal: toolHttpSignal(signal),
     });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
+    const detail = fetchFailureDetail(err);
     return {
       ok: false,
       reason: `无法连接后端校验服务（${detail}）`,
-      text: `修改校验失败：无法连接后端校验服务（${detail}）。请稍后重试。`,
+      category: "infra",
+      text: `该修改未通过校验，已阻止写入。原因：无法连接后端校验服务（${detail}）。${categoryGuidance("infra")}`,
     };
   }
 
@@ -137,7 +141,13 @@ async function postSectionUpdate(
       (typeof (data as Record<string, unknown>)?.message === "string" &&
         String((data as Record<string, unknown>).message)) ||
       `校验失败（状态码 ${resp.status}）`;
-    return { ok: false, reason, text: `该修改未通过校验，已阻止写入。原因：${reason}` };
+    const category = envelopeCategory(data);
+    return {
+      ok: false,
+      reason,
+      category,
+      text: `该修改未通过校验，已阻止写入。原因：${reason}。${categoryGuidance(category)}`,
+    };
   }
 
   const suggestions = Array.isArray(data.suggestions)
@@ -187,10 +197,10 @@ export function createSectionTools(deps: SectionToolsDeps): ToolDefinition[] {
         };
       }
 
-      const result = await postSectionUpdate(deps, "update-section", { section, proposed, removed_ids });
+      const result = await postSectionUpdate(deps, "update-section", { section, proposed, removed_ids }, signal);
       return {
         content: [{ type: "text", text: result.text }],
-        details: { ok: result.ok, ...(result.ok ? { optimized_resume_data: deps.state.pendingChange?.optimized_resume_data, suggestions: deps.state.pendingChange?.suggestions } : { reason: result.reason }) },
+        details: { ok: result.ok, ...(result.ok ? { optimized_resume_data: deps.state.pendingChange?.optimized_resume_data, suggestions: deps.state.pendingChange?.suggestions } : { reason: result.reason, category: result.category }) },
       };
     },
   });
@@ -231,10 +241,10 @@ export function createSectionTools(deps: SectionToolsDeps): ToolDefinition[] {
           details: { ok: false },
         };
       }
-      const result = await postSectionUpdate(deps, "propose-change", { updates });
+      const result = await postSectionUpdate(deps, "propose-change", { updates }, signal);
       return {
         content: [{ type: "text", text: result.text }],
-        details: { ok: result.ok, ...(result.ok ? { optimized_resume_data: deps.state.pendingChange?.optimized_resume_data, suggestions: deps.state.pendingChange?.suggestions } : { reason: result.reason }) },
+        details: { ok: result.ok, ...(result.ok ? { optimized_resume_data: deps.state.pendingChange?.optimized_resume_data, suggestions: deps.state.pendingChange?.suggestions } : { reason: result.reason, category: result.category }) },
       };
     },
   });
@@ -256,7 +266,7 @@ export function createSectionTools(deps: SectionToolsDeps): ToolDefinition[] {
       const raw = (args ?? {}) as { sections?: unknown };
       return { sections: normalizeSectionsArg(raw.sections) };
     },
-    execute: async (_toolCallId, params: { sections: string }, _signal, _onUpdate, _ctx) => {
+    execute: async (_toolCallId, params: { sections: string }, signal, _onUpdate, _ctx) => {
       const sections = (params?.sections ?? "").trim();
       if (!sections) {
         return { content: [{ type: "text", text: "请指定要读取的简历模块名。" }], details: { ok: false } };
@@ -264,15 +274,15 @@ export function createSectionTools(deps: SectionToolsDeps): ToolDefinition[] {
       const url = `${deps.fastapiBaseUrl.replace(/\/+$/, "")}/api/ai/service/tool/get-resume-context?user_id=${deps.userId}&resume_id=${deps.resumeId}&sections=${encodeURIComponent(sections)}`;
       let resp: Response;
       try {
-        resp = await deps.fetch(url, { headers: { "X-AI-Service-Token": deps.serviceToken } });
+        resp = await deps.fetch(url, { headers: { "X-AI-Service-Token": deps.serviceToken }, signal: toolHttpSignal(signal) });
       } catch (err) {
-        const detail = err instanceof Error ? err.message : String(err);
-        return { content: [{ type: "text", text: `读取简历模块失败：无法连接后端服务（${detail}）。` }], details: { ok: false, reason: detail } };
+        const detail = fetchFailureDetail(err);
+        return { content: [{ type: "text", text: `读取简历模块失败：无法连接后端服务（${detail}）。${categoryGuidance("infra")}` }], details: { ok: false, reason: detail, category: "infra" } };
       }
       const parsed = jsonOrText(await resp.text(), resp.headers.get("content-type"));
       const data = (parsed as { data?: Record<string, unknown> } | null)?.data ?? null;
       if (!resp.ok || !data || data.ok !== true) {
-        return { content: [{ type: "text", text: `读取简历模块失败：后端未返回有效数据。` }], details: { ok: false } };
+        return { content: [{ type: "text", text: `读取简历模块失败：后端未返回有效数据。${categoryGuidance("infra")}` }], details: { ok: false, reason: "后端未返回有效数据", category: "infra" } };
       }
       const ctx = (data.sections ?? {}) as Record<string, unknown>;
       return {

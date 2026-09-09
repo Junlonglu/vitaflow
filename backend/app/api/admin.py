@@ -25,6 +25,7 @@ from app.models.ai_config import (
     UserFeedback,
 )
 from app.models.announcement import Announcement
+from app.models.ai_chat import AiChatMessage
 from app.models.export_record import ExportRecord
 from app.models.resume import Resume, UploadedFile
 from app.models.user import User
@@ -479,6 +480,124 @@ def _breakdown_key(task_type: object, feature: object) -> str:
     return str(task_type)
 
 
+# 工具失败类别的固定展示顺序；类别缺失的历史失败步骤归入 unknown。
+_TRACE_CATEGORIES = ("validation", "business", "infra", "unknown")
+
+
+def _chat_timing_breakdown(timing_rows: list) -> dict:
+    """Aggregate per-turn latency breakdowns (对话回合各环节耗时).
+
+    Each timing dict carries first_token_ms (time to first streamed token),
+    tool_ms (cumulative tool execution) and total_ms; 生成回复（含思考）is
+    derived as total - tool. Rows without a sane total_ms are skipped; rows
+    without a specific phase just miss that phase's sample.
+    """
+
+    def _pack(durations: list[int]) -> dict[str, int | None]:
+        return {
+            "avg_ms": round(sum(durations) / len(durations)) if durations else None,
+            "max_ms": max(durations) if durations else None,
+        }
+
+    turns = 0
+    first_token: list[int] = []
+    tool: list[int] = []
+    generation: list[int] = []
+    total: list[int] = []
+    for timing in timing_rows:
+        if not isinstance(timing, dict):
+            continue
+        raw_total = timing.get("total_ms")
+        if not isinstance(raw_total, (int, float)) or raw_total < 0:
+            continue
+        turns += 1
+        total.append(int(raw_total))
+        raw_first = timing.get("first_token_ms")
+        if isinstance(raw_first, (int, float)) and raw_first >= 0:
+            first_token.append(int(raw_first))
+        raw_tool = timing.get("tool_ms")
+        if isinstance(raw_tool, (int, float)) and raw_tool >= 0:
+            tool.append(int(raw_tool))
+        generation.append(max(int(raw_total) - int(raw_tool or 0), 0))
+    return {
+        "turns": turns,
+        "first_token_ms": _pack(first_token),
+        "tool_ms": _pack(tool),
+        "generation_ms": _pack(generation),
+        "total_ms": _pack(total),
+    }
+
+
+def _tool_trace_breakdown(trace_rows: list) -> dict:
+    """Aggregate tool_trace step rows (统一错误信封改造的看板侧).
+
+    Counts only settled steps (status == "end"); failures split by the envelope
+    ``category`` (steps recorded before the category existed land in "unknown").
+    Durations come from the step's ``duration_ms``; steps without one are counted
+    but excluded from the avg/max pack.
+    """
+
+    def _duration_pack(durations: list[int]) -> dict[str, int | None]:
+        return {
+            "avg_ms": round(sum(durations) / len(durations)) if durations else None,
+            "max_ms": max(durations) if durations else None,
+        }
+
+    total = 0
+    success_count = 0
+    success_durations: list[int] = []
+    failure_counts: dict[str, int] = {}
+    failure_durations: dict[str, list[int]] = {}
+    tool_names: dict[str, dict[str, Any]] = {}
+    for trace in trace_rows:
+        for step in trace or []:
+            if not isinstance(step, dict) or step.get("status") != "end":
+                continue
+            total += 1
+            raw_duration = step.get("duration_ms")
+            duration = int(raw_duration) if isinstance(raw_duration, (int, float)) and raw_duration >= 0 else None
+            if step.get("ok") is True:
+                success_count += 1
+                if duration is not None:
+                    success_durations.append(duration)
+            else:
+                category = str(step.get("category") or "unknown")
+                failure_counts[category] = failure_counts.get(category, 0) + 1
+                if duration is not None:
+                    failure_durations.setdefault(category, []).append(duration)
+            tool_item = tool_names.setdefault(str(step.get("name") or "unknown"), {"total": 0, "success": 0, "durations": []})
+            tool_item["total"] += 1
+            if step.get("ok") is True:
+                tool_item["success"] += 1
+            if duration is not None:
+                tool_item["durations"].append(duration)
+
+    failure_total = total - success_count
+    tools = [
+        {
+            "name": name,
+            "total": item["total"],
+            "success": item["success"],
+            "failure_count": item["total"] - item["success"],
+            "failure_rate": round((item["total"] - item["success"]) * 100 / item["total"], 1) if item["total"] else 0.0,
+            **_duration_pack(item["durations"]),
+        }
+        for name, item in sorted(tool_names.items(), key=lambda value: value[1]["total"], reverse=True)
+    ]
+    return {
+        "total": total,
+        "success_count": success_count,
+        "failure_count": failure_total,
+        "failure_rate": round(failure_total * 100 / total, 1) if total else 0.0,
+        "success": {"count": success_count, **_duration_pack(success_durations)},
+        "failures": [
+            {"category": category, "count": failure_counts.get(category, 0), **_duration_pack(failure_durations.get(category, []))}
+            for category in list(_TRACE_CATEGORIES) + sorted(set(failure_counts) - set(_TRACE_CATEGORIES))
+        ],
+        "tools": tools,
+    }
+
+
 @router.get("/dashboard")
 def dashboard(db: Session = Depends(get_db)):
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -669,6 +788,24 @@ def dashboard(db: Session = Depends(get_db)):
         if task_status in {"success", "failed"}:
             item[task_status] += 1
 
+    # 工具调用质量：聚合对话消息 tool_trace 的步骤结果与耗时，按错误类别拆分。
+    trace_rows = db.scalars(
+        select(AiChatMessage.tool_trace).where(
+            AiChatMessage.role == "assistant",
+            AiChatMessage.tool_trace.isnot(None),
+        )
+    ).all()
+    tool_trace_breakdown = _tool_trace_breakdown(trace_rows)
+
+    # 回合环节耗时：聚合 assistant 消息的 timing（ai-service result 事件上报）。
+    timing_rows = db.scalars(
+        select(AiChatMessage.timing).where(
+            AiChatMessage.role == "assistant",
+            AiChatMessage.timing.isnot(None),
+        )
+    ).all()
+    chat_timing_breakdown = _chat_timing_breakdown(timing_rows)
+
     daily = []
     start_day = today - timedelta(days=6)
     end_day = today + timedelta(days=1)
@@ -804,6 +941,8 @@ def dashboard(db: Session = Depends(get_db)):
             "section_breakdown": [
                 {"section_type": section_type, **counts} for section_type, counts in section_map.items()
             ],
+            "tool_trace": tool_trace_breakdown,
+            "chat_timing": chat_timing_breakdown,
             "daily": daily,
             "hourly_activity": hourly_activity,
         }

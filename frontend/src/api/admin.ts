@@ -26,6 +26,24 @@ export interface DashboardData {
   ai_breakdown: Array<{ task_type: string; total: number; success: number; failed: number; tokens: number; input_tokens: number; output_tokens: number }>
   model_breakdown?: Array<{ model_name: string; model_raw_name?: string; config_names?: string[]; total: number; tokens: number; input_tokens: number; output_tokens: number; points_used: number }>
   section_breakdown: Array<{ section_type: string; total: number; success: number; failed: number }>
+  // 对话工具步骤质量：按错误类别/工具名聚合失败与耗时（duration_ms 毫秒）
+  tool_trace?: {
+    total: number
+    success_count: number
+    failure_count: number
+    failure_rate: number
+    success: { count: number; avg_ms: number | null; max_ms: number | null }
+    failures: Array<{ category: string; count: number; avg_ms: number | null; max_ms: number | null }>
+    tools: Array<{ name: string; total: number; success: number; failure_count: number; failure_rate: number; avg_ms: number | null; max_ms: number | null }>
+  }
+  // 对话回合各环节耗时（毫秒）：首字响应/工具执行/生成回复（含思考）/整回合
+  chat_timing?: {
+    turns: number
+    first_token_ms: { avg_ms: number | null; max_ms: number | null }
+    tool_ms: { avg_ms: number | null; max_ms: number | null }
+    generation_ms: { avg_ms: number | null; max_ms: number | null }
+    total_ms: { avg_ms: number | null; max_ms: number | null }
+  }
   daily: Array<{ date: string; users: number; resumes: number; ai_tasks: number; exports: number; shares: number; tokens?: number; points_consumed?: number }>
   hourly_activity?: Array<{ hour: number; label: string; active_users: number; actions: number }>
 }

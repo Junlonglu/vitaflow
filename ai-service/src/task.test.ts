@@ -103,7 +103,8 @@ describe("runTask (Faux)", () => {
     const config = loadConfig();
     try {
       // A real model can disobey the JSON-only instruction — the parse must fail
-      // loudly instead of emitting a malformed result.
+      // loudly instead of emitting a malformed result. The bounded repair turn
+      // runs first and still fails (faux has nothing queued), then the error lands.
       const events: ChatStreamEvent[] = [];
       const usage = await runTask(
         {
@@ -122,6 +123,42 @@ describe("runTask (Faux)", () => {
       assert.match((error as { message: string }).message, /JSON/);
       assert.ok(!events.some((event) => event.type === "result"), "no result event on parse failure");
       assert.deepEqual(usage, [], "a failed task bills nothing");
+    } finally {
+      runtime.dispose();
+    }
+  });
+
+  it("regenerates once after a parse failure and succeeds with the repaired output", async () => {
+    const runtime = await createFauxRuntime();
+    const config = loadConfig();
+    try {
+      // Queue a prose reply first, then the repaired JSON: the parse error is fed
+      // back to the model (校验反馈 → 有界重生成) and the second settle wins.
+      const good = {
+        resume_data: { basics: { name: "张三" }, layout: { section_order: ["basics"], hidden_sections: [], section_titles: {} } },
+        language: "zh-CN",
+        template_id: "tech",
+        template_config: {},
+        explanation: "修复后的输出",
+      };
+      const events: ChatStreamEvent[] = [];
+      const usage = await runTask(
+        {
+          task: "generate_resume",
+          message: "请生成简历",
+          systemPrompt: "你是简历生成器。",
+          config,
+          runtime,
+          fauxReplyOverride: ["抱歉，我无法生成简历。", JSON.stringify(good)],
+        },
+        (event) => events.push(event),
+      );
+
+      const result = events.find((event) => event.type === "result") as { type: "result"; data: Record<string, unknown> } | undefined;
+      assert.ok(result, "expected a result event after the repair turn");
+      assert.equal(result.data.explanation, "修复后的输出");
+      assert.ok(!events.some((event) => event.type === "error"), "no error when the repair succeeds");
+      assert.ok(usage.length >= 1, "both turns' usage is aggregated for billing");
     } finally {
       runtime.dispose();
     }

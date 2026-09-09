@@ -45,9 +45,10 @@ export interface FauxRuntime {
    * model answers with a single minimal-but-legal task JSON, exercising the same
    * accumulate → parse → result path a real model drives. ``replyOverride``
    * queues arbitrary text instead — the seam that lets tests exercise runTask's
-   * unparseable-output error path.
+   * unparseable-output error path. An array queues one reply per agent turn, so
+   * tests can drive the parse-fail → repair-regeneration path end to end.
    */
-  prepareTask: (task: TaskType, replyOverride?: string) => void;
+  prepareTask: (task: TaskType, replyOverride?: string | string[]) => void;
   dispose: () => void;
 }
 
@@ -244,8 +245,9 @@ export async function createFauxRuntime(): Promise<FauxRuntime> {
       }
       faux.setResponses([replyFactory(systemPrompt)]);
     },
-    prepareTask: (task: TaskType, replyOverride?: string) => {
-      faux.setResponses([fauxAssistantMessage(replyOverride ?? taskReply(task))]);
+    prepareTask: (task: TaskType, replyOverride?: string | string[]) => {
+      const replies = Array.isArray(replyOverride) ? replyOverride : [replyOverride ?? taskReply(task)];
+      faux.setResponses(replies.map((reply) => fauxAssistantMessage(reply)));
     },
     dispose: () => faux.unregister(),
   };

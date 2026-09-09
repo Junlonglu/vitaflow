@@ -67,6 +67,33 @@ function sectionText(value?: string) {
     awards: "荣誉奖项",
   } as Record<string, string>)[value || ""] || value || "—"
 }
+
+function formatMs(value?: number | null) {
+  if (value === null || value === undefined) return "—"
+  return value < 1000 ? `${value}ms` : `${(value / 1000).toFixed(1)}s`
+}
+
+function traceCategoryText(category: string) {
+  return ({
+    validation: "参数错误",
+    business: "需换数据",
+    infra: "服务不可用",
+    unknown: "历史数据",
+  } as Record<string, string>)[category] || category
+}
+
+function toolNameText(name: string) {
+  return ({
+    get_resume_context: "读取简历模块",
+    update_basics_field: "修改基本信息",
+    update_section: "修改简历模块",
+    propose_change: "提交修改提案",
+    ask_user_questions: "收集补充信息",
+  } as Record<string, string>)[name] || name
+}
+
+const activeTraceFailures = (failures: Array<{ category: string; count: number; avg_ms: number | null; max_ms: number | null }>) =>
+  failures.filter((item) => item.count > 0)
 </script>
 
 <template>
@@ -121,6 +148,59 @@ function sectionText(value?: string) {
       </article>
 
       <article class="col-span-full min-w-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
+        <h2 class="font-semibold text-zinc-900">工具调用质量</h2>
+        <p class="mt-1 text-xs text-zinc-400">对话工具步骤的失败类别与耗时</p>
+        <template v-if="(dashboard.tool_trace?.total || 0) > 0">
+          <div class="mt-4 grid grid-cols-3 gap-3">
+            <div class="min-w-0 rounded-xl bg-zinc-50 p-3.5"><p class="text-xs text-zinc-400">工具步骤总数</p><p class="mt-1.5 truncate text-base font-semibold text-zinc-900 sm:text-lg">{{ formatNumber(dashboard.tool_trace?.total) }}</p></div>
+            <div class="min-w-0 rounded-xl bg-zinc-50 p-3.5"><p class="text-xs text-zinc-400">成功步骤</p><p class="mt-1.5 truncate text-base font-semibold text-emerald-600 sm:text-lg">{{ formatNumber(dashboard.tool_trace?.success_count) }}</p><p class="mt-1 truncate text-[10px] text-zinc-400 sm:text-xs">平均 {{ formatMs(dashboard.tool_trace?.success?.avg_ms) }} · 最长 {{ formatMs(dashboard.tool_trace?.success?.max_ms) }}</p></div>
+            <div class="min-w-0 rounded-xl bg-zinc-50 p-3.5"><p class="text-xs text-zinc-400">失败率</p><p class="mt-1.5 truncate text-base font-semibold sm:text-lg" :class="(dashboard.tool_trace?.failure_rate || 0) > 0 ? 'text-red-600' : 'text-zinc-900'">{{ dashboard.tool_trace?.failure_rate ?? 0 }}%</p><p class="mt-1 truncate text-[10px] text-zinc-400 sm:text-xs">共 {{ formatNumber(dashboard.tool_trace?.failure_count) }} 步失败</p></div>
+          </div>
+          <div class="mt-3 space-y-2">
+            <div v-for="item in activeTraceFailures(dashboard.tool_trace?.failures || [])" :key="item.category" class="flex items-center justify-between gap-2 overflow-hidden whitespace-nowrap rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2.5 text-xs">
+              <span class="shrink-0 rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700 ring-1 ring-inset ring-red-200">{{ traceCategoryText(item.category) }}</span>
+              <span class="min-w-0 truncate text-zinc-500">{{ item.count }} 步</span>
+              <span class="shrink-0 text-zinc-500">平均 <strong class="text-zinc-700">{{ formatMs(item.avg_ms) }}</strong></span>
+              <span class="shrink-0 text-zinc-500">最长 <strong class="text-zinc-700">{{ formatMs(item.max_ms) }}</strong></span>
+            </div>
+            <p v-if="!activeTraceFailures(dashboard.tool_trace?.failures || []).length" class="py-3 text-center text-sm text-zinc-400">暂无失败步骤</p>
+          </div>
+          <div v-if="(dashboard.tool_trace?.tools || []).length" class="mt-4">
+            <p class="mb-2 text-xs font-medium text-zinc-500">各工具统计</p>
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              <div v-for="item in dashboard.tool_trace?.tools || []" :key="item.name" class="min-w-0 rounded-xl border border-zinc-100 bg-zinc-50 p-3">
+                <div class="flex items-center justify-between gap-2 whitespace-nowrap">
+                  <span class="truncate text-xs font-semibold text-zinc-900">{{ toolNameText(item.name) }}</span>
+                  <span class="shrink-0 text-[10px] text-zinc-400">共 {{ item.total }} 步</span>
+                </div>
+                <div class="mt-1.5 flex items-center justify-between gap-2 whitespace-nowrap text-[10px] text-zinc-500 sm:text-xs">
+                  <span class="rounded-full bg-emerald-50 px-1.5 py-0.5 text-emerald-700">成功 {{ item.success }}</span>
+                  <span class="rounded-full px-1.5 py-0.5" :class="item.failure_count > 0 ? 'bg-red-50 text-red-700' : 'bg-zinc-100 text-zinc-400'">失败 {{ item.failure_count }}</span>
+                  <span class="min-w-0 truncate">平均 <strong class="text-zinc-700">{{ formatMs(item.avg_ms) }}</strong> · 最长 <strong class="text-zinc-700">{{ formatMs(item.max_ms) }}</strong></span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-if="(dashboard.chat_timing?.turns || 0) > 0" class="mt-4">
+            <p class="mb-2 text-xs font-medium text-zinc-500">对话回合各环节耗时（{{ dashboard.chat_timing?.turns }} 回合）</p>
+            <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <div v-for="phase in [
+                { label: '首字响应', key: 'first_token_ms' },
+                { label: '工具执行', key: 'tool_ms' },
+                { label: '生成回复（含思考）', key: 'generation_ms' },
+                { label: '整回合', key: 'total_ms' },
+              ]" :key="phase.key" class="min-w-0 rounded-xl border border-zinc-100 bg-zinc-50 p-3.5">
+                <p class="truncate text-xs text-zinc-400">{{ phase.label }}</p>
+                <p class="mt-1.5 truncate text-base font-semibold text-zinc-900 sm:text-lg">{{ formatMs(dashboard.chat_timing?.[phase.key]?.avg_ms) }}</p>
+                <p class="mt-1 truncate text-[10px] text-zinc-400 sm:text-xs">最长 {{ formatMs(dashboard.chat_timing?.[phase.key]?.max_ms) }}</p>
+              </div>
+            </div>
+          </div>
+        </template>
+        <p v-else class="py-8 text-center text-sm text-zinc-400">暂无工具调用记录</p>
+      </article>
+
+      <article class="col-span-full min-w-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
         <div class="mb-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 class="font-semibold text-zinc-900">用户活跃时间段</h2>
@@ -135,7 +215,7 @@ function sectionText(value?: string) {
         <p v-if="!(dashboard.hourly_activity || []).length" class="py-8 text-center text-sm text-zinc-400">暂无活跃记录</p>
       </article>
 
-      <article class="min-w-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
+      <article class="col-span-full min-w-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
         <h2 class="font-semibold text-zinc-900">AI 功能调用分布</h2>
         <p class="mt-1 text-xs text-zinc-400">对话按指令拆分，历史任务按原类型统计</p>
         <div class="mt-5 space-y-3">
@@ -166,7 +246,7 @@ function sectionText(value?: string) {
         </div>
       </article>
 
-      <article class="min-w-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
+      <article class="col-span-full min-w-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
         <h2 class="font-semibold text-zinc-900">模型调用统计</h2>
         <p class="mt-1 text-xs text-zinc-400">各模型调用量、Tokens 与 Flow Points 消耗</p>
         <div class="mt-5 space-y-3">

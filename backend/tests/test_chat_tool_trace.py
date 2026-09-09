@@ -99,6 +99,7 @@ class MessageOutTraceTest(unittest.TestCase):
             optimized_resume_data=None,
             tool_trace=[{"id": "tc1", "name": "get_resume_context", "label": "查阅简历「实习/工作经历」", "status": "end", "ok": True}],
             pending_questions=None,
+            timing=None,
             action_status="none",
             create_time=datetime.now(),
         )

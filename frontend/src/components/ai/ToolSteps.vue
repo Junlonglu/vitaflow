@@ -17,6 +17,18 @@ const lastChange = () => {
   const last = props.steps[props.steps.length - 1]
   return `${props.steps.length}-${last?.status ?? ""}-${last?.ok ?? ""}-${last?.detail ?? ""}`
 }
+
+const formatDuration = (ms?: number) => {
+  if (ms === undefined) return ""
+  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
+}
+
+const categoryText = (category?: string) => {
+  if (category === "infra") return "服务不可用"
+  if (category === "business") return "需换数据"
+  if (category === "validation") return "参数错误"
+  return category
+}
 </script>
 
 <template>
@@ -34,8 +46,12 @@ const lastChange = () => {
           </template>
           <LoaderCircle v-else class="h-3.5 w-3.5 shrink-0 animate-spin text-zinc-400" />
           <span class="truncate" :class="step.status === 'end' && !step.ok ? 'text-zinc-400' : 'text-zinc-600'">{{ step.label }}</span>
+          <span v-if="step.status === 'end' && step.duration_ms !== undefined" class="ml-auto shrink-0 tabular-nums text-zinc-400">{{ formatDuration(step.duration_ms) }}</span>
         </div>
-        <p v-if="step.detail" class="ml-5.5 mt-0.5 truncate text-[11px]" :class="step.ok ? 'text-zinc-400' : 'text-red-400'">{{ step.detail }}</p>
+        <p v-if="step.detail" class="ml-5.5 mt-0.5 flex items-center gap-1.5 truncate text-[11px]" :class="step.ok ? 'text-zinc-400' : 'text-red-400'">
+          <span v-if="step.ok === false && step.category" class="shrink-0 rounded bg-red-50 px-1 text-[10px]">{{ categoryText(step.category) }}</span>
+          <span class="truncate">{{ step.detail }}</span>
+        </p>
       </div>
     </div>
   </LiveRegion>

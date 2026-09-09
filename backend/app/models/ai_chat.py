@@ -37,6 +37,9 @@ class AiChatMessage(Base):
     suggestions: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
     optimized_resume_data: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
     tool_trace: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(JSON, nullable=True)
+    # 回合环节耗时（毫秒）：first_token_ms 首字响应 / tool_ms 工具执行合计 /
+    # total_ms 整回合；生成回复 = total - tool，由看板推导。
+    timing: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
     pending_questions: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(JSON, nullable=True)
     action_status: Mapped[str] = mapped_column(String(20), default="none")
     create_time: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

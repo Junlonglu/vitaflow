@@ -80,6 +80,10 @@ export interface ToolStep {
   status: "start" | "end"
   ok?: boolean
   detail?: string
+  /** 失败时的错误类别（validation 参数错可修 / business 需换数据 / infra 服务不可用）。 */
+  category?: string
+  /** 该步工具执行耗时（毫秒，end 行才有）。 */
+  duration_ms?: number
 }
 
 /** ask_user_questions 产出的一条待回答问题（随 result 落库到 pending_questions）。 */

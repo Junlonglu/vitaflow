@@ -60,4 +60,57 @@ describe("reportUsage", () => {
     const ok = await reportUsage(deps(fetchImpl), payload);
     assert.equal(ok, false);
   });
+
+  it("retries a transient 5xx and succeeds on a later attempt", async () => {
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls++;
+      return new Response(null, { status: calls === 1 ? 503 : 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const ok = await reportUsage(deps(fetchImpl), payload);
+
+    assert.equal(ok, true);
+    assert.equal(calls, 2);
+  });
+
+  it("does not retry a 4xx rejection — it would fail every retry", async () => {
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls++;
+      return new Response(null, { status: 401 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const ok = await reportUsage(deps(fetchImpl), payload);
+
+    assert.equal(ok, false);
+    assert.equal(calls, 1);
+  });
+
+  it("gives up after 3 attempts on persistent 5xx", async () => {
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls++;
+      return new Response(null, { status: 500 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const ok = await reportUsage(deps(fetchImpl), payload);
+
+    assert.equal(ok, false);
+    assert.equal(calls, 3);
+  });
+
+  it("retries a network error and succeeds when the backend comes back", async () => {
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls++;
+      if (calls === 1) throw new Error("connect ECONNREFUSED");
+      return new Response(null, { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const ok = await reportUsage(deps(fetchImpl), payload);
+
+    assert.equal(ok, true);
+    assert.equal(calls, 2);
+  });
 });

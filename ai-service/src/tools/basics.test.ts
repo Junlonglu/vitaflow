@@ -60,7 +60,8 @@ describe("update_basics_field tool", () => {
     const state = { pendingChange: null as never };
     const tool = createUpdateBasicsFieldTool(
       createUpdateBasicsFieldDeps({
-        fetch: (async () => successResponse({ ok: false, reason: "检测到方案包含简历和对话中未提供的量化结果，已阻止写入。" })) as never,
+        fetch: (async () =>
+          successResponse({ ok: false, category: "business", retryable: false, reason: "检测到方案包含简历和对话中未提供的量化结果，已阻止写入。" })) as never,
       }),
       state,
     );
@@ -68,10 +69,29 @@ describe("update_basics_field tool", () => {
     const result = await tool.execute("call-1", { basics: { phone: "13999999999" } }, undefined, undefined, {} as never);
 
     assert.equal(state.pendingChange, null);
-    assert.equal((result.details as { ok: boolean }).ok, false);
+    const details = result.details as { ok: boolean; category?: string };
+    assert.equal(details.ok, false);
+    assert.equal(details.category, "business");
     const text = (result.content[0] as { text: string }).text;
     assert.match(text, /未通过校验/);
     assert.match(text, /量化/);
+    // The envelope category drives the model-facing guidance: a business failure
+    // must NOT be retried with the same args.
+    assert.match(text, /不要原样重试/);
+  });
+
+  it("guides a retry when the backend rejects the shape (validation category)", async () => {
+    const tool = createUpdateBasicsFieldTool(
+      createUpdateBasicsFieldDeps({
+        fetch: (async () => successResponse({ ok: false, category: "validation", reason: "第 1 条记录包含不支持的字段：title" })) as never,
+      }),
+      { pendingChange: null as never },
+    );
+
+    const result = await tool.execute("call-1", { basics: { location: "深圳" } }, undefined, undefined, {} as never);
+
+    assert.equal((result.details as { category?: string }).category, "validation");
+    assert.match((result.content[0] as { text: string }).text, /请修正参数后重新调用/);
   });
 
   it("rejects a change with no fields without hitting the backend", async () => {
@@ -93,7 +113,7 @@ describe("update_basics_field tool", () => {
     assert.match((result.content[0] as { text: string }).text, /没有需要修改/);
   });
 
-  it("surfaces a backend failure as the tool result without crashing", async () => {
+  it("surfaces a backend failure as an infra envelope failure without crashing", async () => {
     const tool = createUpdateBasicsFieldTool(
       createUpdateBasicsFieldDeps({
         fetch: (async () => {
@@ -105,8 +125,12 @@ describe("update_basics_field tool", () => {
 
     const result = await tool.execute("call-1", { basics: { location: "深圳" } }, undefined, undefined, {} as never);
 
-    assert.equal((result.details as { ok: boolean }).ok, false);
-    assert.match((result.content[0] as { text: string }).text, /无法连接后端校验服务/);
+    const details = result.details as { ok: boolean; category?: string };
+    assert.equal(details.ok, false);
+    assert.equal(details.category, "infra");
+    const text = (result.content[0] as { text: string }).text;
+    assert.match(text, /无法连接后端校验服务/);
+    assert.match(text, /请告知用户稍后再试/);
   });
 
   it("filters prepareArguments to string/number values only", () => {

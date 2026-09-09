@@ -64,6 +64,7 @@ def _message_out(message: AiChatMessage) -> AiChatMessageOut:
             "suggestions": message.suggestions or [],
             "optimized_resume_data": message.optimized_resume_data,
             "tool_trace": message.tool_trace,
+            "timing": message.timing,
             "pending_questions": message.pending_questions,
             "action_status": message.action_status or "none",
             "create_time": message.create_time,
@@ -140,6 +141,7 @@ def _save_assistant_message(
     optimized_resume_data: dict[str, Any] | None,
     tool_trace: list[dict[str, Any]] | None = None,
     pending_questions: list[dict[str, Any]] | None = None,
+    timing: dict[str, Any] | None = None,
 ) -> AiChatMessageOut:
     reply = strip_thinking_text(localize_ai_text(reply or "")).strip()
     assistant_message = AiChatMessage(
@@ -151,6 +153,7 @@ def _save_assistant_message(
         suggestions=suggestions,
         optimized_resume_data=optimized_resume_data,
         tool_trace=tool_trace or None,
+        timing=timing or None,
         pending_questions=pending_questions or None,
         action_status="pending" if optimized_resume_data else "none",
     )
@@ -407,6 +410,13 @@ async def _stream_ai_service_reply(
                 # event too and are persisted so the answer dialog survives reloads.
                 questions = data.get("pending_questions")
                 pending_questions = [item for item in questions if isinstance(item, dict)] if isinstance(questions, list) else None
+                # 回合环节耗时（首字/工具/总时长）只保留数值字段，供看板聚合。
+                raw_timing = data.get("timing")
+                timing = (
+                    {key: value for key, value in raw_timing.items() if isinstance(value, (int, float)) or value is None}
+                    if isinstance(raw_timing, dict)
+                    else None
+                )
                 if isinstance(pending, dict) and pending.get("optimized_resume_data"):
                     assistant = _save_assistant_message(
                         db,
@@ -418,9 +428,10 @@ async def _stream_ai_service_reply(
                         pending.get("optimized_resume_data"),
                         tool_trace,
                         pending_questions=pending_questions,
+                        timing=timing,
                     )
                 else:
-                    assistant = _save_assistant_message(db, session, user, resume, reply, [], None, tool_trace, pending_questions=pending_questions)
+                    assistant = _save_assistant_message(db, session, user, resume, reply, [], None, tool_trace, pending_questions=pending_questions, timing=timing)
                 # 窗口外积压够了就在后台压缩成滚动摘要（下轮生效），不阻塞本回合。
                 # 计数失败只丢一次调度，不能把已收完的回复变成 error 事件。
                 try:
@@ -723,6 +734,17 @@ def _validated_optimized_data(
     if _unverified_numeric_claims(payload, merged):
         return None, "检测到方案包含简历和对话中未提供的量化结果，已阻止写入。"
     return merged, ""
+
+
+def tool_issue_category(issue: str) -> str:
+    """Classify a tool-validation issue for the error envelope (统一错误信封).
+
+    - ``business``：反幻觉拦截 / 无实际变化——模型原样重试没有意义，必须换数据或问用户；
+    - ``validation``：字段、模块、结构问题——模型修正参数后可以重新调用。
+    """
+    if "量化结果" in issue or "没有生成实际内容变化" in issue:
+        return "business"
+    return "validation"
 
 
 def validate_basics_field_update(

@@ -603,6 +603,9 @@ function upsertToolStep(assistant: any, step: ToolStep) {
   if (existing) {
     existing.status = "end"
     existing.ok = step.ok
+    existing.detail = step.detail
+    existing.category = step.category
+    existing.duration_ms = step.duration_ms
   } else {
     trace.push({ ...step })
   }

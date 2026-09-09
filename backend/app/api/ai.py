@@ -37,6 +37,7 @@ from app.services.ai_chat_service import (
     validate_basics_field_update,
     validate_section_update,
     validate_propose_change,
+    tool_issue_category,
     get_section_context,
 )
 from app.services.ai_config_service import (
@@ -649,7 +650,7 @@ def service_update_basics_field(
         user_message,
     )
     if issue:
-        return success({"ok": False, "reason": issue})
+        return success({"ok": False, "category": tool_issue_category(issue), "retryable": False, "reason": issue})
     return success({"ok": True, "optimized_resume_data": optimized_data, "suggestions": suggestions})
 
 
@@ -686,7 +687,7 @@ def service_update_section(
         payload.removed_ids,
     )
     if issue:
-        return success({"ok": False, "reason": issue})
+        return success({"ok": False, "category": tool_issue_category(issue), "retryable": False, "reason": issue})
     return success({"ok": True, "optimized_resume_data": optimized_data, "suggestions": suggestions})
 
 
@@ -718,7 +719,7 @@ def service_propose_change(
         user_message,
     )
     if issue:
-        return success({"ok": False, "reason": issue})
+        return success({"ok": False, "category": tool_issue_category(issue), "retryable": False, "reason": issue})
     return success({"ok": True, "optimized_resume_data": optimized_data, "suggestions": suggestions})
 
 

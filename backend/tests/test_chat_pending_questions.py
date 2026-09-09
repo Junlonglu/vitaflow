@@ -79,6 +79,7 @@ class MessageOutPendingQuestionsTest(unittest.TestCase):
             suggestions=[],
             optimized_resume_data=None,
             tool_trace=None,
+            timing=None,
             pending_questions=questions,
             action_status="none",
             create_time=datetime.now(),

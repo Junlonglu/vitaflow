@@ -33,6 +33,8 @@ class AiChatRegenerateRequest(BaseModel):
 
 class AiChatDecisionRequest(BaseModel):
     action: Literal["apply", "reject"]
+    # 审阅模式部分采纳：前端勾选变更后合并到当前简历数据提交；缺省走整包快照
+    merged_resume_data: Optional[dict[str, Any]] = None
 
 
 class AiChatMessageOut(BaseModel):

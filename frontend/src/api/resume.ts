@@ -40,7 +40,10 @@ export const getResumeShareApi = (id: number) => request.get<ResumeShareSettings
 export const updateResumeShareApi = (id: number, data: { enabled: boolean; expire_time?: string | null; regenerate_token?: boolean; mask_sensitive?: boolean; custom_token?: string }) =>
   request.put<ResumeShareSettings, ResumeShareSettings>(`/resumes/${id}/share`, data)
 export const getPublicSharedResumeApi = (token: string) => request.get<PublicSharedResume, PublicSharedResume>(`/shares/${encodeURIComponent(token)}`)
-export const previewHtmlApi = (id: number) => request.get<string, string>(`/resumes/${id}/preview-html`, { responseType: "text" as any })
+export const previewHtmlApi = (id: number, params?: { message_id?: number }) =>
+  request.get<string, string>(`/resumes/${id}/preview-html`, { responseType: "text" as any, params })
+export const previewResumeDataApi = (id: number, resumeData: any) =>
+  request.post<string, string>(`/resumes/${id}/preview-html`, { resume_data: resumeData }, { responseType: "text" as any })
 export const importResumeFileApi = (file: File | File[], templateId = "tech") => {
   const form = new FormData()
   const files = Array.isArray(file) ? file : [file]

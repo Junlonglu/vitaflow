@@ -16,6 +16,7 @@
     "class-variance-authority": "latest",
     "clsx": "latest",
     "cropperjs": "^1.6.2",
+    "diff": "^9.0.0",
     "dompurify": "latest",
     "echarts": "^6.1.0",
     "lucide-vue-next": "latest",
@@ -31,6 +32,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "latest",
+    "@types/diff": "^7.0.2",
     "@vitejs/plugin-legacy": "^8.0.2",
     "autoprefixer": "latest",
     "browserslist": "^4.28.4",

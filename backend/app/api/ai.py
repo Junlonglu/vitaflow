@@ -602,7 +602,7 @@ def resume_chat_decision(
 ):
     resume = get_resume(db, current_user.id, resume_id)
     assistant_message, resume_data = resolve_chat_change(
-        db, current_user, resume, message_id, payload.action
+        db, current_user, resume, message_id, payload.action, payload.merged_resume_data
     )
     return success(
         AiChatDecisionResponse(

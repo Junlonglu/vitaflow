@@ -1,4 +1,5 @@
 from pathlib import Path
+from copy import deepcopy
 from datetime import datetime
 from typing import Any
 
@@ -10,9 +11,10 @@ from app.core.database import get_db
 from app.core.exceptions import AppException
 from app.core.response import success
 from app.core.security import get_current_user
+from app.models.ai_chat import AiChatMessage
 from app.models.ai_task import AiTask
 from app.models.user import User
-from app.schemas.resume import ResumeCreate, ResumeDuplicateRequest, ResumeOut, ResumeShareUpdate, ResumeUpdate, ResumeVersionCreate, default_template_config
+from app.schemas.resume import ResumeCreate, ResumeDuplicateRequest, ResumeOut, ResumePreviewRequest, ResumeShareUpdate, ResumeUpdate, ResumeVersionCreate, default_template_config
 from app.schemas.resume_starter import ResumeStarterCreateRequest
 from app.services.ai.token_usage import build_token_usage, estimate_tokens
 from app.services.ai_config_service import get_active_ai_config
@@ -282,9 +284,44 @@ def update_share_settings(
 
 
 @router.get("/{resume_id}/preview-html", response_class=HTMLResponse)
-def preview_html(resume_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def preview_html(
+    resume_id: int,
+    message_id: int | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     resume = get_resume(db, current_user.id, resume_id)
-    html = render_resume_html(resume.resume_data, resume.template_id, resume.template_config, resume.language)
+    data = resume.resume_data
+    # 审阅模式：有 pending 提案时渲染「应用后效果」；message 不满足条件则静默回退当前数据
+    if message_id is not None:
+        message = db.get(AiChatMessage, message_id)
+        if (
+            message
+            and message.user_id == current_user.id
+            and message.resume_id == resume.id
+            and message.action_status == "pending"
+            and message.optimized_resume_data
+        ):
+            data = message.optimized_resume_data
+    html = render_resume_html(data, resume.template_id, resume.template_config, resume.language)
+    return HTMLResponse(content=html, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/{resume_id}/preview-html", response_class=HTMLResponse)
+def preview_html_by_data(
+    resume_id: int,
+    payload: ResumePreviewRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    resume = get_resume(db, current_user.id, resume_id)
+    # 标题是内容的一部分（翻译后的标题不能被 locale 重置），规范化后原样保留
+    data = deepcopy(payload.resume_data)
+    titles_in = deepcopy((data.get("layout") or {}).get("section_titles"))
+    data = normalize_resume_data(data, {"language": resume.language})
+    if isinstance(titles_in, dict) and titles_in:
+        data.setdefault("layout", {})["section_titles"] = {**data.get("layout", {}).get("section_titles", {}), **titles_in}
+    html = render_resume_html(data, resume.template_id, resume.template_config, resume.language)
     return HTMLResponse(content=html, headers={"Cache-Control": "no-store"})
 
 

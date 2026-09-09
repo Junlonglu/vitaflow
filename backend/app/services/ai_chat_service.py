@@ -29,7 +29,7 @@ from app.services.ai_config_service import (
 from app.services.ai_service_client import ai_service_chat_events, ai_service_task_result
 from app.services.ai_task_service import create_ai_task, finish_ai_task
 from app.services.flow_points_service import precheck_flow_points
-from app.services.resume_normalization import localize_ai_text, strip_thinking_text
+from app.services.resume_normalization import localize_ai_text, normalize_resume_data, strip_thinking_text
 
 logger = logging.getLogger(__name__)
 
@@ -628,6 +628,16 @@ _RESUME_SECTION_KEYS = {
 _RESUME_WRAPPER_KEYS = ("optimized_resume_data", "resume_data", "data", "result", "resume")
 
 
+def _normalize_keeping_section_titles(data: dict[str, Any], payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    """normalize_resume_data 但保留调用方的模块标题：标题是内容的一部分
+    （翻译提案会把标题换成另一语言的默认名，被 locale 重置等于吞掉该变更）。"""
+    titles_in = deepcopy((data.get("layout") or {}).get("section_titles"))
+    normalized = normalize_resume_data(data, payload)
+    if isinstance(titles_in, dict) and titles_in:
+        normalized.setdefault("layout", {})["section_titles"] = {**normalized.get("layout", {}).get("section_titles", {}), **titles_in}
+    return normalized
+
+
 def _unwrap_resume_data(value: dict[str, Any]) -> dict[str, Any]:
     """Remove occasional model response wrappers before persisting resume JSON."""
     candidate: Any = deepcopy(value)
@@ -1150,6 +1160,7 @@ def resolve_chat_change(
     resume: Resume,
     message_id: int,
     action: str,
+    merged_resume_data: dict[str, Any] | None = None,
 ) -> tuple[AiChatMessageOut, dict[str, Any] | None]:
     message = db.get(AiChatMessage, message_id)
     if (
@@ -1166,11 +1177,21 @@ def resolve_chat_change(
     if action == "apply":
         if not message.optimized_resume_data:
             raise AppException("这次对话没有可写入的修改")
+        # 审阅模式部分采纳：前端把勾选的变更合并到「当前」简历数据后提交；
+        # 缺省走整包快照（整包替换会冲掉提案之后的手动编辑）。
+        # 标题属于内容（翻译/重命名后与简历 language 列无关），规范化后必须原样保留，
+        # 否则已知默认标题（Basic Information 等）会被本地化重置回简历原语言。
+        if merged_resume_data is not None:
+            if not isinstance(merged_resume_data, dict) or not merged_resume_data:
+                raise AppException("提交的修改数据无效")
+            pending_data = _normalize_keeping_section_titles(deepcopy(merged_resume_data), {"language": resume.language})
+        else:
+            pending_data = message.optimized_resume_data
         persisted_data = _persist_resume_change(
             db,
             user,
             resume,
-            message.optimized_resume_data,
+            pending_data,
             "采纳 AI 助手修改",
         )
         message.action_status = "applied"

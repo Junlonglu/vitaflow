@@ -141,6 +141,13 @@ describe("buildQuickCommandTemplates", () => {
     }
   });
 
+  it("the translate template translates module titles via the layout section", () => {
+    const translate = buildQuickCommandTemplates().find((t) => t.name === "翻译")!;
+    assert.match(translate.content, /section_titles/, "translate reads and rewrites module titles");
+    assert.match(translate.content, /section: "layout"/, "translate proposes the layout update");
+    assert.match(translate.content, /custom_/, "custom section ids keep their id and get a translated title");
+  });
+
   it("the optimize template carries the JD and the multi-step tool workflow", () => {
     const optimize = buildQuickCommandTemplates().find((t) => t.name === "JD优化")!;
     assert.ok(optimize.argumentHint.includes("岗位描述"), "optimize advertises a JD parameter");

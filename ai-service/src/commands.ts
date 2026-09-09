@@ -157,8 +157,9 @@ export function buildQuickCommandTemplates(): Array<{
 用户用 /翻译 做整份中英互译（只换语言，不改变结构、事实、数量与顺序）。
 
 请执行：
-1. get_resume_context 读取需要翻译的模块。
-2. 用 propose_change 生成完整翻译后的待确认方案：专有名词与技术名词保留原文，富文本结构、条目 id 与顺序不变，不润色、不扩写、不删减。`;
+1. get_resume_context 读取需要翻译的模块，并额外读取 layout 拿到当前 section_titles。
+2. 用 propose_change 生成完整翻译后的待确认方案：专有名词与技术名词保留原文，富文本结构、条目 id 与顺序不变，不润色、不扩写、不删减。
+3. 模块标题也是内容，必须一并翻译：提案需包含 section: "layout" 的更新，其 section_titles 覆盖全部模块（内置模块 + custom_ 开头的自定义模块 id，id 与 section_order 保持原样），标题值换成目标语言；layout 的其余字段（section_order、hidden_sections、field_labels）原样带上，不做任何改动。`;
 
   const optimizeContent = `# JD 定向优化指令
 

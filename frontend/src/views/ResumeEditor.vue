@@ -8,6 +8,7 @@ import FlowAgentIcon from "@/components/common/FlowAgentIcon.vue"
 import FlowPointIcon from "@/components/ui/FlowPointIcon.vue"
 import ModuleSidebar from "@/components/editor/ModuleSidebar.vue"
 import ResumeFormPanel from "@/components/editor/ResumeFormPanel.vue"
+import ResumeReviewPanel, { type ReviewSection } from "@/components/editor/review/ResumeReviewPanel.vue"
 import StyleConfigPanel from "@/components/editor/StyleConfigPanel.vue"
 import A4Preview from "@/components/preview/A4Preview.vue"
 import ResumeAiChatPanel from "@/components/ai/ResumeAiChatPanel.vue"
@@ -15,7 +16,7 @@ import { normalizeResumeData, useResumeStore } from "@/stores/resume"
 import { useEditorStore, type EditorHistorySnapshot } from "@/stores/editor"
 import { exportPdfApi, exportWordApi } from "@/api/export"
 import { clearResumeChatMessagesApi, decideResumeChatChangeApi, getAiCapabilityApi, getResumeChatMessagesApi, sendResumeChatMessageStreamApi, regenerateResumeChatMessageStreamApi, getFlowPointSummaryApi, type FlowPointSummary, type AiCapability, type AiChatAttachment, type AiChatModelOption, type ToolStep, type PendingQuestion, type QuestionAnswer } from "@/api/ai"
-import { previewHtmlApi, duplicateResumeApi } from "@/api/resume"
+import { previewHtmlApi, previewResumeDataApi, duplicateResumeApi } from "@/api/resume"
 import { listTemplatesApi, type TemplateItem } from "@/api/template"
 import TemplatePreview from "@/components/templates/TemplatePreview.vue"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
@@ -24,6 +25,7 @@ import QuestionDialog from "@/components/ai/QuestionDialog.vue"
 import SaveAsResumeDialog from "@/components/ai/SaveAsResumeDialog.vue"
 import { showGlobalToast } from "@/utils/toast"
 import { createPresetSection } from "@/utils/resumePresets"
+import { buildSelectedResumeData, diffResume, sectionEntriesForReview } from "@/utils/aiDiff"
 import { applyResumeLanguage, normalizeResumeLanguage } from "@/utils/resumeLocale"
 
 const route = useRoute()
@@ -338,13 +340,94 @@ async function refreshPreviewLatest() {
   const requestSeq = ++previewRequestSeq
   previewRefreshing.value = true
   try {
-    const html = await previewHtmlApi(resumeStore.currentResume.id)
+    const pending = pendingReviewMessage.value
+    let html: string
+    if (pending?.optimized_resume_data && resumeStore.resumeData) {
+      // 审阅模式：预览实时跟随勾选——渲染「当前数据 + 已选变更」的合并结果
+      const merged = buildSelectedResumeData(resumeStore.resumeData, pending.optimized_resume_data, selectedDiffIds.value, pendingReviewSections.value)
+      html = await previewResumeDataApi(resumeStore.currentResume.id, merged)
+    } else {
+      html = await previewHtmlApi(resumeStore.currentResume.id)
+    }
     if (requestSeq === previewRequestSeq) {
       resumeStore.previewHtml = html
     }
   } finally {
     if (requestSeq === previewRequestSeq) previewRefreshing.value = false
   }
+}
+
+let previewRefreshTimer: number | undefined
+function schedulePreviewRefresh() {
+  window.clearTimeout(previewRefreshTimer)
+  previewRefreshTimer = window.setTimeout(() => {
+    void refreshPreviewLatest()
+  }, 250)
+}
+
+// —— AI 修改审阅模式（track-changes）：有 pending 提案时左面板换成 diff 审阅卡 ——
+const selectedDiffIds = ref<string[]>([])
+
+const pendingReviewMessage = computed(() => {
+  for (let index = chatMessages.value.length - 1; index >= 0; index--) {
+    const message = chatMessages.value[index]
+    if (message.role === "assistant" && !message.streaming && (message.action_status || "none") === "pending" && message.optimized_resume_data) return message
+  }
+  return null
+})
+
+const pendingReviewSections = computed(() => {
+  const message = pendingReviewMessage.value
+  if (!message?.optimized_resume_data || !resumeStore.resumeData) return []
+  return diffResume(resumeStore.resumeData, message.optimized_resume_data)
+})
+
+const pendingReviewChangeCount = computed(() =>
+  pendingReviewSections.value.reduce((sum, section) => sum + section.changes.length, 0),
+)
+
+const currentReviewSections = computed<ReviewSection[]>(() => {
+  const message = pendingReviewMessage.value
+  if (!message?.optimized_resume_data || !resumeStore.resumeData) return []
+  const sectionKey = editor.currentSection
+  const matched = pendingReviewSections.value.find((section) => section.key === sectionKey)
+  const { changes, unchanged } = sectionEntriesForReview(
+    sectionKey,
+    resumeStore.resumeData,
+    message.optimized_resume_data,
+    matched?.title,
+  )
+  if (!changes.length && !unchanged.length) return []
+  return [{ key: sectionKey, title: matched?.title || "当前模块", changes, unchanged }]
+})
+
+watch(pendingReviewMessage, (message) => {
+  selectedDiffIds.value = message ? pendingReviewSections.value.flatMap((section) => section.changes.map((item) => item.id)) : []
+})
+
+// 勾选变化或 pending 变化都实时刷新右侧预览（防抖合并连续勾选）
+watch([pendingReviewMessage, selectedDiffIds], () => schedulePreviewRefresh())
+
+function toggleReviewChange(id: string) {
+  selectedDiffIds.value = selectedDiffIds.value.includes(id)
+    ? selectedDiffIds.value.filter((item) => item !== id)
+    : [...selectedDiffIds.value, id]
+}
+
+function toggleAllReviewChanges() {
+  const all = pendingReviewSections.value.flatMap((section) => section.changes.map((item) => item.id))
+  selectedDiffIds.value = selectedDiffIds.value.length >= all.length ? [] : all
+}
+
+function applySelectedReviewChanges() {
+  const message = pendingReviewMessage.value
+  if (!message?.optimized_resume_data || !resumeStore.resumeData) return
+  const merged = buildSelectedResumeData(resumeStore.resumeData, message.optimized_resume_data, selectedDiffIds.value, pendingReviewSections.value)
+  resolveChatDecision(message, "apply", merged)
+}
+
+function goToReviewMode() {
+  mainMode.value = "edit"
 }
 
 function captureEditorSnapshot(): EditorHistorySnapshot | null {
@@ -830,7 +913,7 @@ async function confirmClearChatMessages() {
   if (window.confirm("确定清除当前简历的 AI 对话记录吗？")) await clearChatMessages()
 }
 
-async function resolveChatDecision(message: any, action: "apply" | "reject") {
+async function resolveChatDecision(message: any, action: "apply" | "reject", mergedResumeData?: any) {
   if (!resumeStore.currentResume || !message?.id || chatDecisionLoadingId.value !== null) return
   if (action === "apply") flushHistoryCommit()
   const previousStatus = message.action_status || "pending"
@@ -838,7 +921,7 @@ async function resolveChatDecision(message: any, action: "apply" | "reject") {
   message.action_status = "applying"
   chatError.value = ""
   try {
-    const response = (await decideResumeChatChangeApi(resumeId.value, Number(message.id), action)) as any
+    const response = (await decideResumeChatChangeApi(resumeId.value, Number(message.id), action, mergedResumeData)) as any
     if (response?.assistant_message) Object.assign(message, response.assistant_message)
     if (action === "apply" && response?.resume_data) {
       cancelDebouncedSave()
@@ -1077,7 +1160,21 @@ function handleFocusOut(event: Event) {
               @remove-custom="removeCustomSection"
             />
 
+            <ResumeReviewPanel
+              v-if="pendingReviewMessage"
+              class="relative z-10 flex-1 min-h-0 min-w-0"
+              :sections="currentReviewSections"
+              :selected-ids="selectedDiffIds"
+              :total-count="pendingReviewChangeCount"
+              :all-selected="selectedDiffIds.length >= pendingReviewChangeCount && pendingReviewChangeCount > 0"
+              :applying="chatDecisionLoadingId === pendingReviewMessage.id"
+              @toggle="toggleReviewChange"
+              @toggle-all="toggleAllReviewChanges"
+              @apply="applySelectedReviewChanges"
+              @cancel="resolveChatDecision(pendingReviewMessage, 'reject')"
+            />
             <ResumeFormPanel
+              v-else
               class="relative z-10 flex-1 min-h-0 min-w-0"
               :data="resumeStore.resumeData"
               :config="resumeStore.templateConfig"
@@ -1092,7 +1189,7 @@ function handleFocusOut(event: Event) {
           <!-- AI Workbench Mode -->
           <div v-show="mainMode === 'ai'" class="flex flex-col flex-1 min-h-0 overflow-hidden bg-white">
             <div class="relative min-h-0 flex-1 overflow-hidden p-0 md:p-0">
-                <ResumeAiChatPanel v-if="sidePanel === 'chat'" key="chat" v-model:selected-model-id="selectedChatModelId" :chat-models="chatModels" :messages="chatMessages" :loading="chatLoading" :error="chatError" :decision-loading-id="chatDecisionLoadingId" :active="mainMode === 'ai' && sidePanel === 'chat'" :supports-multimodal="supportsChatImages" @send="sendChatMessage" @regenerate="regenerateChatMessage" @clear="clearChatMessages" @confirm="resolveChatDecision($event, 'apply')" @reject="resolveChatDecision($event, 'reject')" @answer-questions="handleAnswerQuestions" />
+                <ResumeAiChatPanel v-if="sidePanel === 'chat'" key="chat" v-model:selected-model-id="selectedChatModelId" :chat-models="chatModels" :messages="chatMessages" :loading="chatLoading" :error="chatError" :decision-loading-id="chatDecisionLoadingId" :active="mainMode === 'ai' && sidePanel === 'chat'" :supports-multimodal="supportsChatImages" @send="sendChatMessage" @regenerate="regenerateChatMessage" @clear="clearChatMessages" @confirm="resolveChatDecision($event, 'apply')" @reject="resolveChatDecision($event, 'reject')" @answer-questions="handleAnswerQuestions" @review="goToReviewMode" />
             </div>
           </div>
         </div>
@@ -1282,7 +1379,7 @@ function handleFocusOut(event: Event) {
     <ConfirmDialog
       v-model:open="showDeleteConfirm"
       title="确认删除该简历？"
-      description="删除后该简历及全部内容将无法恢复，确认继续吗？"
+      description="删除后该简历、全部内容及其对话记录将一并删除且无法恢复，确认继续吗？"
       confirm-text="确认删除"
       cancel-text="取消"
       @confirm="confirmDelete"

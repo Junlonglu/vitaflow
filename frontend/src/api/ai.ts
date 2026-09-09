@@ -63,8 +63,8 @@ export type FlowPointTransaction = { id: number; feature_type: string; points_de
 
 export const getResumeChatMessagesApi = (resumeId: number) => request.get(`/ai/resume-chat/${resumeId}/messages`)
 export const clearResumeChatMessagesApi = (resumeId: number) => request.delete(`/ai/resume-chat/${resumeId}/messages`)
-export const decideResumeChatChangeApi = (resumeId: number, messageId: number, action: "apply" | "reject") =>
-  request.post(`/ai/resume-chat/${resumeId}/messages/${messageId}/decision`, { action })
+export const decideResumeChatChangeApi = (resumeId: number, messageId: number, action: "apply" | "reject", mergedResumeData?: any) =>
+  request.post(`/ai/resume-chat/${resumeId}/messages/${messageId}/decision`, action === "apply" && mergedResumeData ? { action, merged_resume_data: mergedResumeData } : { action })
 export const getAiCapabilityApi = () => request.get<AiCapability, AiCapability>("/ai/capability")
 export const getMyAiRecordsApi = (params: Record<string, unknown>) => request.get<any, any>("/ai/records", { params })
 export const getMyAiHistoriesApi = (params: Record<string, unknown>) => request.get<any, any>("/ai/histories", { params })

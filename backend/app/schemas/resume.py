@@ -160,6 +160,11 @@ class ResumeVersionCreate(BaseModel):
     reason: str = "手动保存版本"
 
 
+class ResumePreviewRequest(BaseModel):
+    """审阅模式实时预览：渲染前端传来的任意简历数据（已选变更合并结果）。"""
+    resume_data: dict[str, Any]
+
+
 class ResumeDuplicateRequest(BaseModel):
     title: Optional[str] = Field(default=None, max_length=120)
 

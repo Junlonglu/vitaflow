@@ -46,6 +46,7 @@ const emit = defineEmits<{
   regenerate: [message: ChatMessage, content: string, attachments?: AiChatAttachment[]]
   confirm: [message: ChatMessage]
   reject: [message: ChatMessage]
+  review: [message: ChatMessage]
   "answer-questions": [message: ChatMessage]
   "update:selectedModelId": [modelId: number | null]
 }>()
@@ -307,6 +308,15 @@ function actionStatus(message: ChatMessage) {
   return message.action_status || "pending"
 }
 
+/** 只有最新一条 pending 提案可以审阅；更早的提示已被新版本取代。 */
+const latestPendingId = computed<number | string | null>(() => {
+  for (let index = props.messages.length - 1; index >= 0; index--) {
+    const message = props.messages[index]
+    if (message.role === "assistant" && !message.streaming && (message.action_status || "none") === "pending" && message.optimized_resume_data) return message.id
+  }
+  return null
+})
+
 /** 流式进度时间线：已广播的阶段序列；无轨迹时退回单行 phaseText。 */
 function phaseItems(message: ChatMessage): string[] {
   return message.phaseTrail?.length ? message.phaseTrail : [message.phaseText || "正在处理"]
@@ -423,12 +433,15 @@ watch(
                   </Button>
                 </div>
                 <div v-if="message.role === 'assistant' && !message.streaming && ['pending', 'applying'].includes(actionStatus(message))" class="mt-4 flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-4">
-                  <span class="mr-auto min-w-[180px] text-xs md:text-[13px] font-medium text-zinc-600">是否确认将这些修改写入简历？</span>
-                  <button type="button" class="h-8 rounded-full px-3 text-xs md:text-[13px] font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-50" :disabled="decisionLoadingId === message.id" @click="emit('reject', message)">取消</button>
-                  <Button type="button" size="sm" class="h-8 rounded-full bg-zinc-900 px-4 text-xs md:text-[13px] font-medium text-white hover:bg-zinc-800" :disabled="decisionLoadingId === message.id" @click="emit('confirm', message)">
-                    <LoaderCircle v-if="decisionLoadingId === message.id" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                    确认修改
-                  </Button>
+                  <template v-if="message.id === latestPendingId">
+                    <span class="mr-auto min-w-[180px] text-xs md:text-[13px] font-medium text-zinc-600">AI 准备了简历修改，可在编辑器中逐条审阅</span>
+                    <button type="button" class="h-8 rounded-full px-3 text-xs md:text-[13px] font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-50" :disabled="decisionLoadingId === message.id" @click="emit('reject', message)">取消</button>
+                    <Button type="button" size="sm" class="h-8 rounded-full bg-zinc-900 px-4 text-xs md:text-[13px] font-medium text-white hover:bg-zinc-800" :disabled="decisionLoadingId === message.id" @click="emit('review', message)">
+                      <LoaderCircle v-if="decisionLoadingId === message.id" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      去审阅
+                    </Button>
+                  </template>
+                  <span v-else class="text-xs md:text-[13px] font-medium text-zinc-400">已有更新版本的修改待处理</span>
                 </div>
                 <div v-else-if="message.role === 'assistant' && actionStatus(message) === 'applied'" class="mt-4 flex items-center gap-2 border-t border-zinc-100 pt-3 text-xs md:text-[13px] font-medium text-emerald-600">
                   <CheckCircle2 class="h-4 w-4" /> 修改已生效

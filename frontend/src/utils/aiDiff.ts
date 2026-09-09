@@ -263,7 +263,22 @@ function sectionTitle(data: any, key: string) {
   return data?.layout?.section_titles?.[key] || builtInTitles[key] || data?.custom_sections?.find((item: any) => item.id === key)?.title || "自定义模块"
 }
 
-function sectionValue(data: any, key: string) {
+/** 模块标题变更的 DiffItem entryKey（翻译/重命名模块标题时可勾选）。 */
+export const SECTION_TITLE_ENTRY_KEY = "__title__"
+
+function titleDiffItem(sectionKey: string, currentData: any, nextData: any): DiffItem | null {
+  const before = currentData?.layout?.section_titles?.[sectionKey]
+  const after = nextData?.layout?.section_titles?.[sectionKey]
+  const beforeText = typeof before === "string" ? before.trim() : ""
+  const afterText = typeof after === "string" ? after.trim() : ""
+  if (!afterText || beforeText === afterText) return null
+  if (!beforeText) {
+    return { id: `${sectionKey}:${SECTION_TITLE_ENTRY_KEY}:added`, kind: "added", sectionKey, entryKey: SECTION_TITLE_ENTRY_KEY, title: "模块标题", after: afterText }
+  }
+  return { id: `${sectionKey}:${SECTION_TITLE_ENTRY_KEY}:modified`, kind: "modified", sectionKey, entryKey: SECTION_TITLE_ENTRY_KEY, title: "模块标题", before: beforeText, after: afterText }
+}
+
+export function sectionValue(data: any, key: string) {
   if (!data) return undefined
   if (data[key] !== undefined) return data[key]
   return data.custom_sections?.find((item: any) => item.id === key)
@@ -370,9 +385,18 @@ export function buildSelectedResumeData(currentData: any, optimizedData: any, se
   })
 
   if (next.layout) {
+    // 模块标题按勾选逐项合并（翻译/重命名标题可单独取消），其余 layout 字段整组合并
+    const selectedTitleKeys = new Set(
+      sections.flatMap((section) => section.changes.filter((change) => change.entryKey === SECTION_TITLE_ENTRY_KEY && selected.has(change.id)).map((change) => section.key)),
+    )
     result.layout = {
       ...(result.layout || {}),
       ...next.layout,
+      section_titles: { ...(result.layout?.section_titles || {}) },
+    }
+    const nextTitles = next.layout.section_titles || {}
+    for (const key of Object.keys(nextTitles)) {
+      if (selectedTitleKeys.has(key)) result.layout.section_titles[key] = nextTitles[key]
     }
   }
   return result
@@ -403,6 +427,38 @@ export function diffSection(sectionKey: string, currentValue: any, nextValue: an
   return changes
 }
 
+export interface UnchangedEntry {
+  key: string
+  title: string
+  text: string
+}
+
+/** 审阅模式用：变更（含模块标题）+ 未变更条目（提案前后一致，含提案后用户手动改过导致的零差异）。 */
+export function sectionEntriesForReview(sectionKey: string, currentData: any, nextData: any, title?: string): { changes: DiffItem[]; unchanged: UnchangedEntry[] } {
+  const resolvedTitle = title || sectionTitle(currentData, sectionKey) || sectionTitle(nextData, sectionKey)
+  const currentValue = sectionValue(currentData, sectionKey)
+  const nextValue = sectionValue(nextData, sectionKey)
+  const currentEntries = toEntries(sectionKey, currentValue, resolvedTitle)
+  const nextEntries = toEntries(sectionKey, nextValue, resolvedTitle)
+  const currentMap = new Map(currentEntries.map((item) => [item.key, item]))
+  const nextMap = new Map(nextEntries.map((item) => [item.key, item]))
+  const changes = [titleDiffItem(sectionKey, currentData, nextData), ...diffSection(sectionKey, currentValue, nextValue, resolvedTitle)].filter(
+    (item): item is DiffItem => item !== null,
+  )
+  const changedKeys = new Set(changes.map((item) => item.entryKey))
+  const unchanged: UnchangedEntry[] = []
+  nextEntries.forEach((item) => {
+    const before = currentMap.get(item.key)
+    if (!before || changedKeys.has(item.key)) return
+    unchanged.push({ key: item.key, title: item.title, text: item.text })
+  })
+  currentEntries.forEach((item) => {
+    if (nextMap.has(item.key) || changedKeys.has(item.key)) return
+    unchanged.push({ key: item.key, title: item.title, text: item.text })
+  })
+  return { changes, unchanged }
+}
+
 export function diffResume(currentData: any, optimizedData: any): SectionDiff[] {
   if (!currentData || !optimizedData) return []
   const order = [
@@ -422,13 +478,15 @@ export function diffResume(currentData: any, optimizedData: any): SectionDiff[] 
   ].filter(Boolean)
 
   return order
-    .filter((key) => hasSection(optimizedData, key))
+    .filter((key) => hasSection(currentData, key) || hasSection(optimizedData, key))
     .map((key) => {
       const title = sectionTitle(optimizedData, key) || sectionTitle(currentData, key)
       return {
         key,
         title,
-        changes: diffSection(key, sectionValue(currentData, key), sectionValue(optimizedData, key), title),
+        changes: [titleDiffItem(key, currentData, optimizedData), ...diffSection(key, sectionValue(currentData, key), sectionValue(optimizedData, key), title)].filter(
+          (item): item is DiffItem => item !== null,
+        ),
       }
     })
     .filter((section) => section.changes.length)

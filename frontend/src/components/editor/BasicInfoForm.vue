@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from "vue"
-import { Award, Banknote, BookOpen, Briefcase, Building2, Calendar, CalendarCheck, Car, ChevronDown, ChevronRight, Code2, Cpu, Github, Globe, GraduationCap, Heart, IdCard, Images, Info, Languages, Laptop, Link, Linkedin, Mail, Map, MapPin, MessageCircle, Phone, Plus, Rocket, School, Sparkles, Star, Tag, Trash2, UserRound, Wallet, Wrench, LoaderCircle, CheckCircle2, AlertCircle, Camera, X } from "lucide-vue-next"
+import { computed, nextTick, ref, onMounted, onUnmounted, watch } from "vue"
+import Sortable from "sortablejs"
+import { Award, Banknote, BookOpen, Briefcase, Building2, Calendar, CalendarCheck, Car, ChevronDown, ChevronRight, Code2, Cpu, Github, Globe, GraduationCap, GripVertical, Heart, IdCard, Images, Info, Languages, Laptop, Link, Linkedin, Mail, Map, MapPin, MessageCircle, Phone, Plus, Rocket, School, Sparkles, Star, Tag, Trash2, UserRound, Wallet, Wrench, LoaderCircle, CheckCircle2, AlertCircle, Camera, X } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
 import Input from "@/components/ui/input/Input.vue"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
@@ -39,8 +40,14 @@ function closeIconPicker(e: Event) {
   }
 }
 
-onMounted(() => window.addEventListener("click", closeIconPicker))
-onUnmounted(() => window.removeEventListener("click", closeIconPicker))
+onMounted(() => {
+  window.addEventListener("click", closeIconPicker)
+  initSortables()
+})
+onUnmounted(() => {
+  window.removeEventListener("click", closeIconPicker)
+  destroySortables()
+})
 
 const coreFields = [
   { key: "name", label: "姓名", placeholder: "请输入姓名" },
@@ -93,7 +100,6 @@ const iconOptions = [
   { value: "Link", label: "链接", component: Link },
 ]
 const iconMap = Object.fromEntries(iconOptions.map((item) => [item.value, item.component]))
-const rowOptions = [1, 2, 3, 4]
 function pickerKey(prefix: string, key: string) {
   return `${prefix}:${key}`
 }
@@ -107,6 +113,13 @@ function setCustomIcon(field: Record<string, any>, icon: string) {
   activeIconPicker.value = ""
   emit("change")
 }
+function itemPickerKey(item: FieldItem) {
+  return item.kind === "builtin" ? pickerKey("builtin", item.key!) : pickerKey("custom", String(item.index))
+}
+function setItemIcon(item: FieldItem, icon: string) {
+  if (item.kind === "builtin") setBuiltInIcon(item.key!, icon)
+  else setCustomIcon(props.basics.custom_fields[item.index!], icon)
+}
 function ensureConfig() {
   props.basics.field_config ||= {}
   builtInFields.forEach((field, index) => {
@@ -115,7 +128,133 @@ function ensureConfig() {
     props.basics.field_config[field.key].row ||= Math.floor(index / 4) + 1
   })
   props.basics.custom_fields ||= []
+  // 自定义字段补齐排版位（与后端 normalize 一致）：渲染模板按行内 order 统一排序
+  props.basics.custom_fields.forEach((field: any, index: number) => {
+    if (!Number(field.row)) field.row = 1
+    if (!Number(field.order)) field.order = 1000 + index
+  })
 }
+
+// —— 字段拖拽排序：4 个行组容器所见即所得，跨行拖拽自动重算 row/order ——
+interface FieldItem {
+  uid: string
+  kind: "builtin" | "custom"
+  key?: string
+  index?: number
+  icon: string
+  label: string
+  value: string
+}
+const ROW_KEYS = [1, 2, 3, 4] as const
+
+function fieldOrder(item: FieldItem): number {
+  const cfg = item.kind === "builtin" ? props.basics.field_config[item.key!] : props.basics.custom_fields[item.index!]
+  return Number(cfg?.order) || 0
+}
+
+const rowItems = computed<Record<number, FieldItem[]>>(() => {
+  ensureConfig()
+  const items: FieldItem[] = []
+  builtInFields.forEach((field) => {
+    const cfg = props.basics.field_config[field.key]
+    items.push({ uid: `bi:${field.key}`, kind: "builtin", key: field.key, icon: cfg.icon || field.icon, label: field.label, value: props.basics[field.key] || "" })
+  })
+  ;(props.basics.custom_fields || []).forEach((field: any, index: number) => {
+    items.push({ uid: `cf:${index}`, kind: "custom", index, icon: field.icon || "Info", label: field.label || "自定义", value: field.value || "" })
+  })
+  const byRow: Record<number, FieldItem[]> = { 1: [], 2: [], 3: [], 4: [] }
+  items.forEach((item) => {
+    const cfg = item.kind === "builtin" ? props.basics.field_config[item.key!] : props.basics.custom_fields[item.index!]
+    const row = Math.min(4, Math.max(1, Math.round(Number(cfg?.row) || 1)))
+    byRow[row].push(item)
+  })
+  for (const row of ROW_KEYS) {
+    byRow[row].sort((left, right) => fieldOrder(left) - fieldOrder(right) || left.uid.localeCompare(right.uid))
+  }
+  return byRow
+})
+
+function nextPlacement(): { row: number; order: number } {
+  for (const row of [4, 3, 2, 1]) {
+    const list = rowItems.value[row] || []
+    if (list.length) {
+      return { row, order: Math.max(...list.map(fieldOrder)) + 1 }
+    }
+  }
+  return { row: 1, order: 1 }
+}
+
+const fieldsCardEl = ref<HTMLElement | null>(null)
+const remountKey = ref(0)
+let sortables: Sortable[] = []
+
+function destroySortables() {
+  sortables.forEach((instance) => instance.destroy())
+  sortables = []
+}
+
+function initSortables() {
+  destroySortables()
+  fieldsCardEl.value?.querySelectorAll<HTMLElement>("[data-row-container]").forEach((el) => {
+    sortables.push(
+      new Sortable(el, {
+        group: "basics-fields",
+        handle: ".drag-handle",
+        draggable: ".field-row",
+        animation: 150,
+        delay: 150,
+        delayOnTouchOnly: true,
+        touchStartThreshold: 3,
+        ghostClass: "sortable-ghost",
+        chosenClass: "sortable-chosen",
+        onEnd: handleDrop,
+      }),
+    )
+  })
+}
+
+function handleDrop() {
+  const containers = Array.from(fieldsCardEl.value?.querySelectorAll<HTMLElement>("[data-row-container]") ?? [])
+  containers.forEach((el, containerIndex) => {
+    el.querySelectorAll<HTMLElement>(".field-row").forEach((node, index) => {
+      const [kind, ident] = (node.dataset.uid || "").split(":")
+      if (kind === "bi") {
+        const cfg = props.basics.field_config[ident]
+        if (cfg) {
+          cfg.row = containerIndex + 1
+          cfg.order = index + 1
+        }
+      } else if (kind === "cf") {
+        const field = props.basics.custom_fields[Number(ident)]
+        if (field) {
+          field.row = containerIndex + 1
+          field.order = index + 1
+        }
+      }
+    })
+  })
+  emit("change")
+}
+
+// 自愈守卫：sortablejs 直接搬动了 DOM，Vue 重渲染后若与派生数据不一致则强制重挂载
+watch(
+  () => JSON.stringify(ROW_KEYS.map((row) => (rowItems.value[row] || []).map((item) => item.uid))),
+  async () => {
+    await nextTick()
+    const containers = Array.from(fieldsCardEl.value?.querySelectorAll<HTMLElement>("[data-row-container]") ?? [])
+    const aligned = ROW_KEYS.every((row, index) => {
+      const domUids = Array.from(containers[index]?.querySelectorAll<HTMLElement>(".field-row") ?? []).map((node) => node.dataset.uid)
+      const want = (rowItems.value[row] || []).map((item) => item.uid)
+      return JSON.stringify(domUids) === JSON.stringify(want)
+    })
+    if (!aligned) {
+      destroySortables()
+      remountKey.value++
+      await nextTick()
+      initSortables()
+    }
+  },
+)
 ensureConfig()
 const availableBasicPresets = computed(() => {
   ensureConfig()
@@ -183,22 +322,23 @@ async function handleCropped(blob: Blob) {
 function addCustom() {
   ensureConfig()
   props.basics.custom_fields ||= []
-  props.basics.custom_fields.push({ id: `field_${Date.now()}`, label: "附加信息", value: "", icon: "Info", row: 1, order: props.basics.custom_fields.length + 1 })
+  const placement = nextPlacement()
+  props.basics.custom_fields.push({ id: `field_${Date.now()}`, label: "附加信息", value: "", icon: "Info", row: placement.row, order: placement.order })
   emit("change")
 }
 
 function addPresetField(preset: (typeof basicInfoPresets)[number]) {
   ensureConfig()
   props.basics.custom_fields ||= []
-  const maxOrder = props.basics.custom_fields.reduce((max: number, field: any) => Math.max(max, Number(field.order || 0)), 0)
+  const placement = nextPlacement()
   props.basics.custom_fields.push({
     id: `field_${preset.key}_${Date.now()}`,
     preset_key: preset.key,
     label: preset.label,
     value: "",
     icon: preset.icon,
-    row: 3,
-    order: maxOrder + 1,
+    row: placement.row,
+    order: placement.order,
   })
   emit("change")
 }
@@ -250,80 +390,57 @@ function addPresetField(preset: (typeof basicInfoPresets)[number]) {
         <h3 class="text-xs md:text-sm font-semibold text-zinc-900">附加信息</h3>
         <Button size="sm" variant="outline" class="h-7 md:h-8 text-xs md:text-sm border-zinc-200" @click="addCustom"><Plus class="h-3.5 w-3.5 md:h-4 md:w-4 md:mr-1" /><span class="hidden md:inline">添加字段</span></Button>
       </div>
-      <div class="p-1.5 md:p-3 space-y-1.5 md:space-y-2">
-        <div v-for="(field, index) in builtInFields" :key="field.key" class="flex items-center gap-1.5 md:gap-3 p-1.5 md:p-2 rounded-xl border border-zinc-100 hover:border-zinc-300 hover:shadow-sm bg-zinc-50/50 hover:bg-white transition-all group hover:z-[60] focus-within:z-[60]" :class="activeIconPicker === pickerKey('builtin', field.key) ? 'z-50 relative' : 'z-10 relative'">
-          <!-- Icon Picker -->
-          <div class="relative shrink-0 icon-picker-container">
-            <button class="flex h-8 w-8 md:h-9 md:w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white hover:border-zinc-400 hover:bg-zinc-50 transition-colors shadow-sm" :title="basics.field_config[field.key].icon" @click="activeIconPicker = activeIconPicker === pickerKey('builtin', field.key) ? '' : pickerKey('builtin', field.key)">
-              <component :is="iconMap[basics.field_config[field.key].icon] || Info" class="h-3.5 w-3.5 md:h-4 md:w-4 text-zinc-600" />
-            </button>
-            <div v-if="activeIconPicker === pickerKey('builtin', field.key)" class="absolute left-0 z-30 grid w-56 grid-cols-6 gap-1 rounded-xl border border-zinc-200 bg-white/95 backdrop-blur-md p-2 shadow-xl" :class="index < 4 ? 'top-11' : 'bottom-11'">
-              <button v-for="icon in iconOptions" :key="icon.value" class="flex h-8 w-8 items-center justify-center rounded-md hover:bg-zinc-100 transition-colors" :title="icon.label" @click="setBuiltInIcon(field.key, icon.value)">
-                <component :is="icon.component" class="h-4 w-4 text-zinc-700" />
-              </button>
-            </div>
-          </div>
-          
-          <!-- Label -->
-          <div class="relative group/label hidden md:block w-16 shrink-0 outline-none" tabindex="0">
-            <div class="text-[14px] font-medium text-zinc-700 px-1 truncate cursor-pointer">{{ field.label }}</div>
-            <div v-if="isLabelTruncated(field.label)" class="absolute left-0 top-full mt-1.5 z-50 hidden group-hover/label:block group-focus/label:block w-max max-w-[200px] whitespace-normal rounded-md bg-zinc-900 px-2.5 py-1 text-xs text-white shadow-xl pointer-events-none">
-              {{ field.label }}
-            </div>
-          </div>
-          
-          <!-- Content Input -->
-          <Input v-model="basics[field.key]" :placeholder="field.label" class="flex-1 min-w-0" @update:model-value="$emit('change')" />
-          
-          <!-- Row Segmented Control -->
-          <div class="shrink-0 flex items-center bg-zinc-100 p-0.5 rounded-lg" title="排版行数">
-            <button v-for="r in 4" :key="r" class="w-5 md:w-7 h-6 md:h-7 rounded-md flex items-center justify-center text-xs md:text-[13px] transition-colors" :class="basics.field_config[field.key].row === r ? 'bg-white text-zinc-800 font-medium shadow-sm' : 'text-zinc-400 hover:text-zinc-600'" @click="basics.field_config[field.key].row = r; $emit('change')">
-              {{ r }}
-            </button>
-          </div>
-        </div>
-
-        <div v-for="(field, i) in basics.custom_fields" :key="field.id" class="flex items-center gap-1.5 md:gap-3 p-1.5 md:p-2 rounded-xl border border-zinc-100 hover:border-zinc-300 hover:shadow-sm bg-zinc-50/50 hover:bg-white transition-all group hover:z-[60] focus-within:z-[60]" :class="activeIconPicker === pickerKey('custom', String(i)) ? 'z-50 relative' : 'z-10 relative'">
-          <!-- Icon Picker -->
-          <div class="relative shrink-0 icon-picker-container">
-            <button class="flex h-8 w-8 md:h-9 md:w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white hover:border-zinc-400 hover:bg-zinc-50 transition-colors shadow-sm" :title="field.icon" @click="activeIconPicker = activeIconPicker === pickerKey('custom', String(i)) ? '' : pickerKey('custom', String(i))">
-              <component :is="iconMap[field.icon] || Info" class="h-3.5 w-3.5 md:h-4 md:w-4 text-zinc-600" />
-            </button>
-            <div v-if="activeIconPicker === pickerKey('custom', String(i))" class="absolute left-0 bottom-11 z-30 grid w-56 grid-cols-6 gap-1 rounded-xl border border-zinc-200 bg-white/95 backdrop-blur-md p-2 shadow-xl">
-              <button v-for="icon in iconOptions" :key="icon.value" class="flex h-8 w-8 items-center justify-center rounded-md hover:bg-zinc-100 transition-colors" :title="icon.label" @click="setCustomIcon(field, icon.value)">
-                <component :is="icon.component" class="h-4 w-4 text-zinc-700" />
-              </button>
-            </div>
-          </div>
-          
-          <!-- Label -->
-          <div class="relative group/label hidden md:block w-16 shrink-0 outline-none" tabindex="0">
-            <div class="text-[14px] font-medium text-zinc-500 px-1 truncate cursor-pointer">{{ field.label || '自定义' }}</div>
-            <div v-if="isLabelTruncated(field.label || '自定义')" class="absolute left-0 top-full mt-1.5 z-50 hidden group-hover/label:block group-focus/label:block w-max max-w-[200px] whitespace-normal rounded-md bg-zinc-900 px-2.5 py-1 text-xs text-white shadow-xl pointer-events-none">
-              {{ field.label || '自定义' }}
-            </div>
-          </div>
-          
-          <!-- Content Input with Trailing Action -->
-          <div class="relative flex-1 min-w-0">
-            <Input v-model="field.value" placeholder="附加内容" class="w-full pr-9" style="padding-right: 2.25rem;" @update:model-value="$emit('change')" />
-            <button 
-              type="button"
-              class="absolute right-1.5 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-lg text-zinc-300 hover:text-red-600 hover:bg-red-50 transition-colors" 
-              title="删除该字段"
-              @click="triggerDeleteField(i)"
+      <div ref="fieldsCardEl" :key="remountKey" class="p-1.5 md:p-3 space-y-1.5 md:space-y-2">
+        <template v-for="row in ROW_KEYS" :key="row">
+          <div class="px-1 text-[11px] font-medium text-zinc-400">第 {{ row }} 行</div>
+          <div data-row-container :data-row="row" class="space-y-1.5 md:space-y-2 min-h-[46px] rounded-lg">
+            <div
+              v-for="item in rowItems[row]"
+              :key="item.uid"
+              :data-uid="item.uid"
+              class="field-row flex items-center gap-1.5 md:gap-3 p-1.5 md:p-2 rounded-xl border border-zinc-100 hover:border-zinc-300 hover:shadow-sm bg-zinc-50/50 hover:bg-white transition-all group hover:z-[60] focus-within:z-[60]"
+              :class="activeIconPicker === itemPickerKey(item) ? 'z-50 relative' : 'z-10 relative'"
             >
-              <Trash2 class="h-3.5 w-3.5" />
-            </button>
+              <!-- Drag Handle -->
+              <span class="drag-handle shrink-0 cursor-grab text-zinc-300 hover:text-zinc-500 transition-colors active:cursor-grabbing" title="拖动排序">
+                <GripVertical class="h-4 w-4" />
+              </span>
+              <!-- Icon Picker -->
+              <div class="relative shrink-0 icon-picker-container">
+                <button class="flex h-8 w-8 md:h-9 md:w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white hover:border-zinc-400 hover:bg-zinc-50 transition-colors shadow-sm" :title="item.icon" @click="activeIconPicker = activeIconPicker === itemPickerKey(item) ? '' : itemPickerKey(item)">
+                  <component :is="iconMap[item.icon] || Info" class="h-3.5 w-3.5 md:h-4 md:w-4 text-zinc-600" />
+                </button>
+                <div v-if="activeIconPicker === itemPickerKey(item)" class="absolute left-0 bottom-11 z-30 grid w-56 grid-cols-6 gap-1 rounded-xl border border-zinc-200 bg-white/95 backdrop-blur-md p-2 shadow-xl">
+                  <button v-for="icon in iconOptions" :key="icon.value" class="flex h-8 w-8 items-center justify-center rounded-md hover:bg-zinc-100 transition-colors" :title="icon.label" @click="setItemIcon(item, icon.value)">
+                    <component :is="icon.component" class="h-4 w-4 text-zinc-700" />
+                  </button>
+                </div>
+              </div>
+
+              <!-- Label -->
+              <div class="relative group/label hidden md:block w-16 shrink-0 outline-none" tabindex="0">
+                <div class="text-[14px] font-medium px-1 truncate cursor-pointer" :class="item.kind === 'builtin' ? 'text-zinc-700' : 'text-zinc-500'">{{ item.label }}</div>
+                <div v-if="isLabelTruncated(item.label)" class="absolute left-0 top-full mt-1.5 z-50 hidden group-hover/label:block group-focus/label:block w-max max-w-[200px] whitespace-normal rounded-md bg-zinc-900 px-2.5 py-1 text-xs text-white shadow-xl pointer-events-none">
+                  {{ item.label }}
+                </div>
+              </div>
+
+              <!-- Content Input -->
+              <div v-if="item.kind === 'custom'" class="relative flex-1 min-w-0">
+                <Input v-model="basics.custom_fields[item.index!].value" placeholder="附加内容" class="w-full pr-9" style="padding-right: 2.25rem;" @update:model-value="$emit('change')" />
+                <button
+                  type="button"
+                  class="absolute right-1.5 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-lg text-zinc-300 hover:text-red-600 hover:bg-red-50 transition-colors"
+                  title="删除该字段"
+                  @click="triggerDeleteField(item.index!)"
+                >
+                  <Trash2 class="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <Input v-else v-model="basics[item.key!]" :placeholder="item.label" class="flex-1 min-w-0" @update:model-value="$emit('change')" />
+            </div>
           </div>
-          
-          <!-- Row Segmented Control -->
-          <div class="shrink-0 flex items-center bg-zinc-100 p-0.5 rounded-lg" title="排版行数">
-            <button v-for="r in 4" :key="r" class="w-5 md:w-7 h-6 md:h-7 rounded-md flex items-center justify-center text-xs md:text-[13px] transition-colors" :class="field.row === r ? 'bg-white text-zinc-800 font-medium shadow-sm' : 'text-zinc-400 hover:text-zinc-600'" @click="field.row = r; $emit('change')">
-              {{ r }}
-            </button>
-          </div>
-        </div>
+        </template>
 
         <div class="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/70">
           <button type="button" class="flex w-full items-center justify-between px-3 py-2.5 text-left text-xs md:text-sm font-medium text-zinc-700 transition hover:text-zinc-950" @click="showPresetFields = !showPresetFields">
@@ -374,6 +491,14 @@ function addPresetField(preset: (typeof basicInfoPresets)[number]) {
 </template>
 
 <style scoped>
+.sortable-ghost {
+  opacity: 0.4;
+  border-style: dashed;
+  background: #eef2ff;
+}
+.sortable-chosen {
+  cursor: grabbing;
+}
 .toast-slide-enter-active,
 .toast-slide-leave-active {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);

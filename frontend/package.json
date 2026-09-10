@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@types/cropperjs": "^1.1.5",
+    "@types/sortablejs": "^1.15.9",
     "@vitejs/plugin-vue": "latest",
     "@vueuse/core": "latest",
     "axios": "latest",
@@ -24,11 +25,10 @@
     "pdfjs-dist": "^6.0.227",
     "pinia": "latest",
     "radix-vue": "latest",
-    "sortablejs": "latest",
+    "sortablejs": "^1.15.7",
     "tailwind-merge": "latest",
     "vue": "latest",
-    "vue-router": "latest",
-    "vuedraggable": "latest"
+    "vue-router": "latest"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "latest",

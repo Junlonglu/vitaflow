@@ -107,6 +107,13 @@ def normalize_resume_data(data: dict[str, Any], payload: Optional[dict[str, Any]
     for key in ["education", "skills", "work", "projects", "awards", "custom_sections"]:
         if not isinstance(data.get(key), list):
             data[key] = []
+    # 自定义字段补齐排版位（row/order）：渲染模板按行内 order 统一排序，缺值/脏值会让排序崩溃或字段被静默丢弃
+    for index, field in enumerate(basics.get("custom_fields") or []):
+        if isinstance(field, dict):
+            if not isinstance(field.get("row"), int) or not 1 <= field["row"] <= 4:
+                field["row"] = 1
+            if not isinstance(field.get("order"), int):
+                field["order"] = 1000 + index
     custom_ids = [
         item.get("id")
         for item in data.get("custom_sections", [])

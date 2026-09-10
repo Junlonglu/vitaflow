@@ -272,6 +272,7 @@
 <body>
 {% set basics = resume.basics or {} %}
 {% import 'resume/partials/icons.html' as icons %}
+{% import 'resume/partials/basics_meta.html' as basics_meta %}
 {% macro header_icon(name) -%}
   {% set color = config.header_icon_color or config.icon_color or '#ffffff' %}
   {{ icons.resume_icon(name, 'timeline-meta-icon', color)|safe }}
@@ -416,33 +417,7 @@
     {% set avatar_position = config.avatar_position if config.avatar_position in ['left', 'center', 'right'] else 'right' %}
     <header class="blue-timeline-hero resume-avatar-{{ avatar_position }}">
       <h1 class="blue-timeline-name">{{ basics.name or resume._labels.unnamed }}{% if basics.title %} - {{ basics.title }}{% endif %}</h1>
-      {% for row in [1, 2, 3, 4] %}
-        {% set ns = namespace(has=false) %}
-        {% for key, cfg in (basics.field_config or {}).items() %}
-          {% if (cfg.row or 1)|int == row and basics.get(key) %}
-            {% set ns.has = true %}
-          {% endif %}
-        {% endfor %}
-        {% for field in basics.custom_fields or [] %}
-          {% if (field.row or 1)|int == row and field.value %}
-            {% set ns.has = true %}
-          {% endif %}
-        {% endfor %}
-        {% if ns.has %}
-          <div class="blue-timeline-meta">
-            {% for key, cfg in (basics.field_config or {}).items()|sort(attribute='1.order') %}
-              {% if (cfg.row or 1)|int == row and basics.get(key) %}
-                <span>{{ header_icon(cfg.icon)|safe }}{{ basics.get(key) }}</span>
-              {% endif %}
-            {% endfor %}
-            {% for field in basics.custom_fields or [] %}
-              {% if (field.row or 1)|int == row and field.value %}
-                <span>{{ header_icon(field.icon)|safe }}{{ field.value }}</span>
-              {% endif %}
-            {% endfor %}
-          </div>
-        {% endif %}
-      {% endfor %}
+      {{ basics_meta.render_meta_rows(basics, header_icon, 'blue-timeline-meta') }}
       {% if config.show_avatar and basics.avatar %}
         <img class="blue-timeline-avatar" src="{{ basics.avatar }}" alt="{{ resume._labels.avatar_alt }}">
       {% endif %}

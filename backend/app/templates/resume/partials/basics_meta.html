@@ -1,0 +1,36 @@
+{# 基本信息联系方式的行渲染宏：basics.html 与 blue_timeline.html 共用。
+   宏完全自包含（只依赖入参），可无上下文 import。 #}
+{% macro render_meta_rows(basics, icon_render, container_class) -%}
+  {# 联系方式按 row 分行展示；同一行内内置字段与自定义字段按 order 统一排序（order 缺失排最后，相同则内置在前） #}
+  {% for row in [1, 2, 3, 4] %}
+    {% set ns = namespace(has=false) %}
+    {% for key, cfg in (basics.field_config or {}).items() %}
+      {% if (cfg.row or 1)|int == row and basics.get(key) %}
+        {% set ns.has = true %}
+      {% endif %}
+    {% endfor %}
+    {% for field in basics.custom_fields or [] %}
+      {% if (field.row or 1)|int == row and field.value %}
+        {% set ns.has = true %}
+      {% endif %}
+    {% endfor %}
+    {% if ns.has %}
+      {% set merged = [] %}
+      {% for key, cfg in (basics.field_config or {}).items() %}
+        {% if (cfg.row or 1)|int == row and basics.get(key) %}
+          {% set _ = merged.append({'order': (cfg.get('order') if cfg.get('order') is not none else 9999)|int, 'icon': cfg.icon, 'value': basics.get(key)}) %}
+        {% endif %}
+      {% endfor %}
+      {% for field in basics.custom_fields or [] %}
+        {% if (field.row or 1)|int == row and field.value %}
+          {% set _ = merged.append({'order': (field.get('order') if field.get('order') is not none else 9999)|int, 'icon': field.icon, 'value': field.value}) %}
+        {% endif %}
+      {% endfor %}
+      <div class="{{ container_class }}">
+        {% for item in merged|sort(attribute='order') %}
+          <span>{{ icon_render(item.icon) }}{{ item.value }}</span>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endfor %}
+{%- endmacro %}

@@ -27,6 +27,18 @@ test("update_basics_field lists the changed field labels", () => {
   assert.equal(toolStepLabel("update_basics_field", { basics: {} }), "修改基本信息");
 });
 
+test("web_search echoes the clamped query and result count", () => {
+  assert.equal(toolStepLabel("web_search", { query: "前端 薪资" }), "联网搜索「前端薪资」");
+  const long = toolStepLabel("web_search", { query: "行业惯例 岗位通用要求 目标公司背景 薪资范围 补充说明文字" });
+  assert.match(long, /^联网搜索「.+…」$/);
+  assert.equal(toolStepLabel("web_search", {}), "联网搜索");
+  const end = toolStepEnd("web_search", { content: [{ type: "text", text: "已检索…" }], details: { ok: true, count: 3 } }, false);
+  assert.equal(end.ok, true);
+  assert.equal(end.detail, "已检索到 3 条结果");
+  const empty = toolStepEnd("web_search", { content: [{ type: "text", text: "未检索到…" }], details: { ok: true, count: 0 } }, false);
+  assert.equal(empty.detail, "未检索到相关结果");
+});
+
 test("unknown tools fall back to their raw name; missing args are tolerated", () => {
   assert.equal(toolStepLabel("some_future_tool", {}), "some_future_tool");
   assert.equal(toolStepLabel("update_section", undefined), "修改「」模块");

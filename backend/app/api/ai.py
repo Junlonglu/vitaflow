@@ -65,6 +65,7 @@ from app.services.flow_points_service import (
     redeem_flow_points,
 )
 from app.services.resume_normalization import normalize_resume_data
+from app.services.search_evidence_service import get_recent_search_evidence, store_search_evidence
 from app.services.resume_service import get_resume
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -98,6 +99,23 @@ class ProposeChangeRequest(BaseModel):
     user_id: int
     resume_id: int
     updates: list[dict[str, Any]]
+
+
+class SearchEvidenceItem(BaseModel):
+    """One normalized web_search hit (tools/searchAdapters.ts SearchHit)."""
+
+    title: str = ""
+    url: str = ""
+    snippet: str = ""
+
+
+class SearchEvidenceRequest(BaseModel):
+    """Search results reported by the AI service's web_search tool for guard evidence."""
+
+    user_id: int
+    resume_id: int
+    query: str
+    results: list[SearchEvidenceItem] = Field(default_factory=list)
 
 
 # 对话回合的 feature 取值（与 ai-service 的 QuickCommand name 对齐，chat 为自由对话）。
@@ -648,6 +666,7 @@ def service_update_basics_field(
         payload.basics,
         history,
         user_message,
+        search_evidence=get_recent_search_evidence(payload.user_id, payload.resume_id),
     )
     if issue:
         return success({"ok": False, "category": tool_issue_category(issue), "retryable": False, "reason": issue})
@@ -685,6 +704,7 @@ def service_update_section(
         history,
         user_message,
         payload.removed_ids,
+        search_evidence=get_recent_search_evidence(payload.user_id, payload.resume_id),
     )
     if issue:
         return success({"ok": False, "category": tool_issue_category(issue), "retryable": False, "reason": issue})
@@ -717,6 +737,7 @@ def service_propose_change(
         payload.updates,
         history,
         user_message,
+        search_evidence=get_recent_search_evidence(payload.user_id, payload.resume_id),
     )
     if issue:
         return success({"ok": False, "category": tool_issue_category(issue), "retryable": False, "reason": issue})
@@ -740,6 +761,27 @@ def service_get_resume_context(
     resume = get_resume(db, user_id, resume_id)
     ctx = get_section_context(resume.resume_data, sections)
     return success({"ok": True, "sections": ctx})
+
+
+@router.post("/service/tool/search-evidence")
+def service_search_evidence(
+    payload: SearchEvidenceRequest,
+    _: None = Depends(require_ai_service_token),
+):
+    """Internal tool callback: record web_search results as guard evidence.
+
+    The Node AI service's ``web_search`` tool posts its normalized hits here
+    (best-effort — a failed POST must not fail the search). Stored memory-only
+    with a TTL; the numeric anti-hallucination guard reads them back as a fourth
+    evidence source when validating this user/resume's pending changes.
+    """
+    stored = store_search_evidence(
+        payload.user_id,
+        payload.resume_id,
+        payload.query,
+        [item.model_dump() for item in payload.results],
+    )
+    return success({"ok": True, "stored": stored})
 
 
 @router.post("/service/usage")

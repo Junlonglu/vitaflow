@@ -721,6 +721,9 @@ def _unverified_numeric_claims(payload: dict[str, Any], optimized_data: dict[str
         "resume_data": payload.get("resume", {}).get("resume_data") or {},
         "history": payload.get("history") or [],
         "user_message": payload.get("user_message") or "",
+        # web_search 本回合检索到的结果（/service/tool/search-evidence 落的记忆）
+        # 也算证据：行业/JD 类数字可以引用搜索到的公开事实
+        "search_evidence": payload.get("search_evidence") or [],
     }
     return _numeric_claims(optimized_data) - _numeric_claims(source)
 
@@ -762,6 +765,7 @@ def validate_basics_field_update(
     basics: dict[str, Any] | None,
     history: list[dict[str, Any]] | None = None,
     user_message: str = "",
+    search_evidence: list[str] | None = None,
 ) -> tuple[dict[str, Any] | None, list[str], str]:
     """Validate a field-level basics change proposed by ``update_basics_field``.
 
@@ -786,6 +790,7 @@ def validate_basics_field_update(
         "history": history or [],
         "user_message": user_message,
         "attachments": [],
+        "search_evidence": search_evidence or [],
     }
     # The tool submits only the changed fields; merge them into the current basics
     # (leaving the rest of the basics section intact) rather than replacing it.
@@ -964,6 +969,7 @@ def validate_section_update(
     history: list[dict[str, Any]] | None = None,
     user_message: str = "",
     removed_ids: list[str] | None = None,
+    search_evidence: list[str] | None = None,
 ) -> tuple[dict[str, Any] | None, list[str], str]:
     """Validate a section-level change proposed by the AI service's ``update_section`` tool.
 
@@ -993,6 +999,7 @@ def validate_section_update(
         "history": history or [],
         "user_message": user_message,
         "attachments": [],
+        "search_evidence": search_evidence or [],
     }
     if _unverified_numeric_claims(payload, merged):
         return None, [], "检测到方案包含简历和对话中未提供的量化结果，已阻止写入。"
@@ -1005,6 +1012,7 @@ def validate_propose_change(
     updates: list[dict[str, Any]] | None,
     history: list[dict[str, Any]] | None = None,
     user_message: str = "",
+    search_evidence: list[str] | None = None,
 ) -> tuple[dict[str, Any] | None, list[str], str]:
     """Validate an atomic change spanning several sections (``propose_change`` tool).
 
@@ -1047,6 +1055,7 @@ def validate_propose_change(
         "history": history or [],
         "user_message": user_message,
         "attachments": [],
+        "search_evidence": search_evidence or [],
     }
     if _unverified_numeric_claims(payload, merged):
         return None, [], "检测到方案包含简历和对话中未提供的量化结果，已阻止写入。"

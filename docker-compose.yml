@@ -57,6 +57,11 @@ services:
       AI_TURN_TIMEOUT_MS: ${AI_TURN_TIMEOUT_MS:-60000}
       # 工具回调/计费回调指向宿主机 FastAPI（Windows/macOS Docker Desktop 内置该域名）
       PI_FASTAPI_BASE_URL: ${PI_FASTAPI_BASE_URL:-http://host.docker.internal:8000}
+      # 联网搜索工具：none（默认，禁用）| bocha | tavily；配 SEARCH_API_KEY 才注册 web_search
+      SEARCH_PROVIDER: ${SEARCH_PROVIDER:-none}
+      SEARCH_API_KEY: ${SEARCH_API_KEY:-}
+      SEARCH_BASE_URL: ${SEARCH_BASE_URL:-}
+      SEARCH_MAX_RESULTS: ${SEARCH_MAX_RESULTS:-5}
     volumes:
       # 挂载模型配置目录；faux 模式下目录可不存在（compose 会自动创建空目录）
       - ./ai-service/.pi-agent:/app/.pi-agent

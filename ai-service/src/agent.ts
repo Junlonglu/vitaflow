@@ -12,7 +12,7 @@
 import { join } from "node:path";
 import { createAgentSession, createSyntheticSourceInfo, DefaultResourceLoader, SessionManager, type PromptTemplate } from "@earendil-works/pi-coding-agent";
 import type { ImageContent, Model } from "@earendil-works/pi-ai/compat";
-import type { ServiceConfig } from "./config.js";
+import { isSearchEnabled, type ServiceConfig } from "./config.js";
 import type { FauxRuntime, FauxToolPlanStep } from "./faux.js";
 import type { RealRuntime } from "./real.js";
 import type { ModelUsage } from "./usage.js";
@@ -23,6 +23,7 @@ import type { TaskType } from "./taskPrompts.js";
 import { createUpdateBasicsFieldTool, type BasicsToolState } from "./tools/basics.js";
 import { createSectionTools, type SectionToolsState } from "./tools/sections.js";
 import { createAskUserQuestionsTool, createQuestionsState, type QuestionsToolState } from "./tools/questions.js";
+import { createWebSearchTool } from "./tools/search.js";
 import { toolStepEnd, toolStepLabel, type ToolTraceEntry } from "./tools/labels.js";
 
 /** Faux mode drives the deterministic demo provider; real mode uses models.json. */
@@ -218,6 +219,21 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     state: toolState,
   });
   const questionsTool = createAskUserQuestionsTool(questionsState);
+  // 联网搜索：供应商未配置（none / 缺密钥）时工具不注册，Agent 行为与之前完全一致。
+  const searchTool = isSearchEnabled(config)
+    ? createWebSearchTool({
+        fetch: globalThis.fetch,
+        fastapiBaseUrl: config.fastapiBaseUrl,
+        serviceToken: config.serviceToken,
+        userId,
+        resumeId,
+        // isSearchEnabled 已排除 "none"，这里收窄类型
+        provider: config.searchProvider as "bocha" | "tavily",
+        apiKey: config.searchApiKey,
+        baseUrl: config.searchBaseUrl,
+        maxResults: config.searchMaxResults,
+      })
+    : null;
 
   // High-level stage broadcast for the chat UI's progress timeline (ChatGPT-style
   // "what is the model doing"). Stages only ever advance — thinking resuming after
@@ -297,8 +313,8 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     // the filesystem, keeping a single validated mutation path. The read-only
     // get_resume_context is exposed too so the agent can inspect a section before
     // changing it (still no filesystem access).
-    tools: ["update_basics_field", "update_section", "propose_change", "get_resume_context", "ask_user_questions"],
-    customTools: [basicsTool, ...sectionTools, questionsTool],
+    tools: ["update_basics_field", "update_section", "propose_change", "get_resume_context", "ask_user_questions", ...(searchTool ? ["web_search" as const] : [])],
+    customTools: [basicsTool, ...sectionTools, questionsTool, ...(searchTool ? [searchTool] : [])],
     // Thinking streams to the UI only for models that actually support reasoning;
     // non-reasoning models (faux included) stay pinned off — a forced level there
     // can produce an empty assistant message.
@@ -359,8 +375,9 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     if (event.type === "tool_execution_start") {
       // ask_user_questions ends the turn waiting on the user, so it is not a
       // drafting step — advancing the stage there would mislabel the timeline.
+      // web_search/get_resume_context are lookups, not drafting either.
       if (event.toolName !== "ask_user_questions") {
-        advanceStage(event.toolName === "get_resume_context" ? "reading" : "drafting");
+        advanceStage(event.toolName === "get_resume_context" || event.toolName === "web_search" ? "reading" : "drafting");
       }
       const entry: ToolTraceEntry = {
         id: event.toolCallId,

@@ -15,17 +15,34 @@ export interface ServiceConfig {
   turnTimeoutMs: number;
   /** FastAPI base URL the tool uses to call back the validation endpoint. */
   fastapiBaseUrl: string;
+  /** 联网搜索供应商：`none`（默认，工具不注册）| `bocha` | `tavily`。 */
+  searchProvider: "none" | "bocha" | "tavily";
+  searchApiKey: string;
+  /** 供应商 API 地址覆盖（自建/代理），缺省用适配器内置地址。 */
+  searchBaseUrl?: string;
+  /** 单次搜索结果条数上限（工具参数只能向下调）。 */
+  searchMaxResults: number;
 }
 
 export function loadConfig(): ServiceConfig {
   const provider = (process.env.PI_PROVIDER || "faux").toLowerCase();
+  const searchProviderRaw = (process.env.SEARCH_PROVIDER || "none").toLowerCase();
   return {
     port: Number(process.env.PORT || 8300),
     serviceToken: process.env.AI_SERVICE_TOKEN || "",
     provider: provider === "real" ? "real" : "faux",
     turnTimeoutMs: Number(process.env.AI_TURN_TIMEOUT_MS || 60_000),
     fastapiBaseUrl: (process.env.PI_FASTAPI_BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, ""),
+    searchProvider: searchProviderRaw === "bocha" || searchProviderRaw === "tavily" ? searchProviderRaw : "none",
+    searchApiKey: process.env.SEARCH_API_KEY || "",
+    searchBaseUrl: process.env.SEARCH_BASE_URL || undefined,
+    searchMaxResults: Math.max(1, Math.min(10, Number(process.env.SEARCH_MAX_RESULTS || 5))),
   };
+}
+
+/** 联网搜索是否启用：供应商就绪且配了密钥，web_search 工具才注册。 */
+export function isSearchEnabled(config: Pick<ServiceConfig, "searchProvider" | "searchApiKey">): boolean {
+  return config.searchProvider !== "none" && Boolean(config.searchApiKey);
 }
 
 /**

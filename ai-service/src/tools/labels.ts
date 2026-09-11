@@ -51,6 +51,10 @@ export function toolStepLabel(toolName: string, args: unknown): string {
   switch (toolName) {
     case "get_resume_context":
       return `查阅简历「${sectionList(raw.sections)}」`;
+    case "web_search": {
+      const query = clamp(String(raw.query ?? ""), 20);
+      return query ? `联网搜索「${query}」` : "联网搜索";
+    }
     case "update_basics_field": {
       const basics = (raw.basics ?? {}) as Record<string, unknown>;
       const keys = Object.keys(basics).slice(0, 3);
@@ -109,6 +113,10 @@ export function toolStepEnd(toolName: string, result: unknown, isError: boolean)
     const sections = (details.sections ?? {}) as Record<string, unknown>;
     const count = Object.keys(sections).length;
     return { ok: true, detail: count ? `已读取 ${count} 个模块` : "该模块暂无内容" };
+  }
+  if (toolName === "web_search") {
+    const count = typeof details.count === "number" ? details.count : 0;
+    return { ok: true, detail: count ? `已检索到 ${count} 条结果` : "未检索到相关结果" };
   }
   if (toolName === "ask_user_questions") {
     const questions = Array.isArray(details.questions) ? details.questions : [];

@@ -50,6 +50,11 @@ services:
     container_name: vitaflow-ai-service
     ports:
       - "8300:8300"
+    # 直连公共 DNS：容器内置 DNS（127.0.0.11）转发宿主机解析器时偶发 8s+ 超时
+    # （EAI_AGAIN），是空闲后首个对话回合首字延迟 10s+ 的根因
+    dns:
+      - 223.5.5.5
+      - 119.29.29.29
     environment:
       PI_PROVIDER: ${PI_PROVIDER:-faux}
       AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-}

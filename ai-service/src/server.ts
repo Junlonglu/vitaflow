@@ -6,6 +6,9 @@
  * events back. It holds no state and can be scaled horizontally.
  */
 import "dotenv/config";
+import { installCachedLookup } from "./dns-lookup.js";
+// 必须在任何出站请求（DeepSeek、FastAPI 回调）发生前替换 dns.lookup
+installCachedLookup();
 import { join } from "node:path";
 import { timingSafeEqual } from "node:crypto";
 import express from "express";
@@ -267,6 +270,7 @@ app.delete("/v1/catalog/providers/:key/models/:modelId", async (req, res) => {
 });
 
 app.post("/v1/chat", async (req, res) => {
+  console.log(`[vitaflow-ai] chat request received`);
   if (!authorize(req)) {
     res.status(401).json({ type: "error", message: "未授权：需要有效的服务令牌" });
     return;

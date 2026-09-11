@@ -268,6 +268,10 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
         first_token_ms: firstTokenAt !== undefined ? firstTokenAt - turnStart : null,
         tool_ms: toolTotalMs,
         total_ms: totalMs,
+        // 首字延迟分段：资源加载 / 会话创建 / 供应商首字（prompt 后等模型 delta）
+        loader_ms: loaderDoneAt - resolveDoneAt,
+        session_create_ms: sessionDoneAt - loaderDoneAt,
+        provider_ttfb_ms: firstTokenAt !== undefined ? firstTokenAt - sessionDoneAt : null,
       },
     };
     if (toolState.pendingChange) {
@@ -300,7 +304,12 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
       diagnostics: base.diagnostics,
     }),
   });
+  // 首字延迟排查埋点：turn 内分段计时（模型解析 / 资源加载 / 会话创建 / 供应商 TTFB）。
+  const turnSetupStart = Date.now();
+  const resolveDoneAt = Date.now(); // resolveRealModel 是内存查表，计入上一行到这里的间隔无意义
+
   await loader.reload();
+  const loaderDoneAt = Date.now();
 
   const { session, modelFallbackMessage } = await createAgentSession({
     cwd,
@@ -320,6 +329,7 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     // can produce an empty assistant message.
     thinkingLevel: model.reasoning ? "medium" : "off",
   });
+  const sessionDoneAt = Date.now();
 
   if (modelFallbackMessage) {
     emit({ type: "error", message: `模型不可用：${modelFallbackMessage}` });
@@ -341,13 +351,19 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     if (event.type === "message_update") {
       const ae = event.assistantMessageEvent;
       if (ae?.type === "text_delta") {
-        if (firstTokenAt === undefined) firstTokenAt = Date.now();
+        if (firstTokenAt === undefined) {
+          firstTokenAt = Date.now();
+          console.log(`[vitaflow-ai] first token +${firstTokenAt - turnStart}ms (loader ${loaderDoneAt - resolveDoneAt} / session ${sessionDoneAt - loaderDoneAt} / provider ttfb ${firstTokenAt - sessionDoneAt})`);
+        }
         text += ae.delta;
         advanceStage("replying");
         emit({ type: "delta", text: ae.delta });
       }
       if (ae?.type === "thinking_delta") {
-        if (firstTokenAt === undefined) firstTokenAt = Date.now();
+        if (firstTokenAt === undefined) {
+          firstTokenAt = Date.now();
+          console.log(`[vitaflow-ai] first token +${firstTokenAt - turnStart}ms (loader ${loaderDoneAt - resolveDoneAt} / session ${sessionDoneAt - loaderDoneAt} / provider ttfb ${firstTokenAt - sessionDoneAt})`);
+        }
         advanceStage("thinking");
         emit({ type: "thinking", text: ae.delta });
       }

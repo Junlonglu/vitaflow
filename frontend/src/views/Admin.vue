@@ -77,22 +77,43 @@ const userPointTransactionsLoading = ref(false)
 const userPointTransactionsError = ref("")
 const userPointTransactionsTarget = ref<AdminUser | null>(null)
 
-const navItems = [
-  { id: "dashboard" as const, label: "数据看板", icon: LayoutDashboard },
-  { id: "announcements" as const, label: "公告管理", icon: Megaphone },
-  { id: "users" as const, label: "用户管理", icon: Users },
-  { id: "resumes" as const, label: "简历管理", icon: FileText },
-  { id: "ai" as const, label: "AI 任务", icon: Bot },
-  { id: "point-transactions" as const, label: "点数流水", icon: Activity },
-  { id: "ai-models" as const, label: "模型配置", icon: SlidersHorizontal },
-  { id: "point-rules" as const, label: "点数规则", icon: Zap },
-  { id: "redeem-codes" as const, label: "兑换码", icon: Ticket },
-  { id: "system-settings" as const, label: "系统设置", icon: Settings },
-  { id: "feedbacks" as const, label: "意见反馈", icon: MessageSquare },
-  { id: "exports" as const, label: "导出记录", icon: Download },
-  { id: "templates" as const, label: "模板设置", icon: LayoutTemplate },
-  { id: "industry-templates" as const, label: "岗位预设", icon: Briefcase },
+const navGroups = [
+  { label: null, items: [{ id: "dashboard", label: "数据看板", icon: LayoutDashboard }] },
+  {
+    label: "用户与内容",
+    items: [
+      { id: "users", label: "用户管理", icon: Users },
+      { id: "resumes", label: "简历管理", icon: FileText },
+      { id: "exports", label: "导出记录", icon: Download },
+    ],
+  },
+  {
+    label: "AI 服务",
+    items: [
+      { id: "ai", label: "AI 任务", icon: Bot },
+      { id: "ai-models", label: "模型配置", icon: SlidersHorizontal },
+    ],
+  },
+  {
+    label: "运营与点数",
+    items: [
+      { id: "point-transactions", label: "点数流水", icon: Activity },
+      { id: "point-rules", label: "点数规则", icon: Zap },
+      { id: "redeem-codes", label: "兑换码", icon: Ticket },
+      { id: "announcements", label: "公告管理", icon: Megaphone },
+      { id: "feedbacks", label: "意见反馈", icon: MessageSquare },
+    ],
+  },
+  {
+    label: "系统配置",
+    items: [
+      { id: "system-settings", label: "系统设置", icon: Settings },
+      { id: "templates", label: "模板设置", icon: LayoutTemplate },
+      { id: "industry-templates", label: "岗位预设", icon: Briefcase },
+    ],
+  },
 ]
+const navItems = navGroups.flatMap((group) => group.items)
 
 const currentTitle = computed(() => navItems.find((item) => item.id === section.value)?.label || "管理后台")
 const currentPage = computed(() => {
@@ -981,7 +1002,7 @@ onMounted(() => load())
 
 <template>
   <AdminShell
-    :nav-items="navItems"
+    :nav-groups="navGroups"
     :section="section"
     :title="currentTitle"
     :loading="loading"

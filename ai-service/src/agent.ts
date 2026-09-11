@@ -24,7 +24,7 @@ import { createUpdateBasicsFieldTool, type BasicsToolState } from "./tools/basic
 import { createSectionTools, type SectionToolsState } from "./tools/sections.js";
 import { createAskUserQuestionsTool, createQuestionsState, type QuestionsToolState } from "./tools/questions.js";
 import { createWebSearchTool } from "./tools/search.js";
-import { toolStepEnd, toolStepLabel, type ToolTraceEntry } from "./tools/labels.js";
+import { toolQualitySteps, toolStepEnd, toolStepLabel, type ToolQualityStep, type ToolTraceEntry } from "./tools/labels.js";
 
 /** Faux mode drives the deterministic demo provider; real mode uses models.json. */
 export type ChatRuntime = FauxRuntime | RealRuntime;
@@ -88,6 +88,8 @@ export interface ChatTurnOutcome {
   error?: string;
   /** Curated tool steps executed this turn (from toolTrace). */
   toolCalls: number;
+  /** Content-free quality steps for the AiTask fact row (survive resume deletion). */
+  toolQuality: ToolQualityStep[];
 }
 
 /** One-shot task input (ticket 09): generate/import, no tools, single JSON answer. */
@@ -168,13 +170,13 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     const resolved = resolveRealModel(runtime, modelRef);
     if (!resolved.model) {
       emit({ type: "error", message: resolved.error ?? "模型不可用" });
-      return { usage: [], failed: true, error: resolved.error ?? "模型不可用", toolCalls: 0 };
+      return { usage: [], failed: true, error: resolved.error ?? "模型不可用", toolCalls: 0, toolQuality: [] };
     }
     model = resolved.model;
   }
   if (!model) {
     emit({ type: "error", message: "没有可用的模型" });
-    return { usage: [], failed: true, error: "没有可用的模型", toolCalls: 0 };
+    return { usage: [], failed: true, error: "没有可用的模型", toolCalls: 0, toolQuality: [] };
   }
 
   // The field-level and section tools record the validated pending payload here so
@@ -333,7 +335,7 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
 
   if (modelFallbackMessage) {
     emit({ type: "error", message: `模型不可用：${modelFallbackMessage}` });
-    return { usage: [], failed: true, error: `模型不可用：${modelFallbackMessage}`, toolCalls: 0 };
+    return { usage: [], failed: true, error: `模型不可用：${modelFallbackMessage}`, toolCalls: 0, toolQuality: [] };
   }
 
   let text = "";
@@ -480,9 +482,9 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
   // always sends a result, so resultSent alone can't distinguish failure);
   // failed turns carry no usage, mirroring the legacy rule that refunds them.
   if (sawError) {
-    return { usage: [], failed: true, error: turnError, toolCalls: toolTrace.length };
+    return { usage: [], failed: true, error: turnError, toolCalls: toolTrace.length, toolQuality: toolQualitySteps(toolTrace) };
   }
-  return { usage: usage.snapshot(), failed: false, toolCalls: toolTrace.length };
+  return { usage: usage.snapshot(), failed: false, toolCalls: toolTrace.length, toolQuality: toolQualitySteps(toolTrace) };
 }
 
 /**

@@ -25,6 +25,35 @@ export interface ToolTraceEntry {
   duration_ms?: number;
 }
 
+/**
+ * Content-free quality step for the end-of-turn usage report: name/outcome/
+ * duration/error-category only. label/detail/id stay out — they may echo resume
+ * content, which must keep dying with the chat message; these aggregates are
+ * meant to survive resume deletion on the AiTask fact row.
+ */
+export interface ToolQualityStep {
+  name: string;
+  status: "end";
+  ok: boolean;
+  duration_ms?: number;
+  category?: string;
+}
+
+/** Drop unsettled and content-bearing fields from the trace; keeps report shape tight.
+ * 超长回合截断到 50 步——质量摘要是辅助数据，超限不能把整份计费上报顶成 422。 */
+export function toolQualitySteps(trace: ToolTraceEntry[]): ToolQualityStep[] {
+  return trace
+    .filter((entry) => entry.status === "end")
+    .slice(0, 50)
+    .map((entry) => ({
+      name: entry.name,
+      status: "end" as const,
+      ok: entry.ok === true,
+      ...(typeof entry.duration_ms === "number" ? { duration_ms: entry.duration_ms } : {}),
+      ...(entry.category ? { category: entry.category } : {}),
+    }));
+}
+
 /** Truncate a free-text fragment for display (defensive against prompt junk). */
 function clamp(text: string, max = 12): string {
   const clean = text.replace(/[\s「」]+/g, "").trim();

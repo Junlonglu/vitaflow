@@ -253,5 +253,128 @@ class AiServiceUsageEndpointTest(unittest.TestCase):
         self.assertEqual(resp.status_code, 404)
 
 
+_TOOL_QUALITY_PAYLOAD = {
+    **_USAGE_PAYLOAD,
+    "tool_quality": [
+        {"name": "get_resume_context", "status": "end", "ok": True, "duration_ms": 45},
+        {"name": "update_section", "status": "end", "ok": False, "category": "validation", "duration_ms": 120},
+    ],
+}
+
+
+class ToolQualityPersistenceTest(unittest.TestCase):
+    """工具质量摘要落库（事实记录与消息表解耦——删简历后看板口径仍一致）。
+
+    摘要只随第一个任务行落库（回合级数据，多模型回合不得在聚合时翻倍）；
+    内容型字段（label/detail）即使混进请求也要被白名单剥掉。
+    """
+
+    def setUp(self):
+        self.client = _make_client()
+        self._original_token = settings.ai_service_token
+        settings.ai_service_token = "test-token"
+
+    def tearDown(self):
+        settings.ai_service_token = self._original_token
+
+    def test_quality_rides_on_first_task_row_only(self):
+        created: list[dict] = []
+        multi_model = {
+            **_TOOL_QUALITY_PAYLOAD,
+            "usage": [_USAGE_PAYLOAD["usage"][0], {**_USAGE_PAYLOAD["usage"][0], "model": "other-model"}],
+        }
+
+        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None):
+            created.append({"input_data": input_data, "model_name": model_name})
+            return _stub_task()
+
+        with (
+            patch.object(ai_module, "get_ai_config_by_model_ref", return_value=None),
+            patch.object(ai_module, "create_ai_task", side_effect=fake_create_ai_task),
+            patch.object(ai_module, "finish_ai_task", side_effect=lambda db, t, status, **kw: None),
+        ):
+            resp = self.client.post("/api/ai/service/usage", json=multi_model, headers={"x-ai-service-token": "test-token"})
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(created), 2)
+        self.assertEqual(len(created[0]["input_data"]["tool_quality"]), 2)
+        self.assertNotIn("tool_quality", created[1]["input_data"])
+
+    def test_extra_content_fields_are_stripped(self):
+        # 内容型字段必须死在消息表上：即使上游误传 label/detail 也不得落库
+        payload = {
+            **_TOOL_QUALITY_PAYLOAD,
+            "tool_quality": [
+                {"name": "update_section", "status": "end", "ok": True, "label": "负责订单服务…", "detail": "简历原文片段", "id": "tc1", "duration_ms": 30},
+            ],
+        }
+        created: dict = {}
+
+        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None):
+            created.update(input_data=input_data)
+            return _stub_task()
+
+        with (
+            patch.object(ai_module, "get_ai_config_by_model_ref", return_value=None),
+            patch.object(ai_module, "create_ai_task", side_effect=fake_create_ai_task),
+            patch.object(ai_module, "finish_ai_task", side_effect=lambda db, t, status, **kw: None),
+        ):
+            resp = self.client.post("/api/ai/service/usage", json=payload, headers={"x-ai-service-token": "test-token"})
+
+        self.assertEqual(resp.status_code, 200)
+        step = created["input_data"]["tool_quality"][0]
+        self.assertEqual(step, {"name": "update_section", "status": "end", "ok": True, "duration_ms": 30})
+
+    def test_failed_turn_stores_quality_on_failed_task_row(self):
+        created: dict = {}
+
+        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None):
+            created.update(input_data=input_data)
+            return _stub_task()
+
+        with (
+            patch.object(ai_module, "create_ai_task", side_effect=fake_create_ai_task),
+            patch.object(ai_module, "finish_ai_task", side_effect=lambda db, t, status, **kw: None),
+        ):
+            resp = self.client.post(
+                "/api/ai/service/usage",
+                json={
+                    "user_id": 7,
+                    "resume_id": 3,
+                    "feature": "chat",
+                    "status": "failed",
+                    "error_message": "模型超时",
+                    "usage": [],
+                    "tool_quality": [{"name": "web_search", "status": "end", "ok": True, "duration_ms": 800}],
+                },
+                headers={"x-ai-service-token": "test-token"},
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(created["input_data"]["tool_quality"], [{"name": "web_search", "status": "end", "ok": True, "duration_ms": 800}])
+
+    def test_more_than_50_steps_are_truncated_not_rejected(self):
+        # 质量摘要是辅助数据：超限截断即可，绝不能 422 拒掉整份计费上报
+        payload = {
+            **_TOOL_QUALITY_PAYLOAD,
+            "tool_quality": [{"name": "web_search", "status": "end", "ok": True}] * 51,
+        }
+        created: dict = {}
+
+        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None):
+            created.update(input_data=input_data)
+            return _stub_task()
+
+        with (
+            patch.object(ai_module, "get_ai_config_by_model_ref", return_value=None),
+            patch.object(ai_module, "create_ai_task", side_effect=fake_create_ai_task),
+            patch.object(ai_module, "finish_ai_task", side_effect=lambda db, t, status, **kw: None),
+        ):
+            resp = self.client.post("/api/ai/service/usage", json=payload, headers={"x-ai-service-token": "test-token"})
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(created["input_data"]["tool_quality"]), 50)
+
+
 if __name__ == "__main__":
     unittest.main()

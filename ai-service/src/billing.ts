@@ -14,6 +14,7 @@
  * from the provider console. Retry lives ONLY here — the rest of the call chain
  * must stay single-retry-point (多层重试会相乘放大流量).
  */
+import type { ToolQualityStep } from "./tools/labels.js";
 import type { ModelUsage } from "./usage.js";
 
 export interface UsageReportDeps {
@@ -30,6 +31,8 @@ export interface UsageReportPayload {
   feature?: string;
   /** Tool steps executed this turn; recorded on the task row for the admin console. */
   tool_calls?: number;
+  /** Content-free quality steps; persisted on the AiTask row so quality stats survive resume deletion. */
+  tool_quality?: ToolQualityStep[];
   /** "failed" records a failed turn without billing (no usage is reported then). */
   status?: "failed";
   error_message?: string;

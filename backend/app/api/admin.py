@@ -788,13 +788,17 @@ def dashboard(db: Session = Depends(get_db)):
         if task_status in {"success", "failed"}:
             item[task_status] += 1
 
-    # 工具调用质量：聚合对话消息 tool_trace 的步骤结果与耗时，按错误类别拆分。
-    trace_rows = db.scalars(
-        select(AiChatMessage.tool_trace).where(
-            AiChatMessage.role == "assistant",
-            AiChatMessage.tool_trace.isnot(None),
-        )
+    # 工具调用质量：聚合回合任务行上的 tool_quality 摘要（ai-service 计费上报
+    # 写入，与消息表解耦——删简历后口径仍与功能分布一致）。步骤在写入侧已是
+    # 去内容形态（name/ok/duration_ms/category/status=end），聚合函数复用。
+    quality_rows = db.scalars(
+        select(AiTask.input_data).where(AiTask.input_data.isnot(None))
     ).all()
+    trace_rows = [
+        input_data["tool_quality"]
+        for input_data in quality_rows
+        if isinstance(input_data, dict) and input_data.get("tool_quality")
+    ]
     tool_trace_breakdown = _tool_trace_breakdown(trace_rows)
 
     # 回合环节耗时：聚合 assistant 消息的 timing（ai-service result 事件上报）。

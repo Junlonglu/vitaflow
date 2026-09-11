@@ -1,10 +1,10 @@
 import hmac
 import json
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -135,6 +135,22 @@ class AiServiceUsageEntry(BaseModel):
     total_tokens: int = 0
 
 
+class ToolQualityStep(BaseModel):
+    """Content-free per-tool-step quality line (name/outcome/duration/category).
+
+    The AI service strips ``label``/``detail``/``id`` before posting — those may
+    echo resume content, so they keep dying with the chat message. These
+    aggregates ride onto the AiTask fact row and survive resume deletion, keeping
+    the admin tool-quality panel aligned with the feature breakdown.
+    """
+
+    name: str = Field(max_length=60)
+    status: Literal["end"]
+    ok: bool
+    duration_ms: int | None = Field(default=None, ge=0)
+    category: str | None = Field(default=None, max_length=30)
+
+
 class AiServiceUsageRequest(BaseModel):
     """End-of-request usage report the Node AI service posts to FastAPI.
 
@@ -152,6 +168,13 @@ class AiServiceUsageRequest(BaseModel):
     status: str | None = None
     error_message: str | None = None
     usage: list[AiServiceUsageEntry] = Field(default_factory=list)
+    tool_quality: list[ToolQualityStep] = Field(default_factory=list)
+
+    @field_validator("tool_quality", mode="after")
+    @classmethod
+    def _cap_tool_quality(cls, value: list[ToolQualityStep]) -> list[ToolQualityStep]:
+        # 质量摘要是辅助数据：超限只截断，绝不能把整份计费上报顶成 422
+        return value[:50]
 
 
 def require_ai_service_token(request: Request) -> None:
@@ -810,6 +833,11 @@ def report_ai_service_usage(
     # 对话回合的功能维度：快捷指令取其规范名，自由对话记 "chat"；未知值丢弃。
     feature = payload.feature if payload.feature in AI_CHAT_FEATURES else None
 
+    # 工具质量摘要挂在回合的任务行上（事实记录），与消息表解耦——删简历后
+    # 看板的工具质量与功能分布口径保持一致。质量只随第一个任务行落库（回合
+    # 级数据），多模型回合不得在聚合时翻倍。
+    tool_quality = [step.model_dump(exclude_none=True) for step in payload.tool_quality]
+
     # 失败回合：不结算任何积分，只落一条 failed 任务行，让成功率统计反映真实失败。
     if payload.status == "failed":
         task = create_ai_task(
@@ -817,6 +845,7 @@ def report_ai_service_usage(
             user.id,
             "ai_chat",
             resume_id=payload.resume_id,
+            input_data={"tool_quality": tool_quality} if tool_quality else None,
             model_name=None,
             feature=feature,
         )
@@ -841,6 +870,8 @@ def report_ai_service_usage(
         }
         if payload.tool_calls:
             input_data["tool_calls"] = payload.tool_calls
+        if tool_quality and not entries:
+            input_data["tool_quality"] = tool_quality
         task = create_ai_task(
             db,
             user.id,

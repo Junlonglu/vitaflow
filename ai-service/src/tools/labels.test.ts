@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { toolStepEnd, toolStepLabel } from "./labels.js";
+import { toolQualitySteps, toolStepEnd, toolStepLabel, type ToolTraceEntry } from "./labels.js";
 
 test("get_resume_context maps section keys to Chinese labels", () => {
   assert.equal(toolStepLabel("get_resume_context", { sections: "work,projects" }), "查阅简历「实习/工作经历、项目经历」");
@@ -71,4 +71,36 @@ test("toolStepEnd summarizes read and mutation outcomes without raw payloads", (
 
   const emptyRead = toolStepEnd("get_resume_context", { content: [{ type: "text", text: "未读取到该模块。" }], details: { ok: true, sections: {} } }, false);
   assert.equal(emptyRead.detail, "该模块暂无内容");
+});
+
+test("toolQualitySteps keeps only settled steps and strips content-bearing fields", () => {
+  const trace: ToolTraceEntry[] = [
+    { id: "tc1", name: "get_resume_context", label: "查阅简历", status: "start" },
+    { id: "tc2", name: "update_section", label: "修改「实习/工作经历」", status: "end", ok: true, detail: "负责订单服务…", duration_ms: 45 },
+    { id: "tc3", name: "propose_change", label: "生成修改提案", status: "end", ok: false, detail: "数字缺少依据", category: "validation", duration_ms: 120 },
+    { id: "tc4", name: "web_search", label: "联网搜索", status: "end", ok: true },
+  ];
+  const steps = toolQualitySteps(trace);
+
+  // start 行不进摘要；内容字段（label/detail/id）必须被剥掉——它们可能引用简历
+  // 内容，要随消息删除，而摘要要长存于 AiTask 事实行
+  assert.deepEqual(steps, [
+    { name: "update_section", status: "end", ok: true, duration_ms: 45 },
+    { name: "propose_change", status: "end", ok: false, category: "validation", duration_ms: 120 },
+    { name: "web_search", status: "end", ok: true },
+  ]);
+
+  assert.deepEqual(toolQualitySteps([]), []);
+});
+
+test("toolQualitySteps caps at 50 steps — auxiliary data must not 422 the billing report", () => {
+  const trace: ToolTraceEntry[] = Array.from({ length: 60 }, (_, index) => ({
+    id: `tc${index}`,
+    name: "update_section",
+    label: "修改",
+    status: "end" as const,
+    ok: true,
+  }));
+  const steps = toolQualitySteps(trace);
+  assert.equal(steps.length, 50);
 });

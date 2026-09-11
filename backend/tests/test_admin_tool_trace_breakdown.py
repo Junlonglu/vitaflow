@@ -1,9 +1,9 @@
 """Tests for the admin dashboard's tool-trace quality aggregation (工具调用质量卡片).
 
-`_tool_trace_breakdown` consumes the raw `tool_trace` JSON rows stored on
-assistant chat messages (curated steps with status/ok/category/duration_ms —
-see the 统一错误信封 work in ai-service) and produces the per-category failure
-and duration stats the admin dashboard renders. Pure function, no DB.
+`_tool_trace_breakdown` consumes per-turn quality step rows. The source is now
+`AiTask.input_data["tool_quality"]`（ai-service 计费上报写入的去内容摘要，
+与消息表解耦——删简历后口径仍与功能分布一致）；消息上的原始 tool_trace 仍是
+聊天 UI 的数据源，但不再是看板聚合源。Pure function, no DB.
 """
 import unittest
 
@@ -73,6 +73,25 @@ class ToolTraceBreakdownTest(unittest.TestCase):
         by_category = {item["category"]: item for item in breakdown["failures"]}
         self.assertEqual(by_category["infra"]["count"], 1)
         self.assertIsNone(by_category["infra"]["avg_ms"])
+
+    def test_content_free_quality_steps_aggregate_the_same(self):
+        # AiTask 上的 tool_quality 形态：无 id/label，status 固定为 end
+        rows = [
+            [{"name": "get_resume_context", "status": "end", "ok": True, "duration_ms": 800}],
+            [{"name": "update_section", "status": "end", "ok": False, "category": "validation", "duration_ms": 120}],
+        ]
+        breakdown = _tool_trace_breakdown(rows)
+        self.assertEqual(breakdown["total"], 2)
+        self.assertEqual(breakdown["success_count"], 1)
+        self.assertEqual(breakdown["tools"][0], {
+            "name": "get_resume_context",
+            "total": 1,
+            "success": 1,
+            "failure_count": 0,
+            "failure_rate": 0.0,
+            "avg_ms": 800,
+            "max_ms": 800,
+        })
 
 
 if __name__ == "__main__":

@@ -113,4 +113,23 @@ describe("reportUsage", () => {
     assert.equal(ok, true);
     assert.equal(calls, 2);
   });
+
+  it("carries the tool quality summary verbatim in the body", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), init: init ?? {} });
+      return new Response(null, { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const ok = await reportUsage(deps(fetchImpl), {
+      ...payload,
+      tool_quality: [{ name: "update_section", status: "end", ok: false, category: "validation", duration_ms: 120 }],
+    });
+
+    assert.equal(ok, true);
+    const body = JSON.parse(String(calls[0].init.body));
+    assert.deepEqual(body.tool_quality, [
+      { name: "update_section", status: "end", ok: false, category: "validation", duration_ms: 120 },
+    ]);
+  });
 });

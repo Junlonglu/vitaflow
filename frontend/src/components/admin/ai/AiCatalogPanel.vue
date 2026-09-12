@@ -65,6 +65,14 @@ function openEditProvider(provider: AdminCatalogProvider) {
   })
 }
 
+function formatContextWindow(value?: number | null) {
+  if (!value) return ""
+  const thousands = Math.round(value / 1000)
+  // 999999 这类差一点到 1M 的值四舍五入后 k 会变成 1000，回落到 M 分支
+  if (thousands >= 1000) return `${Number((value / 1000000).toFixed(1))}M 上下文`
+  return `${thousands}k 上下文`
+}
+
 const modelDialogOpen = ref(false)
 const modelEditing = ref<{ providerKey: string; modelId: string } | null>(null)
 const modelForm = ref<{ providerKey: string; id: string; name: string; reasoning: boolean; input: string[]; context_window: string; max_tokens: string }>({
@@ -194,7 +202,7 @@ function onRefresh() {
           </div>
           <div class="flex shrink-0 items-center gap-1.5">
             <span v-for="kind in model.input" :key="kind" class="inline-flex items-center whitespace-nowrap rounded-md border border-zinc-200/50 bg-white px-2 py-0.5 text-[10px] font-medium text-zinc-600" :class="kind === 'image' ? 'border-purple-200/60 bg-purple-50 text-purple-700' : ''">{{ kind === "image" ? "多模态" : "文本" }}</span>
-            <span v-if="model.context_window" class="inline-flex items-center whitespace-nowrap rounded-md border border-zinc-200/50 bg-white px-2 py-0.5 text-[10px] font-medium text-zinc-600">{{ (model.context_window / 1000).toFixed(0) }}k 上下文</span>
+            <span v-if="model.context_window" class="inline-flex items-center whitespace-nowrap rounded-md border border-zinc-200/50 bg-white px-2 py-0.5 text-[10px] font-medium text-zinc-600">{{ formatContextWindow(model.context_window) }}</span>
             <button v-if="provider.editable && !fauxProvider" class="rounded-full p-1.5 text-zinc-400 transition-all hover:bg-zinc-100 hover:text-zinc-700 active:scale-95" title="编辑模型" @click="openEditModel(provider.key, model)"><Pencil class="h-3.5 w-3.5" /></button>
             <button v-if="provider.editable && !fauxProvider" class="rounded-full p-1.5 text-zinc-400 transition-all hover:bg-red-50 hover:text-red-600 active:scale-95" title="删除模型" @click="emit('deleteModel', provider.key, model.id)"><Trash2 class="h-3.5 w-3.5" /></button>
           </div>

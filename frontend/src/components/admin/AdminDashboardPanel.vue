@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import { computed, ref } from "vue"
 import type { Component } from "vue"
 import type { EChartsOption } from "echarts"
-import { Activity } from "lucide-vue-next"
+import { Activity, ChevronDown } from "lucide-vue-next"
 import AdminChart from "@/components/admin/AdminChart.vue"
 import type { DashboardData } from "@/api/admin"
 
-defineProps<{
+const props = defineProps<{
   dashboard: DashboardData
   cards: Array<{
     label: string
@@ -89,11 +90,80 @@ function toolNameText(name: string) {
     update_section: "修改简历模块",
     propose_change: "提交修改提案",
     ask_user_questions: "收集补充信息",
+    web_search: "联网搜索",
   } as Record<string, string>)[name] || name
 }
 
-const activeTraceFailures = (failures: Array<{ category: string; count: number; avg_ms: number | null; max_ms: number | null }>) =>
-  failures.filter((item) => item.count > 0)
+// ---- 对话环节质量卡（回合环节 + 工具类型统一体系）----
+
+type StageQuality = NonNullable<DashboardData["stage_quality"]>
+type StageEntry = StageQuality["stages"][number]
+
+// 首字细分（loader/session/provider）不占概览行，折叠进「首字响应」的下钻面板。
+// 概览行顺序：首字响应 → 工具环节 → 模型生成 / 整回合收尾。
+const TURN_SUB_KEYS = ["loader_ms", "session_create_ms", "provider_ttfb_ms"]
+const TURN_TAIL_KEYS = ["generation_ms", "total_ms"]
+
+const stageQuality = computed<StageQuality | null>(() => props.dashboard?.stage_quality ?? null)
+
+const stageRows = computed<StageEntry[]>(() => {
+  const quality = stageQuality.value
+  if (!quality) return []
+  const byKey = new Map(quality.stages.map((stage) => [stage.key, stage]))
+  const keys = [
+    ...(byKey.has("first_token_ms") ? ["first_token_ms"] : []),
+    ...quality.stages.filter((stage) => stage.kind === "tool").map((stage) => stage.key),
+    ...TURN_TAIL_KEYS.filter((key) => byKey.has(key)),
+  ]
+  return keys.map((key) => byKey.get(key)!).filter(Boolean)
+})
+
+const firstTokenSubstages = computed<StageEntry[]>(() => {
+  const byKey = new Map((stageQuality.value?.stages ?? []).map((stage) => [stage.key, stage]))
+  return TURN_SUB_KEYS.map((key) => byKey.get(key)).filter((stage): stage is StageEntry => !!stage)
+})
+
+// 手风琴多开：各环节独立开合（与 AdminShell 侧边栏分组同一模式）
+const openStages = ref(new Set<string>())
+function toggleStage(key: string) {
+  const next = new Set(openStages.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  openStages.value = next
+}
+
+function stageNameText(key: string) {
+  return ({
+    first_token_ms: "首字响应",
+    loader_ms: "资源加载",
+    session_create_ms: "会话创建",
+    provider_ttfb_ms: "供应商首字",
+    generation_ms: "模型生成（含思考）",
+    total_ms: "整回合",
+  } as Record<string, string>)[key] || toolNameText(key)
+}
+
+function stageFailureRate(stage: StageEntry): number | null {
+  if (stage.kind === "tool") {
+    return stage.success_rate === undefined ? null : Math.round((100 - stage.success_rate) * 10) / 10
+  }
+  // 回合级失败率只有整回合样本足够代表（失败回合没有首字/生成耗时）
+  if (stage.key === "total_ms") return stageQuality.value?.turn_failure_rate ?? null
+  return null
+}
+
+function deltaText(delta?: number | null) {
+  if (delta === null || delta === undefined) return "—"
+  if (delta > 0) return `↑${delta}%`
+  if (delta < 0) return `↓${Math.abs(delta)}%`
+  return "持平"
+}
+function deltaClass(delta?: number | null) {
+  if (!delta) return "text-zinc-400"
+  return delta > 0 ? "text-red-600" : "text-emerald-600"
+}
+
+const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter((item) => item.count > 0)
 </script>
 
 <template>
@@ -148,56 +218,62 @@ const activeTraceFailures = (failures: Array<{ category: string; count: number; 
       </article>
 
       <article class="col-span-full min-w-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
-        <h2 class="font-semibold text-zinc-900">工具调用质量</h2>
-        <p class="mt-1 text-xs text-zinc-400">对话工具步骤的失败类别与耗时</p>
-        <template v-if="(dashboard.tool_trace?.total || 0) > 0">
-          <div class="mt-4 grid grid-cols-3 gap-3">
-            <div class="min-w-0 rounded-xl bg-zinc-50 p-3.5"><p class="text-xs text-zinc-400">工具步骤总数</p><p class="mt-1.5 truncate text-base font-semibold text-zinc-900 sm:text-lg">{{ formatNumber(dashboard.tool_trace?.total) }}</p></div>
-            <div class="min-w-0 rounded-xl bg-zinc-50 p-3.5"><p class="text-xs text-zinc-400">成功步骤</p><p class="mt-1.5 truncate text-base font-semibold text-emerald-600 sm:text-lg">{{ formatNumber(dashboard.tool_trace?.success_count) }}</p><p class="mt-1 truncate text-[10px] text-zinc-400 sm:text-xs">平均 {{ formatMs(dashboard.tool_trace?.success?.avg_ms) }} · 最长 {{ formatMs(dashboard.tool_trace?.success?.max_ms) }}</p></div>
-            <div class="min-w-0 rounded-xl bg-zinc-50 p-3.5"><p class="text-xs text-zinc-400">失败率</p><p class="mt-1.5 truncate text-base font-semibold sm:text-lg" :class="(dashboard.tool_trace?.failure_rate || 0) > 0 ? 'text-red-600' : 'text-zinc-900'">{{ dashboard.tool_trace?.failure_rate ?? 0 }}%</p><p class="mt-1 truncate text-[10px] text-zinc-400 sm:text-xs">共 {{ formatNumber(dashboard.tool_trace?.failure_count) }} 步失败</p></div>
-          </div>
-          <div class="mt-3 space-y-2">
-            <div v-for="item in activeTraceFailures(dashboard.tool_trace?.failures || [])" :key="item.category" class="flex items-center justify-between gap-2 overflow-hidden whitespace-nowrap rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2.5 text-xs">
-              <span class="shrink-0 rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700 ring-1 ring-inset ring-red-200">{{ traceCategoryText(item.category) }}</span>
-              <span class="min-w-0 truncate text-zinc-500">{{ item.count }} 步</span>
-              <span class="shrink-0 text-zinc-500">平均 <strong class="text-zinc-700">{{ formatMs(item.avg_ms) }}</strong></span>
-              <span class="shrink-0 text-zinc-500">最长 <strong class="text-zinc-700">{{ formatMs(item.max_ms) }}</strong></span>
+        <h2 class="font-semibold text-zinc-900">对话环节质量</h2>
+        <p class="mt-1 text-xs text-zinc-400">回合与工具各环节的耗时与失败下钻</p>
+        <template v-if="stageRows.length">
+          <div class="mt-4 grid grid-cols-2 gap-3">
+            <div class="min-w-0 rounded-xl bg-zinc-50 p-3.5">
+              <p class="text-xs text-zinc-400">回合样本</p>
+              <p class="mt-1.5 truncate text-base font-semibold text-zinc-900 sm:text-lg">{{ formatNumber(stageQuality?.turns) }}</p>
             </div>
-            <p v-if="!activeTraceFailures(dashboard.tool_trace?.failures || []).length" class="py-3 text-center text-sm text-zinc-400">暂无失败步骤</p>
-          </div>
-          <div v-if="(dashboard.tool_trace?.tools || []).length" class="mt-4">
-            <p class="mb-2 text-xs font-medium text-zinc-500">各工具统计</p>
-            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              <div v-for="item in dashboard.tool_trace?.tools || []" :key="item.name" class="min-w-0 rounded-xl border border-zinc-100 bg-zinc-50 p-3">
-                <div class="flex items-center justify-between gap-2 whitespace-nowrap">
-                  <span class="truncate text-xs font-semibold text-zinc-900">{{ toolNameText(item.name) }}</span>
-                  <span class="shrink-0 text-[10px] text-zinc-400">共 {{ item.total }} 步</span>
-                </div>
-                <div class="mt-1.5 flex items-center justify-between gap-2 whitespace-nowrap text-[10px] text-zinc-500 sm:text-xs">
-                  <span class="rounded-full bg-emerald-50 px-1.5 py-0.5 text-emerald-700">成功 {{ item.success }}</span>
-                  <span class="rounded-full px-1.5 py-0.5" :class="item.failure_count > 0 ? 'bg-red-50 text-red-700' : 'bg-zinc-100 text-zinc-400'">失败 {{ item.failure_count }}</span>
-                  <span class="min-w-0 truncate">平均 <strong class="text-zinc-700">{{ formatMs(item.avg_ms) }}</strong> · 最长 <strong class="text-zinc-700">{{ formatMs(item.max_ms) }}</strong></span>
-                </div>
-              </div>
+            <div class="min-w-0 rounded-xl bg-zinc-50 p-3.5">
+              <p class="text-xs text-zinc-400">回合失败率</p>
+              <p class="mt-1.5 truncate text-base font-semibold sm:text-lg" :class="(stageQuality?.turn_failure_rate || 0) > 0 ? 'text-red-600' : 'text-zinc-900'">{{ stageQuality?.turn_failure_rate ?? 0 }}%</p>
             </div>
           </div>
-          <div v-if="(dashboard.chat_timing?.turns || 0) > 0" class="mt-4">
-            <p class="mb-2 text-xs font-medium text-zinc-500">对话回合各环节耗时（{{ dashboard.chat_timing?.turns }} 回合）</p>
-            <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <div v-for="phase in [
-                { label: '首字响应', key: 'first_token_ms' },
-                { label: '工具执行', key: 'tool_ms' },
-                { label: '生成回复（含思考）', key: 'generation_ms' },
-                { label: '整回合', key: 'total_ms' },
-              ]" :key="phase.key" class="min-w-0 rounded-xl border border-zinc-100 bg-zinc-50 p-3.5">
-                <p class="truncate text-xs text-zinc-400">{{ phase.label }}</p>
-                <p class="mt-1.5 truncate text-base font-semibold text-zinc-900 sm:text-lg">{{ formatMs(dashboard.chat_timing?.[phase.key]?.avg_ms) }}</p>
-                <p class="mt-1 truncate text-[10px] text-zinc-400 sm:text-xs">最长 {{ formatMs(dashboard.chat_timing?.[phase.key]?.max_ms) }}</p>
+          <div class="mt-3 divide-y divide-zinc-100 overflow-hidden rounded-xl border border-zinc-100">
+            <div v-for="stage in stageRows" :key="stage.key">
+              <button type="button" class="flex w-full items-center gap-2 px-3 py-2.5 text-left transition hover:bg-zinc-50 sm:gap-3" :aria-expanded="openStages.has(stage.key)" @click="toggleStage(stage.key)">
+                <span class="min-w-0 flex-1 truncate text-xs font-medium text-zinc-900 sm:text-sm">{{ stageNameText(stage.key) }}</span>
+                <span class="shrink-0 text-[10px] text-zinc-400 sm:text-xs">{{ stage.samples }} 次</span>
+                <span class="shrink-0 text-xs font-semibold text-zinc-900 sm:text-sm">{{ formatMs(stage.avg_ms) }}</span>
+                <span class="w-16 shrink-0 text-right text-[10px] sm:w-20 sm:text-xs" :class="deltaClass(stage.recent_delta_pct)" :title="`近10次平均 ${formatMs(stage.recent_avg_ms)} · 较总体 ${deltaText(stage.recent_delta_pct)}`">近10 {{ deltaText(stage.recent_delta_pct) }}</span>
+                <span class="w-14 shrink-0 text-right text-[10px] sm:w-16 sm:text-xs" :class="(stageFailureRate(stage) || 0) > 0 ? 'text-red-600' : 'text-zinc-400'">{{ stageFailureRate(stage) === null ? "" : `失败 ${stageFailureRate(stage)}%` }}</span>
+                <ChevronDown class="h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform" :class="openStages.has(stage.key) ? '' : '-rotate-90'" />
+              </button>
+              <div v-show="openStages.has(stage.key)" class="space-y-3 border-t border-zinc-100 bg-zinc-50/60 px-3 py-3">
+                <div class="grid grid-cols-2 gap-2 text-[10px] sm:grid-cols-3 sm:text-xs lg:grid-cols-6">
+                  <div><p class="text-zinc-400">样本</p><p class="mt-0.5 font-semibold text-zinc-900">{{ stage.samples }}</p></div>
+                  <div><p class="text-zinc-400">平均</p><p class="mt-0.5 font-semibold text-zinc-900">{{ formatMs(stage.avg_ms) }}</p></div>
+                  <div><p class="text-zinc-400">P50</p><p class="mt-0.5 font-semibold text-zinc-900">{{ formatMs(stage.p50_ms) }}</p></div>
+                  <div><p class="text-zinc-400">P95</p><p class="mt-0.5 font-semibold text-zinc-900">{{ formatMs(stage.p95_ms) }}</p></div>
+                  <div><p class="text-zinc-400">最长</p><p class="mt-0.5 font-semibold text-zinc-900">{{ formatMs(stage.max_ms) }}</p></div>
+                  <div><p class="text-zinc-400">近10次平均</p><p class="mt-0.5 font-semibold text-zinc-900">{{ formatMs(stage.recent_avg_ms) }}</p></div>
+                </div>
+                <div v-if="stage.key === 'first_token_ms' && firstTokenSubstages.length" class="space-y-1.5">
+                  <p class="text-xs font-medium text-zinc-500">首字延迟细分</p>
+                  <div v-for="sub in firstTokenSubstages" :key="sub.key" class="flex items-center justify-between gap-2 whitespace-nowrap rounded-lg bg-white px-2.5 py-2 text-[10px] sm:text-xs">
+                    <span class="text-zinc-600">{{ stageNameText(sub.key) }}</span>
+                    <span class="text-zinc-500">平均 <strong class="text-zinc-900">{{ formatMs(sub.avg_ms) }}</strong> · 最长 <strong class="text-zinc-900">{{ formatMs(sub.max_ms) }}</strong></span>
+                  </div>
+                </div>
+                <div v-if="stage.kind === 'tool'" class="space-y-2">
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <span v-for="item in activeStageFailures(stage)" :key="item.category" class="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-700 ring-1 ring-inset ring-red-200">{{ traceCategoryText(item.category) }} × {{ item.count }}</span>
+                    <span v-if="!activeStageFailures(stage).length" class="text-[10px] text-zinc-400 sm:text-xs">无失败记录</span>
+                  </div>
+                  <div v-if="(stage.recent_reasons || []).length" class="rounded-lg bg-white px-2.5 py-2">
+                    <p class="text-[10px] text-zinc-400">最近失败原因</p>
+                    <ul class="mt-1 space-y-0.5">
+                      <li v-for="reason in stage.recent_reasons" :key="reason" class="truncate text-[10px] text-zinc-600 sm:text-xs">· {{ reason }}</li>
+                    </ul>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </template>
-        <p v-else class="py-8 text-center text-sm text-zinc-400">暂无工具调用记录</p>
+        <p v-else class="py-8 text-center text-sm text-zinc-400">暂无对话记录</p>
       </article>
 
       <article class="col-span-full min-w-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">

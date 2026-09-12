@@ -14,6 +14,7 @@
  * from the provider console. Retry lives ONLY here — the rest of the call chain
  * must stay single-retry-point (多层重试会相乘放大流量).
  */
+import type { TurnTiming } from "./agent.js";
 import type { ToolQualityStep } from "./tools/labels.js";
 import type { ModelUsage } from "./usage.js";
 
@@ -33,6 +34,8 @@ export interface UsageReportPayload {
   tool_calls?: number;
   /** Content-free quality steps; persisted on the AiTask row so quality stats survive resume deletion. */
   tool_quality?: ToolQualityStep[];
+  /** Per-turn latency breakdown in ms; same fact-row persistence rule as tool_quality. */
+  turn_timing?: TurnTiming;
   /** "failed" records a failed turn without billing (no usage is reported then). */
   status?: "failed";
   error_message?: string;

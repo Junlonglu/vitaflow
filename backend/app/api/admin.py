@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Literal, Optional
@@ -25,7 +26,6 @@ from app.models.ai_config import (
     UserFeedback,
 )
 from app.models.announcement import Announcement
-from app.models.ai_chat import AiChatMessage
 from app.models.export_record import ExportRecord
 from app.models.resume import Resume, UploadedFile
 from app.models.user import User
@@ -483,118 +483,148 @@ def _breakdown_key(task_type: object, feature: object) -> str:
 # 工具失败类别的固定展示顺序；类别缺失的历史失败步骤归入 unknown。
 _TRACE_CATEGORIES = ("validation", "business", "infra", "unknown")
 
+# 回合环节的固定展示顺序；loader/session/provider 是首字延迟的细分，前端把它们
+# 折叠进「首字响应」的下钻面板。
+_TURN_STAGE_ORDER = ("first_token_ms", "loader_ms", "session_create_ms", "provider_ttfb_ms", "generation_ms", "total_ms")
 
-def _chat_timing_breakdown(timing_rows: list) -> dict:
-    """Aggregate per-turn latency breakdowns (对话回合各环节耗时).
 
-    Each timing dict carries first_token_ms (time to first streamed token),
-    tool_ms (cumulative tool execution) and total_ms; 生成回复（含思考）is
-    derived as total - tool. Rows without a sane total_ms are skipped; rows
-    without a specific phase just miss that phase's sample.
+def _percentile(durations: list[int], ratio: float) -> int | None:
+    if not durations:
+        return None
+    ordered = sorted(durations)
+    return ordered[math.ceil(len(ordered) * ratio) - 1]
+
+
+def _p95(durations: list[int]) -> int | None:
+    """nearest-rank p95；样本 <20 时分布不稳，返回 None 让前端隐藏。"""
+    return _percentile(durations, 0.95) if len(durations) >= 20 else None
+
+
+def _stage_quality_breakdown(rows: list) -> dict:
+    """Aggregate per-stage latency + failure quality (对话环节质量卡).
+
+    ``rows`` are (input_data, task_status) pairs, newest-first (the caller
+    orders by id desc and caps the scan). A row's ``turn_timing`` dict feeds
+    the turn stages (回合环节), its ``tool_quality`` steps feed one stage per
+    tool name — tools and turn phases are sibling stages in one card. A stage's
+    近10次 sample is the first 10 durations seen in row order;
+    ``recent_delta_pct`` compares it against the overall average. Failed task
+    rows count toward the turn failure rate (denominator = rows carrying a turn
+    sample, timed or failed).
     """
 
-    def _pack(durations: list[int]) -> dict[str, int | None]:
+    def _new_stage() -> dict[str, Any]:
+        return {"samples": 0, "durations": [], "recent": [], "success": 0, "failures": {}, "failure_durations": {}, "reasons": []}
+
+    stages: dict[str, dict[str, Any]] = {}
+    turns = 0
+    turn_rows = 0
+    failed_rows = 0
+    for input_data, status in rows:
+        is_failed = status == "failed"
+        if is_failed:
+            failed_rows += 1
+        if isinstance(input_data, dict):
+            timing = input_data.get("turn_timing")
+            if isinstance(timing, dict):
+                raw_total = timing.get("total_ms")
+                if isinstance(raw_total, (int, float)) and raw_total >= 0:
+                    turn_rows += 1
+                    turns += 1
+                    total = int(raw_total)
+                    raw_tool = timing.get("tool_ms")
+                    tool = int(raw_tool) if isinstance(raw_tool, (int, float)) and raw_tool >= 0 else 0
+                    phase_samples = (
+                        ("first_token_ms", timing.get("first_token_ms")),
+                        ("loader_ms", timing.get("loader_ms")),
+                        ("session_create_ms", timing.get("session_create_ms")),
+                        ("provider_ttfb_ms", timing.get("provider_ttfb_ms")),
+                        ("generation_ms", max(total - tool, 0)),
+                        ("total_ms", total),
+                    )
+                    for key, value in phase_samples:
+                        if isinstance(value, (int, float)) and value >= 0:
+                            item = stages.setdefault(key, _new_stage())
+                            duration = int(value)
+                            item["samples"] += 1
+                            item["durations"].append(duration)
+                            if len(item["recent"]) < 10:
+                                item["recent"].append(duration)
+                elif is_failed:
+                    turn_rows += 1
+            elif is_failed:
+                turn_rows += 1
+            for step in input_data.get("tool_quality") or []:
+                if not isinstance(step, dict) or step.get("status") != "end":
+                    continue
+                item = stages.setdefault(str(step.get("name") or "unknown"), _new_stage())
+                item["samples"] += 1
+                raw_duration = step.get("duration_ms")
+                duration = int(raw_duration) if isinstance(raw_duration, (int, float)) and raw_duration >= 0 else None
+                if duration is not None:
+                    item["durations"].append(duration)
+                    if len(item["recent"]) < 10:
+                        item["recent"].append(duration)
+                if step.get("ok") is True:
+                    item["success"] += 1
+                else:
+                    category = str(step.get("category") or "unknown")
+                    item["failures"][category] = item["failures"].get(category, 0) + 1
+                    if duration is not None:
+                        item["failure_durations"].setdefault(category, []).append(duration)
+                    # 行序即新→旧：reason 去重后保留最近出现的说法，最多 3 条
+                    reason = step.get("reason")
+                    if isinstance(reason, str) and reason and reason not in item["reasons"] and len(item["reasons"]) < 3:
+                        item["reasons"].append(reason)
+        elif is_failed:
+            turn_rows += 1
+
+    def _pack(item: dict[str, Any]) -> dict[str, Any]:
+        durations: list[int] = item["durations"]
+        avg = round(sum(durations) / len(durations)) if durations else None
+        recent = item["recent"]
+        recent_avg = round(sum(recent) / len(recent)) if recent else None
+        # 单样本（样本数 <2）没有趋势可言，delta 置空让前端显示「—」
+        delta = round((recent_avg - avg) * 100 / avg) if avg and recent_avg is not None and avg > 0 and len(durations) >= 2 else None
         return {
-            "avg_ms": round(sum(durations) / len(durations)) if durations else None,
+            "samples": item["samples"],
+            "avg_ms": avg,
+            # p50（中位数）不受离群值影响：与 avg 差距大说明分布被尾部拉偏
+            "p50_ms": _percentile(durations, 0.5),
+            "p95_ms": _p95(durations),
             "max_ms": max(durations) if durations else None,
+            "recent_avg_ms": recent_avg,
+            "recent_delta_pct": delta,
         }
 
-    turns = 0
-    first_token: list[int] = []
-    tool: list[int] = []
-    generation: list[int] = []
-    total: list[int] = []
-    for timing in timing_rows:
-        if not isinstance(timing, dict):
+    stage_list = []
+    for key in _TURN_STAGE_ORDER:
+        item = stages.pop(key, None)
+        if item and item["samples"]:
+            stage_list.append({"key": key, "kind": "turn", **_pack(item)})
+    for key, item in sorted(stages.items(), key=lambda entry: entry[1]["samples"], reverse=True):
+        if not item["samples"]:
             continue
-        raw_total = timing.get("total_ms")
-        if not isinstance(raw_total, (int, float)) or raw_total < 0:
-            continue
-        turns += 1
-        total.append(int(raw_total))
-        raw_first = timing.get("first_token_ms")
-        if isinstance(raw_first, (int, float)) and raw_first >= 0:
-            first_token.append(int(raw_first))
-        raw_tool = timing.get("tool_ms")
-        if isinstance(raw_tool, (int, float)) and raw_tool >= 0:
-            tool.append(int(raw_tool))
-        generation.append(max(int(raw_total) - int(raw_tool or 0), 0))
+        failure_pack = []
+        for category in list(_TRACE_CATEGORIES) + sorted(set(item["failures"]) - set(_TRACE_CATEGORIES)):
+            durations = item["failure_durations"].get(category, [])
+            failure_pack.append({
+                "category": category,
+                "count": item["failures"].get(category, 0),
+                "avg_ms": round(sum(durations) / len(durations)) if durations else None,
+            })
+        stage_list.append({
+            "key": key,
+            "kind": "tool",
+            **_pack(item),
+            "success_rate": round(item["success"] * 100 / item["samples"], 1),
+            "failures": failure_pack,
+            "recent_reasons": item["reasons"],
+        })
     return {
         "turns": turns,
-        "first_token_ms": _pack(first_token),
-        "tool_ms": _pack(tool),
-        "generation_ms": _pack(generation),
-        "total_ms": _pack(total),
-    }
-
-
-def _tool_trace_breakdown(trace_rows: list) -> dict:
-    """Aggregate tool_trace step rows (统一错误信封改造的看板侧).
-
-    Counts only settled steps (status == "end"); failures split by the envelope
-    ``category`` (steps recorded before the category existed land in "unknown").
-    Durations come from the step's ``duration_ms``; steps without one are counted
-    but excluded from the avg/max pack.
-    """
-
-    def _duration_pack(durations: list[int]) -> dict[str, int | None]:
-        return {
-            "avg_ms": round(sum(durations) / len(durations)) if durations else None,
-            "max_ms": max(durations) if durations else None,
-        }
-
-    total = 0
-    success_count = 0
-    success_durations: list[int] = []
-    failure_counts: dict[str, int] = {}
-    failure_durations: dict[str, list[int]] = {}
-    tool_names: dict[str, dict[str, Any]] = {}
-    for trace in trace_rows:
-        for step in trace or []:
-            if not isinstance(step, dict) or step.get("status") != "end":
-                continue
-            total += 1
-            raw_duration = step.get("duration_ms")
-            duration = int(raw_duration) if isinstance(raw_duration, (int, float)) and raw_duration >= 0 else None
-            if step.get("ok") is True:
-                success_count += 1
-                if duration is not None:
-                    success_durations.append(duration)
-            else:
-                category = str(step.get("category") or "unknown")
-                failure_counts[category] = failure_counts.get(category, 0) + 1
-                if duration is not None:
-                    failure_durations.setdefault(category, []).append(duration)
-            tool_item = tool_names.setdefault(str(step.get("name") or "unknown"), {"total": 0, "success": 0, "durations": []})
-            tool_item["total"] += 1
-            if step.get("ok") is True:
-                tool_item["success"] += 1
-            if duration is not None:
-                tool_item["durations"].append(duration)
-
-    failure_total = total - success_count
-    tools = [
-        {
-            "name": name,
-            "total": item["total"],
-            "success": item["success"],
-            "failure_count": item["total"] - item["success"],
-            "failure_rate": round((item["total"] - item["success"]) * 100 / item["total"], 1) if item["total"] else 0.0,
-            **_duration_pack(item["durations"]),
-        }
-        for name, item in sorted(tool_names.items(), key=lambda value: value[1]["total"], reverse=True)
-    ]
-    return {
-        "total": total,
-        "success_count": success_count,
-        "failure_count": failure_total,
-        "failure_rate": round(failure_total * 100 / total, 1) if total else 0.0,
-        "success": {"count": success_count, **_duration_pack(success_durations)},
-        "failures": [
-            {"category": category, "count": failure_counts.get(category, 0), **_duration_pack(failure_durations.get(category, []))}
-            for category in list(_TRACE_CATEGORIES) + sorted(set(failure_counts) - set(_TRACE_CATEGORIES))
-        ],
-        "tools": tools,
+        "turn_failure_rate": round(failed_rows * 100 / turn_rows, 1) if turn_rows else 0.0,
+        "stages": stage_list,
     }
 
 
@@ -788,27 +818,17 @@ def dashboard(db: Session = Depends(get_db)):
         if task_status in {"success", "failed"}:
             item[task_status] += 1
 
-    # 工具调用质量：聚合回合任务行上的 tool_quality 摘要（ai-service 计费上报
-    # 写入，与消息表解耦——删简历后口径仍与功能分布一致）。步骤在写入侧已是
-    # 去内容形态（name/ok/duration_ms/category/status=end），聚合函数复用。
-    quality_rows = db.scalars(
-        select(AiTask.input_data).where(AiTask.input_data.isnot(None))
+    # 对话环节质量：回合任务行上的 turn_timing（回合耗时）+ tool_quality（工具
+    # 步骤）统一聚合，全部来自 ai-service 计费上报的事实行，与消息表解耦——
+    # 删简历后口径仍与功能分布一致。按 id 降序取近 500 行，行序即新→旧，
+    # 供「近10次」趋势样本使用。
+    task_rows = db.execute(
+        select(AiTask.input_data, AiTask.status)
+        .where(AiTask.task_type == "ai_chat", AiTask.input_data.isnot(None))
+        .order_by(AiTask.id.desc())
+        .limit(500)
     ).all()
-    trace_rows = [
-        input_data["tool_quality"]
-        for input_data in quality_rows
-        if isinstance(input_data, dict) and input_data.get("tool_quality")
-    ]
-    tool_trace_breakdown = _tool_trace_breakdown(trace_rows)
-
-    # 回合环节耗时：聚合 assistant 消息的 timing（ai-service result 事件上报）。
-    timing_rows = db.scalars(
-        select(AiChatMessage.timing).where(
-            AiChatMessage.role == "assistant",
-            AiChatMessage.timing.isnot(None),
-        )
-    ).all()
-    chat_timing_breakdown = _chat_timing_breakdown(timing_rows)
+    stage_quality = _stage_quality_breakdown([(row.input_data, row.status) for row in task_rows])
 
     daily = []
     start_day = today - timedelta(days=6)
@@ -945,8 +965,7 @@ def dashboard(db: Session = Depends(get_db)):
             "section_breakdown": [
                 {"section_type": section_type, **counts} for section_type, counts in section_map.items()
             ],
-            "tool_trace": tool_trace_breakdown,
-            "chat_timing": chat_timing_breakdown,
+            "stage_quality": stage_quality,
             "daily": daily,
             "hourly_activity": hourly_activity,
         }

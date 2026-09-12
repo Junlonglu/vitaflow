@@ -37,6 +37,13 @@ export interface ToolQualityStep {
   ok: boolean;
   duration_ms?: number;
   category?: string;
+  /**
+   * Failure reason only (ok=false): the curated envelope verdict from
+   * toolStepEnd — a validation message, never a resume payload — so the admin
+   * dashboard can group failures by cause. Success summaries stay out: they may
+   * echo resume content and must keep dying with the chat message.
+   */
+  reason?: string;
 }
 
 /** Drop unsettled and content-bearing fields from the trace; keeps report shape tight.
@@ -51,6 +58,7 @@ export function toolQualitySteps(trace: ToolTraceEntry[]): ToolQualityStep[] {
       ok: entry.ok === true,
       ...(typeof entry.duration_ms === "number" ? { duration_ms: entry.duration_ms } : {}),
       ...(entry.category ? { category: entry.category } : {}),
+      ...(entry.ok === false && entry.detail ? { reason: clampText(entry.detail, 40) } : {}),
     }));
 }
 

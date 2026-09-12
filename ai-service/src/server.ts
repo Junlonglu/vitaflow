@@ -331,6 +331,7 @@ app.post("/v1/chat", async (req, res) => {
         feature,
         tool_calls: outcome.toolCalls,
         tool_quality: outcome.toolQuality,
+        turn_timing: outcome.timing,
       });
       if (!ok) console.error("[vitaflow-ai] usage report rejected by FastAPI");
     } catch (err) {
@@ -346,9 +347,11 @@ app.post("/v1/chat", async (req, res) => {
         resume_id: resumeId,
         usage: [],
         feature,
+        tool_calls: outcome.toolCalls,
         status: "failed",
         error_message: outcome.error,
         tool_quality: outcome.toolQuality,
+        turn_timing: outcome.timing,
       });
       if (!ok) console.error("[vitaflow-ai] failure report rejected by FastAPI");
     } catch (err) {

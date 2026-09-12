@@ -141,7 +141,9 @@ class ToolQualityStep(BaseModel):
     The AI service strips ``label``/``detail``/``id`` before posting — those may
     echo resume content, so they keep dying with the chat message. These
     aggregates ride onto the AiTask fact row and survive resume deletion, keeping
-    the admin tool-quality panel aligned with the feature breakdown.
+    the admin tool-quality panel aligned with the feature breakdown. The single
+    exception is ``reason``: a failed step's validation verdict (curated, never a
+    resume payload), kept so the dashboard can group failures by cause.
     """
 
     name: str = Field(max_length=60)
@@ -149,6 +151,29 @@ class ToolQualityStep(BaseModel):
     ok: bool
     duration_ms: int | None = Field(default=None, ge=0)
     category: str | None = Field(default=None, max_length=30)
+    reason: str | None = None
+
+    @field_validator("reason", mode="after")
+    @classmethod
+    def _clamp_reason(cls, value: str | None) -> str | None:
+        # 与 tool_quality 上限同口径：辅助字段超限截断即可，不拒整份计费上报
+        return value[:60] if value else value
+
+
+class TurnTiming(BaseModel):
+    """Content-free per-turn latency breakdown in ms (对话环节质量看板的回合样本).
+
+    Deliberately permissive (floats allowed, no sign/total checks): this is
+    auxiliary data and must never 422 the billing report — sanity filtering
+    happens at aggregation time in the admin dashboard.
+    """
+
+    first_token_ms: float | None = None
+    tool_ms: float | None = None
+    total_ms: float | None = None
+    loader_ms: float | None = None
+    session_create_ms: float | None = None
+    provider_ttfb_ms: float | None = None
 
 
 class AiServiceUsageRequest(BaseModel):
@@ -169,6 +194,7 @@ class AiServiceUsageRequest(BaseModel):
     error_message: str | None = None
     usage: list[AiServiceUsageEntry] = Field(default_factory=list)
     tool_quality: list[ToolQualityStep] = Field(default_factory=list)
+    turn_timing: TurnTiming | None = None
 
     @field_validator("tool_quality", mode="after")
     @classmethod
@@ -833,19 +859,27 @@ def report_ai_service_usage(
     # 对话回合的功能维度：快捷指令取其规范名，自由对话记 "chat"；未知值丢弃。
     feature = payload.feature if payload.feature in AI_CHAT_FEATURES else None
 
-    # 工具质量摘要挂在回合的任务行上（事实记录），与消息表解耦——删简历后
-    # 看板的工具质量与功能分布口径保持一致。质量只随第一个任务行落库（回合
-    # 级数据），多模型回合不得在聚合时翻倍。
+    # 工具质量摘要与回合耗时都挂在回合的任务行上（事实记录），与消息表解耦
+    # ——删简历后看板的工具质量、环节耗时与功能分布口径保持一致。两者都只随
+    # 第一个任务行落库（回合级数据），多模型回合不得在聚合时翻倍。
     tool_quality = [step.model_dump(exclude_none=True) for step in payload.tool_quality]
+    turn_timing = payload.turn_timing.model_dump(exclude_none=True) if payload.turn_timing else None
 
     # 失败回合：不结算任何积分，只落一条 failed 任务行，让成功率统计反映真实失败。
     if payload.status == "failed":
+        turn_input: dict[str, Any] = {}
+        if payload.tool_calls:
+            turn_input["tool_calls"] = payload.tool_calls
+        if tool_quality:
+            turn_input["tool_quality"] = tool_quality
+        if turn_timing:
+            turn_input["turn_timing"] = turn_timing
         task = create_ai_task(
             db,
             user.id,
             "ai_chat",
             resume_id=payload.resume_id,
-            input_data={"tool_quality": tool_quality} if tool_quality else None,
+            input_data=turn_input or None,
             model_name=None,
             feature=feature,
         )
@@ -872,6 +906,8 @@ def report_ai_service_usage(
             input_data["tool_calls"] = payload.tool_calls
         if tool_quality and not entries:
             input_data["tool_quality"] = tool_quality
+        if turn_timing and not entries:
+            input_data["turn_timing"] = turn_timing
         task = create_ai_task(
             db,
             user.id,

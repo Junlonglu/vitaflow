@@ -78,6 +78,12 @@ export interface AgentInput {
 type Emit = (event: ChatStreamEvent) => void;
 
 /**
+ * Content-free per-turn latency breakdown in ms (no prompt/response payload),
+ * reported to the AiTask fact row so stage-quality stats survive resume deletion.
+ */
+export type TurnTiming = Record<string, number | null>;
+
+/**
  * End-of-turn outcome for billing/reporting (server.ts posts it to FastAPI).
  * A failed turn carries no usage — failed turns are never billed, but they ARE
  * reported (status="failed") so the admin success rate reflects real failures.
@@ -90,6 +96,8 @@ export interface ChatTurnOutcome {
   toolCalls: number;
   /** Content-free quality steps for the AiTask fact row (survive resume deletion). */
   toolQuality: ToolQualityStep[];
+  /** Latency breakdown; absent only when the turn failed before timing started. */
+  timing?: TurnTiming;
 }
 
 /** One-shot task input (ticket 09): generate/import, no tools, single JSON answer. */
@@ -259,22 +267,25 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     }
   };
 
+  // Shared by the result event (chat UI) and the turn outcome (usage report):
+  // one latency breakdown per turn, assembled at call time.
+  const buildTurnTiming = (): TurnTiming => ({
+    first_token_ms: firstTokenAt !== undefined ? firstTokenAt - turnStart : null,
+    tool_ms: toolTotalMs,
+    total_ms: Date.now() - turnStart,
+    // 首字延迟分段：资源加载 / 会话创建 / 供应商首字（prompt 后等模型 delta）
+    loader_ms: loaderDoneAt - resolveDoneAt,
+    session_create_ms: sessionDoneAt - loaderDoneAt,
+    provider_ttfb_ms: firstTokenAt !== undefined ? firstTokenAt - sessionDoneAt : null,
+  });
+
   let resultSent = false;
   const sendResult = (text: string) => {
     if (resultSent) return;
     resultSent = true;
-    const totalMs = Date.now() - turnStart;
     const data: Record<string, unknown> = {
       assistant_message: buildAssistantMessage(text, Date.now()),
-      timing: {
-        first_token_ms: firstTokenAt !== undefined ? firstTokenAt - turnStart : null,
-        tool_ms: toolTotalMs,
-        total_ms: totalMs,
-        // 首字延迟分段：资源加载 / 会话创建 / 供应商首字（prompt 后等模型 delta）
-        loader_ms: loaderDoneAt - resolveDoneAt,
-        session_create_ms: sessionDoneAt - loaderDoneAt,
-        provider_ttfb_ms: firstTokenAt !== undefined ? firstTokenAt - sessionDoneAt : null,
-      },
+      timing: buildTurnTiming(),
     };
     if (toolState.pendingChange) {
       data.pending_change = toolState.pendingChange;
@@ -335,7 +346,7 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
 
   if (modelFallbackMessage) {
     emit({ type: "error", message: `模型不可用：${modelFallbackMessage}` });
-    return { usage: [], failed: true, error: `模型不可用：${modelFallbackMessage}`, toolCalls: 0, toolQuality: [] };
+    return { usage: [], failed: true, error: `模型不可用：${modelFallbackMessage}`, toolCalls: 0, toolQuality: [], timing: buildTurnTiming() };
   }
 
   let text = "";
@@ -482,9 +493,9 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
   // always sends a result, so resultSent alone can't distinguish failure);
   // failed turns carry no usage, mirroring the legacy rule that refunds them.
   if (sawError) {
-    return { usage: [], failed: true, error: turnError, toolCalls: toolTrace.length, toolQuality: toolQualitySteps(toolTrace) };
+    return { usage: [], failed: true, error: turnError, toolCalls: toolTrace.length, toolQuality: toolQualitySteps(toolTrace), timing: buildTurnTiming() };
   }
-  return { usage: usage.snapshot(), failed: false, toolCalls: toolTrace.length, toolQuality: toolQualitySteps(toolTrace) };
+  return { usage: usage.snapshot(), failed: false, toolCalls: toolTrace.length, toolQuality: toolQualitySteps(toolTrace), timing: buildTurnTiming() };
 }
 
 /**

@@ -83,10 +83,11 @@ test("toolQualitySteps keeps only settled steps and strips content-bearing field
   const steps = toolQualitySteps(trace);
 
   // start 行不进摘要；内容字段（label/detail/id）必须被剥掉——它们可能引用简历
-  // 内容，要随消息删除，而摘要要长存于 AiTask 事实行
+  // 内容，要随消息删除，而摘要要长存于 AiTask 事实行。唯一例外：失败步骤的
+  // detail 以截断 reason 的身份保留（校验结论文案，不含简历原文）。
   assert.deepEqual(steps, [
     { name: "update_section", status: "end", ok: true, duration_ms: 45 },
-    { name: "propose_change", status: "end", ok: false, category: "validation", duration_ms: 120 },
+    { name: "propose_change", status: "end", ok: false, category: "validation", duration_ms: 120, reason: "数字缺少依据" },
     { name: "web_search", status: "end", ok: true },
   ]);
 
@@ -103,4 +104,21 @@ test("toolQualitySteps caps at 50 steps — auxiliary data must not 422 the bill
   }));
   const steps = toolQualitySteps(trace);
   assert.equal(steps.length, 50);
+});
+
+test("toolQualitySteps keeps the failure reason only on failed steps, clamped to 40 chars", () => {
+  const trace: ToolTraceEntry[] = [
+    { id: "tc1", name: "update_section", label: "修改", status: "end", ok: false, detail: "数字缺少依据", category: "validation" },
+    // 成功步骤的 detail 是变更摘要（可能回显简历内容），必须留在消息表
+    { id: "tc2", name: "propose_change", label: "提案", status: "end", ok: true, detail: "已修改：实习/工作经历（2 条变为 2 条：A 公司）" },
+    { id: "tc3", name: "web_search", label: "联网搜索", status: "end", ok: false },
+  ];
+  const [failed, success, failedNoDetail] = toolQualitySteps(trace);
+  assert.equal(failed.reason, "数字缺少依据");
+  assert.equal(success.reason, undefined);
+  assert.equal("reason" in failedNoDetail, false);
+
+  const long = toolQualitySteps([{ id: "tc4", name: "update_section", label: "修改", status: "end", ok: false, detail: "原".repeat(45) }])[0];
+  assert.equal(long.reason?.length, 41, "40 chars plus the ellipsis");
+  assert.ok(long.reason?.endsWith("…"));
 });

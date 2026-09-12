@@ -375,6 +375,83 @@ class ToolQualityPersistenceTest(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(len(created["input_data"]["tool_quality"]), 50)
 
+    def test_turn_timing_rides_on_first_task_row_only(self):
+        multi_model = {
+            **_USAGE_PAYLOAD,
+            "turn_timing": {"first_token_ms": 1240, "tool_ms": 45, "total_ms": 8300, "loader_ms": 6, "session_create_ms": 4, "provider_ttfb_ms": 1180},
+            "usage": [_USAGE_PAYLOAD["usage"][0], {**_USAGE_PAYLOAD["usage"][0], "model": "other-model"}],
+        }
+        created: list[dict] = []
+
+        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None):
+            created.append({"input_data": input_data, "model_name": model_name})
+            return _stub_task()
+
+        with (
+            patch.object(ai_module, "get_ai_config_by_model_ref", return_value=None),
+            patch.object(ai_module, "create_ai_task", side_effect=fake_create_ai_task),
+            patch.object(ai_module, "finish_ai_task", side_effect=lambda db, t, status, **kw: None),
+        ):
+            resp = self.client.post("/api/ai/service/usage", json=multi_model, headers={"x-ai-service-token": "test-token"})
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(created), 2)
+        self.assertEqual(created[0]["input_data"]["turn_timing"]["total_ms"], 8300)
+        self.assertNotIn("turn_timing", created[1]["input_data"])
+
+    def test_failed_turn_stores_turn_timing(self):
+        timing = {"first_token_ms": 1240, "tool_ms": 45, "total_ms": 8300, "loader_ms": 6, "session_create_ms": 4, "provider_ttfb_ms": 1180}
+        created: dict = {}
+
+        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None):
+            created.update(input_data=input_data)
+            return _stub_task()
+
+        with (
+            patch.object(ai_module, "create_ai_task", side_effect=fake_create_ai_task),
+            patch.object(ai_module, "finish_ai_task", side_effect=lambda db, t, status, **kw: None),
+        ):
+            resp = self.client.post(
+                "/api/ai/service/usage",
+                json={
+                    "user_id": 7,
+                    "resume_id": 3,
+                    "feature": "chat",
+                    "status": "failed",
+                    "error_message": "模型超时",
+                    "usage": [],
+                    "tool_calls": 1,
+                    "turn_timing": timing,
+                },
+                headers={"x-ai-service-token": "test-token"},
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(created["input_data"]["turn_timing"], timing)
+        self.assertEqual(created["input_data"]["tool_calls"], 1, "失败回合的工具调用数也要落库")
+
+    def test_malformed_timing_values_do_not_reject_report(self):
+        # 回合耗时是辅助数据：负数/浮点不得把整份计费上报顶成 422（聚合侧过滤）
+        payload = {
+            **_USAGE_PAYLOAD,
+            "turn_timing": {"total_ms": -5, "first_token_ms": 1.5},
+        }
+        created: dict = {}
+
+        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None):
+            created.update(input_data=input_data)
+            return _stub_task()
+
+        with (
+            patch.object(ai_module, "get_ai_config_by_model_ref", return_value=None),
+            patch.object(ai_module, "create_ai_task", side_effect=fake_create_ai_task),
+            patch.object(ai_module, "finish_ai_task", side_effect=lambda db, t, status, **kw: None),
+        ):
+            resp = self.client.post("/api/ai/service/usage", json=payload, headers={"x-ai-service-token": "test-token"})
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(created["input_data"]["turn_timing"], {"total_ms": -5, "first_token_ms": 1.5})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -132,4 +132,19 @@ describe("reportUsage", () => {
       { name: "update_section", status: "end", ok: false, category: "validation", duration_ms: 120 },
     ]);
   });
+
+  it("carries the turn timing breakdown verbatim in the body", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), init: init ?? {} });
+      return new Response(null, { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const timing = { first_token_ms: 1240, tool_ms: 45, total_ms: 8300, loader_ms: 6, session_create_ms: 4, provider_ttfb_ms: 1180 };
+    const ok = await reportUsage(deps(fetchImpl), { ...payload, turn_timing: timing });
+
+    assert.equal(ok, true);
+    const body = JSON.parse(String(calls[0].init.body));
+    assert.deepEqual(body.turn_timing, timing);
+  });
 });

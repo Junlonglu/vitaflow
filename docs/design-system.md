@@ -58,7 +58,8 @@
 |---|---|---|
 | 页头/编辑器顶栏 | `z-20` / `z-40` | sticky 导航 |
 | 弹窗遮罩 | `z-[100]` | ConfirmDialog 及所有 modal |
-| 下拉/浮层 | `z-[200]` | Select/Dropdown/Popover content |
+| 下拉/浮层 | `z-[200]` | Select/Dropdown/Popover content、侧栏右键菜单 |
+| 锚定确认气泡 | `z-[210]` | `ConfirmPopover`，要盖住弹窗与下拉 |
 | 全局 toast | `z-[9999]` | toast.ts |
 | tooltip | `z-[99999]` | 跨组件 tooltip |
 

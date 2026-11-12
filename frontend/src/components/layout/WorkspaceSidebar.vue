@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue"
 import { RouterLink, useRoute, useRouter } from "vue-router"
-import { ChevronRight, Files, LayoutTemplate, MessageSquare, Pin, Plus, Search, Sparkles, Trash2, X } from "lucide-vue-next"
+import { ChevronRight, Copy, Files, FolderOpen, LayoutTemplate, MessageSquare, Pin, Plus, Search, Sparkles, Trash2, X } from "lucide-vue-next"
 import BrandLogo from "@/components/common/BrandLogo.vue"
 import WorkspaceUserMenu from "@/components/layout/WorkspaceUserMenu.vue"
+import ConfirmPopover from "@/components/ui/dialog/ConfirmPopover.vue"
 import { SIDEBAR_PAGE_SIZE, useResumeStore } from "@/stores/resume"
 import { useChatStore } from "@/stores/chat"
 import { useWorkspaceBridge } from "@/composables/useWorkspaceBridge"
@@ -125,12 +126,14 @@ async function refresh() {
 
 onMounted(async () => {
   window.addEventListener("keydown", handleSessionShortcut)
+  window.addEventListener("keydown", handleEscape)
   await refresh()
   if (activeId.value) await expandActive(activeId.value)
 })
 
 onUnmounted(() => {
   window.removeEventListener("keydown", handleSessionShortcut)
+  window.removeEventListener("keydown", handleEscape)
   window.clearTimeout(searchTimer)
 })
 
@@ -234,15 +237,134 @@ function handleSessionShortcut(event: KeyboardEvent) {
   }
 }
 
-async function removeSession(resumeId: number, sessionId: number) {
-  const target = chatStore.sessions(resumeId).find((item) => item.id === sessionId)
-  if (!target) return
-  if (!window.confirm(`删除对话「${target.title || "无标题"}」？删除后无法恢复。`)) return
-  try {
-    await chatStore.removeSession(resumeId, sessionId)
-  } catch {
-    showGlobalToast("删除对话失败，请重试", "error")
+// —— 删除确认：贴着被删的那一行弹出，不跳居中弹窗 ——
+type PendingDelete = {
+  kind: "session" | "resume"
+  resumeId: number
+  sessionId?: number
+  title: string
+  description: string
+  anchor: HTMLElement | null
+}
+
+const pendingDelete = ref<PendingDelete | null>(null)
+const deleteOpen = computed({
+  get: () => Boolean(pendingDelete.value),
+  set: (value: boolean) => {
+    if (!value) pendingDelete.value = null
+  },
+})
+
+function askRemoveSession(event: MouseEvent, resumeId: number, session: AiChatSession) {
+  // 锚到整行而不是删除按钮：鼠标移开后按钮会隐藏，用按钮当锚点会量到 0
+  const trigger = event.currentTarget as HTMLElement | null
+  const row = trigger?.closest("[data-session-row]") as HTMLElement | null
+  pendingDelete.value = {
+    kind: "session",
+    resumeId,
+    sessionId: session.id,
+    title: "删除这条对话？",
+    description: `「${session.title || "无标题对话"}」里的消息会一并删除，且无法恢复。`,
+    anchor: row || trigger,
   }
+}
+
+function askRemoveResume(resumeId: number, anchor: HTMLElement | null) {
+  const target = store.resumeList.find((item) => item.id === resumeId)
+  pendingDelete.value = {
+    kind: "resume",
+    resumeId,
+    title: "删除这份简历？",
+    description: `「${target?.title || "无标题简历"}」以及它的所有对话都会被移除，且无法恢复。`,
+    anchor,
+  }
+}
+
+async function confirmDelete() {
+  const target = pendingDelete.value
+  if (!target) return
+  pendingDelete.value = null
+
+  if (target.kind === "session" && target.sessionId) {
+    try {
+      await chatStore.removeSession(target.resumeId, target.sessionId)
+    } catch {
+      showGlobalToast("删除对话失败，请重试", "error")
+    }
+    return
+  }
+
+  try {
+    // 删的是正在编辑的那份：先把防抖未落库的改动刷掉，再删，避免 404
+    if (activeId.value === target.resumeId) await flushSave()
+    await store.deleteResume(target.resumeId)
+    chatStore.forgetResume(target.resumeId)
+    if (expandedId.value === target.resumeId) expandedId.value = null
+    if (activeId.value === target.resumeId) await router.push("/workspace")
+    showGlobalToast("简历已删除", "success")
+  } catch {
+    showGlobalToast("删除失败，请重试", "error")
+  }
+}
+
+// —— 简历右键菜单 ——
+const resumeMenu = ref({ open: false, x: 0, y: 0, resumeId: 0, anchor: null as HTMLElement | null })
+const RESUME_MENU_WIDTH = 172
+const RESUME_MENU_HEIGHT = 150
+
+function openResumeMenu(event: MouseEvent, resumeId: number) {
+  event.preventDefault()
+  resumeMenu.value = {
+    open: true,
+    x: Math.max(8, Math.min(event.clientX, window.innerWidth - RESUME_MENU_WIDTH - 8)),
+    y: Math.max(8, Math.min(event.clientY, window.innerHeight - RESUME_MENU_HEIGHT - 8)),
+    resumeId,
+    anchor: (event.currentTarget as HTMLElement) || null,
+  }
+}
+
+function closeResumeMenu() {
+  resumeMenu.value.open = false
+}
+
+/** Esc 关掉右键菜单（确认气泡自己处理 Esc） */
+function handleEscape(event: KeyboardEvent) {
+  if (event.key === "Escape" && resumeMenu.value.open) resumeMenu.value.open = false
+}
+
+async function menuOpenResume() {
+  const id = resumeMenu.value.resumeId
+  closeResumeMenu()
+  if (!id) return
+  if (activeId.value === id) {
+    await expandActive(id)
+    return
+  }
+  await openResume(id)
+}
+
+async function menuNewSession() {
+  const id = resumeMenu.value.resumeId
+  closeResumeMenu()
+  if (id) await newSession(id)
+}
+
+async function menuDuplicateResume() {
+  const id = resumeMenu.value.resumeId
+  closeResumeMenu()
+  if (!id) return
+  try {
+    await store.duplicateResume(id)
+    showGlobalToast("已复制一份", "success")
+  } catch {
+    showGlobalToast("复制失败，请重试", "error")
+  }
+}
+
+function menuDeleteResume() {
+  const { resumeId, anchor } = resumeMenu.value
+  closeResumeMenu()
+  if (resumeId) askRemoveResume(resumeId, anchor)
 }
 
 function startRename(resumeId: number, sessionId: number, title: string) {
@@ -376,6 +498,7 @@ function formatUpdated(value?: string) {
         <div
           class="group flex w-full items-center gap-0.5 rounded-md pr-1 transition-colors"
           :class="resumeRowClass(item.id)"
+          @contextmenu.prevent.stop="openResumeMenu($event, item.id)"
         >
           <button type="button" class="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5 text-left" @click="openResume(item.id)">
             <span class="min-w-0 flex-1">
@@ -406,6 +529,7 @@ function formatUpdated(value?: string) {
           <div
             v-for="session in chatStore.sessions(item.id)"
             :key="session.id"
+            data-session-row
             class="group/session flex w-full cursor-pointer items-center gap-1.5 rounded-md py-1.5 pl-2 pr-1 text-left transition-colors"
             :class="activeId === item.id && chatStore.activeSessionId(item.id) === session.id ? 'bg-zinc-200/60 text-zinc-900' : 'text-zinc-500 hover:bg-zinc-200/40 hover:text-zinc-800'"
             :title="sessionSnippet(session)"
@@ -442,7 +566,7 @@ function formatUpdated(value?: string) {
               type="button"
               class="hidden h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-500 group-hover/session:flex"
               title="删除对话"
-              @click.stop="removeSession(item.id, session.id)"
+              @click.stop="askRemoveSession($event, item.id, session)"
             >
               <Trash2 class="h-3 w-3" />
             </button>
@@ -534,4 +658,65 @@ function formatUpdated(value?: string) {
 
     <WorkspaceUserMenu />
   </aside>
+
+  <!-- 简历右键菜单 -->
+  <Teleport to="body">
+    <div
+      v-if="resumeMenu.open"
+      class="fixed inset-0 z-[200]"
+      @mousedown.self="closeResumeMenu"
+      @contextmenu.prevent="closeResumeMenu"
+      @wheel.prevent="closeResumeMenu"
+    >
+      <div
+        class="fixed rounded-lg border border-zinc-200 bg-white p-1 shadow-[0_10px_28px_-8px_rgba(0,0,0,0.18)]"
+        :style="{ width: `${RESUME_MENU_WIDTH}px`, left: `${resumeMenu.x}px`, top: `${resumeMenu.y}px` }"
+      >
+        <button
+          type="button"
+          class="flex h-8 w-full items-center gap-2 rounded-md px-2 text-[12.5px] text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
+          @click="menuOpenResume"
+        >
+          <FolderOpen class="h-3.5 w-3.5 shrink-0 text-zinc-400" />
+          <span>打开</span>
+        </button>
+        <button
+          type="button"
+          class="flex h-8 w-full items-center gap-2 rounded-md px-2 text-[12.5px] text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
+          @click="menuNewSession"
+        >
+          <Plus class="h-3.5 w-3.5 shrink-0 text-zinc-400" />
+          <span>新建对话</span>
+        </button>
+        <button
+          type="button"
+          class="flex h-8 w-full items-center gap-2 rounded-md px-2 text-[12.5px] text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
+          @click="menuDuplicateResume"
+        >
+          <Copy class="h-3.5 w-3.5 shrink-0 text-zinc-400" />
+          <span>复制简历</span>
+        </button>
+        <div class="my-1 h-px bg-zinc-100"></div>
+        <button
+          type="button"
+          class="flex h-8 w-full items-center gap-2 rounded-md px-2 text-[12.5px] text-red-600 transition-colors hover:bg-red-50"
+          @click="menuDeleteResume"
+        >
+          <Trash2 class="h-3.5 w-3.5 shrink-0" />
+          <span>删除简历</span>
+        </button>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- 删除确认：贴着被删的对话或简历那一行弹出 -->
+  <ConfirmPopover
+    v-model:open="deleteOpen"
+    :anchor="pendingDelete?.anchor || null"
+    :title="pendingDelete?.title || ''"
+    :description="pendingDelete?.description"
+    confirm-text="确认删除"
+    @confirm="confirmDelete"
+    @cancel="pendingDelete = null"
+  />
 </template>

@@ -355,6 +355,7 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 | 会话切换 | 点侧栏会话写 `chatStore.setActiveSession`，编辑器 watch 它换消息；`⌘/Ctrl + Alt + ↑↓` 在当前简历的会话间循环，`⌘/Ctrl + Alt + N` 新建对话（焦点在输入框内不抢键） |
 | 搜索 | 侧栏搜索框：简历部分按标题在内存里过滤，会话走后端跨简历搜索（标题或消息内容命中，260ms 防抖）；点结果先 `fetchSessions(resume_id)` 再切会话，否则 active 会被回退成第一条 |
 | 置顶 | `POST .../sessions/{id}/pin`；列表顺序 = 置顶优先 → `update_time` 倒序 → id 倒序，前端 `sortSessions` 与后端 SQL 保持同一规则，`PATCH` 后不会出现「钉了却还在下面」 |
+| 删除与右键 | 删除对话 / 删除简历都用锚定气泡 `components/ui/dialog/ConfirmPopover.vue`（`z-[210]`）：贴着被删的那一行弹出，优先放右侧，右边不够翻到左侧，两边都不够（窄屏抽屉）落到行下方，小三角始终指向该行；简历行支持右键菜单（打开 / 新建对话 / 复制简历 / 删除简历，`z-[200]`，Esc、点空白、滚轮都会关闭）。删正在编辑的简历前先 `flushSave()` 再删，随后 `router.push('/workspace')` |
 | 预览刷新 | `refreshPreviewLatest` 单飞 + 尾随合并：同时只有一个 `/preview` 请求；预览不可见（移动端非「预览」tab、`document.hidden`）时不发请求，只记 `previewDirty`，切回可见时补一次 |
 | 创建流程 | 侧栏「新建简历 / AI 生成简历」、工作区首页底部三个入口都只调 `useWorkspaceCreate().openCreate(entry)`；`Workspace.vue` 根部挂 `ResumeCreateFlow`（岗位起稿 / 空白模板 / 导入 / AI 生成）消费意图，创建成功 `emit('created')` → 先 `flushSave()` 再 `push('/workspace/:id')`，全程不离开外壳 |
 | 模板中心 | 收编进工作区（`/workspace/templates` → `WorkspaceTemplates.vue`），不再跳全站顶栏的独立页；点「用此模板创建」时 `openCreate('blank', { templateId })` 直接建简历，岗位起稿 / 导入则把该 `template_id` 传给对应接口，不再重复选模板。`/templates` 只保留给未登录访客 |

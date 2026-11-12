@@ -57,6 +57,7 @@ def localize_ai_text(value: str) -> str:
         "start_date": "开始时间",
         "end_date": "结束时间",
         "tech_stack": "技术栈",
+        "research_area": "研究领域",
         "description": "描述",
         "highlights": "亮点",
         "highlight": "亮点",

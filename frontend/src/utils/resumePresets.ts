@@ -189,6 +189,7 @@ export const resumeModulePresets: ResumeModulePreset[] = [
       { key: "publisher", label: "期刊/专利号/会议" },
       { key: "date", label: "时间" },
       { key: "role", label: "作者/角色" },
+      { key: "research_area", label: "研究领域", span: 2, placeholder: "例如：计算机视觉、多模态学习、具身智能" },
       { key: "url", label: "链接", span: 2 },
       { key: "description", label: "说明", type: "rich", span: 2 },
     ],

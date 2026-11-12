@@ -57,15 +57,23 @@ function isFieldLabelCustomized(sectionKey: string, fieldKey: string) {
   return typeof props.data.layout.field_labels?.[sectionKey]?.[fieldKey] === "string"
 }
 
-function hasCustomTechStack() {
+function labeledCustomFields() {
   const section = customSection()
-  return Boolean(
-    section
-    && (
-      ["open_source", "portfolio"].includes(section.preset_type)
-      || section.items?.some((item: any) => Object.prototype.hasOwnProperty.call(item || {}, "tech_stack"))
-    )
+  if (!section) return []
+  const legacyTechStack = ["open_source", "portfolio"].includes(section.preset_type)
+  return (["tech_stack", "research_area"] as const).filter(
+    (key) =>
+      (key === "tech_stack" && legacyTechStack)
+      || section.items?.some((item: any) => Object.prototype.hasOwnProperty.call(item || {}, key)),
   )
+}
+
+function customFieldLabels() {
+  const labels: Record<string, string> = {}
+  for (const key of labeledCustomFields()) {
+    labels[key] = effectiveFieldLabel(props.data, props.current, key, props.language, true)
+  }
+  return labels
 }
 </script>
 
@@ -129,9 +137,9 @@ function hasCustomTechStack() {
         v-else-if="customSection()"
         :section="customSection()"
         :is-wide="isWide"
-        :display-field-labels="hasCustomTechStack() ? { tech_stack: effectiveFieldLabel(data, current, 'tech_stack', language, true) } : {}"
-        :editable-display-fields="hasCustomTechStack() ? ['tech_stack'] : []"
-        :customized-display-fields="isFieldLabelCustomized(current, 'tech_stack') ? ['tech_stack'] : []"
+        :display-field-labels="customFieldLabels()"
+        :editable-display-fields="labeledCustomFields()"
+        :customized-display-fields="labeledCustomFields().filter((key) => isFieldLabelCustomized(current, key))"
         @change="$emit('change')"
         @update-field-label="(key, value) => setFieldLabel(current, key, value)"
         @reset-field-label="(key) => resetFieldLabel(current, key)"

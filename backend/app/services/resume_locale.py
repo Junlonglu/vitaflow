@@ -17,6 +17,7 @@ RESUME_LOCALES: dict[str, dict[str, Any]] = {
         "skill_keywords": "技能标签",
         "project_tech_stack": "技术栈",
         "custom_tech_stack": "技术/工具",
+        "custom_research_area": "研究领域",
         "experience": "经历",
         "content": "内容",
         "candidate": "求职者",
@@ -50,6 +51,7 @@ RESUME_LOCALES: dict[str, dict[str, Any]] = {
         "skill_keywords": "Skills",
         "project_tech_stack": "Tech Stack",
         "custom_tech_stack": "Tools",
+        "custom_research_area": "Research Areas",
         "experience": "Experience",
         "content": "Content",
         "candidate": "Candidate",
@@ -173,6 +175,7 @@ def section_field_labels(layout: dict[str, Any], section_key: str, language: Any
         defaults["keywords"] = locale["skill_keywords"]
     elif custom:
         defaults["tech_stack"] = locale["custom_tech_stack"]
+        defaults["research_area"] = locale["custom_research_area"]
 
     configured = layout.get("field_labels") if isinstance(layout, dict) else {}
     section_config = configured.get(section_key) if isinstance(configured, dict) else {}

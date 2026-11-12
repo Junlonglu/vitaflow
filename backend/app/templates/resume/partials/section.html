@@ -126,7 +126,7 @@
                 {% set _ = meta.append(item.get(meta_key)) %}
               {% endif %}
             {% endfor %}
-            {% if title or meta or item.description or item.highlights or item.tech_stack %}
+            {% if title or meta or item.description or item.highlights or item.tech_stack or item.research_area %}
               <div class="experience-item">
                 {% if title or meta %}
                   <div class="item-head">
@@ -136,6 +136,9 @@
                 {% endif %}
                 {% if item.tech_stack %}
                   <div class="item-sub">{% if section.field_labels.tech_stack %}{{ section.field_labels.tech_stack }}{{ resume._labels.colon }}{% endif %}{% if item.tech_stack is string %}{{ item.tech_stack }}{% else %}{{ item.tech_stack|join(' / ') }}{% endif %}</div>
+                {% endif %}
+                {% if item.research_area %}
+                  <div class="item-sub">{% if section.field_labels.research_area %}{{ section.field_labels.research_area }}{{ resume._labels.colon }}{% endif %}{% if item.research_area is string %}{{ item.research_area }}{% else %}{{ item.research_area|join(' / ') }}{% endif %}</div>
                 {% endif %}
                 {% if item.description %}<div class="rich-text-body">{{ item.description|rich_text|safe }}</div>{% endif %}
                 {% if item.highlights %}<div class="rich-text-body">{{ item.highlights|rich_text|safe }}</div>{% endif %}

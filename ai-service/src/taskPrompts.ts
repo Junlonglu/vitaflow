@@ -114,7 +114,7 @@ const RESUME_DATA_SCHEMA_RULES = `
   - 社会实践 preset_type=social_practice，条目字段：id、organization、role、start_date、end_date、description。
   - 开源贡献 preset_type=open_source，条目字段：id、name、role、url、tech_stack、description、highlights。
   - 技术博客 preset_type=tech_blog，条目字段：id、title、platform、date、url、description。
-  - 论文/专利 preset_type=publications，条目字段：id、title、publisher、date、role、url、description。
+  - 论文/专利 preset_type=publications，条目字段：id、title、publisher、date、role、research_area、url、description。
   - 作品集 preset_type=portfolio，条目字段：id、name、role、url、tech_stack、description、highlights。
   - 案例展示 preset_type=case_studies，条目字段：id、name、role、url、description、highlights。
 - 每个 custom_sections 条目必须包含 id、preset_type、title、items；id 使用 custom_ 开头并唯一。layout.section_order 必须包含已生成的自定义模块 id；layout.section_titles 必须包含与 language 一致的标题。

@@ -26,6 +26,7 @@ export const resumeLocales = {
     fieldLabels: {
       projectTechStack: "技术栈",
       customTechStack: "技术/工具",
+      customResearchArea: "研究领域",
     },
   },
   en: {
@@ -51,6 +52,7 @@ export const resumeLocales = {
     fieldLabels: {
       projectTechStack: "Tech Stack",
       customTechStack: "Tools",
+      customResearchArea: "Research Areas",
     },
   },
 } as const
@@ -96,9 +98,12 @@ export function defaultFieldConfigLabel(key: string, language: unknown) {
 export function effectiveFieldLabel(data: ResumeData, sectionKey: string, fieldKey: string, language: unknown, custom = false) {
   const configured = data.layout.field_labels?.[sectionKey]?.[fieldKey]
   if (typeof configured === "string") return configured
-  if (fieldKey !== "tech_stack") return ""
   const locale = resumeLocales[normalizeResumeLanguage(language)]
-  return custom ? locale.fieldLabels.customTechStack : locale.fieldLabels.projectTechStack
+  if (fieldKey === "tech_stack") {
+    return custom ? locale.fieldLabels.customTechStack : locale.fieldLabels.projectTechStack
+  }
+  if (custom && fieldKey === "research_area") return locale.fieldLabels.customResearchArea
+  return ""
 }
 
 export function applyResumeLanguage(data: ResumeData, previousLanguage: unknown, nextLanguage: unknown) {

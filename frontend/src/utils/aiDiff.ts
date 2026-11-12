@@ -65,6 +65,7 @@ const fieldOrder = [
   "credential_id",
   "url",
   "tech_stack",
+  "research_area",
   "keywords",
   "description",
   "content",
@@ -117,6 +118,7 @@ const fieldLabels: Record<string, string> = {
   keywords: "关键词",
   highlights: "亮点",
   tech_stack: "技术栈",
+  research_area: "研究领域",
 }
 
 function compact(value: unknown): string {

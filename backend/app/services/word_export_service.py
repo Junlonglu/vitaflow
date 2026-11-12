@@ -173,6 +173,10 @@ def export_word(db: Session, user_id: int, resume: Resume) -> Path:
                     tech_label = field_labels.get("tech_stack", "")
                     prefix = f"{tech_label}{colon}" if tech_label else ""
                     doc.add_paragraph(f"{prefix}{_inline(item.get('tech_stack'))}")
+                if item.get("research_area"):
+                    research_label = field_labels.get("research_area", "")
+                    prefix = f"{research_label}{colon}" if research_label else ""
+                    doc.add_paragraph(f"{prefix}{_inline(item.get('research_area'))}")
                 for field in ["content", "description", "highlights"]:
                     if item.get(field):
                         doc.add_paragraph(_plain(item.get(field), colon))

@@ -374,7 +374,7 @@ CUSTOM_SECTION_LIBRARY: dict[str, dict[str, Any]] = {
     "custom_publications": {
         "preset_type": "publications",
         "title": "论文/专利",
-        "items": [{"title": "请填写论文/专利/研究成果", "publisher": "", "date": "", "role": "", "url": "", "description": "可补充研究方向、本人贡献和成果应用场景。"}],
+        "items": [{"title": "请填写论文/专利/研究成果", "publisher": "", "date": "", "role": "", "research_area": "", "url": "", "description": "可补充研究方向、本人贡献和成果应用场景。"}],
     },
     "custom_portfolio": {
         "preset_type": "portfolio",

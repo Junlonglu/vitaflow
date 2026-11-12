@@ -72,8 +72,8 @@ function logout() {
             <RouterLink
               v-if="user.userInfo?.role === 'admin'"
               class="flex shrink-0 items-center gap-1.5 rounded-md px-3 py-2 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
-              :class="{ 'bg-zinc-100 text-zinc-900': route.path.startsWith('/admin') }"
-              to="/admin"
+              :class="{ 'bg-zinc-100 text-zinc-900': route.path.startsWith('/workspace/admin') }"
+              to="/workspace/admin"
             >
               <LayoutDashboard class="h-4 w-4" />
               <span>管理后台</span>
@@ -196,8 +196,8 @@ function logout() {
           <RouterLink
             v-if="user.userInfo?.role === 'admin'"
             class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 transition-colors"
-            :class="{ 'bg-zinc-100 text-zinc-900': route.path.startsWith('/admin') }"
-            to="/admin"
+            :class="{ 'bg-zinc-100 text-zinc-900': route.path.startsWith('/workspace/admin') }"
+            to="/workspace/admin"
             @click="mobileMenuOpen = false"
           >
             <LayoutDashboard class="h-4 w-4 text-zinc-500" />

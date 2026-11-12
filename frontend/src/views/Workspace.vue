@@ -6,6 +6,7 @@ import WorkspaceHome from "@/components/workspace/WorkspaceHome.vue"
 import WorkspaceResumeLibrary from "@/components/workspace/WorkspaceResumeLibrary.vue"
 import WorkspaceTemplates from "@/components/workspace/WorkspaceTemplates.vue"
 import WorkspacePreviewPane from "@/components/workspace/WorkspacePreviewPane.vue"
+import WorkspacePage from "@/components/workspace/WorkspacePage.vue"
 import ResumeCreateFlow from "@/components/resume/ResumeCreateFlow.vue"
 import AnnouncementModal from "@/components/announcement/AnnouncementModal.vue"
 import ResumeEditor from "@/views/ResumeEditor.vue"
@@ -17,6 +18,8 @@ const HelpCenter = defineAsyncComponent(() => import("@/views/HelpCenter.vue"))
 const Profile = defineAsyncComponent(() => import("@/views/Profile.vue"))
 const AnnouncementHistory = defineAsyncComponent(() => import("@/views/AnnouncementHistory.vue"))
 const AiRecords = defineAsyncComponent(() => import("@/views/AiRecords.vue"))
+// 管理后台体积大且只有管理员可见，单独切包
+const Admin = defineAsyncComponent(() => import("@/views/Admin.vue"))
 
 const route = useRoute()
 const router = useRouter()
@@ -26,8 +29,8 @@ const resumeId = computed(() => {
   return Number.isFinite(value) && value > 0 ? value : null
 })
 
-// 主区面板：模板中心 / 全部简历 / 内容页 / 编辑器 / 首页，同一时刻只渲染一个
-const panel = computed<"templates" | "library" | "help" | "profile" | "announcements" | "ai-records" | "editor" | "home">(() => {
+// 主区面板：模板中心 / 全部简历 / 内容页 / 管理后台 / 编辑器 / 首页，同一时刻只渲染一个
+const panel = computed<"templates" | "library" | "help" | "profile" | "announcements" | "ai-records" | "admin" | "editor" | "home">(() => {
   const path = route.path
   if (path === "/workspace/templates") return "templates"
   if (path === "/workspace/resumes") return "library"
@@ -35,6 +38,7 @@ const panel = computed<"templates" | "library" | "help" | "profile" | "announcem
   if (path === "/workspace/profile") return "profile"
   if (path === "/workspace/announcements") return "announcements"
   if (path === "/workspace/ai-records") return "ai-records"
+  if (path === "/workspace/admin") return "admin"
   return resumeId.value ? "editor" : "home"
 })
 
@@ -60,6 +64,10 @@ async function handleCreated(id: number) {
     <Profile v-else-if="panel === 'profile'" />
     <AnnouncementHistory v-else-if="panel === 'announcements'" />
     <AiRecords v-else-if="panel === 'ai-records'" />
+    <!-- 管理后台自带二级侧栏，外面只补滚动容器和移动端抽屉入口 -->
+    <WorkspacePage v-else-if="panel === 'admin'">
+      <Admin />
+    </WorkspacePage>
     <ResumeEditor v-else-if="panel === 'editor' && resumeId" :key="resumeId" :resume-id="resumeId" />
     <template v-else>
       <WorkspaceHome />
@@ -69,9 +77,9 @@ async function handleCreated(id: number) {
     <!-- 创建流程：岗位起稿 / 空白模板 / 导入 / AI 生成，全部在工作区内完成 -->
     <ResumeCreateFlow listen-global @created="handleCreated" />
 
-    <!-- 公告统一在工作区根部弹，编辑简历时不打断；空对象/空标题不弹 -->
+    <!-- 公告统一在工作区根部弹；编辑器与管理后台不打断 -->
     <AnnouncementModal
-      v-if="announcement?.title && panel !== 'editor'"
+      v-if="announcement?.title && panel !== 'editor' && panel !== 'admin'"
       :announcement="announcement"
       @close="announcement = null"
     />

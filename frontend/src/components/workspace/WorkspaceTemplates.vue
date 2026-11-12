@@ -139,7 +139,7 @@ function startFromTemplate(entry: "starter" | "import" | "blank") {
             <X class="h-3 w-3" />
           </button>
         </div>
-        <div class="thin-scrollbar flex min-w-0 flex-1 gap-1 overflow-x-auto">
+        <div class="flex min-w-0 flex-1 flex-wrap gap-1">
           <button
             v-for="item in categories"
             :key="item"
@@ -157,7 +157,7 @@ function startFromTemplate(entry: "starter" | "import" | "blank") {
         </div>
       </div>
 
-      <div v-if="loading" class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+      <div v-if="loading" class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         <div v-for="i in 8" :key="i" class="animate-pulse">
           <div class="aspect-[3/4] rounded-xl bg-zinc-100"></div>
           <div class="mt-2 h-3 w-20 rounded bg-zinc-100"></div>
@@ -189,7 +189,7 @@ function startFromTemplate(entry: "starter" | "import" | "blank") {
         </button>
       </div>
 
-      <div v-else class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+      <div v-else class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         <article
           v-for="item in filteredTemplates"
           :key="item.template_id"
@@ -225,41 +225,42 @@ function startFromTemplate(entry: "starter" | "import" | "blank") {
     </div>
 
     <!-- 选中模板的大图预览 + 起稿入口 -->
-    <aside class="hidden w-[38%] min-w-[300px] max-w-[460px] shrink-0 flex-col border-l border-zinc-200/70 bg-zinc-100/50 lg:flex">
+    <aside class="hidden w-[42%] min-w-[380px] max-w-[560px] shrink-0 flex-col border-l border-zinc-200/70 bg-zinc-100/50 lg:flex">
       <div class="thin-scrollbar flex h-full flex-col overflow-y-auto px-6 py-6">
         <template v-if="selectedTemplate">
-          <div class="mx-auto w-full max-w-[300px]">
+          <!-- 预览、标题、入口放同一列，避免按钮比预览宽出一截 -->
+          <div class="mx-auto flex w-full max-w-[380px] flex-col">
             <TemplatePreview :html="selectedTemplate.preview_html" />
-          </div>
-          <div class="mt-5">
-            <p class="text-[13px] font-semibold text-zinc-900">{{ selectedTemplate.name }}</p>
-            <p class="mt-0.5 text-[11.5px] text-zinc-500">{{ selectedTemplate.category }}</p>
-          </div>
-          <div class="mt-4 space-y-1.5">
-            <button
-              type="button"
-              class="flex h-9 w-full items-center gap-2 rounded-lg bg-zinc-900 px-3 text-[12.5px] font-medium text-white transition-colors hover:bg-zinc-800"
-              @click="startFromTemplate('blank')"
-            >
-              <LayoutTemplate class="h-3.5 w-3.5" />
-              <span>用此模板创建</span>
-            </button>
-            <button
-              type="button"
-              class="flex h-9 w-full items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 text-[12.5px] font-medium text-zinc-700 transition-colors hover:border-zinc-300 hover:text-zinc-950"
-              @click="startFromTemplate('starter')"
-            >
-              <Briefcase class="h-3.5 w-3.5 text-zinc-400" />
-              <span>按岗位起稿</span>
-            </button>
-            <button
-              type="button"
-              class="flex h-9 w-full items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 text-[12.5px] font-medium text-zinc-700 transition-colors hover:border-zinc-300 hover:text-zinc-950"
-              @click="startFromTemplate('import')"
-            >
-              <FileUp class="h-3.5 w-3.5 text-zinc-400" />
-              <span>导入已有简历</span>
-            </button>
+            <div class="mt-5">
+              <p class="text-[13px] font-semibold text-zinc-900">{{ selectedTemplate.name }}</p>
+              <p class="mt-0.5 text-[11.5px] text-zinc-500">{{ selectedTemplate.category }}</p>
+            </div>
+            <div class="mt-4 space-y-1.5">
+              <button
+                type="button"
+                class="flex h-9 w-full items-center gap-2 rounded-lg bg-zinc-900 px-3 text-[12.5px] font-medium text-white transition-colors hover:bg-zinc-800"
+                @click="startFromTemplate('blank')"
+              >
+                <LayoutTemplate class="h-3.5 w-3.5" />
+                <span>用此模板创建</span>
+              </button>
+              <button
+                type="button"
+                class="flex h-9 w-full items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 text-[12.5px] font-medium text-zinc-700 transition-colors hover:border-zinc-300 hover:text-zinc-950"
+                @click="startFromTemplate('starter')"
+              >
+                <Briefcase class="h-3.5 w-3.5 text-zinc-400" />
+                <span>按岗位起稿</span>
+              </button>
+              <button
+                type="button"
+                class="flex h-9 w-full items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 text-[12.5px] font-medium text-zinc-700 transition-colors hover:border-zinc-300 hover:text-zinc-950"
+                @click="startFromTemplate('import')"
+              >
+                <FileUp class="h-3.5 w-3.5 text-zinc-400" />
+                <span>导入已有简历</span>
+              </button>
+            </div>
           </div>
         </template>
         <div v-else class="m-auto w-full max-w-[240px] text-center">

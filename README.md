@@ -292,7 +292,8 @@ ADMIN_EMAILS=admin@example.com
 - `/templates`：未登录访客的公开模板页（登录后重定向到 `/workspace/templates`）
 - `/share/:token`：公开分享页
 - `/help`、`/profile`、`/announcements`、`/ai-records`：旧链接，重定向到对应 `/workspace/*`
-- `/admin`：管理后台（独立后台外壳，不在工作区内）
+- `/workspace/admin`：管理后台，同样待在工作区外壳里；菜单按宽度自适应（窄屏横排 tab，≥1536px 才用左侧竖排）
+- `/admin`：旧链接，重定向到 `/workspace/admin`
 
 ## 项目说明
 

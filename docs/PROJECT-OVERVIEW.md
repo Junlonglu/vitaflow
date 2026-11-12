@@ -330,7 +330,7 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 | `/login`、`/register` | `Login.vue` | 登录/注册合并组件，验证码 |
 | `/workspace` | `Workspace.vue` | **工作区外壳**：左侧栏（简历列表 + 用户区）+ 中间对话首页 + 右侧预览空态 |
 | `/workspace/:id` | `Workspace.vue` → `ResumeEditor.vue` | **核心页面**，外壳内的编辑器：中栏「Flow Agent 对话 ⇄ 内容编辑」可切换，右栏 A4 预览 |
-| `/workspace/templates` | `Workspace.vue` → `WorkspaceTemplates.vue` | **工作区内的模板中心**：左侧模板网格（搜索 + 分类筛选），右侧选中模板大图 + 「用此模板创建 / 按岗位起稿 / 导入已有简历」，选好模板后带着 `template_id` 进创建流程 |
+| `/workspace/templates` | `Workspace.vue` → `WorkspaceTemplates.vue` | **工作区内的模板中心**：左侧模板网格（搜索 + 分类筛选），右侧选中模板大图 + 「用此模板创建 / 按岗位起稿 / 导入已有简历」，选好模板后带着 `template_id` 进创建流程；网格最多 3 列（`2xl` 才 4 列），右栏占主区 42%（380–560px），预览、标题、入口同宽成列 |
 | `/workspace/resumes` | `Workspace.vue` → `WorkspaceResumeLibrary.vue` | **全部简历**面板：卡片网格、复制、删除、响应式分页（桌面 8 / 窄屏 6），创建入口复用 `ResumeCreateFlow`；列表分页状态本地维护，避免与侧栏共用的 store 互相顶掉 |
 | `/resumes` | — | 重定向到 `/workspace/resumes`，兼容旧链接与历史导航 |
 | `/resumes/:id/edit` | — | 重定向到 `/workspace/:id`，兼容旧链接 |
@@ -341,7 +341,8 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 | `/workspace/ai-records` | `Workspace.vue` → `AiRecords.vue` | Flow Points 余额、兑换、调用记录与消费明细 |
 | `/help`、`/profile`、`/announcements`、`/ai-records` | — | 旧链接，重定向到对应 `/workspace/*`（`/profile` 保留 query） |
 | `/share/:token` | `SharedResume.vue` | 公开分享页，无鉴权 |
-| `/admin` | `Admin.vue` | 管理后台，`meta.requiresAdmin`，1599 行 |
+| `/workspace/admin` | `Workspace.vue` → `Admin.vue` | 管理后台，`meta.requiresAdmin`；套 `WorkspacePage` 后留在工作区外壳内，内容区按需异步加载 |
+| `/admin` | — | 旧链接，重定向到 `/workspace/admin` |
 
 路由守卫：登录态检查 + `requiresAdmin` 前端拦截（**仅体验优化，真正边界在后端**）。
 

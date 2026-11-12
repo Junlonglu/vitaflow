@@ -24,7 +24,7 @@ const menuItems = computed(() => {
     { label: "帮助中心", to: "/workspace/help", icon: CircleHelp },
     { label: "个人资料", to: "/workspace/profile", icon: UserRound },
   ]
-  if (isAdmin.value) items.push({ label: "管理后台", to: "/admin", icon: LayoutDashboard })
+  if (isAdmin.value) items.push({ label: "管理后台", to: "/workspace/admin", icon: LayoutDashboard })
   return items
 })
 

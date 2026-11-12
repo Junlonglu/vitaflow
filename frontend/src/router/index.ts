@@ -27,13 +27,15 @@ const router = createRouter({
     { path: "/workspace/profile", component: Workspace },
     { path: "/workspace/announcements", component: Workspace },
     { path: "/workspace/ai-records", component: Workspace },
+    // 管理后台也挂在工作区外壳里，权限仍由 meta 校验
+    { path: "/workspace/admin", component: Workspace, meta: { requiresAdmin: true } },
     { path: "/workspace/:id", component: Workspace },
     // 未登录时的公开模板页；登录后由守卫转到 /workspace/templates
     { path: "/templates", component: TemplateGallery },
     { path: "/profile", redirect: (to) => ({ path: "/workspace/profile", query: to.query }) },
     { path: "/announcements", redirect: "/workspace/announcements" },
     { path: "/ai-records", redirect: "/workspace/ai-records" },
-    { path: "/admin", component: () => import("@/views/Admin.vue"), meta: { requiresAdmin: true } },
+    { path: "/admin", redirect: "/workspace/admin" },
   ],
 })
 

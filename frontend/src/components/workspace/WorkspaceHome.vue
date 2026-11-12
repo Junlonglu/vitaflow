@@ -1,18 +1,24 @@
 <script setup lang="ts">
 import { ref } from "vue"
 import { useRouter } from "vue-router"
-import { ArrowUp, FileUp, LayoutTemplate, PanelLeft, Sparkles } from "lucide-vue-next"
+import { ArrowUp, Briefcase, FileUp, PanelLeft, Sparkles } from "lucide-vue-next"
 import BrandLogo from "@/components/common/BrandLogo.vue"
 import { useResumeStore } from "@/stores/resume"
 import { useWorkspaceDrawer } from "@/composables/useWorkspaceDrawer"
+import { useWorkspaceCreate, type CreateEntry } from "@/composables/useWorkspaceCreate"
 import { showGlobalToast } from "@/utils/toast"
 
 const router = useRouter()
 const store = useResumeStore()
 const { openDrawer } = useWorkspaceDrawer()
+const { openCreate } = useWorkspaceCreate()
 
 const prompt = ref("")
 const busy = ref(false)
+
+function startCreate(entry: CreateEntry) {
+  openCreate(entry)
+}
 
 const scenarios = [
   { key: "job", label: "求职简历", seed: "帮我写一份面向「」岗位的简历，我的经历是：" },
@@ -121,18 +127,18 @@ async function submit() {
       </div>
 
       <div class="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-zinc-100 pt-4 text-[12px] text-zinc-500">
-        <button type="button" class="inline-flex items-center gap-1.5 transition-colors hover:text-zinc-900" @click="submit">
+        <button type="button" class="inline-flex items-center gap-1.5 transition-colors hover:text-zinc-900" @click="startCreate('blank')">
           <Sparkles class="h-3.5 w-3.5 text-zinc-400" />
           <span>空白简历</span>
         </button>
-        <RouterLink to="/templates" class="inline-flex items-center gap-1.5 transition-colors hover:text-zinc-900">
-          <LayoutTemplate class="h-3.5 w-3.5 text-zinc-400" />
-          <span>从模板开始</span>
-        </RouterLink>
-        <RouterLink to="/resumes?create=import" class="inline-flex items-center gap-1.5 transition-colors hover:text-zinc-900">
+        <button type="button" class="inline-flex items-center gap-1.5 transition-colors hover:text-zinc-900" @click="startCreate('starter')">
+          <Briefcase class="h-3.5 w-3.5 text-zinc-400" />
+          <span>按岗位起稿</span>
+        </button>
+        <button type="button" class="inline-flex items-center gap-1.5 transition-colors hover:text-zinc-900" @click="startCreate('import')">
           <FileUp class="h-3.5 w-3.5 text-zinc-400" />
           <span>导入已有简历</span>
-        </RouterLink>
+        </button>
       </div>
     </div>
   </div>

@@ -8,6 +8,7 @@ import { useResumeStore } from "@/stores/resume"
 import { useChatStore } from "@/stores/chat"
 import { useWorkspaceBridge } from "@/composables/useWorkspaceBridge"
 import { useWorkspaceDrawer } from "@/composables/useWorkspaceDrawer"
+import { useWorkspaceCreate, type CreateEntry } from "@/composables/useWorkspaceCreate"
 import { showGlobalToast } from "@/utils/toast"
 import type { AiChatSession, AiChatSessionSearchItem } from "@/api/ai"
 
@@ -17,9 +18,9 @@ const store = useResumeStore()
 const chatStore = useChatStore()
 const { flushSave } = useWorkspaceBridge()
 const { drawerOpen, closeDrawer } = useWorkspaceDrawer()
+const { openCreate } = useWorkspaceCreate()
 
 const loading = ref(false)
-const creating = ref(false)
 const activeId = computed(() => Number(route.params.id) || null)
 
 // 展开的简历（手风琴）：同一时刻只展开一份，会话列表再长也不会挤掉下面的简历。
@@ -152,19 +153,10 @@ async function openResume(id: number) {
   router.push(`/workspace/${id}`)
 }
 
-async function createResume() {
-  if (creating.value) return
-  creating.value = true
-  try {
-    await flushSave()
-    const created = (await store.createResume("tech")) as { id: number }
-    await refresh()
-    router.push(`/workspace/${created.id}`)
-  } catch {
-    showGlobalToast("创建简历失败，请重试", "error")
-  } finally {
-    creating.value = false
-  }
+/** 创建入口统一交给工作区根部的 `ResumeCreateFlow`，这里只负责收起抽屉并发意图。 */
+function startCreate(entry: CreateEntry) {
+  closeDrawer()
+  openCreate(entry)
 }
 
 async function goWorkspaceHome() {
@@ -308,21 +300,20 @@ function formatUpdated(value?: string) {
     <div class="shrink-0 px-3 pt-2">
       <button
         type="button"
-        class="flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-[13px] font-medium text-zinc-700 transition-colors hover:bg-zinc-200/60 disabled:opacity-60"
-        :disabled="creating"
-        @click="createResume"
+        class="flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-[13px] font-medium text-zinc-700 transition-colors hover:bg-zinc-200/60"
+        @click="startCreate('choice')"
       >
         <Plus class="h-4 w-4 shrink-0 text-zinc-500" />
         <span>新建简历</span>
-        <span class="ml-auto text-[11px] font-normal text-zinc-400">{{ creating ? "创建中" : "" }}</span>
       </button>
-      <RouterLink
-        to="/resumes?create=ai"
+      <button
+        type="button"
         class="flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-[13px] font-medium text-zinc-600 transition-colors hover:bg-zinc-200/60 hover:text-zinc-900"
+        @click="startCreate('ai')"
       >
         <Sparkles class="h-4 w-4 shrink-0 text-zinc-400" />
         <span>AI 生成简历</span>
-      </RouterLink>
+      </button>
       <RouterLink
         to="/templates"
         class="flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-[13px] font-medium text-zinc-600 transition-colors hover:bg-zinc-200/60 hover:text-zinc-900"

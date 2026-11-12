@@ -330,7 +330,7 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 | `/login`、`/register` | `Login.vue` | 登录/注册合并组件，验证码 |
 | `/workspace` | `Workspace.vue` | **工作区外壳**：左侧栏（简历列表 + 用户区）+ 中间对话首页 + 右侧预览空态 |
 | `/workspace/:id` | `Workspace.vue` → `ResumeEditor.vue` | **核心页面**，外壳内的编辑器：中栏「Flow Agent 对话 ⇄ 内容编辑」可切换，右栏 A4 预览 |
-| `/resumes` | `ResumeList.vue` | 简历列表、新建、从起手式创建、导入文件（工作区的「AI 生成 / 导入」入口经 `?create=` 打开对应流程） |
+| `/resumes` | `ResumeList.vue` | **全部简历**管理页：卡片网格、复制、删除、分页；创建/导入复用 `ResumeCreateFlow`，仍支持旧链接 `?create=ai\|import\|blank` |
 | `/resumes/:id/edit` | — | 重定向到 `/workspace/:id`，兼容旧链接 |
 | `/templates` | `TemplateGallery.vue` | 模板库与实时预览 |
 | `/profile` | `Profile.vue` | 个人资料、积分、密码 |
@@ -352,6 +352,7 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 | 搜索 | 侧栏搜索框：简历部分按标题在内存里过滤，会话走后端跨简历搜索（标题或消息内容命中，260ms 防抖）；点结果先 `fetchSessions(resume_id)` 再切会话，否则 active 会被回退成第一条 |
 | 置顶 | `POST .../sessions/{id}/pin`；列表顺序 = 置顶优先 → `update_time` 倒序 → id 倒序，前端 `sortSessions` 与后端 SQL 保持同一规则，`PATCH` 后不会出现「钉了却还在下面」 |
 | 预览刷新 | `refreshPreviewLatest` 单飞 + 尾随合并：同时只有一个 `/preview` 请求；预览不可见（移动端非「预览」tab、`document.hidden`）时不发请求，只记 `previewDirty`，切回可见时补一次 |
+| 创建流程 | 侧栏「新建简历 / AI 生成简历」、工作区首页底部三个入口都只调 `useWorkspaceCreate().openCreate(entry)`；`Workspace.vue` 根部挂 `ResumeCreateFlow`（岗位起稿 / 空白模板 / 导入 / AI 生成）消费意图，创建成功 `emit('created')` → 先 `flushSave()` 再 `push('/workspace/:id')`，全程不离开外壳 |
 
 ### 8.3 目录职责
 
@@ -363,8 +364,8 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 | `components/ai/` | 对话面板、消息气泡、`ThinkingProcess.vue`（思考过程可视化）、变更确认卡片、提问卡片、工具进度 |
 | `components/templates/` | 模板选择与缩略预览（**注意：`ClassicTemplate.vue`/`ModernTemplate.vue`/`TechTemplate.vue` 在 `src` 内已无引用，属旧渲染路径残留**） |
 | `components/workspace/` | 工作区首页（对话起始态）、右侧预览空态 |
-| `components/admin/` `announcement/` `resume/` `home/` `layout/` `common/` `ui/` | 分域组件；`layout/` 下 `MainLayout.vue` 是全站顶栏，`WorkspaceShell.vue` / `WorkspaceSidebar.vue` / `WorkspaceUserMenu.vue` 是工作区外壳 |
-| `composables/` | `useWorkspaceBridge.ts`：侧栏切换简历前调用编辑器注册的 `flushSave`，避免防抖间隙丢改动；`useWorkspaceDrawer.ts`：移动端侧栏抽屉的开合状态 |
+| `components/admin/` `announcement/` `resume/` `home/` `layout/` `common/` `ui/` | 分域组件；`resume/` 下 `ResumeCreateFlow.vue` 承载全部创建流程（工作区与 `/resumes` 共用）；`layout/` 下 `MainLayout.vue` 是全站顶栏，`WorkspaceShell.vue` / `WorkspaceSidebar.vue` / `WorkspaceUserMenu.vue` 是工作区外壳 |
+| `composables/` | `useWorkspaceBridge.ts`：侧栏切换简历前调用编辑器注册的 `flushSave`，避免防抖间隙丢改动；`useWorkspaceDrawer.ts`：移动端侧栏抽屉的开合状态；`useWorkspaceCreate.ts`：创建入口意图分发（`choice` / `starter` / `ai` / `import` / `blank`） |
 | `stores/` | 4 个：`user`（登录态、积分）、`resume`（列表）、`editor`（当前简历、脏标记、保存、预览刷新）、`chat`（每份简历的会话列表与当前会话，侧栏与编辑器共用） |
 | `api/` | 每个业务域一个文件；`request.ts` 是 axios 封装，`ai.ts` 是流式专用 |
 | `types/` | 与后端 schema 对齐的 TS 类型（`resume.ts` / `ai.ts` / `api.ts` / `user.ts`） |

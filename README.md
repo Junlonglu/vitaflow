@@ -91,6 +91,24 @@ VitaFlow/
 
 ## 快速开始
 
+### 0. 一键 Docker 部署（全栈，可选）
+
+需要 Docker Desktop / Docker Engine，在仓库根目录执行：
+
+```bash
+docker compose --profile full up -d --build
+```
+
+首次构建会下载 Chromium、中文字体与 OCR 依赖，约 10–20 分钟。启动后：
+
+- 前端：<http://localhost:8080>
+- 后端接口文档：<http://localhost:8000/docs>
+- MinIO 控制台：<http://localhost:9001>
+
+默认的 `docker compose up -d` 只启动 MySQL / Redis / MinIO / AI 服务，前后端继续按下面的步骤在宿主机运行，适合日常开发（保留热更新）。两种模式的完整说明见 [docs/本地开发环境启动指南.md](docs/本地开发环境启动指南.md)。
+
+> 构建默认走阿里云 Debian / PyPI 镜像；海外部署可在根目录 `.env` 设置 `APT_MIRROR` 与 `PIP_INDEX_URL` 为官方源。
+
 ### 1. 创建数据库
 
 ```sql

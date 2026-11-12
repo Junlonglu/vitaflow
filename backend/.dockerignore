@@ -1,0 +1,10 @@
+# 本地虚拟环境与敏感配置绝不进入镜像
+.venv
+.env
+__pycache__
+*.pyc
+.pytest_cache
+tests
+logs
+storage
+*.log

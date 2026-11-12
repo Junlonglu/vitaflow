@@ -42,6 +42,20 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
+## Docker
+
+```bash
+# 只构建后端镜像（含 Chromium、WeasyPrint 系统库、中文字体、Tesseract 中文 OCR）
+docker compose build backend
+
+# 全栈启动（backend-migrate → backend → frontend）
+docker compose --profile full up -d --build
+```
+
+- 镜像构建使用 `constraints.txt` 锁定依赖版本。
+- compose 会把容器内 `PDF_CHROMIUM_EXECUTABLE_PATH` 置空（改用 Playwright 自带浏览器），并将 `EXPORT_DIR` / `UPLOAD_DIR` 固定为相对路径。
+- 全栈模式下容器通过服务名访问 MySQL / Redis / MinIO / ai-service，无需修改 `.env` 中的 127.0.0.1 值。
+
 ## 日志配置
 
 后端启动时会初始化统一日志配置，默认输出到控制台，并记录应用启动、关闭、请求耗时和未处理异常堆栈。

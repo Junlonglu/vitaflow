@@ -1,0 +1,27 @@
+# 后端依赖版本约束（与项目验证过的 Python 3.11 环境一致）。
+# 用途：pip install -r requirements.txt -c constraints.txt
+# 只约束 requirements.txt 中的直接依赖，避免构建结果随时间漂移。
+fastapi==0.138.1
+uvicorn==0.49.0
+sqlalchemy==2.0.51
+alembic==1.18.5
+pymysql==1.2.0
+redis==8.0.1
+pydantic==2.13.4
+pydantic-settings==2.14.2
+python-dotenv==1.2.2
+python-jose==3.5.0
+passlib==1.7.4
+bcrypt==4.0.1
+python-multipart==0.0.32
+python-docx==1.2.0
+pypdf==6.14.2
+pillow==12.2.0
+pytesseract==0.3.13
+jinja2==3.1.6
+weasyprint==69.0
+playwright==1.60.0
+bleach==6.4.0
+minio==7.2.20
+oss2==2.19.1
+httpx==0.28.1

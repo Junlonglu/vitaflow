@@ -79,12 +79,19 @@ curl -N -X POST http://127.0.0.1:8300/v1/chat \
 
 ## Docker
 
+ai-service 不属于任何 profile，默认 `docker compose up -d` 就会随基础设施一起启动：
+
 ```bash
-docker compose --profile ai-service build ai-service
-docker compose --profile ai-service up -d ai-service
+docker compose up -d ai-service
+# 或随基础设施一起
+docker compose up -d
 ```
 
-> 使用 `ai-service` profile，避免影响默认 `docker compose up -d` 的参考基础设施。
+需要连同后端与前端一起全栈启动时使用 `full` profile：
+
+```bash
+docker compose --profile full up -d --build
+```
 
 ## 常用命令
 

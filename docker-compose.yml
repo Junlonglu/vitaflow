@@ -1,12 +1,33 @@
+# 双模式：
+#   1) 手动开发（默认）：docker compose up -d
+#      只启动 mysql / redis / minio / ai-service；后端与前端在宿主机运行（保留热更新）。
+#   2) 全栈一键部署：docker compose --profile full up -d --build
+#      额外启动 backend-migrate / backend / frontend(Nginx)，入口 http://localhost:8080
+#
+# 环境变量：
+#   - 根目录 .env 供 compose 插值（AI 服务配置、端口、全栈模式覆盖项）
+#   - backend/.env 供后端进程读取；全栈模式下容器主机名由 environment 覆盖
+#   - ai-service 容器同时用于两种模式，PI_FASTAPI_BASE_URL 保持 host.docker.internal
+#     （全栈模式依赖 backend 继续发布 8000 端口），因此无需按模式切换配置
+
+x-backend-build: &backend-build
+  build:
+    context: ./backend
+    args:
+      # 国内默认阿里云镜像；海外可设 APT_MIRROR / PIP_INDEX_URL 为官方源
+      APT_MIRROR: ${APT_MIRROR:-https://mirrors.aliyun.com}
+      PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
+  image: vitaflow-backend:latest
+
 services:
   mysql:
     image: mysql:8.0
     container_name: vitaflow-mysql
     ports:
-      - "3306:3306"
+      - "${MYSQL_PORT:-3306}:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: 123456
-      MYSQL_DATABASE: vitaflow
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-123456}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-vitaflow}
     volumes:
       - mysql-data:/var/lib/mysql
     command:
@@ -14,7 +35,8 @@ services:
       - --collation-server=utf8mb4_unicode_ci
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p123456"]
+      # $$ 交由容器内 shell 展开，避免 compose 在宿主机侧提前插值
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -23,11 +45,11 @@ services:
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: vitaflow-minio
     ports:
-      - "9000:9000"   # API 端口
-      - "9001:9001"   # 控制台端口
+      - "${MINIO_PORT:-9000}:9000"     # API 端口
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"  # 控制台端口
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     volumes:
       - minio-data:/data
     command: server /data --console-address ":9001"
@@ -37,19 +59,25 @@ services:
     image: redis:7-alpine
     container_name: vitaflow-redis
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis-data:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   # AI 服务（pi-agent 旁路）。默认 faux 模式（确定性演示、无网络依赖）；
   # real 模式经根目录 .env 设 PI_PROVIDER=real，并从挂载的 .pi-agent/models.json
   # 读模型列表（见 ai-service/models.json.example），API Key 经 DEEPSEEK_API_KEY 注入。
   ai-service:
     build: ./ai-service
+    image: vitaflow-ai-service:latest
     container_name: vitaflow-ai-service
     ports:
-      - "8300:8300"
+      - "${AI_SERVICE_PORT:-8300}:8300"
     # 直连公共 DNS：容器内置 DNS（127.0.0.11）转发宿主机解析器时偶发 8s+ 超时
     # （EAI_AGAIN），是空闲后首个对话回合首字延迟 10s+ 的根因
     dns:
@@ -59,8 +87,9 @@ services:
       PI_PROVIDER: ${PI_PROVIDER:-faux}
       AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
-      AI_TURN_TIMEOUT_MS: ${AI_TURN_TIMEOUT_MS:-60000}
-      # 工具回调/计费回调指向宿主机 FastAPI（Windows/macOS Docker Desktop 内置该域名）
+      AI_TURN_TIMEOUT_MS: ${AI_TURN_TIMEOUT_MS:-300000}
+      # 工具回调/计费回调指向宿主机 FastAPI（Windows/macOS Docker Desktop 内置该域名）。
+      # 全栈模式下 backend 也发布 8000，因此该值在两种模式都成立。
       PI_FASTAPI_BASE_URL: ${PI_FASTAPI_BASE_URL:-http://host.docker.internal:8000}
       # 联网搜索工具：none（默认，禁用）| bocha | tavily；配 SEARCH_API_KEY 才注册 web_search
       SEARCH_PROVIDER: ${SEARCH_PROVIDER:-none}
@@ -72,6 +101,108 @@ services:
       - ./ai-service/.pi-agent:/app/.pi-agent
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8300/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  # 一次性迁移任务：backend 启动前确保数据库结构是最新的
+  backend-migrate:
+    profiles: ["full"]
+    # 复用 backend 构建出的镜像，避免同一镜像构建两次
+    image: vitaflow-backend:latest
+    container_name: vitaflow-backend-migrate
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-123456}
+      DB_NAME: ${MYSQL_DATABASE:-vitaflow}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+
+  backend:
+    profiles: ["full"]
+    <<: *backend-build
+    container_name: vitaflow-backend
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      # 容器内地址覆盖（手动模式仍读 backend/.env 里的 127.0.0.1）。
+      # DB 凭据跟随 compose 的 MySQL 服务，避免改了 MYSQL_ROOT_PASSWORD 后后端仍用旧值。
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-123456}
+      DB_NAME: ${MYSQL_DATABASE:-vitaflow}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      AI_SERVICE_URL: http://ai-service:8300
+      # 令牌以根目录 .env 为准，强制两边一致
+      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-}
+      # Chromium 与 uvicorn 同容器，可用 127.0.0.1；该值同时参与 PDF 缓存指纹
+      PDF_BASE_URL: http://127.0.0.1:8000
+      # 宿主若配置了 Windows Chromium 路径，容器内必须置空改用 Playwright 自带浏览器
+      PDF_CHROMIUM_EXECUTABLE_PATH: ""
+      EXPORT_DIR: storage/exports
+      UPLOAD_DIR: storage/uploads
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173,http://127.0.0.1:5173}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+    volumes:
+      # 导出文件、PDF 缓存、日志持久化到宿主机
+      - ./backend/storage:/app/storage
+      - ./backend/logs:/app/logs
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      ai-service:
+        condition: service_healthy
+      backend-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  # 前端：Nginx 托管构建产物，并把 /api 反代到 backend
+  frontend:
+    profiles: ["full"]
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+    image: vitaflow-frontend:latest
+    container_name: vitaflow-frontend
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
 
 volumes:

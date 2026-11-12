@@ -2,7 +2,6 @@
 import type { Component } from "vue"
 import { computed, ref, watch } from "vue"
 import { ChevronDown, RefreshCw, ShieldCheck } from "lucide-vue-next"
-import AppLayout from "@/components/layout/AppLayout.vue"
 import Button from "@/components/ui/button/Button.vue"
 
 interface AdminNavItem {
@@ -49,7 +48,6 @@ function toggleGroup(label: string) {
 </script>
 
 <template>
-  <AppLayout>
     <div class="mx-auto flex max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:py-10">
       <aside class="hidden w-56 shrink-0 lg:block">
         <div class="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
@@ -122,5 +120,4 @@ function toggleGroup(label: string) {
         <slot />
       </main>
     </div>
-  </AppLayout>
 </template>

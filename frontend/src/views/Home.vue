@@ -1,12 +1,10 @@
 <script setup lang="ts">
-import AppLayout from "@/components/layout/AppLayout.vue"
 import HeroSection from "@/components/home/HeroSection.vue"
 import FeatureSection from "@/components/home/FeatureSection.vue"
 import TemplateShowcase from "@/components/home/TemplateShowcase.vue"
 import WorkflowSection from "@/components/home/WorkflowSection.vue"
 </script>
 <template>
-  <AppLayout>
     <main class="flex-1 bg-[#fafafa]">
       <HeroSection />
       <FeatureSection />
@@ -34,5 +32,4 @@ import WorkflowSection from "@/components/home/WorkflowSection.vue"
         </a>
       </div>
     </footer>
-  </AppLayout>
 </template>

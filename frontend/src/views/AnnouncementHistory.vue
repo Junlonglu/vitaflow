@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue"
 import { ChevronRight, Megaphone, RefreshCw, X } from "lucide-vue-next"
-import AppLayout from "@/components/layout/AppLayout.vue"
+import WorkspacePage from "@/components/workspace/WorkspacePage.vue"
 import Button from "@/components/ui/button/Button.vue"
 import {
   getAnnouncementDetailApi, getAnnouncementHistoryApi,
@@ -46,7 +46,7 @@ onMounted(() => load())
 </script>
 
 <template>
-  <AppLayout>
+  <WorkspacePage>
     <main class="mx-auto max-w-4xl px-4 py-8 sm:px-6 md:py-14">
       <header class="mb-8 flex items-end justify-between gap-4">
         <div><p class="mb-1.5 sm:mb-2 text-[10px] sm:text-xs font-semibold uppercase tracking-[0.15em] sm:tracking-[0.18em] text-zinc-400">Announcements</p><h1 class="text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-950">历史公告</h1><p class="mt-1.5 sm:mt-2 text-xs sm:text-sm text-zinc-500">查看 VitaFlow 的更新与重要通知</p></div>
@@ -77,7 +77,7 @@ onMounted(() => load())
         </section>
       </div>
     </Transition>
-  </AppLayout>
+  </WorkspacePage>
 </template>
 
 <style scoped>

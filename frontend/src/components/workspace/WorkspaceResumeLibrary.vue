@@ -9,8 +9,6 @@ import ResumeCard from "@/components/resume/ResumeCard.vue"
 import ResumeGridSkeleton from "@/components/resume/ResumeGridSkeleton.vue"
 import ResumeListEmptyState from "@/components/resume/ResumeListEmptyState.vue"
 import ResumeListPagination from "@/components/resume/ResumeListPagination.vue"
-import AnnouncementModal from "@/components/announcement/AnnouncementModal.vue"
-import { getCurrentAnnouncementApi, type AnnouncementItem } from "@/api/announcement"
 import { deleteResumeApi, duplicateResumeApi, listResumesApi } from "@/api/resume"
 import { listTemplatesApi, type TemplateItem } from "@/api/template"
 import type { ResumeItem } from "@/types/resume"
@@ -38,7 +36,6 @@ const page = ref(1)
 const pageSize = ref(8)
 const loading = ref(false)
 const templates = ref<TemplateItem[]>([])
-const announcement = ref<AnnouncementItem | null>(null)
 const showDeleteConfirm = ref(false)
 const resumeToDelete = ref<number | null>(null)
 const isTruncatedMap = ref<Record<string | number, boolean>>({})
@@ -76,14 +73,13 @@ function handleBreakpointChange() {
 }
 
 onMounted(async () => {
-  const [currentAnnouncement] = await Promise.all([
-    getCurrentAnnouncementApi().catch(() => null),
+  // 公告弹窗已提到 Workspace.vue 根部统一处理，这里只负责列表和模板名
+  await Promise.all([
     load(1, getResponsivePageSize()),
     listTemplatesApi()
       .then((list) => (templates.value = list))
       .catch(() => null),
   ])
-  announcement.value = currentAnnouncement
   window.addEventListener("resize", handleBreakpointChange)
 })
 
@@ -208,7 +204,6 @@ async function confirmDelete() {
 
     <ResumeListEmptyState v-if="!loading && !items.length" @create="openCreate('choice')" />
 
-    <AnnouncementModal v-if="announcement" :announcement="announcement" @close="announcement = null" />
 
     <ConfirmDialog
       v-model:open="showDeleteConfirm"

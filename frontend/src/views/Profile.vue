@@ -2,7 +2,7 @@
 import { onMounted, ref, watch } from "vue"
 import DOMPurify from "dompurify"
 import { useRoute } from "vue-router"
-import AppLayout from "@/components/layout/AppLayout.vue"
+import WorkspacePage from "@/components/workspace/WorkspacePage.vue"
 import Button from "@/components/ui/button/Button.vue"
 import Input from "@/components/ui/input/Input.vue"
 import Label from "@/components/ui/label/Label.vue"
@@ -163,7 +163,7 @@ const navItems = [
 </script>
 
 <template>
-  <AppLayout>
+  <WorkspacePage background="muted">
     <main class="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:py-12">
       
       <!-- Page Header -->
@@ -440,5 +440,5 @@ const navItems = [
         </div>
       </Transition>
     </Teleport>
-  </AppLayout>
+  </WorkspacePage>
 </template>

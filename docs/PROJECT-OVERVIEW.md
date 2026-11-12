@@ -335,10 +335,11 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 | `/resumes` | — | 重定向到 `/workspace/resumes`，兼容旧链接与历史导航 |
 | `/resumes/:id/edit` | — | 重定向到 `/workspace/:id`，兼容旧链接 |
 | `/templates` | `TemplateGallery.vue` | 仅面向未登录访客的公开模板页（浏览 + 引流到登录）；登录后守卫直接跳到 `/workspace/templates` |
-| `/profile` | `Profile.vue` | 个人资料、积分、密码 |
-| `/ai-records` | `AiRecords.vue` | AI 使用记录与积分流水 |
-| `/announcements` | `AnnouncementHistory.vue` | 公告历史 |
-| `/help` | `HelpCenter.vue` | 帮助中心 |
+| `/workspace/help` | `Workspace.vue` → `HelpCenter.vue` | 帮助中心，主题导航 + FAQ，快捷入口都指回工作区内部 |
+| `/workspace/profile` | `Workspace.vue` → `Profile.vue` | 个人资料、修改密码、意见反馈（`?tab=feedback` 直达反馈页），浅灰底衬托白卡 |
+| `/workspace/announcements` | `Workspace.vue` → `AnnouncementHistory.vue` | 公告历史与详情弹窗 |
+| `/workspace/ai-records` | `Workspace.vue` → `AiRecords.vue` | Flow Points 余额、兑换、调用记录与消费明细 |
+| `/help`、`/profile`、`/announcements`、`/ai-records` | — | 旧链接，重定向到对应 `/workspace/*`（`/profile` 保留 query） |
 | `/share/:token` | `SharedResume.vue` | 公开分享页，无鉴权 |
 | `/admin` | `Admin.vue` | 管理后台，`meta.requiresAdmin`，1599 行 |
 
@@ -356,6 +357,8 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 | 预览刷新 | `refreshPreviewLatest` 单飞 + 尾随合并：同时只有一个 `/preview` 请求；预览不可见（移动端非「预览」tab、`document.hidden`）时不发请求，只记 `previewDirty`，切回可见时补一次 |
 | 创建流程 | 侧栏「新建简历 / AI 生成简历」、工作区首页底部三个入口都只调 `useWorkspaceCreate().openCreate(entry)`；`Workspace.vue` 根部挂 `ResumeCreateFlow`（岗位起稿 / 空白模板 / 导入 / AI 生成）消费意图，创建成功 `emit('created')` → 先 `flushSave()` 再 `push('/workspace/:id')`，全程不离开外壳 |
 | 模板中心 | 收编进工作区（`/workspace/templates` → `WorkspaceTemplates.vue`），不再跳全站顶栏的独立页；点「用此模板创建」时 `openCreate('blank', { templateId })` 直接建简历，岗位起稿 / 导入则把该 `template_id` 传给对应接口，不再重复选模板。`/templates` 只保留给未登录访客 |
+| 内容页 | 帮助中心 / 个人中心 / 公告 / Flow Points 统一走 `WorkspacePage.vue`（滚动容器 + 移动端抽屉入口 + 可选浅灰底），路由挂在 `/workspace/*` 下，`Workspace.vue` 用 `panel` 计算属性决定渲染哪一个；四个页面按需异步加载，不进首屏包 |
+| 公告弹窗 | 挂在工作区根部（`Workspace.vue`），除编辑器外都会弹；空标题不弹。此前只挂在「全部简历」面板上，用户不进那个面板就永远看不到公告 |
 | 全部简历 | 收编进工作区（`/workspace/resumes` → `WorkspaceResumeLibrary.vue`），分页、复制、删除都在面板内完成；侧栏只拉最近 50 份，超出时列表底部出现「查看全部 N 份」入口。面板的列表分页状态独立于 `resume` store，增删后回写一次 store，侧栏不会因为面板把 `page_size` 改成 8 而只剩 8 条 |
 
 ### 8.3 目录职责
@@ -367,8 +370,8 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 | `components/preview/` | 预览容器、缩放、分页提示 |
 | `components/ai/` | 对话面板、消息气泡、`ThinkingProcess.vue`（思考过程可视化）、变更确认卡片、提问卡片、工具进度 |
 | `components/templates/` | 模板选择与缩略预览（**注意：`ClassicTemplate.vue`/`ModernTemplate.vue`/`TechTemplate.vue` 在 `src` 内已无引用，属旧渲染路径残留**） |
-| `components/workspace/` | 工作区首页（对话起始态）、模板中心面板（`WorkspaceTemplates.vue`）、全部简历面板（`WorkspaceResumeLibrary.vue`）、右侧预览空态 |
-| `components/admin/` `announcement/` `resume/` `home/` `layout/` `common/` `ui/` | 分域组件；`resume/` 下 `ResumeCreateFlow.vue` 承载全部创建流程（工作区与 `/resumes` 共用）；`layout/` 下 `MainLayout.vue` 是全站顶栏，`WorkspaceShell.vue` / `WorkspaceSidebar.vue` / `WorkspaceUserMenu.vue` 是工作区外壳 |
+| `components/workspace/` | 工作区首页（对话起始态）、模板中心面板（`WorkspaceTemplates.vue`）、全部简历面板（`WorkspaceResumeLibrary.vue`）、内容页外壳（`WorkspacePage.vue`）、右侧预览空态 |
+| `components/admin/` `announcement/` `resume/` `home/` `layout/` `common/` `ui/` | 分域组件；`resume/` 下 `ResumeCreateFlow.vue` 承载全部创建流程（工作区与 `/resumes` 共用）；`layout/` 下 `MainLayout.vue` 只服务公开页（`/`、`/landing`、`/templates`），`WorkspaceShell.vue` / `WorkspaceSidebar.vue` / `WorkspaceUserMenu.vue` 是工作区外壳；`AppLayout.vue` 这个曾经的空壳包装器已删除 |
 | `composables/` | `useWorkspaceBridge.ts`：侧栏切换简历前调用编辑器注册的 `flushSave`，避免防抖间隙丢改动；`useWorkspaceDrawer.ts`：移动端侧栏抽屉的开合状态；`useWorkspaceCreate.ts`：创建入口意图分发（`choice` / `starter` / `ai` / `import` / `blank`），可带 `templateId` 跳过模板选择 |
 | `stores/` | 4 个：`user`（登录态、积分）、`resume`（列表）、`editor`（当前简历、脏标记、保存、预览刷新）、`chat`（每份简历的会话列表与当前会话，侧栏与编辑器共用） |
 | `api/` | 每个业务域一个文件；`request.ts` 是 axios 封装，`ai.ts` 是流式专用 |

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue"
 import { Activity, FileSearch, History, Languages, LoaderCircle, MessageSquare, RefreshCw, ScrollText, Send, TicketCheck, X } from "lucide-vue-next"
-import AppLayout from "@/components/layout/AppLayout.vue"
+import WorkspacePage from "@/components/workspace/WorkspacePage.vue"
 import Button from "@/components/ui/button/Button.vue"
 import FlowPointIcon from "@/components/ui/FlowPointIcon.vue"
 import Input from "@/components/ui/input/Input.vue"
@@ -338,7 +338,7 @@ onMounted(() => refresh())
 </script>
 
 <template>
-  <AppLayout>
+  <WorkspacePage>
     <main class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:py-12">
       <header class="mb-7">
         <div>
@@ -605,7 +605,7 @@ onMounted(() => refresh())
         </article>
       </div>
     </main>
-  </AppLayout>
+  </WorkspacePage>
 </template>
 
 <style scoped>

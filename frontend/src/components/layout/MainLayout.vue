@@ -45,8 +45,8 @@ function logout() {
           <RouterLink
             v-if="loggedIn"
             class="flex shrink-0 items-center gap-1.5 rounded-md px-3 py-2 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
-            :class="{ 'bg-zinc-100 text-zinc-900': route.path === '/help' }"
-            to="/help"
+            :class="{ 'bg-zinc-100 text-zinc-900': route.path === '/workspace/help' }"
+            to="/workspace/help"
           >
             <CircleHelp class="h-4 w-4" />
             <span>帮助</span>
@@ -55,16 +55,16 @@ function logout() {
           <template v-if="loggedIn">
             <RouterLink
               class="flex shrink-0 items-center gap-1.5 rounded-md px-3 py-2 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
-              :class="{ 'bg-zinc-100 text-zinc-900': route.path === '/announcements' }"
-              to="/announcements"
+              :class="{ 'bg-zinc-100 text-zinc-900': route.path === '/workspace/announcements' }"
+              to="/workspace/announcements"
             >
               <Bell class="h-4 w-4" />
               <span>公告</span>
             </RouterLink>
             <RouterLink
               class="flex shrink-0 items-center gap-1.5 rounded-md px-3 py-2 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
-              :class="{ 'bg-zinc-100 text-zinc-900': route.path === '/ai-records' }"
-              to="/ai-records"
+              :class="{ 'bg-zinc-100 text-zinc-900': route.path === '/workspace/ai-records' }"
+              to="/workspace/ai-records"
             >
               <FlowPointIcon class="h-4 w-4" />
               <span>Flow Points</span>
@@ -88,8 +88,8 @@ function logout() {
             </RouterLink>
             <RouterLink
               class="flex shrink-0 items-center gap-1.5 rounded-md px-3 py-2 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
-              :class="{ 'bg-zinc-100 text-zinc-900': route.path === '/profile' }"
-              to="/profile"
+              :class="{ 'bg-zinc-100 text-zinc-900': route.path === '/workspace/profile' }"
+              to="/workspace/profile"
             >
               <UserRound class="h-4 w-4" />
               <span>{{ user.userInfo?.username || '用户信息' }}</span>
@@ -168,8 +168,8 @@ function logout() {
           </RouterLink>
           <RouterLink
             class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 transition-colors"
-            :class="{ 'bg-zinc-100 text-zinc-900': route.path === '/help' }"
-            to="/help"
+            :class="{ 'bg-zinc-100 text-zinc-900': route.path === '/workspace/help' }"
+            to="/workspace/help"
             @click="mobileMenuOpen = false"
           >
             <CircleHelp class="h-4 w-4 text-zinc-500" />
@@ -177,8 +177,8 @@ function logout() {
           </RouterLink>
           <RouterLink
             class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 transition-colors"
-            :class="{ 'bg-zinc-100 text-zinc-900': route.path === '/announcements' }"
-            to="/announcements"
+            :class="{ 'bg-zinc-100 text-zinc-900': route.path === '/workspace/announcements' }"
+            to="/workspace/announcements"
             @click="mobileMenuOpen = false"
           >
             <Bell class="h-4 w-4 text-zinc-500" />
@@ -186,8 +186,8 @@ function logout() {
           </RouterLink>
           <RouterLink
             class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 transition-colors"
-            :class="{ 'bg-zinc-100 text-zinc-900': route.path === '/ai-records' }"
-            to="/ai-records"
+            :class="{ 'bg-zinc-100 text-zinc-900': route.path === '/workspace/ai-records' }"
+            to="/workspace/ai-records"
             @click="mobileMenuOpen = false"
           >
             <FlowPointIcon class="h-4 w-4 text-zinc-500" />
@@ -214,8 +214,8 @@ function logout() {
           </RouterLink>
           <RouterLink
             class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 transition-colors"
-            :class="{ 'bg-zinc-100 text-zinc-900': route.path === '/profile' }"
-            to="/profile"
+            :class="{ 'bg-zinc-100 text-zinc-900': route.path === '/workspace/profile' }"
+            to="/workspace/profile"
             @click="mobileMenuOpen = false"
           >
             <UserRound class="h-4 w-4 text-zinc-500" />

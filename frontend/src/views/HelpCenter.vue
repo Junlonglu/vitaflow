@@ -15,10 +15,9 @@ import {
   Command,
   Sparkles,
 } from "lucide-vue-next"
-import AppLayout from "@/components/layout/AppLayout.vue"
+import WorkspacePage from "@/components/workspace/WorkspacePage.vue"
 import FlowPointIcon from "@/components/ui/FlowPointIcon.vue"
 import Button from "@/components/ui/button/Button.vue"
-import { useUserStore } from "@/stores/user"
 
 type HelpTopic = {
   id: string
@@ -29,28 +28,28 @@ type HelpTopic = {
   steps: string[]
 }
 
-const user = useUserStore()
 const activeTopicId = ref("start")
 
+// 帮助中心已经收进工作区外壳，这里都是工作区内部跳转，不再需要考虑未登录分支
 const quickStartActions = computed(() => [
   {
     title: "选择模板",
     description: "从模板开始创建或导入简历",
-    to: "/templates",
+    to: "/workspace/templates",
     icon: LayoutTemplate,
     primary: true,
   },
   {
     title: "我的简历",
     description: "继续编辑、复制、分享或导出",
-    to: user.token ? "/workspace/resumes" : "/login",
+    to: "/workspace/resumes",
     icon: FileText,
     primary: false,
   },
   {
     title: "提交反馈",
     description: "遇到问题时查看处理进度",
-    to: user.token ? "/profile?tab=feedback" : "/login",
+    to: "/workspace/profile?tab=feedback",
     icon: MessageSquare,
     primary: false,
   },
@@ -175,9 +174,9 @@ const faqs = [
 </script>
 
 <template>
-  <AppLayout>
-    <div class="min-h-screen bg-white">
-      <main class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:py-12">
+  <WorkspacePage>
+    <div>
+      <main class="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:py-10">
         <section class="border-b border-zinc-200 pb-8 lg:pb-12">
           <div class="grid gap-8 lg:gap-10 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
             <div class="flex flex-col lg:pr-4">
@@ -331,7 +330,7 @@ const faqs = [
               把问题、使用场景和出现异常的位置写清楚，管理员处理后你可以在个人中心查看反馈状态和回复。
             </p>
           </div>
-          <RouterLink :to="user.token ? '/profile?tab=feedback' : '/login'" class="shrink-0">
+          <RouterLink to="/workspace/profile?tab=feedback" class="shrink-0">
             <Button class="h-11 rounded-xl bg-white px-5 text-zinc-950 hover:bg-zinc-100">
               <MessageSquare class="mr-2 h-4 w-4" />
               提交反馈
@@ -341,5 +340,5 @@ const faqs = [
       </section>
     </main>
     </div>
-  </AppLayout>
+  </WorkspacePage>
 </template>

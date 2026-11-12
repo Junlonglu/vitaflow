@@ -2,7 +2,6 @@
 import { computed, onMounted, ref, watch } from "vue"
 import { useRouter } from "vue-router"
 import { ChevronLeft, ChevronRight } from "lucide-vue-next"
-import AppLayout from "@/components/layout/AppLayout.vue"
 import Button from "@/components/ui/button/Button.vue"
 import TemplatePreview from "@/components/templates/TemplatePreview.vue"
 import { listTemplatesApi, type TemplateItem } from "@/api/template"
@@ -43,7 +42,6 @@ function startWithTemplate() {
 </script>
 
 <template>
-  <AppLayout>
     <main class="mx-auto max-w-7xl px-4 sm:px-6 py-8 md:py-16">
       <div class="max-w-2xl">
         <p class="mb-1.5 sm:mb-2 text-[10px] sm:text-xs font-semibold uppercase tracking-[0.15em] sm:tracking-[0.18em] text-zinc-400">Template Gallery</p>
@@ -112,5 +110,4 @@ function startWithTemplate() {
         </div>
       </div>
     </main>
-  </AppLayout>
 </template>

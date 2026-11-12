@@ -352,7 +352,7 @@ function save(options: { refreshPreview?: boolean } = {}) {
 
 async function saveAndGoToAiRecords() {
   await save({ refreshPreview: false })
-  router.push("/ai-records")
+  router.push("/workspace/ai-records")
 }
 
 async function openShareDialog() {

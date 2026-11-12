@@ -3,8 +3,6 @@ import Home from "@/views/Home.vue"
 import Login from "@/views/Login.vue"
 import Workspace from "@/views/Workspace.vue"
 import TemplateGallery from "@/views/TemplateGallery.vue"
-import Profile from "@/views/Profile.vue"
-import HelpCenter from "@/views/HelpCenter.vue"
 import { meApi } from "@/api/auth"
 
 const router = createRouter({
@@ -15,21 +13,26 @@ const router = createRouter({
     { path: "/login", component: Login },
     { path: "/register", component: Login }, // Merged with Login component
     { path: "/share/:token", component: () => import("@/views/SharedResume.vue") },
-    { path: "/help", component: HelpCenter },
+    // 帮助中心 / 个人中心 / 公告 / Flow Points 都已收编进工作区外壳
+    { path: "/help", redirect: "/workspace/help" },
     // 全部简历已收编进工作区，旧链接（含 ?create=ai|import|blank）保留重定向
     { path: "/resumes", redirect: (to) => ({ path: "/workspace/resumes", query: to.query }) },
     // 旧编辑链接统一收敛到工作区，避免历史书签/分享链接失效
     { path: "/resumes/:id/edit", redirect: (to) => `/workspace/${to.params.id}` },
     { path: "/workspace", component: Workspace },
-    // 模板中心与全部简历已收编进工作区，静态段优先于 /workspace/:id
+    // 模板中心、全部简历与内容页已收编进工作区，静态段优先于 /workspace/:id
     { path: "/workspace/templates", component: Workspace },
     { path: "/workspace/resumes", component: Workspace },
+    { path: "/workspace/help", component: Workspace },
+    { path: "/workspace/profile", component: Workspace },
+    { path: "/workspace/announcements", component: Workspace },
+    { path: "/workspace/ai-records", component: Workspace },
     { path: "/workspace/:id", component: Workspace },
     // 未登录时的公开模板页；登录后由守卫转到 /workspace/templates
     { path: "/templates", component: TemplateGallery },
-    { path: "/profile", component: Profile },
-    { path: "/announcements", component: () => import("@/views/AnnouncementHistory.vue") },
-    { path: "/ai-records", component: () => import("@/views/AiRecords.vue") },
+    { path: "/profile", redirect: (to) => ({ path: "/workspace/profile", query: to.query }) },
+    { path: "/announcements", redirect: "/workspace/announcements" },
+    { path: "/ai-records", redirect: "/workspace/ai-records" },
     { path: "/admin", component: () => import("@/views/Admin.vue"), meta: { requiresAdmin: true } },
   ],
 })

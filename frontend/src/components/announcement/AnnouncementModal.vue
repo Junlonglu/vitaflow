@@ -28,7 +28,7 @@ async function close() {
 
 async function goToAllAnnouncements() {
   await close()
-  router.push("/announcements")
+  router.push("/workspace/announcements")
 }
 
 function formatDate(value?: string) {

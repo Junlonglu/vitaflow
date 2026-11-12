@@ -19,10 +19,10 @@ const menuItems = computed(() => {
   const items = [
     { label: "全部简历", to: "/workspace/resumes", icon: Files },
     { label: "模板中心", to: "/workspace/templates", icon: LayoutTemplate },
-    { label: "Flow Points", to: "/ai-records", icon: FlowPointIcon },
-    { label: "公告", to: "/announcements", icon: Bell },
-    { label: "帮助中心", to: "/help", icon: CircleHelp },
-    { label: "个人资料", to: "/profile", icon: UserRound },
+    { label: "Flow Points", to: "/workspace/ai-records", icon: FlowPointIcon },
+    { label: "公告", to: "/workspace/announcements", icon: Bell },
+    { label: "帮助中心", to: "/workspace/help", icon: CircleHelp },
+    { label: "个人资料", to: "/workspace/profile", icon: UserRound },
   ]
   if (isAdmin.value) items.push({ label: "管理后台", to: "/admin", icon: LayoutDashboard })
   return items

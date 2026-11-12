@@ -285,12 +285,14 @@ ADMIN_EMAILS=admin@example.com
 - `/workspace/resumes`：工作区内的全部简历（管理、复制、删除、分页）
 - `/resumes`：旧链接，重定向到 `/workspace/resumes`（保留 `?create=` 参数）
 - `/resumes/:id/edit`：旧编辑链接，重定向到 `/workspace/:id`
+- `/workspace/help`：工作区内的帮助中心
+- `/workspace/profile`：工作区内的个人中心（`?tab=feedback` 直达反馈）
+- `/workspace/announcements`：工作区内的公告历史
+- `/workspace/ai-records`：工作区内的 Flow Points 与调用记录
 - `/templates`：未登录访客的公开模板页（登录后重定向到 `/workspace/templates`）
 - `/share/:token`：公开分享页
-- `/profile`：个人中心
-- `/announcements`：公告历史
-- `/ai-records`：AI 记录
-- `/admin`：管理后台
+- `/help`、`/profile`、`/announcements`、`/ai-records`：旧链接，重定向到对应 `/workspace/*`
+- `/admin`：管理后台（独立后台外壳，不在工作区内）
 
 ## 项目说明
 

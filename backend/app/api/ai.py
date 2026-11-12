@@ -26,11 +26,19 @@ from app.schemas.ai_chat import (
     AiChatDecisionResponse,
     AiChatRegenerateRequest,
     AiChatSendRequest,
+    AiChatSessionCreateRequest,
+    AiChatSessionRenameRequest,
 )
 from app.services.ai.token_usage import build_token_usage, normalize_token_usage
 from app.services.ai_chat_service import (
+    chat_session_data,
     clear_chat_messages,
+    create_chat_session,
+    delete_chat_session,
+    get_chat_session,
     list_chat_messages,
+    list_chat_sessions,
+    rename_chat_session,
     stream_ai_service_chat,
     stream_ai_service_regenerate,
     resolve_chat_change,
@@ -321,6 +329,7 @@ def _ai_service_stream_response(
     content: str,
     attachments: list[dict[str, Any]] | None = None,
     model_config_id: int | None = None,
+    session_id: int | None = None,
 ) -> StreamingResponse:
     """Proxy a chat turn to the AI service, persisting messages in MySQL.
 
@@ -328,7 +337,7 @@ def _ai_service_stream_response(
     ``result`` event's ``assistant_message`` is the DB-backed row (MySQL is the
     single source of truth for the UI message list).
     """
-    events = stream_ai_service_chat(db, user, resume, content, attachments, model_config_id)
+    events = stream_ai_service_chat(db, user, resume, content, attachments, model_config_id, session_id)
 
     async def iterator():
         try:
@@ -601,10 +610,66 @@ def generate_resume_stream_api(payload: GenerateResumeRequest, db: Session = Dep
     )
 
 
-@router.get("/resume-chat/{resume_id}/messages")
-def resume_chat_messages(resume_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@router.get("/resume-chat/{resume_id}/sessions")
+def resume_chat_sessions(
+    resume_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    """该简历下的会话列表（按最近活动排序），侧栏据此渲染多会话。"""
     get_resume(db, current_user.id, resume_id)
-    return success([item.model_dump() for item in list_chat_messages(db, current_user.id, resume_id)])
+    return success(list_chat_sessions(db, current_user.id, resume_id))
+
+
+@router.post("/resume-chat/{resume_id}/sessions")
+def resume_chat_create_session(
+    resume_id: int,
+    payload: AiChatSessionCreateRequest | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    get_resume(db, current_user.id, resume_id)
+    session = create_chat_session(db, current_user.id, resume_id, payload.title if payload else None)
+    return success(chat_session_data(session))
+
+
+@router.patch("/resume-chat/{resume_id}/sessions/{session_id}")
+def resume_chat_rename_session(
+    resume_id: int,
+    session_id: int,
+    payload: AiChatSessionRenameRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    get_resume(db, current_user.id, resume_id)
+    session = rename_chat_session(db, current_user.id, resume_id, session_id, payload.title)
+    return success(chat_session_data(session))
+
+
+@router.delete("/resume-chat/{resume_id}/sessions/{session_id}")
+def resume_chat_delete_session(
+    resume_id: int,
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    get_resume(db, current_user.id, resume_id)
+    delete_chat_session(db, current_user.id, resume_id, session_id)
+    return success(True)
+
+
+@router.get("/resume-chat/{resume_id}/messages")
+def resume_chat_messages(
+    resume_id: int,
+    session_id: int | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    resume = get_resume(db, current_user.id, resume_id)
+    if session_id is not None:
+        # 归属校验先做：越权/不存在的会话直接 404，不落一个空会话给前端。
+        get_chat_session(db, current_user.id, resume.id, session_id)
+    return success(
+        [item.model_dump() for item in list_chat_messages(db, current_user.id, resume_id, session_id=session_id)]
+    )
 
 
 @router.post("/resume-chat/{resume_id}/messages/stream")
@@ -625,7 +690,9 @@ def resume_chat_send_stream(
 
         return _ndjson_stream_response(empty_message())
     attachments = [item.model_dump() for item in payload.attachments]
-    return _ai_service_stream_response(db, current_user, resume, content, attachments, payload.model_config_id)
+    return _ai_service_stream_response(
+        db, current_user, resume, content, attachments, payload.model_config_id, payload.session_id
+    )
 
 
 @router.post("/resume-chat/{resume_id}/messages/{message_id}/regenerate/stream")
@@ -647,6 +714,7 @@ def resume_chat_regenerate_stream(
         if payload and payload.attachments is not None
         else None,
         model_config_id=payload.model_config_id if payload else None,
+        session_id=payload.session_id if payload else None,
     )
 
     async def iterator():
@@ -680,9 +748,14 @@ def resume_chat_decision(
 
 
 @router.delete("/resume-chat/{resume_id}/messages")
-def resume_chat_clear(resume_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def resume_chat_clear(
+    resume_id: int,
+    session_id: int | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     get_resume(db, current_user.id, resume_id)
-    clear_chat_messages(db, current_user.id, resume_id)
+    clear_chat_messages(db, current_user.id, resume_id, session_id)
     return success(True)
 
 

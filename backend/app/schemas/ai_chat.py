@@ -23,12 +23,37 @@ class AiChatSendRequest(BaseModel):
     content: str = Field(min_length=1, max_length=MAX_CHAT_CONTENT_LENGTH)
     attachments: list[AiChatAttachment] = Field(default_factory=list, max_length=MAX_CHAT_ATTACHMENTS)
     model_config_id: Optional[int] = None
+    # 目标会话：省略时落到该简历最近一次的会话（兼容旧前端的 1:1 行为）。
+    session_id: Optional[int] = None
+
+
+# 会话标题上限，与 ai_chat_sessions.title 的 String(120) 留出余量。
+MAX_CHAT_SESSION_TITLE_LENGTH = 60
+
+
+class AiChatSessionCreateRequest(BaseModel):
+    title: Optional[str] = Field(default=None, max_length=MAX_CHAT_SESSION_TITLE_LENGTH)
+
+
+class AiChatSessionRenameRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=MAX_CHAT_SESSION_TITLE_LENGTH)
+
+
+class AiChatSessionOut(BaseModel):
+    id: int
+    resume_id: int
+    title: str
+    message_count: int = 0
+    last_message: str = ""
+    create_time: datetime
+    update_time: datetime
 
 
 class AiChatRegenerateRequest(BaseModel):
     content: Optional[str] = Field(default=None, max_length=MAX_CHAT_CONTENT_LENGTH)
     attachments: Optional[list[AiChatAttachment]] = Field(default=None, max_length=MAX_CHAT_ATTACHMENTS)
     model_config_id: Optional[int] = None
+    session_id: Optional[int] = None
 
 
 class AiChatDecisionRequest(BaseModel):

@@ -61,8 +61,28 @@ export type FlowPointSummary = {
 }
 export type FlowPointTransaction = { id: number; feature_type: string; points_delta: number; balance_after: number; tokens_used: number; model_name?: string | null; description: string; create_time: string }
 
-export const getResumeChatMessagesApi = (resumeId: number) => request.get(`/ai/resume-chat/${resumeId}/messages`)
-export const clearResumeChatMessagesApi = (resumeId: number) => request.delete(`/ai/resume-chat/${resumeId}/messages`)
+export type AiChatSession = {
+  id: number
+  resume_id: number
+  title: string
+  message_count: number
+  last_message: string
+  create_time: string
+  update_time: string
+}
+
+export const getResumeChatSessionsApi = (resumeId: number) => request.get<any, AiChatSession[]>(`/ai/resume-chat/${resumeId}/sessions`)
+export const createResumeChatSessionApi = (resumeId: number, title?: string) =>
+  request.post<any, AiChatSession>(`/ai/resume-chat/${resumeId}/sessions`, title ? { title } : {})
+export const renameResumeChatSessionApi = (resumeId: number, sessionId: number, title: string) =>
+  request.patch<any, AiChatSession>(`/ai/resume-chat/${resumeId}/sessions/${sessionId}`, { title })
+export const deleteResumeChatSessionApi = (resumeId: number, sessionId: number) =>
+  request.delete<any, boolean>(`/ai/resume-chat/${resumeId}/sessions/${sessionId}`)
+
+export const getResumeChatMessagesApi = (resumeId: number, sessionId?: number | null) =>
+  request.get(`/ai/resume-chat/${resumeId}/messages`, { params: sessionId ? { session_id: sessionId } : {} })
+export const clearResumeChatMessagesApi = (resumeId: number, sessionId?: number | null) =>
+  request.delete(`/ai/resume-chat/${resumeId}/messages`, { params: sessionId ? { session_id: sessionId } : {} })
 export const decideResumeChatChangeApi = (resumeId: number, messageId: number, action: "apply" | "reject", mergedResumeData?: any) =>
   request.post(`/ai/resume-chat/${resumeId}/messages/${messageId}/decision`, action === "apply" && mergedResumeData ? { action, merged_resume_data: mergedResumeData } : { action })
 export const getAiCapabilityApi = () => request.get<AiCapability, AiCapability>("/ai/capability")
@@ -207,12 +227,20 @@ async function postAiStream<T = any>(path: string, data: any, callbacks: StreamC
 }
 
 export const generateResumeStreamApi = (data: any, callbacks?: StreamCallbacks) => postAiStream("/ai/generate-resume/stream", data, callbacks)
-export const sendResumeChatMessageStreamApi = (resumeId: number, data: { content: string; attachments?: AiChatAttachment[]; model_config_id?: number | null }, callbacks?: StreamCallbacks) =>
+
+type ChatTurnPayload = {
+  content?: string
+  attachments?: AiChatAttachment[]
+  model_config_id?: number | null
+  session_id?: number | null
+}
+
+export const sendResumeChatMessageStreamApi = (resumeId: number, data: ChatTurnPayload & { content: string }, callbacks?: StreamCallbacks) =>
   postAiStream(`/ai/resume-chat/${resumeId}/messages/stream`, data, callbacks)
 export const regenerateResumeChatMessageStreamApi = (
   resumeId: number,
   messageId: number,
-  data: { content?: string; attachments?: AiChatAttachment[]; model_config_id?: number | null } = {},
+  data: ChatTurnPayload = {},
   callbacks?: StreamCallbacks,
 ) =>
   postAiStream(`/ai/resume-chat/${resumeId}/messages/${messageId}/regenerate/stream`, data, callbacks)

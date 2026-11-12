@@ -119,8 +119,9 @@ vitaflow/
 - 能力与记录：`GET /ai/capability`、`GET /ai/records`、`GET /ai/histories`
 - 积分：`GET /ai/flow-points`、`GET /ai/flow-points/transactions`、`POST /ai/flow-points/redeem`
 - 流式：`POST /ai/generate-resume/stream`（按目标岗位生成整份简历）、`POST /ai/resume-chat/{resume_id}/messages/stream`、`POST /ai/resume-chat/{resume_id}/messages/{message_id}/regenerate/stream`
-- 变更决策：`POST /ai/resume-chat/{resume_id}/messages/{message_id}/decision`（apply / reject）、`DELETE /ai/resume-chat/{resume_id}/messages`
-- 历史：`GET /ai/resume-chat/{resume_id}/messages`
+- 会话（一份简历多条对话）：`GET /ai/resume-chat/{resume_id}/sessions`（含条数与末条预览）、`POST .../sessions`、`PATCH .../sessions/{session_id}`（重命名）、`DELETE .../sessions/{session_id}`
+- 变更决策：`POST /ai/resume-chat/{resume_id}/messages/{message_id}/decision`（apply / reject）、`DELETE /ai/resume-chat/{resume_id}/messages?session_id=`
+- 历史：`GET /ai/resume-chat/{resume_id}/messages?session_id=`（省略 session_id 时落在该简历最近一次会话，兼容旧前端）
 - **服务间回调（供 ai-service 调用）**：`POST /ai/service/tool/update-basics-field`、`POST /ai/service/tool/update-section`、`POST /ai/service/tool/propose-change`、`GET /ai/service/tool/get-resume-context`、`POST /ai/service/tool/search-evidence`、`POST /ai/service/usage`
 
 **其余**
@@ -171,7 +172,7 @@ vitaflow/
 
 | 表 | 说明 |
 |---|---|
-| `ai_chat_sessions` | 会话（按 user + resume 组织），含滚动摘要 `context_summary` 与其覆盖到的 `summary_message_id` |
+| `ai_chat_sessions` | 会话（按 user + resume 组织，一份简历可有多条对话），含滚动摘要 `context_summary` 与其覆盖到的 `summary_message_id` |
 | `ai_chat_messages` | 消息；assistant 消息可带 `optimized_resume_data`(待确认变更)、`suggestions`(变更摘要)、`action_status`(pending/applied/rejected)、usage 字段 |
 | `ai_tasks` | 一次性任务记录（类型、输入、输出、状态、错误、耗时、token） |
 | `ai_model_configs` | **业务策略**：`model_ref` 指向模型目录中的 provider/model；含 `name`、`context_messages`、`is_chat_selectable`、`sort_order`、`is_active`，以及三种费率 `chat_points_per_call` / `chat_points_per_million_input_tokens` / `chat_points_per_million_output_tokens` |
@@ -352,7 +353,7 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 | `components/workspace/` | 工作区首页（对话起始态）、右侧预览空态 |
 | `components/admin/` `announcement/` `resume/` `home/` `layout/` `common/` `ui/` | 分域组件；`layout/` 下 `MainLayout.vue` 是全站顶栏，`WorkspaceShell.vue` / `WorkspaceSidebar.vue` / `WorkspaceUserMenu.vue` 是工作区外壳 |
 | `composables/` | `useWorkspaceBridge.ts`：侧栏切换简历前调用编辑器注册的 `flushSave`，避免防抖间隙丢改动 |
-| `stores/` | 仅 3 个：`user`（登录态、积分）、`resume`（列表）、`editor`（当前简历、脏标记、保存、预览刷新） |
+| `stores/` | 4 个：`user`（登录态、积分）、`resume`（列表）、`editor`（当前简历、脏标记、保存、预览刷新）、`chat`（每份简历的会话列表与当前会话，侧栏与编辑器共用） |
 | `api/` | 每个业务域一个文件；`request.ts` 是 axios 封装，`ai.ts` 是流式专用 |
 | `types/` | 与后端 schema 对齐的 TS 类型（`resume.ts` / `ai.ts` / `api.ts` / `user.ts`） |
 | `utils/` | `aiDiff.ts` / `wordDiff.ts`（变更 diff）、`resumePagination.ts`（分页估算）、`resumePresets.ts`（预设）、`printResume.ts`、`toast.ts` |

@@ -106,7 +106,7 @@ class StreamAiServiceMultimodalTest(unittest.TestCase):
 
     def test_forwards_attachments_when_model_is_multimodal(self) -> None:
         config = _stub_chat_config()
-        session = SimpleNamespace(id=42, update_time=None, context_summary=None, summary_message_id=None)
+        session = SimpleNamespace(id=42, title="AI 简历助手", update_time=None, context_summary=None, summary_message_id=None)
         user = SimpleNamespace(id=7)
         resume = SimpleNamespace(id=3, title="后端简历", resume_data={"basics": {"name": "张三"}})
         attachments = [{"url": "http://127.0.0.1:9000/vitaflow/ai-chat/1.png", "object_name": "ai-chat/1.png", "content_type": "image/png"}]
@@ -153,7 +153,7 @@ class StreamAiServicePendingPersistTest(unittest.TestCase):
             captured["reply"] = reply
             return SimpleNamespace(timing=None, model_dump=lambda *_a, **_k: {"id": 1, "content": reply})
 
-        session = SimpleNamespace(id=42, update_time=None, context_summary=None, summary_message_id=None)
+        session = SimpleNamespace(id=42, title="AI 简历助手", update_time=None, context_summary=None, summary_message_id=None)
         user = SimpleNamespace(id=7)
         resume = SimpleNamespace(id=3, title="后端简历", resume_data={"basics": {"location": "广州"}})
 
@@ -193,7 +193,7 @@ class StreamAiServicePendingPersistTest(unittest.TestCase):
             captured["optimized_resume_data"] = optimized_resume_data
             return SimpleNamespace(timing=None, model_dump=lambda *_a, **_k: {"id": 1, "content": reply})
 
-        session = SimpleNamespace(id=42, update_time=None, context_summary=None, summary_message_id=None)
+        session = SimpleNamespace(id=42, title="AI 简历助手", update_time=None, context_summary=None, summary_message_id=None)
         user = SimpleNamespace(id=7)
         resume = SimpleNamespace(id=3, title="后端简历", resume_data={"basics": {}})
 

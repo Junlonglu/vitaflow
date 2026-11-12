@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch, computed } from "vue"
-import { CheckCircle2, LoaderCircle, SendHorizontal, Bot, Target, Wand2, Trash2, X, ImagePlus, XCircle, Copy, Check, RotateCcw, Cpu, HelpCircle, Languages, Sparkles, MessageCircle } from "lucide-vue-next"
+import { CheckCircle2, LoaderCircle, SendHorizontal, Bot, Target, Wand2, Trash2, X, ImagePlus, XCircle, Copy, Check, RotateCcw, Cpu, HelpCircle, Languages, Sparkles, MessageCircle, SquarePen } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
 import Select from "@/components/ui/select/Select.vue"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
@@ -43,6 +43,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   send: [content: string, attachments?: AiChatAttachment[]]
   clear: []
+  "new-session": []
   regenerate: [message: ChatMessage, content: string, attachments?: AiChatAttachment[]]
   confirm: [message: ChatMessage]
   reject: [message: ChatMessage]
@@ -514,6 +515,9 @@ watch(
             <button v-if="supportsMultimodal" type="button" class="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-[12px] sm:rounded-[16px] text-zinc-400 transition-all hover:bg-blue-50 hover:text-blue-600 active:scale-95 disabled:opacity-50" :disabled="loading || uploadingImage" title="上传图片" @click="chooseImage">
               <LoaderCircle v-if="uploadingImage" class="h-4 w-4 sm:h-5 sm:w-5 animate-spin" stroke-width="1.5" />
               <ImagePlus v-else class="h-4 w-4 sm:h-5 sm:w-5" stroke-width="1.5" />
+            </button>
+            <button v-if="!loading && !regenerateSource" type="button" class="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-[12px] sm:rounded-[16px] text-zinc-400 transition-all hover:bg-blue-50 hover:text-blue-600 active:scale-95" title="新对话" @click="emit('new-session')">
+              <SquarePen class="h-4 w-4 sm:h-5 sm:w-5" stroke-width="1.5" />
             </button>
             <button v-if="messages.length > 0 && !loading && !regenerateSource" type="button" class="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-[12px] sm:rounded-[16px] text-zinc-400 transition-all hover:bg-red-50 hover:text-red-500 active:scale-95" @click="showClearConfirm = true" title="清空对话">
               <Trash2 class="h-4 w-4 sm:h-5 sm:w-5" stroke-width="1.5" />

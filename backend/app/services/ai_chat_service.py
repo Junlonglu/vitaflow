@@ -96,25 +96,184 @@ def _resume_intent_summary(resume_data: dict[str, Any] | None) -> dict[str, Any]
 
 
 
-def get_or_create_chat_session(db: Session, user_id: int, resume_id: int) -> AiChatSession:
-    session = db.scalar(
-        select(AiChatSession)
-        .where(AiChatSession.user_id == user_id, AiChatSession.resume_id == resume_id)
-        .order_by(AiChatSession.id.asc())
+DEFAULT_CHAT_SESSION_TITLE = "新对话"
+# 历史遗留的默认标题：这些标题仍视为「未命名」，首条用户消息会覆盖成自动标题。
+_PLACEHOLDER_SESSION_TITLES = {"", DEFAULT_CHAT_SESSION_TITLE, "AI 简历助手"}
+_AUTO_SESSION_TITLE_LENGTH = 24
+_SESSION_PREVIEW_LENGTH = 60
+
+
+def _session_title(value: str | None) -> str:
+    return re.sub(r"\s+", " ", str(value or "")).strip()[:120]
+
+
+def _auto_session_title(content: str | None) -> str:
+    text = re.sub(r"\s+", " ", str(content or "")).strip()
+    if not text:
+        return ""
+    return text if len(text) <= _AUTO_SESSION_TITLE_LENGTH else text[:_AUTO_SESSION_TITLE_LENGTH] + "…"
+
+
+def chat_session_data(session: AiChatSession, message_count: int = 0, last_message: str = "") -> dict[str, Any]:
+    return {
+        "id": session.id,
+        "resume_id": session.resume_id,
+        "title": session.title or DEFAULT_CHAT_SESSION_TITLE,
+        "message_count": message_count,
+        "last_message": last_message,
+        "create_time": session.create_time,
+        "update_time": session.update_time,
+    }
+
+
+def list_chat_sessions(db: Session, user_id: int, resume_id: int) -> list[dict[str, Any]]:
+    """List the caller's sessions of one resume, newest activity first.
+
+    Sidebar payload: each row carries the message count and a one-line preview of
+    the last message, so the UI never has to load a session's messages to render
+    the list. Two extra aggregate queries instead of N+1.
+    """
+    sessions = list(
+        db.scalars(
+            select(AiChatSession)
+            .where(AiChatSession.user_id == user_id, AiChatSession.resume_id == resume_id)
+            .order_by(AiChatSession.update_time.desc(), AiChatSession.id.desc())
+        )
     )
-    if session:
-        return session
-    session = AiChatSession(user_id=user_id, resume_id=resume_id)
+    if not sessions:
+        return []
+
+    session_ids = [item.id for item in sessions]
+    stats = {
+        row[0]: (int(row[1] or 0), row[2])
+        for row in db.execute(
+            select(
+                AiChatMessage.session_id,
+                func.count(AiChatMessage.id),
+                func.max(AiChatMessage.id),
+            )
+            .where(AiChatMessage.session_id.in_(session_ids))
+            .group_by(AiChatMessage.session_id)
+        ).all()
+    }
+    last_ids = [last_id for _, last_id in stats.values() if last_id is not None]
+    previews = (
+        {
+            row[0]: re.sub(r"\s+", " ", str(row[1] or "")).strip()[:_SESSION_PREVIEW_LENGTH]
+            for row in db.execute(
+                select(AiChatMessage.id, AiChatMessage.content).where(AiChatMessage.id.in_(last_ids))
+            ).all()
+        }
+        if last_ids
+        else {}
+    )
+
+    result: list[dict[str, Any]] = []
+    for session in sessions:
+        count, last_id = stats.get(session.id, (0, None))
+        result.append(chat_session_data(session, count, previews.get(last_id, "") if last_id else ""))
+    return result
+
+
+def create_chat_session(
+    db: Session, user_id: int, resume_id: int, title: str | None = None
+) -> AiChatSession:
+    session = AiChatSession(
+        user_id=user_id,
+        resume_id=resume_id,
+        title=_session_title(title) or DEFAULT_CHAT_SESSION_TITLE,
+    )
     db.add(session)
     db.commit()
     db.refresh(session)
     return session
 
 
+def get_chat_session(db: Session, user_id: int, resume_id: int, session_id: int) -> AiChatSession:
+    session = db.get(AiChatSession, session_id)
+    if not session or session.user_id != user_id or session.resume_id != resume_id:
+        raise AppException("会话不存在", 404)
+    return session
+
+
+def rename_chat_session(
+    db: Session, user_id: int, resume_id: int, session_id: int, title: str
+) -> AiChatSession:
+    session = get_chat_session(db, user_id, resume_id, session_id)
+    next_title = _session_title(title)
+    if not next_title:
+        raise AppException("会话标题不能为空", 400)
+    session.title = next_title
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return session
+
+
+def delete_chat_session(db: Session, user_id: int, resume_id: int, session_id: int) -> None:
+    session = get_chat_session(db, user_id, resume_id, session_id)
+    db.execute(
+        delete(AiChatMessage).where(
+            AiChatMessage.session_id == session.id, AiChatMessage.user_id == user_id
+        )
+    )
+    db.delete(session)
+    db.commit()
+
+
+def _maybe_apply_auto_title(db: Session, session: AiChatSession, content: str | None) -> bool:
+    """Name a still-untitled session after its first user message.
+
+    Only runs while the session has no user turn yet, so a manual rename (or an
+    already-named conversation) is never overwritten by a later message.
+    """
+    if _session_title(session.title) not in _PLACEHOLDER_SESSION_TITLES:
+        return False
+    user_turns = db.scalar(
+        select(func.count())
+        .select_from(AiChatMessage)
+        .where(AiChatMessage.session_id == session.id, AiChatMessage.role == "user")
+    )
+    if user_turns:
+        return False
+    title = _auto_session_title(content)
+    if not title:
+        return False
+    session.title = title
+    return True
+
+
+def get_or_create_chat_session(
+    db: Session, user_id: int, resume_id: int, session_id: int | None = None
+) -> AiChatSession:
+    """Resolve the working session.
+
+    With ``session_id`` the session must belong to this user and resume (404
+    otherwise). Without it we fall back to the most recently active session —
+    the pre-multi-session behaviour for callers that have not been migrated —
+    and create one when the resume has no session at all.
+    """
+    if session_id is not None:
+        return get_chat_session(db, user_id, resume_id, session_id)
+    session = db.scalar(
+        select(AiChatSession)
+        .where(AiChatSession.user_id == user_id, AiChatSession.resume_id == resume_id)
+        .order_by(AiChatSession.update_time.desc(), AiChatSession.id.desc())
+    )
+    if session:
+        return session
+    return create_chat_session(db, user_id, resume_id)
+
+
 def list_chat_messages(
-    db: Session, user_id: int, resume_id: int, limit: int = 80, after_id: int | None = None
+    db: Session,
+    user_id: int,
+    resume_id: int,
+    limit: int = 80,
+    after_id: int | None = None,
+    session_id: int | None = None,
 ) -> list[AiChatMessageOut]:
-    session = get_or_create_chat_session(db, user_id, resume_id)
+    session = get_or_create_chat_session(db, user_id, resume_id, session_id)
     query = select(AiChatMessage).where(AiChatMessage.session_id == session.id, AiChatMessage.user_id == user_id)
     if after_id is not None:
         query = query.where(AiChatMessage.id > after_id)
@@ -122,8 +281,10 @@ def list_chat_messages(
     return [_message_out(message) for message in reversed(messages)]
 
 
-def clear_chat_messages(db: Session, user_id: int, resume_id: int) -> None:
-    session = get_or_create_chat_session(db, user_id, resume_id)
+def clear_chat_messages(
+    db: Session, user_id: int, resume_id: int, session_id: int | None = None
+) -> None:
+    session = get_or_create_chat_session(db, user_id, resume_id, session_id)
     db.execute(delete(AiChatMessage).where(AiChatMessage.session_id == session.id, AiChatMessage.user_id == user_id))
     session.update_time = datetime.now()
     db.add(session)
@@ -173,6 +334,7 @@ def build_ai_service_context(
     limit: int | None = None,
     summary: str | None = None,
     summary_message_id: int | None = None,
+    session_id: int | None = None,
 ) -> dict[str, Any]:
     """Build the context block injected into the AI service prompt.
 
@@ -180,21 +342,33 @@ def build_ai_service_context(
     history (capped at ``settings.ai_service_context_messages``) and the
     outstanding pending-change summary. ``summary`` is the rolling compaction of
     everything up to ``summary_message_id`` — injected so long conversations keep
-    their early context. The AI service renders this into the system prompt and
+    their early context. ``session_id`` scopes both the history and the pending
+    change to one conversation: a proposal staged in another chat must never leak
+    into this turn's context. The AI service renders this into the system prompt and
     never touches MySQL itself, keeping the Node session stateless while MySQL
     remains the single source of truth.
     """
     context_limit = limit or max(1, min(int(settings.ai_service_context_messages or 12), 40))
-    history = list_chat_messages(db, user.id, resume.id, limit=context_limit + 8, after_id=summary_message_id)
+    history = list_chat_messages(
+        db,
+        user.id,
+        resume.id,
+        limit=context_limit + 8,
+        after_id=summary_message_id,
+        session_id=session_id,
+    )
+    pending_filters = [
+        AiChatMessage.user_id == user.id,
+        AiChatMessage.resume_id == resume.id,
+        AiChatMessage.role == "assistant",
+        AiChatMessage.action_status == "pending",
+        AiChatMessage.optimized_resume_data.is_not(None),
+    ]
+    if session_id is not None:
+        pending_filters.append(AiChatMessage.session_id == session_id)
     pending_change = db.scalar(
         select(AiChatMessage)
-        .where(
-            AiChatMessage.user_id == user.id,
-            AiChatMessage.resume_id == resume.id,
-            AiChatMessage.role == "assistant",
-            AiChatMessage.action_status == "pending",
-            AiChatMessage.optimized_resume_data.is_not(None),
-        )
+        .where(*pending_filters)
         .order_by(AiChatMessage.id.desc())
     )
     resume_data = resume.resume_data or {}
@@ -378,6 +552,7 @@ async def _stream_ai_service_reply(
         limit=context_limit,
         summary=session.context_summary,
         summary_message_id=session.summary_message_id,
+        session_id=session.id,
     )
     text_parts: list[str] = []
     events = ai_service_chat_events(
@@ -457,6 +632,7 @@ async def stream_ai_service_chat(
     content: str,
     attachments: list[dict[str, Any]] | None = None,
     model_config_id: int | None = None,
+    session_id: int | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Stream a chat turn backed by the Node AI service.
 
@@ -465,6 +641,9 @@ async def stream_ai_service_chat(
     points_per_call precheck (ticket 07). It is resolved tolerantly: with no
     model configured at all (pure faux demo) the turn still runs, unmapped and
     unbilled.
+
+    ``session_id`` picks the conversation; omitting it keeps the legacy
+    "latest session of this resume" behaviour.
     """
     message = (content or "").strip()
     if not message:
@@ -482,7 +661,11 @@ async def stream_ai_service_chat(
         return
     _precheck_turn_points(db, user, model_config)
 
-    session = get_or_create_chat_session(db, user.id, resume.id)
+    session = get_or_create_chat_session(db, user.id, resume.id, session_id)
+    # 首条消息给未命名会话起标题（必须在插入本条之前判定「有没有历史回合」）。
+    if _maybe_apply_auto_title(db, session, message):
+        db.add(session)
+        db.commit()
     user_message = AiChatMessage(
         session_id=session.id,
         user_id=user.id,
@@ -509,6 +692,7 @@ async def stream_ai_service_regenerate(
     override_content: str | None = None,
     override_attachments: list[dict[str, Any]] | None = None,
     model_config_id: int | None = None,
+    session_id: int | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Regenerate the reply to a user message via the Node AI service (ticket 09).
 
@@ -516,6 +700,9 @@ async def stream_ai_service_regenerate(
     message, every later message in the session is dropped, optional
     content/attachment overrides are applied in place, then the turn re-runs
     through the same relay as a fresh send.
+
+    The drop stays inside the message's own session, so regenerating in one
+    conversation can never truncate another one.
     """
     user_message = db.get(AiChatMessage, message_id)
     if (
@@ -525,6 +712,9 @@ async def stream_ai_service_regenerate(
         or user_message.role != "user"
     ):
         yield {"type": "error", "message": "只能重新生成自己的用户消息"}
+        return
+    if session_id is not None and user_message.session_id != session_id:
+        yield {"type": "error", "message": "这条消息不属于当前会话"}
         return
 
     applying_overrides = override_content is not None or override_attachments is not None
@@ -564,7 +754,7 @@ async def stream_ai_service_regenerate(
             AiChatMessage.id > user_message.id,
         )
     )
-    session = get_or_create_chat_session(db, user.id, resume.id)
+    session = get_or_create_chat_session(db, user.id, resume.id, user_message.session_id)
     session.update_time = datetime.now()
     db.add(session)
     db.commit()

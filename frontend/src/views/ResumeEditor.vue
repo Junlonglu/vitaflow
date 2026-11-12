@@ -13,6 +13,7 @@ import StyleConfigPanel from "@/components/editor/StyleConfigPanel.vue"
 import A4Preview from "@/components/preview/A4Preview.vue"
 import ResumeAiChatPanel from "@/components/ai/ResumeAiChatPanel.vue"
 import { normalizeResumeData, useResumeStore } from "@/stores/resume"
+import { useChatStore } from "@/stores/chat"
 import { useEditorStore, type EditorHistorySnapshot } from "@/stores/editor"
 import { exportPdfApi, exportWordApi } from "@/api/export"
 import { clearResumeChatMessagesApi, decideResumeChatChangeApi, getAiCapabilityApi, getResumeChatMessagesApi, sendResumeChatMessageStreamApi, regenerateResumeChatMessageStreamApi, getFlowPointSummaryApi, type FlowPointSummary, type AiCapability, type AiChatAttachment, type AiChatModelOption, type ToolStep, type PendingQuestion, type QuestionAnswer } from "@/api/ai"
@@ -34,6 +35,7 @@ const route = useRoute()
 const router = useRouter()
 const { registerFlushSave, clearFlushSave } = useWorkspaceBridge()
 const resumeStore = useResumeStore()
+const chatStore = useChatStore()
 const editor = useEditorStore()
 const showStyle = ref(false)
 const mobileMenuOpen = ref(false)
@@ -49,8 +51,10 @@ function triggerDelete() {
 
 async function confirmDelete() {
   if (!resumeStore.currentResume?.id) return
+  const deletedId = resumeStore.currentResume.id
   try {
-    await resumeStore.deleteResume(resumeStore.currentResume.id)
+    await resumeStore.deleteResume(deletedId)
+    chatStore.forgetResume(deletedId)
     showDeleteConfirm.value = false
     showGlobalToast("删除成功", "success")
     router.push("/workspace")
@@ -125,6 +129,10 @@ const formPanelExpanded = ref(true)
 const chatMessages = ref<any[]>([])
 const chatLoading = ref(false)
 const chatLoaded = ref(false)
+// 当前会话：会话列表与选中态都在 chat store 里（侧栏共用），这里只跟随它。
+const activeSessionId = computed(() => chatStore.activeSessionId(resumeId.value))
+// 发送流程自己切会话（首次发送会新建会话）时上锁，避免 watch 抢着重载消息。
+const sessionSwitchLock = ref(false)
 const aiCapability = ref<AiCapability | null>(null)
 const flowPointSummary = ref<FlowPointSummary | null>(null)
 const aiCapabilityLoaded = ref(false)
@@ -292,6 +300,19 @@ onBeforeUnmount(() => {
   cancelDebouncedSave()
   cancelHistoryCommit()
   editor.setCurrentSection("basics")
+})
+
+// 侧栏切换会话：只换消息数组，不重挂整个编辑器。流式回合进行中不允许切走，
+// 否则增量事件会写进另一条会话的气泡里。
+watch(activeSessionId, async (next, prev) => {
+  if (!next || next === prev) return
+  if (sessionSwitchLock.value) return
+  if (chatLoading.value) {
+    chatStore.setActiveSession(resumeId.value, prev ?? null)
+    showGlobalToast("正在回复中，稍后再切换对话", "error")
+    return
+  }
+  await loadChatMessages()
 })
 
 
@@ -609,7 +630,13 @@ function showApplySuccess() {
 async function loadChatMessages() {
   chatError.value = ""
   try {
-    chatMessages.value = (await getResumeChatMessagesApi(resumeId.value)) as unknown as any[]
+    if (!chatStore.isLoaded(resumeId.value)) await chatStore.fetchSessions(resumeId.value)
+    const sessionId = activeSessionId.value
+    // 还没建过会话（简历刚创建）时不发请求：GET 会在后端凭空建一个空会话，
+    // 会话留给第一条消息去创建，标题才能拿到内容。
+    chatMessages.value = sessionId
+      ? ((await getResumeChatMessagesApi(resumeId.value, sessionId)) as unknown as any[])
+      : []
     chatLoaded.value = true
     jdOptimizeArmed.value = false
   } catch (error: any) {
@@ -707,6 +734,17 @@ async function sendChatMessage(content: string, attachments: AiChatAttachment[] 
     return
   }
   flushHistoryCommit()
+  sessionSwitchLock.value = true
+  let sessionId = activeSessionId.value
+  if (!sessionId) {
+    try {
+      sessionId = (await chatStore.ensureSession(resumeId.value)).id
+    } catch (error: any) {
+      sessionSwitchLock.value = false
+      chatError.value = error?.message || "创建对话失败，请重试"
+      return
+    }
+  }
   chatLoading.value = true
   chatError.value = ""
   if (content.trim().startsWith("/JD优化")) jdOptimizeArmed.value = true
@@ -719,7 +757,7 @@ async function sendChatMessage(content: string, attachments: AiChatAttachment[] 
     if (!editor.saved) await save({ refreshPreview: false })
     const response = (await sendResumeChatMessageStreamApi(
       resumeId.value,
-      { content, attachments, model_config_id: effectiveChatModelId.value },
+      { content, attachments, model_config_id: effectiveChatModelId.value, session_id: sessionId },
       {
         onDelta: (text) => {
           const assistant = chatMessages.value[assistantIndex]
@@ -777,6 +815,12 @@ async function sendChatMessage(content: string, attachments: AiChatAttachment[] 
     chatError.value = error.message === "SILENT_ERROR" ? "" : (error.message || "AI 对话失败")
   } finally {
     chatLoading.value = false
+    sessionSwitchLock.value = false
+    // 会话标题/预览/排序由后端维护（首条消息自动命名），回合结束后同步一次。
+    if (sessionId) {
+      chatStore.touchSession(resumeId.value, sessionId)
+      chatStore.fetchSessions(resumeId.value, { force: true }).catch(() => undefined)
+    }
     getFlowPointSummaryApi().then((data) => (flowPointSummary.value = data)).catch(() => null)
   }
 }
@@ -842,7 +886,7 @@ async function regenerateChatMessage(message?: any, overrideContent?: string, ov
     const response = (await regenerateResumeChatMessageStreamApi(
       resumeId.value,
       numericId,
-      { content: content || "请结合我上传的图片分析简历。", attachments, model_config_id: effectiveChatModelId.value },
+      { content: content || "请结合我上传的图片分析简历。", attachments, model_config_id: effectiveChatModelId.value, session_id: activeSessionId.value },
       {
         onDelta: (text: string) => {
           const assistant = chatMessages.value[assistantIndex]
@@ -898,18 +942,38 @@ async function regenerateChatMessage(message?: any, overrideContent?: string, ov
     chatError.value = error.message === "SILENT_ERROR" ? "" : (error.message || "重新发送失败")
   } finally {
     chatLoading.value = false
+    if (activeSessionId.value) chatStore.fetchSessions(resumeId.value, { force: true }).catch(() => undefined)
     getFlowPointSummaryApi().then((data) => (flowPointSummary.value = data)).catch(() => null)
   }
 }
 
 async function clearChatMessages() {
   chatError.value = ""
+  if (!activeSessionId.value) {
+    chatMessages.value = []
+    chatLoaded.value = true
+    return
+  }
   try {
-    await clearResumeChatMessagesApi(resumeId.value)
+    await clearResumeChatMessagesApi(resumeId.value, activeSessionId.value)
+    chatMessages.value = []
+    chatLoaded.value = true
+    if (activeSessionId.value) chatStore.fetchSessions(resumeId.value, { force: true }).catch(() => undefined)
+  } catch (error: any) {
+    chatError.value = error.message || "清除对话记录失败"
+  }
+}
+
+/** 面板里的「新对话」：开一条新会话（侧栏会同步出现，首条消息自动命名）。 */
+async function startNewChatSession() {
+  if (chatLoading.value) return
+  chatError.value = ""
+  try {
+    await chatStore.createSession(resumeId.value)
     chatMessages.value = []
     chatLoaded.value = true
   } catch (error: any) {
-    chatError.value = error.message || "清除对话记录失败"
+    chatError.value = error?.message || "新建对话失败，请重试"
   }
 }
 
@@ -1219,7 +1283,7 @@ async function sendInitialPrompt() {
           <!-- AI Workbench Mode -->
           <div v-show="mainMode === 'ai'" class="flex flex-col flex-1 min-h-0 overflow-hidden bg-white">
             <div class="relative min-h-0 flex-1 overflow-hidden p-0 md:p-0">
-                <ResumeAiChatPanel v-if="sidePanel === 'chat'" key="chat" v-model:selected-model-id="selectedChatModelId" :chat-models="chatModels" :messages="chatMessages" :loading="chatLoading" :error="chatError" :decision-loading-id="chatDecisionLoadingId" :active="mainMode === 'ai' && sidePanel === 'chat'" :supports-multimodal="supportsChatImages" @send="sendChatMessage" @regenerate="regenerateChatMessage" @clear="clearChatMessages" @confirm="resolveChatDecision($event, 'apply')" @reject="resolveChatDecision($event, 'reject')" @answer-questions="handleAnswerQuestions" @review="goToReviewMode" />
+                <ResumeAiChatPanel v-if="sidePanel === 'chat'" key="chat" v-model:selected-model-id="selectedChatModelId" :chat-models="chatModels" :messages="chatMessages" :loading="chatLoading" :error="chatError" :decision-loading-id="chatDecisionLoadingId" :active="mainMode === 'ai' && sidePanel === 'chat'" :supports-multimodal="supportsChatImages" @send="sendChatMessage" @regenerate="regenerateChatMessage" @clear="clearChatMessages" @new-session="startNewChatSession" @confirm="resolveChatDecision($event, 'apply')" @reject="resolveChatDecision($event, 'reject')" @answer-questions="handleAnswerQuestions" @review="goToReviewMode" />
             </div>
           </div>
         </div>

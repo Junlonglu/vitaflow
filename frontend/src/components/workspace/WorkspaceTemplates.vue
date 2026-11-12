@@ -126,7 +126,7 @@ function startFromTemplate(entry: "starter" | "import" | "blank") {
             v-model="keyword"
             type="text"
             placeholder="搜索模板名称"
-            class="h-8 w-full rounded-md border-0 bg-white pl-8 pr-8 text-[12.5px] text-zinc-800 ring-1 ring-zinc-200/70 outline-none transition-colors placeholder:text-zinc-400 focus:ring-zinc-300"
+            class="h-8 w-full rounded-lg border-0 bg-white pl-8 pr-8 text-[12.5px] text-zinc-800 ring-1 ring-zinc-200/70 outline-none transition-colors placeholder:text-zinc-400 focus:ring-zinc-300"
             @keydown.esc="keyword = ''"
           />
           <button
@@ -193,7 +193,7 @@ function startFromTemplate(entry: "starter" | "import" | "blank") {
         <article
           v-for="item in filteredTemplates"
           :key="item.template_id"
-          class="group flex cursor-pointer flex-col rounded-lg border bg-white p-1.5 transition-colors"
+          class="group flex cursor-pointer flex-col rounded-xl border bg-white p-1.5 transition-colors"
           :class="
             selectedTemplate?.template_id === item.template_id
               ? 'border-zinc-900'
@@ -201,7 +201,7 @@ function startFromTemplate(entry: "starter" | "import" | "blank") {
           "
           @click="selectedId = item.template_id"
         >
-          <div class="relative aspect-[3/4] overflow-hidden rounded-md border border-zinc-100 bg-zinc-50">
+          <div class="relative aspect-[3/4] overflow-hidden rounded-lg border border-zinc-100 bg-zinc-50">
             <div class="absolute inset-x-0 top-0 origin-top transition-transform duration-500 group-hover:scale-[1.02]">
               <TemplatePreview :html="item.preview_html" />
             </div>
@@ -264,7 +264,7 @@ function startFromTemplate(entry: "starter" | "import" | "blank") {
           </div>
         </template>
         <div v-else class="m-auto w-full max-w-[240px] text-center">
-          <div class="flex h-[300px] flex-col items-center justify-center gap-2 rounded-md border border-dashed border-zinc-300 bg-white/60">
+          <div class="flex h-[300px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-300 bg-white/60">
             <LayoutTemplate class="h-6 w-6 text-zinc-300" />
             <p class="text-[12px] text-zinc-400">模板预览区</p>
           </div>

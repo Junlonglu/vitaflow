@@ -42,7 +42,7 @@ function formatUpdateTime(timeStr?: string) {
 
 <template>
   <div
-    class="group relative flex cursor-pointer flex-col rounded-lg bg-white p-2 ring-1 ring-zinc-200/70 transition-colors duration-200 hover:ring-zinc-300 sm:p-2.5"
+    class="group relative flex cursor-pointer flex-col rounded-xl bg-white p-2 ring-1 ring-zinc-200/70 transition-colors duration-200 hover:ring-zinc-300 sm:p-2.5"
     @click="$emit('edit', item.id)"
   >
     <div class="absolute right-4 top-4 z-10 flex translate-y-0.5 items-center gap-1.5 opacity-0 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100 sm:right-6 sm:top-6">
@@ -54,7 +54,7 @@ function formatUpdateTime(timeStr?: string) {
       </button>
     </div>
 
-    <div class="pointer-events-none relative aspect-[1/1.1] w-full overflow-hidden rounded-md border border-zinc-100 bg-zinc-50">
+    <div class="pointer-events-none relative aspect-[1/1.1] w-full overflow-hidden rounded-lg border border-zinc-100 bg-zinc-50">
       <div class="absolute inset-x-0 top-0 w-full transform transition-transform duration-700 ease-out group-hover:scale-[1.05]">
         <TemplatePreview :html="template?.preview_html" />
       </div>

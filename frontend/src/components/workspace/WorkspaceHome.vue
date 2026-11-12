@@ -91,7 +91,7 @@ async function submit() {
         </button>
       </div>
 
-      <div class="mt-4 rounded-lg border border-zinc-200/80 bg-white p-2.5 transition-colors focus-within:border-zinc-300 focus-within:ring-2 focus-within:ring-zinc-900/[0.04]">
+      <div class="mt-4 rounded-xl border border-zinc-200/80 bg-white p-2.5 transition-colors focus-within:border-zinc-300 focus-within:ring-2 focus-within:ring-zinc-900/[0.04]">
         <textarea
           v-model="prompt"
           rows="3"

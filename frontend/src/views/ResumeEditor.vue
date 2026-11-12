@@ -1212,19 +1212,19 @@ async function sendInitialPrompt() {
 
         <!-- Desktop Action Buttons -->
         <div class="hidden md:flex items-center gap-2">
-          <Button size="sm" variant="outline" class="flex h-9 shrink-0 items-center justify-center rounded-md border-zinc-200 px-3 text-[13px] font-medium text-zinc-600 shadow-none hover:bg-zinc-50 hover:text-zinc-900" @click="openTemplateModal" title="更换模板">
+          <Button size="sm" variant="outline" class="flex h-9 shrink-0 items-center justify-center border-zinc-200 px-3 text-[13px] font-medium text-zinc-600 shadow-none hover:bg-zinc-50 hover:text-zinc-900" @click="openTemplateModal" title="更换模板">
             <LayoutTemplate class="h-4 w-4 shrink-0 mr-1.5" /> <span>模板</span>
           </Button>
-          <Button size="sm" variant="outline" class="flex h-9 shrink-0 items-center justify-center rounded-md border-zinc-200 px-3 text-[13px] font-medium text-zinc-600 shadow-none hover:bg-zinc-50 hover:text-zinc-900" @click="openStylePanel" title="主题设置">
+          <Button size="sm" variant="outline" class="flex h-9 shrink-0 items-center justify-center border-zinc-200 px-3 text-[13px] font-medium text-zinc-600 shadow-none hover:bg-zinc-50 hover:text-zinc-900" @click="openStylePanel" title="主题设置">
             <Settings class="h-4 w-4 shrink-0 mr-1.5" /> <span>设置</span>
           </Button>
-          <Button size="sm" variant="outline" class="flex h-9 shrink-0 items-center justify-center rounded-md border-zinc-200 px-3 text-[13px] font-medium text-zinc-600 shadow-none hover:bg-zinc-50 hover:text-zinc-900" @click="openShareDialog" title="分享简历">
+          <Button size="sm" variant="outline" class="flex h-9 shrink-0 items-center justify-center border-zinc-200 px-3 text-[13px] font-medium text-zinc-600 shadow-none hover:bg-zinc-50 hover:text-zinc-900" @click="openShareDialog" title="分享简历">
             <Share2 class="h-4 w-4 shrink-0 mr-1.5" /> <span>分享</span>
           </Button>
           <Button v-if="false" size="sm" variant="outline" class="!hidden md:!inline-flex shrink-0 h-10 px-4 border-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 rounded-lg shadow-sm font-medium" :disabled="!!exportLoading" @click="exportWord">
             <FileText class="h-4 w-4 shrink-0 mr-1.5" /> Word
           </Button>
-          <Button size="sm" class="flex h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-md bg-zinc-900 px-4 text-[13px] font-medium text-white shadow-none transition-colors hover:bg-zinc-800 active:scale-95" :disabled="!!exportLoading" @click="exportPdf">
+          <Button size="sm" class="flex h-9 shrink-0 items-center justify-center whitespace-nowrap bg-zinc-900 px-4 text-[13px] font-medium text-white shadow-none transition-colors hover:bg-zinc-800 active:scale-95" :disabled="!!exportLoading" @click="exportPdf">
             <Download class="h-4 w-4 shrink-0 mr-1.5" /> 导出
           </Button>
         </div>
@@ -1242,7 +1242,7 @@ async function sendInitialPrompt() {
 
       <!-- Mobile Dropdown Menu -->
       <Transition name="modal-fade">
-        <div v-if="mobileMenuOpen" class="md:hidden absolute top-[calc(100%-4px)] right-2 z-50 w-40 space-y-0.5 rounded-lg border border-zinc-200 bg-white p-1.5 shadow-lg">
+        <div v-if="mobileMenuOpen" class="md:hidden absolute top-[calc(100%-4px)] right-2 z-50 w-40 space-y-0.5 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-lg">
           <div v-if="flowPointSummary" class="flex items-center justify-between px-2.5 py-2 rounded-xl bg-zinc-100/70 text-zinc-700 text-xs font-medium mb-1 cursor-pointer hover:bg-zinc-200/50 transition-colors" @click="saveAndGoToAiRecords">
             <div class="flex items-center gap-1.5">
               <FlowPointIcon class="h-3.5 w-3.5 text-zinc-600" />
@@ -1300,7 +1300,7 @@ async function sendInitialPrompt() {
           <!-- Mode Switcher -->
           <div class="hidden shrink-0 items-center gap-1 border-b border-zinc-200/60 px-2 py-1.5 md:flex">
             <button
-              class="inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[13px] transition-colors"
+              class="inline-flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[13px] transition-colors"
               :class="mainMode === 'edit' ? 'bg-zinc-100 font-medium text-zinc-900' : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800'"
               @click="mainMode = 'edit'"
             >
@@ -1308,7 +1308,7 @@ async function sendInitialPrompt() {
               <span>内容编辑</span>
             </button>
             <button
-              class="inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[13px] transition-colors"
+              class="inline-flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[13px] transition-colors"
               :class="mainMode === 'ai' ? 'bg-zinc-100 font-medium text-zinc-900' : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800'"
               @click="mainMode = 'ai'; if(sidePanel === 'none') sidePanel = 'chat'"
             >
@@ -1461,9 +1461,9 @@ async function sendInitialPrompt() {
           <div class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5 thin-scrollbar bg-white/40">
             <div class="grid grid-cols-2 gap-3.5">
               <article v-for="item in templates" :key="item.template_id" 
-                       class="group flex cursor-pointer flex-col rounded-lg border border-zinc-200/70 bg-white p-2.5 transition-colors hover:border-zinc-300 sm:p-3"
+                       class="group flex cursor-pointer flex-col rounded-xl border border-zinc-200/70 bg-white p-2.5 transition-colors hover:border-zinc-300 sm:p-3"
                        @click="selectTemplate(item.template_id)">
-                <div class="relative aspect-[4/3] w-full overflow-hidden rounded-md border border-zinc-100 bg-white">
+                <div class="relative aspect-[4/3] w-full overflow-hidden rounded-lg border border-zinc-100 bg-white">
                   <div class="absolute inset-x-0 top-0">
                     <TemplatePreview :html="item.preview_html" />
                   </div>
@@ -1489,7 +1489,7 @@ async function sendInitialPrompt() {
     <!-- Toast Notification -->
     <Teleport to="body">
       <Transition name="toast-slide">
-        <div v-if="toastMessage" class="fixed bottom-10 left-1/2 z-[100] flex w-max max-w-[90vw] -translate-x-1/2 items-center gap-2 rounded-md bg-zinc-900 px-4 py-2.5 text-[13px] font-medium text-white shadow-lg">
+        <div v-if="toastMessage" class="fixed bottom-10 left-1/2 z-[100] flex w-max max-w-[90vw] -translate-x-1/2 items-center gap-2 rounded-lg bg-zinc-900 px-4 py-2.5 text-[13px] font-medium text-white shadow-lg">
           <CheckCircle2 v-if="toastType === 'success'" class="h-4 w-4 shrink-0 text-emerald-400" />
           <AlertCircle v-else-if="toastType === 'error'" class="h-4 w-4 shrink-0 text-red-400" />
           <span class="break-words">{{ toastMessage }}</span>
@@ -1499,7 +1499,7 @@ async function sendInitialPrompt() {
 
     <Transition name="export-fade">
       <div v-if="exportLoading" class="fixed inset-0 z-[80] flex items-center justify-center bg-zinc-950/45 px-6 backdrop-blur-sm">
-        <div class="w-full max-w-[320px] rounded-lg border border-zinc-200 bg-white px-6 py-7 text-center shadow-xl">
+        <div class="w-full max-w-[320px] rounded-2xl border border-zinc-200 bg-white px-6 py-7 text-center shadow-xl">
           <LoaderCircle class="mx-auto h-10 w-10 animate-spin text-zinc-900" />
           <h3 class="mt-4 text-base font-semibold text-zinc-900">
             {{ exportLoading === 'pdf' ? '正在导出 PDF' : '正在导出 Word' }}

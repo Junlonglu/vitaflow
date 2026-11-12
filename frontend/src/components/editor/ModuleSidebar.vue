@@ -153,7 +153,7 @@ function addModule(presetType?: string) {
           v-for="element in orderedSections"
           :key="element"
           :data-module="element"
-          class="group relative flex select-none items-center h-8 shrink-0 cursor-pointer rounded-md border px-3 text-xs font-medium transition-colors duration-200 md:h-9 md:px-3.5 md:text-[13px] outline-none focus:outline-none focus-visible:outline-none"
+          class="group relative flex select-none items-center h-8 shrink-0 cursor-pointer rounded-lg border px-3 text-xs font-medium transition-colors duration-200 md:h-9 md:px-3.5 md:text-[13px] outline-none focus:outline-none focus-visible:outline-none"
           :class="[
             current === element 
               ? 'border-zinc-200/80 bg-zinc-100 text-zinc-900' 
@@ -192,7 +192,7 @@ function addModule(presetType?: string) {
 
         <!-- Add Custom Module Button -->
         <button
-          class="group flex h-8 shrink-0 items-center justify-center rounded-md border border-dashed border-zinc-300 bg-transparent px-3 text-xs font-medium text-zinc-500 transition-colors duration-200 hover:border-zinc-400 hover:bg-zinc-50 hover:text-zinc-800 md:h-9 md:px-3.5 md:text-[13px]"
+          class="group flex h-8 shrink-0 items-center justify-center rounded-lg border border-dashed border-zinc-300 bg-transparent px-3 text-xs font-medium text-zinc-500 transition-colors duration-200 hover:border-zinc-400 hover:bg-zinc-50 hover:text-zinc-800 md:h-9 md:px-3.5 md:text-[13px]"
           @click="showAddModuleModal = true"
         >
           <Plus class="h-3.5 w-3.5 md:h-4 md:w-4 mr-1" />

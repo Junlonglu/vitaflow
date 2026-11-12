@@ -142,7 +142,7 @@ onBeforeUnmount(unbind)
     <div v-if="open" class="fixed inset-0 z-[210]" @mousedown.self="close" @contextmenu.prevent="close">
       <div
         ref="cardRef"
-        class="fixed rounded-lg border border-zinc-200 bg-white p-4 shadow-[0_12px_32px_-8px_rgba(0,0,0,0.18)]"
+        class="fixed rounded-xl border border-zinc-200 bg-white p-4 shadow-[0_12px_32px_-8px_rgba(0,0,0,0.18)]"
         :style="{ width: `${CARD_WIDTH}px`, left: `${pos.left}px`, top: `${pos.top}px`, visibility: ready ? 'visible' : 'hidden' }"
         role="dialog"
         aria-modal="true"
@@ -162,14 +162,14 @@ onBeforeUnmount(unbind)
         <div class="mt-3.5 flex justify-end gap-2">
           <button
             type="button"
-            class="h-8 rounded-md border border-zinc-200 bg-white px-3 text-[12.5px] font-medium text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
+            class="h-8 rounded-lg border border-zinc-200 bg-white px-3 text-[12.5px] font-medium text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
             @click="close"
           >
             {{ cancelText }}
           </button>
           <button
             type="button"
-            class="h-8 rounded-md px-3 text-[12.5px] font-medium text-white transition-colors"
+            class="h-8 rounded-lg px-3 text-[12.5px] font-medium text-white transition-colors"
             :class="destructive ? 'bg-red-600 hover:bg-red-700' : 'bg-zinc-900 hover:bg-zinc-800'"
             @click="confirm"
           >

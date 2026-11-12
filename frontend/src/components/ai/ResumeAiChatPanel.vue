@@ -411,7 +411,7 @@ watch(
             </div>
             
             <div :class="message.role === 'assistant' ? 'assistant-message-shell' : 'max-w-[90%] md:max-w-[75%] relative'">
-              <div class="message-bubble relative text-[13px] md:text-[14.5px] leading-relaxed transition-all" :class="message.role === 'user' ? 'rounded-lg bg-zinc-100 px-3.5 py-2 text-zinc-900 md:px-4 md:py-2.5' : 'text-zinc-800'">
+              <div class="message-bubble relative text-[13px] md:text-[14.5px] leading-relaxed transition-all" :class="message.role === 'user' ? 'rounded-xl bg-zinc-100 px-3.5 py-2 text-zinc-900 md:px-4 md:py-2.5' : 'text-zinc-800'">
                 <p v-if="message.role === 'user'" class="whitespace-pre-wrap break-words">{{ message.content }}</p>
                 <template v-else>
                   <ThinkingProcess :text="message.thinking || ''" :streaming="message.streaming" />
@@ -431,7 +431,7 @@ watch(
                     <HelpCircle class="h-4 w-4 text-blue-500" />
                     已向你收集 {{ message.pending_questions.length }} 项补充信息
                   </span>
-                  <Button v-if="index === messages.length - 1" type="button" size="sm" variant="outline" class="h-8 rounded-md px-3 text-xs md:text-[13px]" @click="emit('answer-questions', message)">
+                  <Button v-if="index === messages.length - 1" type="button" size="sm" variant="outline" class="h-8 px-3 text-xs md:text-[13px]" @click="emit('answer-questions', message)">
                     填写补充信息
                   </Button>
                 </div>
@@ -439,7 +439,7 @@ watch(
                   <template v-if="message.id === latestPendingId">
                     <span class="mr-auto min-w-[180px] text-xs md:text-[13px] font-medium text-zinc-600">AI 准备了简历修改，可在编辑器中逐条审阅</span>
                     <button type="button" class="h-8 rounded-md px-3 text-xs md:text-[13px] font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-50" :disabled="decisionLoadingId === message.id" @click="emit('reject', message)">取消</button>
-                    <Button type="button" size="sm" class="h-8 rounded-md bg-zinc-900 px-4 text-xs md:text-[13px] font-medium text-white hover:bg-zinc-800" :disabled="decisionLoadingId === message.id" @click="emit('review', message)">
+                    <Button type="button" size="sm" class="h-8 bg-zinc-900 px-4 text-xs md:text-[13px] font-medium text-white hover:bg-zinc-800" :disabled="decisionLoadingId === message.id" @click="emit('review', message)">
                       <LoaderCircle v-if="decisionLoadingId === message.id" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
                       去审阅
                     </Button>
@@ -453,7 +453,7 @@ watch(
                   <X class="h-4 w-4" /> 修改已取消
                 </div>
                 <div v-if="message.attachments?.length" class="mt-3 flex flex-wrap gap-2">
-                  <button v-for="item in message.attachments" :key="item.url" type="button" class="block h-20 w-20 sm:h-24 sm:w-24 shrink-0 cursor-zoom-in overflow-hidden rounded-md border border-zinc-200/70 bg-white transition-colors hover:border-zinc-300 active:scale-95" @click="openPreview(item.url)">
+                  <button v-for="item in message.attachments" :key="item.url" type="button" class="block h-20 w-20 sm:h-24 sm:w-24 shrink-0 cursor-zoom-in overflow-hidden rounded-lg border border-zinc-200/70 bg-white transition-colors hover:border-zinc-300 active:scale-95" @click="openPreview(item.url)">
                     <img :src="item.url" :alt="item.name || '对话图片'" class="h-full w-full object-cover" />
                   </button>
                 </div>
@@ -469,10 +469,10 @@ watch(
         </TransitionGroup>
       </div>
 
-      <form class="composer relative mx-auto mb-18 mt-1 w-[calc(100%-1.5rem)] max-w-3xl shrink-0 rounded-lg border border-zinc-200/80 bg-white p-1 transition-colors focus-within:border-zinc-300 focus-within:ring-2 focus-within:ring-zinc-900/[0.04] sm:mb-4 sm:w-[calc(100%-2rem)] sm:p-2" @submit.prevent="submit">
+      <form class="composer relative mx-auto mb-18 mt-1 w-[calc(100%-1.5rem)] max-w-3xl shrink-0 rounded-xl border border-zinc-200/80 bg-white p-1 transition-colors focus-within:border-zinc-300 focus-within:ring-2 focus-within:ring-zinc-900/[0.04] sm:mb-4 sm:w-[calc(100%-2rem)] sm:p-2" @submit.prevent="submit">
         <div v-if="attachments.length || uploadError" class="flex flex-wrap gap-2 sm:gap-3 px-2.5 sm:px-3 pb-1 pt-2">
-          <div v-for="(item, index) in attachments" :key="item.url" class="group relative h-14 w-14 sm:h-16 sm:w-16 shrink-0 rounded-md border border-zinc-200/80 bg-white">
-            <img :src="item.url" :alt="item.name || '待发送图片'" class="h-full w-full rounded-md object-cover" />
+          <div v-for="(item, index) in attachments" :key="item.url" class="group relative h-14 w-14 sm:h-16 sm:w-16 shrink-0 rounded-lg border border-zinc-200/80 bg-white">
+            <img :src="item.url" :alt="item.name || '待发送图片'" class="h-full w-full rounded-lg object-cover" />
             <button type="button" class="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-white text-zinc-400 ring-1 ring-zinc-200/80 transition hover:text-red-500 active:scale-95" title="移除图片" @click="removeAttachment(index)">
               <X class="h-3 w-3" stroke-width="2.5" />
             </button>
@@ -480,7 +480,7 @@ watch(
           <p v-if="uploadError" class="w-full text-xs text-red-500">{{ uploadError }}</p>
         </div>
         <div class="relative flex items-start">
-          <div v-if="slashOpen" class="absolute bottom-full left-0 right-0 z-20 mb-2 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-lg">
+          <div v-if="slashOpen" class="absolute bottom-full left-0 right-0 z-20 mb-2 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-lg">
             <p class="px-4 pb-1 pt-2.5 text-[11px] font-medium text-zinc-400">快捷指令（↑↓ 选择，Enter 补全）</p>
             <button
               v-for="(cmd, i) in slashMatches"
@@ -527,7 +527,7 @@ watch(
             <button v-if="regenerateSource" type="button" class="flex h-8 items-center justify-center rounded-md px-2.5 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 active:scale-95 sm:h-9 sm:px-3 sm:text-[13px]" title="取消重新生成" @click="cancelRegenerate">
               取消
             </button>
-            <button type="button" class="group flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-md bg-zinc-900 text-white transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-30 hover:bg-zinc-800 active:scale-[0.94]" :disabled="loading || (!input.trim() && !attachments.length)" :title="regenerateSource ? '确认重新生成' : '发送'" @click="submit">
+            <button type="button" class="group flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-white transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-30 hover:bg-zinc-800 active:scale-[0.94]" :disabled="loading || (!input.trim() && !attachments.length)" :title="regenerateSource ? '确认重新生成' : '发送'" @click="submit">
               <RotateCcw v-if="regenerateSource" class="h-4 w-4 sm:h-5 sm:w-5 transition-transform duration-300 ease-out group-hover:rotate-[-25deg]" stroke-width="1.6" />
               <SendHorizontal v-else class="h-4 w-4 sm:h-5 sm:w-5 transition-transform duration-300 ease-out" :class="{ 'group-hover:translate-x-0.5 group-hover:-translate-y-0.5': !loading && (input.trim() || attachments.length) }" stroke-width="1.5" />
             </button>

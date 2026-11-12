@@ -464,7 +464,7 @@ function formatUpdated(value?: string) {
           v-model="searchQuery"
           type="text"
           placeholder="搜索简历或对话"
-          class="h-8 w-full rounded-md border-0 bg-white/60 pl-7 pr-7 text-[12px] text-zinc-800 outline-none ring-1 ring-zinc-200/60 transition-colors placeholder:text-zinc-400 focus:bg-white focus:ring-zinc-300"
+          class="h-8 w-full rounded-lg border-0 bg-white/60 pl-7 pr-7 text-[12px] text-zinc-800 outline-none ring-1 ring-zinc-200/60 transition-colors placeholder:text-zinc-400 focus:bg-white focus:ring-zinc-300"
           @keydown.esc="searchQuery = ''"
         />
         <button
@@ -669,7 +669,7 @@ function formatUpdated(value?: string) {
       @wheel.prevent="closeResumeMenu"
     >
       <div
-        class="fixed rounded-lg border border-zinc-200 bg-white p-1 shadow-[0_10px_28px_-8px_rgba(0,0,0,0.18)]"
+        class="fixed rounded-xl border border-zinc-200 bg-white p-1 shadow-[0_10px_28px_-8px_rgba(0,0,0,0.18)]"
         :style="{ width: `${RESUME_MENU_WIDTH}px`, left: `${resumeMenu.x}px`, top: `${resumeMenu.y}px` }"
       >
         <button

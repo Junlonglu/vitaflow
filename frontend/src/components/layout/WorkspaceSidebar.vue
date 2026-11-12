@@ -43,6 +43,13 @@ function toggleExpanded(resumeId: number) {
   if (!chatStore.isLoaded(resumeId)) void chatStore.fetchSessions(resumeId).catch(() => undefined)
 }
 
+/** 子级会话高亮时父行不铺底，避免两层灰条叠在一起（WorkBuddy 的树形选中也是这个规则）。 */
+function resumeRowClass(resumeId: number) {
+  if (activeId.value !== resumeId) return "text-zinc-600 hover:bg-zinc-200/40"
+  if (isExpanded(resumeId) && chatStore.activeSessionId(resumeId)) return "text-zinc-900"
+  return "bg-zinc-200/60 text-zinc-900"
+}
+
 // —— 搜索 ——
 // 简历部分在前端过滤（列表本来就在内存里）；会话走后端跨简历搜索，命中标题
 // 或任意一条消息内容，这样不用把所有简历的会话都拉下来。
@@ -278,17 +285,17 @@ function formatUpdated(value?: string) {
 
 <template>
   <aside
-    class="fixed inset-y-0 left-0 z-[60] flex h-full w-[272px] shrink-0 flex-col border-r border-zinc-200/70 bg-zinc-50 shadow-2xl transition-transform duration-200 ease-out md:static md:z-auto md:w-[248px] md:translate-x-0 md:bg-zinc-50/70 md:shadow-none"
+    class="fixed inset-y-0 left-0 z-[60] flex h-full w-[272px] shrink-0 flex-col border-r border-zinc-200/60 bg-zinc-50 shadow-2xl transition-transform duration-200 ease-out md:static md:z-auto md:w-[248px] md:translate-x-0 md:bg-zinc-50/60 md:shadow-none"
     :class="drawerOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'"
   >
     <div class="shrink-0 px-3 pt-3">
       <div class="flex h-9 items-center">
-        <RouterLink to="/workspace" class="flex h-9 flex-1 items-center rounded-lg px-1.5 transition-colors hover:bg-zinc-200/50" @click.prevent="goWorkspaceHome">
+        <RouterLink to="/workspace" class="flex h-9 flex-1 items-center rounded-md px-1.5 transition-colors hover:bg-zinc-200/50" @click.prevent="goWorkspaceHome">
           <BrandLogo size="sm" />
         </RouterLink>
         <button
           type="button"
-          class="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-200/60 hover:text-zinc-900 md:hidden"
+          class="grid h-8 w-8 shrink-0 place-items-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-200/50 hover:text-zinc-900 md:hidden"
           aria-label="收起侧栏"
           @click="closeDrawer"
         >
@@ -300,7 +307,7 @@ function formatUpdated(value?: string) {
     <div class="shrink-0 px-3 pt-2">
       <button
         type="button"
-        class="flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-[13px] font-medium text-zinc-700 transition-colors hover:bg-zinc-200/60"
+        class="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-[13px] font-medium text-zinc-700 transition-colors hover:bg-zinc-200/50"
         @click="startCreate('choice')"
       >
         <Plus class="h-4 w-4 shrink-0 text-zinc-500" />
@@ -308,7 +315,7 @@ function formatUpdated(value?: string) {
       </button>
       <button
         type="button"
-        class="flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-[13px] font-medium text-zinc-600 transition-colors hover:bg-zinc-200/60 hover:text-zinc-900"
+        class="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-[13px] font-medium text-zinc-600 transition-colors hover:bg-zinc-200/50 hover:text-zinc-900"
         @click="startCreate('ai')"
       >
         <Sparkles class="h-4 w-4 shrink-0 text-zinc-400" />
@@ -316,14 +323,14 @@ function formatUpdated(value?: string) {
       </button>
       <RouterLink
         to="/workspace/templates"
-        class="flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-[13px] font-medium transition-colors"
+        class="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-[13px] font-medium transition-colors"
         :class="
           route.path === '/workspace/templates'
-            ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/80'
-            : 'text-zinc-600 hover:bg-zinc-200/60 hover:text-zinc-900'
+            ? 'bg-zinc-200/60 text-zinc-900'
+            : 'text-zinc-600 hover:bg-zinc-200/40 hover:text-zinc-900'
         "
       >
-        <LayoutTemplate class="h-4 w-4 shrink-0" :class="route.path === '/workspace/templates' ? 'text-zinc-900' : 'text-zinc-400'" />
+        <LayoutTemplate class="h-4 w-4 shrink-0" :class="route.path === '/workspace/templates' ? 'text-zinc-700' : 'text-zinc-400'" />
         <span>模板中心</span>
       </RouterLink>
     </div>
@@ -335,7 +342,7 @@ function formatUpdated(value?: string) {
           v-model="searchQuery"
           type="text"
           placeholder="搜索简历或对话"
-          class="h-8 w-full rounded-lg border border-zinc-200 bg-white pl-7 pr-7 text-[12px] text-zinc-800 outline-none transition-colors placeholder:text-zinc-400 focus:border-zinc-300"
+          class="h-8 w-full rounded-md border-0 bg-white/60 pl-7 pr-7 text-[12px] text-zinc-800 outline-none ring-1 ring-zinc-200/60 transition-colors placeholder:text-zinc-400 focus:bg-white focus:ring-zinc-300"
           @keydown.esc="searchQuery = ''"
         />
         <button
@@ -358,7 +365,7 @@ function formatUpdated(value?: string) {
 
     <div v-if="!isSearching" class="thin-scrollbar mt-1 min-h-0 flex-1 overflow-y-auto px-2 pb-2">
       <div v-if="loading && !store.resumeList.length" class="space-y-1 px-1 pt-1">
-        <div v-for="i in 4" :key="i" class="h-8 animate-pulse rounded-lg bg-zinc-200/60"></div>
+        <div v-for="i in 4" :key="i" class="h-8 animate-pulse rounded-md bg-zinc-200/60"></div>
       </div>
 
       <p v-else-if="!store.resumeList.length" class="px-2 py-6 text-center text-[12px] leading-5 text-zinc-400">
@@ -367,8 +374,8 @@ function formatUpdated(value?: string) {
 
       <div v-for="item in store.resumeList" :key="item.id" class="mb-0.5">
         <div
-          class="group flex w-full items-center gap-0.5 rounded-lg pr-1 transition-colors"
-          :class="activeId === item.id ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/80' : 'text-zinc-600 hover:bg-zinc-200/50'"
+          class="group flex w-full items-center gap-0.5 rounded-md pr-1 transition-colors"
+          :class="resumeRowClass(item.id)"
         >
           <button type="button" class="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5 text-left" @click="openResume(item.id)">
             <span class="min-w-0 flex-1">
@@ -391,21 +398,21 @@ function formatUpdated(value?: string) {
           </button>
         </div>
 
-        <div v-if="isExpanded(item.id)" class="mt-0.5 ml-[18px] border-l border-zinc-200/80 pl-1.5">
-          <div v-if="chatStore.loadingResumeId === item.id && !chatStore.sessions(item.id).length" class="py-1 pl-2">
+        <div v-if="isExpanded(item.id)" class="ml-[22px] mt-px pb-1 pl-1">
+          <div v-if="chatStore.loadingResumeId === item.id && !chatStore.sessions(item.id).length" class="py-1 pl-1">
             <div class="h-6 w-32 animate-pulse rounded bg-zinc-200/60"></div>
           </div>
 
           <div
             v-for="session in chatStore.sessions(item.id)"
             :key="session.id"
-            class="group/session flex w-full cursor-pointer items-center gap-1.5 rounded-md py-1.5 pl-1.5 pr-1 text-left transition-colors"
-            :class="activeId === item.id && chatStore.activeSessionId(item.id) === session.id ? 'bg-white text-zinc-900 ring-1 ring-zinc-200/70' : 'text-zinc-500 hover:bg-zinc-200/40 hover:text-zinc-800'"
+            class="group/session flex w-full cursor-pointer items-center gap-1.5 rounded-md py-1.5 pl-2 pr-1 text-left transition-colors"
+            :class="activeId === item.id && chatStore.activeSessionId(item.id) === session.id ? 'bg-zinc-200/60 text-zinc-900' : 'text-zinc-500 hover:bg-zinc-200/40 hover:text-zinc-800'"
+            :title="sessionSnippet(session)"
             @click="openSession(item.id, session.id)"
             @dblclick.stop="startRename(item.id, session.id, session.title)"
           >
             <Pin v-if="session.is_pinned" class="h-3 w-3 shrink-0 text-amber-500" />
-            <MessageSquare v-else class="h-3.5 w-3.5 shrink-0 text-zinc-400" />
             <span class="min-w-0 flex-1">
               <input
                 v-if="editingSessionId === session.id"
@@ -418,15 +425,13 @@ function formatUpdated(value?: string) {
                 @keydown.esc.prevent="editingSessionId = null"
                 @blur="commitRename(item.id, session.id)"
               />
-              <template v-else>
-                <span class="block truncate text-[12px] font-medium leading-4">{{ session.title || "无标题对话" }}</span>
-                <span class="block truncate text-[10.5px] leading-4 text-zinc-400">{{ sessionSnippet(session) }}</span>
-              </template>
+              <span v-else class="block truncate text-[12.5px] leading-5">{{ session.title || "无标题对话" }}</span>
             </span>
+            <span class="shrink-0 text-[10.5px] tabular-nums text-zinc-400 group-hover/session:hidden">{{ formatUpdated(session.update_time) }}</span>
             <button
               type="button"
-              class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-400 transition-all hover:bg-amber-50 hover:text-amber-600 group-hover/session:opacity-100"
-              :class="session.is_pinned ? 'text-amber-500 opacity-100' : 'opacity-0'"
+              class="hidden h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-amber-50 hover:text-amber-600 group-hover/session:flex"
+              :class="session.is_pinned ? 'text-amber-500' : ''"
               :title="session.is_pinned ? '取消置顶' : '置顶对话'"
               :disabled="pinningId === session.id"
               @click.stop="togglePin(item.id, session)"
@@ -435,7 +440,7 @@ function formatUpdated(value?: string) {
             </button>
             <button
               type="button"
-              class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-400 opacity-0 transition-all hover:bg-red-50 hover:text-red-500 group-hover/session:opacity-100"
+              class="hidden h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-500 group-hover/session:flex"
               title="删除对话"
               @click.stop="removeSession(item.id, session.id)"
             >
@@ -445,7 +450,7 @@ function formatUpdated(value?: string) {
 
           <button
             type="button"
-            class="flex w-full items-center gap-1.5 rounded-md py-1.5 pl-1.5 pr-1 text-left text-[12px] text-zinc-400 transition-colors hover:bg-zinc-200/40 hover:text-zinc-700 disabled:opacity-60"
+            class="flex w-full items-center gap-1.5 rounded-md py-1.5 pl-2 pr-1 text-left text-[12px] text-zinc-400 transition-colors hover:bg-zinc-200/40 hover:text-zinc-700 disabled:opacity-60"
             :disabled="creatingSessionFor === item.id"
             :title="`新建对话（${modLabel} + Alt + N）`"
             @click="newSession(item.id)"
@@ -453,10 +458,6 @@ function formatUpdated(value?: string) {
             <Plus class="h-3.5 w-3.5 shrink-0" />
             <span>{{ creatingSessionFor === item.id ? "新建中" : "新对话" }}</span>
           </button>
-
-          <p v-if="chatStore.sessions(item.id).length > 1" class="hidden px-1.5 pb-1 pt-0.5 text-[10px] leading-4 text-zinc-300 md:block">
-            {{ modLabel }} + Alt + ↑↓ 切换对话
-          </p>
         </div>
       </div>
 
@@ -464,7 +465,7 @@ function formatUpdated(value?: string) {
       <RouterLink
         v-if="store.resumeListTotal > store.resumeList.length"
         to="/workspace/resumes"
-        class="mt-1 flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[11.5px] text-zinc-500 transition-colors hover:bg-zinc-200/50 hover:text-zinc-900"
+        class="mt-1 flex h-7 items-center gap-1.5 rounded-md px-2 text-[11.5px] text-zinc-500 transition-colors hover:bg-zinc-200/40 hover:text-zinc-900"
       >
         <Files class="h-3 w-3 shrink-0" />
         <span>查看全部 {{ store.resumeListTotal }} 份</span>

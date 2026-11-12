@@ -79,11 +79,11 @@ const QUICK_COMMANDS = [
 ]
 
 const quickCommands = [
-  { ...QUICK_COMMANDS[0], icon: Wand2, bg: "bg-violet-50", color: "text-violet-500", ring: "hover:ring-violet-200" },
-  { ...QUICK_COMMANDS[1], icon: Languages, bg: "bg-blue-50", color: "text-blue-500", ring: "hover:ring-blue-200" },
-  { ...QUICK_COMMANDS[2], icon: Target, bg: "bg-indigo-50", color: "text-indigo-500", ring: "hover:ring-indigo-200" },
-  { ...QUICK_COMMANDS[3], icon: Sparkles, bg: "bg-emerald-50", color: "text-emerald-500", ring: "hover:ring-emerald-200" },
-  { ...QUICK_COMMANDS[4], icon: MessageCircle, bg: "bg-amber-50", color: "text-amber-500", ring: "hover:ring-amber-200" },
+  { ...QUICK_COMMANDS[0], icon: Wand2 },
+  { ...QUICK_COMMANDS[1], icon: Languages },
+  { ...QUICK_COMMANDS[2], icon: Target },
+  { ...QUICK_COMMANDS[3], icon: Sparkles },
+  { ...QUICK_COMMANDS[4], icon: MessageCircle },
 ]
 
 function adjustHeight() {
@@ -375,41 +375,43 @@ watch(
 
 <template>
   <div class="flex h-full min-h-0 flex-col gap-4 relative overflow-x-hidden">
-    <div class="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-blue-500/10 blur-[80px]"></div>
-    
-
     <section class="chat-stage relative flex min-h-0 flex-1 flex-col bg-transparent z-10">
       <div ref="listRef" class="relative min-h-0 flex-1 flex flex-col overflow-y-auto px-4 py-4 md:px-6 md:py-8 thin-scrollbar">
         <section v-if="!messages.length && !loading" class="mx-auto flex w-full min-h-full max-w-xl flex-col items-center justify-center py-6 text-center">
-          <div class="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] bg-white text-zinc-700 shadow-[0_8px_24px_rgba(0,0,0,0.06)] ring-1 ring-zinc-200/60" style="view-transition-name: ai-hero-icon;">
-            <Bot class="relative z-10 h-7 w-7" stroke-width="1.5" />
+          <div class="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-zinc-100 text-zinc-500" style="view-transition-name: ai-hero-icon;">
+            <Bot class="h-5 w-5" stroke-width="1.6" />
           </div>
-          <h3 class="mt-2.5 text-[20px] font-medium tracking-tight text-zinc-900">简历打磨，现在开始。</h3>
-          <p class="mt-1.5 text-xs text-zinc-400">输入 <span class="rounded bg-zinc-100 px-1 font-mono text-[11px] font-semibold text-zinc-600">/</span> 可唤起快捷指令</p>
-          
-          <div class="mt-8 grid w-full grid-cols-2 gap-3 px-1">
-            <button v-for="cmd in quickCommands" :key="cmd.name" class="group relative flex flex-col items-start overflow-hidden rounded-[16px] sm:rounded-[20px] bg-white ring-1 ring-zinc-200/60 p-2.5 sm:p-3.5 text-left transition-all duration-300 active:scale-[0.97] hover:shadow-[0_8px_20px_rgba(0,0,0,0.04)] hover:-translate-y-0.5" :class="cmd.ring" @click="useQuickCommand(cmd)">
-              <div class="absolute -right-6 -top-6 h-20 w-20 rounded-full blur-2xl transition-opacity duration-500 opacity-0 group-hover:opacity-100" :class="cmd.bg"></div>
-              <div class="relative z-10 flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-[10px] sm:rounded-[12px] ring-1 ring-white/50 mb-1.5 sm:mb-2.5 transition-transform duration-300 group-hover:scale-110" :class="[cmd.bg, cmd.color]">
-                <component :is="cmd.icon" class="h-3.5 w-3.5 sm:h-4 sm:w-4" stroke-width="2" />
-              </div>
-              <div class="relative z-10 flex items-center gap-1.5">
-                <span class="font-mono text-[12px] sm:text-[13px] font-semibold text-zinc-900">/{{ cmd.name }}</span>
-                <span v-if="cmd.argumentHint" class="rounded bg-zinc-100 px-1 py-0.5 text-[10px] text-zinc-400">{{ cmd.argumentHint }}</span>
-              </div>
-              <div class="relative z-10 mt-1 text-[10px] sm:text-[11px] leading-relaxed text-zinc-500">{{ cmd.description }}</div>
+          <h3 class="mt-3 text-[17px] font-medium tracking-tight text-zinc-900">简历打磨，现在开始</h3>
+          <p class="mt-1 text-[12px] text-zinc-400">输入 <span class="font-mono text-zinc-600">/</span> 可唤起快捷指令</p>
+
+          <div class="mt-6 grid w-full grid-cols-1 gap-x-1 gap-y-0.5 px-1 text-left sm:grid-cols-2">
+            <button
+              v-for="cmd in quickCommands"
+              :key="cmd.name"
+              type="button"
+              class="group flex items-start gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-zinc-100"
+              @click="useQuickCommand(cmd)"
+            >
+              <component :is="cmd.icon" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-400 transition-colors group-hover:text-zinc-600" stroke-width="1.8" />
+              <span class="min-w-0">
+                <span class="flex items-baseline gap-1.5">
+                  <span class="font-mono text-[12.5px] font-medium text-zinc-900">/{{ cmd.name }}</span>
+                  <span v-if="cmd.argumentHint" class="text-[11px] text-zinc-400">{{ cmd.argumentHint }}</span>
+                </span>
+                <span class="mt-0.5 block text-[11.5px] leading-4 text-zinc-500">{{ cmd.description }}</span>
+              </span>
             </button>
           </div>
         </section>
 
-        <TransitionGroup name="message-list" tag="div" class="space-y-6 md:space-y-7">
+        <TransitionGroup name="message-list" tag="div" class="space-y-5 md:space-y-6">
           <article v-for="(message, index) in messages" :key="message.id" class="group relative flex gap-2 md:gap-4" :class="message.role === 'user' ? 'justify-end' : 'justify-start'">
-            <div v-if="message.role === 'assistant'" class="absolute opacity-0 pointer-events-none md:relative md:opacity-100 md:pointer-events-auto self-end mb-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-[14px] bg-white text-zinc-700 shadow-[0_4px_12px_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/60" :style="index === lastAssistantIndex ? 'view-transition-name: ai-hero-icon;' : ''">
-              <Bot class="h-5 w-5" stroke-width="1.5" />
+            <div v-if="message.role === 'assistant'" class="absolute opacity-0 pointer-events-none md:relative md:opacity-100 md:pointer-events-auto self-start mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded bg-zinc-100 text-zinc-500" :style="index === lastAssistantIndex ? 'view-transition-name: ai-hero-icon;' : ''">
+              <Bot class="h-3.5 w-3.5" stroke-width="1.6" />
             </div>
             
             <div :class="message.role === 'assistant' ? 'assistant-message-shell' : 'max-w-[90%] md:max-w-[75%] relative'">
-              <div class="message-bubble relative text-[13px] md:text-[15px] leading-relaxed transition-all" :class="message.role === 'user' ? 'rounded-[20px] md:rounded-[24px] rounded-tr-[8px] bg-zinc-100 px-4 py-2.5 md:px-5 md:py-3.5 text-zinc-900' : 'rounded-[20px] md:rounded-[24px] rounded-tl-[8px] bg-white px-4.5 py-3.5 md:px-6 md:py-5 text-zinc-800 ring-1 ring-zinc-200/50 shadow-sm'">
+              <div class="message-bubble relative text-[13px] md:text-[14.5px] leading-relaxed transition-all" :class="message.role === 'user' ? 'rounded-lg bg-zinc-100 px-3.5 py-2 text-zinc-900 md:px-4 md:py-2.5' : 'text-zinc-800'">
                 <p v-if="message.role === 'user'" class="whitespace-pre-wrap break-words">{{ message.content }}</p>
                 <template v-else>
                   <ThinkingProcess :text="message.thinking || ''" :streaming="message.streaming" />
@@ -429,15 +431,15 @@ watch(
                     <HelpCircle class="h-4 w-4 text-blue-500" />
                     已向你收集 {{ message.pending_questions.length }} 项补充信息
                   </span>
-                  <Button v-if="index === messages.length - 1" type="button" size="sm" variant="outline" class="h-8 rounded-full px-3 text-xs md:text-[13px]" @click="emit('answer-questions', message)">
+                  <Button v-if="index === messages.length - 1" type="button" size="sm" variant="outline" class="h-8 rounded-md px-3 text-xs md:text-[13px]" @click="emit('answer-questions', message)">
                     填写补充信息
                   </Button>
                 </div>
                 <div v-if="message.role === 'assistant' && !message.streaming && ['pending', 'applying'].includes(actionStatus(message))" class="mt-4 flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-4">
                   <template v-if="message.id === latestPendingId">
                     <span class="mr-auto min-w-[180px] text-xs md:text-[13px] font-medium text-zinc-600">AI 准备了简历修改，可在编辑器中逐条审阅</span>
-                    <button type="button" class="h-8 rounded-full px-3 text-xs md:text-[13px] font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-50" :disabled="decisionLoadingId === message.id" @click="emit('reject', message)">取消</button>
-                    <Button type="button" size="sm" class="h-8 rounded-full bg-zinc-900 px-4 text-xs md:text-[13px] font-medium text-white hover:bg-zinc-800" :disabled="decisionLoadingId === message.id" @click="emit('review', message)">
+                    <button type="button" class="h-8 rounded-md px-3 text-xs md:text-[13px] font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-50" :disabled="decisionLoadingId === message.id" @click="emit('reject', message)">取消</button>
+                    <Button type="button" size="sm" class="h-8 rounded-md bg-zinc-900 px-4 text-xs md:text-[13px] font-medium text-white hover:bg-zinc-800" :disabled="decisionLoadingId === message.id" @click="emit('review', message)">
                       <LoaderCircle v-if="decisionLoadingId === message.id" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
                       去审阅
                     </Button>
@@ -451,7 +453,7 @@ watch(
                   <X class="h-4 w-4" /> 修改已取消
                 </div>
                 <div v-if="message.attachments?.length" class="mt-3 flex flex-wrap gap-2">
-                  <button v-for="item in message.attachments" :key="item.url" type="button" class="block h-20 w-20 sm:h-24 sm:w-24 shrink-0 overflow-hidden rounded-xl border border-zinc-200/60 bg-white shadow-sm transition-all hover:shadow-md active:scale-95 cursor-zoom-in" @click="openPreview(item.url)">
+                  <button v-for="item in message.attachments" :key="item.url" type="button" class="block h-20 w-20 sm:h-24 sm:w-24 shrink-0 cursor-zoom-in overflow-hidden rounded-md border border-zinc-200/70 bg-white transition-colors hover:border-zinc-300 active:scale-95" @click="openPreview(item.url)">
                     <img :src="item.url" :alt="item.name || '对话图片'" class="h-full w-full object-cover" />
                   </button>
                 </div>
@@ -467,18 +469,18 @@ watch(
         </TransitionGroup>
       </div>
 
-      <form class="composer relative mx-3 sm:mx-4 mb-18 sm:mb-4 mt-1 shrink-0 rounded-[18px] sm:rounded-[24px] bg-zinc-50/80 p-1 sm:p-2.5 ring-1 ring-zinc-200/50 transition-all focus-within:bg-white focus-within:ring-blue-200 focus-within:shadow-[0_8px_40px_rgba(16,185,129,0.08)]" @submit.prevent="submit">
+      <form class="composer relative mx-3 sm:mx-4 mb-18 sm:mb-4 mt-1 shrink-0 rounded-lg border border-zinc-200/80 bg-white p-1 transition-colors focus-within:border-zinc-300 focus-within:ring-2 focus-within:ring-zinc-900/[0.04] sm:p-2" @submit.prevent="submit">
         <div v-if="attachments.length || uploadError" class="flex flex-wrap gap-2 sm:gap-3 px-2.5 sm:px-3 pb-1 pt-2">
-          <div v-for="(item, index) in attachments" :key="item.url" class="group relative h-14 w-14 sm:h-16 sm:w-16 shrink-0 rounded-xl border border-zinc-200/80 bg-white shadow-sm">
-            <img :src="item.url" :alt="item.name || '待发送图片'" class="h-full w-full rounded-xl object-cover" />
-            <button type="button" class="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-white text-zinc-400 shadow-[0_2px_8px_rgba(0,0,0,0.08)] ring-1 ring-zinc-200/80 transition hover:text-red-500 hover:scale-110 active:scale-95" title="移除图片" @click="removeAttachment(index)">
+          <div v-for="(item, index) in attachments" :key="item.url" class="group relative h-14 w-14 sm:h-16 sm:w-16 shrink-0 rounded-md border border-zinc-200/80 bg-white">
+            <img :src="item.url" :alt="item.name || '待发送图片'" class="h-full w-full rounded-md object-cover" />
+            <button type="button" class="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-white text-zinc-400 ring-1 ring-zinc-200/80 transition hover:text-red-500 active:scale-95" title="移除图片" @click="removeAttachment(index)">
               <X class="h-3 w-3" stroke-width="2.5" />
             </button>
           </div>
           <p v-if="uploadError" class="w-full text-xs text-red-500">{{ uploadError }}</p>
         </div>
         <div class="relative flex items-start">
-          <div v-if="slashOpen" class="absolute bottom-full left-0 right-0 z-20 mb-2 overflow-hidden rounded-2xl bg-white shadow-[0_12px_40px_rgba(0,0,0,0.12)] ring-1 ring-zinc-200/70">
+          <div v-if="slashOpen" class="absolute bottom-full left-0 right-0 z-20 mb-2 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-lg">
             <p class="px-4 pb-1 pt-2.5 text-[11px] font-medium text-zinc-400">快捷指令（↑↓ 选择，Enter 补全）</p>
             <button
               v-for="(cmd, i) in slashMatches"
@@ -489,7 +491,7 @@ watch(
               @mouseenter="slashActiveIndex = i"
               @click="applySlashCommand(cmd)"
             >
-              <span class="shrink-0 rounded-md bg-zinc-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-zinc-700">/{{ cmd.name }}</span>
+              <span class="shrink-0 font-mono text-xs font-medium text-zinc-800">/{{ cmd.name }}</span>
               <span class="min-w-0 flex-1 truncate text-xs text-zinc-500">{{ cmd.description }}</span>
               <span v-if="cmd.argumentHint" class="shrink-0 text-[11px] text-zinc-400">{{ cmd.argumentHint }}</span>
             </button>
@@ -497,14 +499,14 @@ watch(
           <textarea ref="inputRef" v-model="input" placeholder="输入你想调整的内容，或输入 / 使用快捷指令..." rows="1" class="w-full min-h-[32px] sm:min-h-[44px] max-h-[100px] sm:max-h-[160px] resize-none bg-transparent px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-[15px] leading-relaxed text-zinc-800 placeholder:text-zinc-400 border-0 shadow-none focus-visible:ring-0 outline-none" style="scrollbar-width: none;" @input="adjustHeight" @compositionstart="composing = true" @compositionend="composing = false" @keydown="handleSlashNav" @keydown.enter.exact.prevent="handleEnter($event)" @paste="handlePaste"></textarea>
         </div>
         <div class="flex items-center justify-between gap-2 px-2 sm:px-3 pt-2 pb-1">
-          <div v-if="chatModels?.length" class="inline-flex max-w-full items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-medium text-zinc-600 ring-1 ring-zinc-200/80 shadow-sm transition-all hover:ring-zinc-300 hover:shadow">
+          <div v-if="chatModels?.length" class="inline-flex max-w-full items-center gap-1.5 rounded-md px-1 text-xs text-zinc-500 transition-colors hover:text-zinc-900">
             <Cpu class="h-3.5 w-3.5 text-zinc-400 shrink-0" />
             <Select
               :model-value="selectedModelId || ''"
               :options="modelOptions"
               :disabled="loading"
               ghost
-              class="!h-6 !max-w-[200px] !rounded-full !p-0 !text-xs !font-semibold"
+              class="!h-6 !max-w-[200px] !rounded !p-0 !text-xs !font-medium"
               @change="(value) => emit('update:selectedModelId', value ? Number(value) : null)"
             />
           </div>
@@ -512,20 +514,20 @@ watch(
           
           <div class="flex items-center gap-1 sm:gap-1.5 shrink-0">
             <input ref="fileInputRef" type="file" accept="image/png,image/jpeg,image/webp" multiple class="hidden" @change="handleImageChange" />
-            <button v-if="supportsMultimodal" type="button" class="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-[12px] sm:rounded-[16px] text-zinc-400 transition-all hover:bg-blue-50 hover:text-blue-600 active:scale-95 disabled:opacity-50" :disabled="loading || uploadingImage" title="上传图片" @click="chooseImage">
+            <button v-if="supportsMultimodal" type="button" class="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 active:scale-95 disabled:opacity-50" :disabled="loading || uploadingImage" title="上传图片" @click="chooseImage">
               <LoaderCircle v-if="uploadingImage" class="h-4 w-4 sm:h-5 sm:w-5 animate-spin" stroke-width="1.5" />
               <ImagePlus v-else class="h-4 w-4 sm:h-5 sm:w-5" stroke-width="1.5" />
             </button>
-            <button v-if="!loading && !regenerateSource" type="button" class="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-[12px] sm:rounded-[16px] text-zinc-400 transition-all hover:bg-blue-50 hover:text-blue-600 active:scale-95" title="新对话" @click="emit('new-session')">
+            <button v-if="!loading && !regenerateSource" type="button" class="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 active:scale-95" title="新对话" @click="emit('new-session')">
               <SquarePen class="h-4 w-4 sm:h-5 sm:w-5" stroke-width="1.5" />
             </button>
-            <button v-if="messages.length > 0 && !loading && !regenerateSource" type="button" class="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-[12px] sm:rounded-[16px] text-zinc-400 transition-all hover:bg-red-50 hover:text-red-500 active:scale-95" @click="showClearConfirm = true" title="清空对话">
+            <button v-if="messages.length > 0 && !loading && !regenerateSource" type="button" class="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-500 active:scale-95" @click="showClearConfirm = true" title="清空对话">
               <Trash2 class="h-4 w-4 sm:h-5 sm:w-5" stroke-width="1.5" />
             </button>
-            <button v-if="regenerateSource" type="button" class="flex h-8 sm:h-9 items-center justify-center rounded-[12px] sm:rounded-[16px] px-2.5 sm:px-3 text-xs sm:text-[13px] font-medium text-zinc-500 hover:bg-zinc-200/60 hover:text-zinc-800 active:scale-95 transition-all" title="取消重新生成" @click="cancelRegenerate">
+            <button v-if="regenerateSource" type="button" class="flex h-8 items-center justify-center rounded-md px-2.5 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 active:scale-95 sm:h-9 sm:px-3 sm:text-[13px]" title="取消重新生成" @click="cancelRegenerate">
               取消
             </button>
-            <button type="button" class="group flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-[12px] sm:rounded-[16px] bg-zinc-900 text-white shadow-sm transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40 hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/20 active:scale-[0.92]" :disabled="loading || (!input.trim() && !attachments.length)" :title="regenerateSource ? '确认重新生成' : '发送'" @click="submit">
+            <button type="button" class="group flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-md bg-zinc-900 text-white transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-30 hover:bg-zinc-800 active:scale-[0.94]" :disabled="loading || (!input.trim() && !attachments.length)" :title="regenerateSource ? '确认重新生成' : '发送'" @click="submit">
               <RotateCcw v-if="regenerateSource" class="h-4 w-4 sm:h-5 sm:w-5 transition-transform duration-300 ease-out group-hover:rotate-[-25deg]" stroke-width="1.6" />
               <SendHorizontal v-else class="h-4 w-4 sm:h-5 sm:w-5 transition-transform duration-300 ease-out" :class="{ 'group-hover:translate-x-0.5 group-hover:-translate-y-0.5': !loading && (input.trim() || attachments.length) }" stroke-width="1.5" />
             </button>

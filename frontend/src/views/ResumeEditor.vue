@@ -1172,7 +1172,7 @@ async function sendInitialPrompt() {
         <!-- Flow Points 账户余额展示（移动至右侧主功能区，支持点击保存并跳转） -->
         <div 
           v-if="flowPointSummary" 
-          class="hidden md:flex shrink-0 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm cursor-pointer hover:bg-zinc-50 hover:border-zinc-300 transition-all active:scale-95"
+          class="hidden md:flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-zinc-600 cursor-pointer transition-colors hover:bg-zinc-100 hover:text-zinc-900 active:scale-95"
           title="点击保存并前往 Flow Points 兑换页"
           @click="saveAndGoToAiRecords"
         >
@@ -1184,19 +1184,19 @@ async function sendInitialPrompt() {
 
         <!-- Desktop Action Buttons -->
         <div class="hidden md:flex items-center gap-2">
-          <Button size="sm" variant="outline" class="shrink-0 h-10 px-3.5 border-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 rounded-lg shadow-sm font-medium text-sm flex items-center justify-center" @click="openTemplateModal" title="更换模板">
+          <Button size="sm" variant="outline" class="flex h-9 shrink-0 items-center justify-center rounded-md border-zinc-200 px-3 text-[13px] font-medium text-zinc-600 shadow-none hover:bg-zinc-50 hover:text-zinc-900" @click="openTemplateModal" title="更换模板">
             <LayoutTemplate class="h-4 w-4 shrink-0 mr-1.5" /> <span>模板</span>
           </Button>
-          <Button size="sm" variant="outline" class="shrink-0 h-10 px-3.5 border-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 rounded-lg shadow-sm font-medium text-sm flex items-center justify-center" @click="openStylePanel" title="主题设置">
+          <Button size="sm" variant="outline" class="flex h-9 shrink-0 items-center justify-center rounded-md border-zinc-200 px-3 text-[13px] font-medium text-zinc-600 shadow-none hover:bg-zinc-50 hover:text-zinc-900" @click="openStylePanel" title="主题设置">
             <Settings class="h-4 w-4 shrink-0 mr-1.5" /> <span>设置</span>
           </Button>
-          <Button size="sm" variant="outline" class="shrink-0 h-10 px-3.5 border-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 rounded-lg shadow-sm font-medium text-sm flex items-center justify-center" @click="openShareDialog" title="分享简历">
+          <Button size="sm" variant="outline" class="flex h-9 shrink-0 items-center justify-center rounded-md border-zinc-200 px-3 text-[13px] font-medium text-zinc-600 shadow-none hover:bg-zinc-50 hover:text-zinc-900" @click="openShareDialog" title="分享简历">
             <Share2 class="h-4 w-4 shrink-0 mr-1.5" /> <span>分享</span>
           </Button>
           <Button v-if="false" size="sm" variant="outline" class="!hidden md:!inline-flex shrink-0 h-10 px-4 border-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 rounded-lg shadow-sm font-medium" :disabled="!!exportLoading" @click="exportWord">
             <FileText class="h-4 w-4 shrink-0 mr-1.5" /> Word
           </Button>
-          <Button size="sm" class="shrink-0 h-10 px-5 bg-zinc-900 text-white hover:bg-zinc-800 rounded-lg shadow-md active:scale-95 transition-all font-medium text-sm whitespace-nowrap flex items-center justify-center" :disabled="!!exportLoading" @click="exportPdf">
+          <Button size="sm" class="flex h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-md bg-zinc-900 px-4 text-[13px] font-medium text-white shadow-none transition-colors hover:bg-zinc-800 active:scale-95" :disabled="!!exportLoading" @click="exportPdf">
             <Download class="h-4 w-4 shrink-0 mr-1.5" /> 导出
           </Button>
         </div>
@@ -1214,7 +1214,7 @@ async function sendInitialPrompt() {
 
       <!-- Mobile Dropdown Menu -->
       <Transition name="modal-fade">
-        <div v-if="mobileMenuOpen" class="md:hidden absolute top-[calc(100%-4px)] right-2 w-36 border border-zinc-200/80 rounded-2xl bg-white/95 backdrop-blur-xl p-2 space-y-1 shadow-2xl z-50">
+        <div v-if="mobileMenuOpen" class="md:hidden absolute top-[calc(100%-4px)] right-2 z-50 w-40 space-y-0.5 rounded-lg border border-zinc-200 bg-white p-1.5 shadow-lg">
           <div v-if="flowPointSummary" class="flex items-center justify-between px-2.5 py-2 rounded-xl bg-zinc-100/70 text-zinc-700 text-xs font-medium mb-1 cursor-pointer hover:bg-zinc-200/50 transition-colors" @click="saveAndGoToAiRecords">
             <div class="flex items-center gap-1.5">
               <FlowPointIcon class="h-3.5 w-3.5 text-zinc-600" />
@@ -1267,30 +1267,26 @@ async function sendInitialPrompt() {
       <div class="workspace-surface flex min-w-0 flex-1">
         <!-- Left Unified Sidebar -->
         <!-- Left Unified Sidebar -->
-        <div :class="['flex-col h-full shrink-0 bg-white overflow-hidden transition-none relative z-20 shadow-[4px_0_24px_rgba(0,0,0,0.02)]', (mobileTab === 'edit' || mobileTab === 'ai') ? 'flex w-full' : 'hidden md:flex']" :style="{ width: isMobile ? '100%' : leftPanelWidth + 'px' }">
+        <div :class="['flex-col h-full shrink-0 bg-white overflow-hidden transition-none relative z-20', (mobileTab === 'edit' || mobileTab === 'ai') ? 'flex w-full' : 'hidden md:flex']" :style="{ width: isMobile ? '100%' : leftPanelWidth + 'px' }">
           
           <!-- Mode Switcher -->
-          <div class="hidden md:flex shrink-0 border-b border-zinc-200/50 p-1.5 md:p-2.5 bg-zinc-50/80 justify-center w-full z-10 relative">
-             <div class="flex w-full bg-zinc-200/50 p-1 rounded-lg md:rounded-xl shadow-inner border border-zinc-200/80">
-                <button 
-                  class="relative flex-1 flex items-center justify-center gap-1.5 md:gap-2 py-1 md:py-1.5 rounded-md md:rounded-lg text-xs md:text-[14px] font-medium transition-all duration-300"
-                  :class="mainMode === 'edit' ? 'text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'"
-                  @click="mainMode = 'edit'"
-                >
-                  <div v-if="mainMode === 'edit'" class="absolute inset-0 bg-white rounded-md md:rounded-lg shadow-[0_2px_8px_rgba(0,0,0,0.04)]"></div>
-                  <Edit3 class="relative z-10 w-3.5 h-3.5 md:w-4 md:h-4" />
-                  <span class="relative z-10">内容编辑</span>
-                </button>
-                <button 
-                  class="relative flex-1 flex items-center justify-center gap-1.5 md:gap-2 py-1 md:py-1.5 rounded-md md:rounded-lg text-xs md:text-[14px] font-medium transition-all duration-300"
-                  :class="mainMode === 'ai' ? 'text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'"
-                  @click="mainMode = 'ai'; if(sidePanel === 'none') sidePanel = 'chat'"
-                >
-                  <div v-if="mainMode === 'ai'" class="absolute inset-0 bg-white rounded-md md:rounded-lg shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-blue-100/50"></div>
-                  <FlowAgentIcon class="relative z-10 w-3.5 h-3.5 md:w-4 md:h-4" :class="mainMode === 'ai' ? 'text-blue-500' : ''" />
-                  <span class="relative z-10 font-bold tracking-tight">Flow Agent</span>
-                </button>
-             </div>
+          <div class="hidden shrink-0 items-center gap-1 border-b border-zinc-200/60 px-2 py-1.5 md:flex">
+            <button
+              class="inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[13px] transition-colors"
+              :class="mainMode === 'edit' ? 'bg-zinc-100 font-medium text-zinc-900' : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800'"
+              @click="mainMode = 'edit'"
+            >
+              <Edit3 class="h-3.5 w-3.5" />
+              <span>内容编辑</span>
+            </button>
+            <button
+              class="inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[13px] transition-colors"
+              :class="mainMode === 'ai' ? 'bg-zinc-100 font-medium text-zinc-900' : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800'"
+              @click="mainMode = 'ai'; if(sidePanel === 'none') sidePanel = 'chat'"
+            >
+              <FlowAgentIcon class="h-3.5 w-3.5" :class="mainMode === 'ai' ? 'text-blue-600' : ''" />
+              <span>Flow Agent</span>
+            </button>
           </div>
 
           <!-- Traditional Edit Mode -->
@@ -1355,7 +1351,7 @@ async function sendInitialPrompt() {
         <!-- Preview Canvas -->
         <div :class="['relative flex-1 bg-zinc-100/50 flex-col overflow-hidden', mobileTab === 'preview' ? 'flex' : 'hidden md:flex']">
           <A4Preview class="flex-1" :html="resumeStore.previewHtml" :scale="editor.previewScale" @zoom-in="editor.setPreviewScale(Math.min(1, editor.previewScale + 0.05))" @zoom-out="editor.setPreviewScale(Math.max(0.45, editor.previewScale - 0.05))" />
-          <div v-if="previewRefreshing" class="pointer-events-none absolute right-5 top-16 rounded-full border border-zinc-200 bg-white/90 px-3 py-1 text-xs font-medium text-zinc-500 shadow-sm backdrop-blur">
+          <div v-if="previewRefreshing" class="pointer-events-none absolute right-5 top-16 rounded-md border border-zinc-200/80 bg-white px-2.5 py-1 text-[11.5px] font-medium text-zinc-500">
             预览更新中
           </div>
         </div>
@@ -1388,17 +1384,17 @@ async function sendInitialPrompt() {
                   切换语言会更新默认模块标题、字段标签和导出语言；已填写正文、手动修改或 AI 生成的标题不会被覆盖。
                 </div>
               </div>
-              <div class="grid grid-cols-2 gap-1.5 rounded-[10px] bg-zinc-100/80 p-1 ring-1 ring-zinc-200/50">
+              <div class="grid grid-cols-2 gap-1 rounded-md bg-zinc-100 p-0.5">
                 <button
-                  class="h-9 rounded-lg text-sm font-medium transition"
-                  :class="normalizeResumeLanguage(resumeStore.currentResume.language) === 'zh-CN' ? 'bg-white text-zinc-950 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'"
+                  class="h-8 rounded text-[13px] font-medium transition-colors"
+                  :class="normalizeResumeLanguage(resumeStore.currentResume.language) === 'zh-CN' ? 'bg-white text-zinc-900 ring-1 ring-zinc-200/70' : 'text-zinc-500 hover:text-zinc-900'"
                   @click="setResumeLanguage('zh-CN')"
                 >
                   简体中文
                 </button>
                 <button
-                  class="h-9 rounded-lg text-sm font-medium transition"
-                  :class="normalizeResumeLanguage(resumeStore.currentResume.language) === 'en' ? 'bg-white text-zinc-950 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'"
+                  class="h-8 rounded text-[13px] font-medium transition-colors"
+                  :class="normalizeResumeLanguage(resumeStore.currentResume.language) === 'en' ? 'bg-white text-zinc-900 ring-1 ring-zinc-200/70' : 'text-zinc-500 hover:text-zinc-900'"
                   @click="setResumeLanguage('en')"
                 >
                   English
@@ -1414,7 +1410,7 @@ async function sendInitialPrompt() {
         <div v-if="applySuccess" class="pointer-events-none absolute inset-0 z-[64] flex items-center justify-center overflow-hidden">
           <div class="apply-success-ring absolute h-72 w-72 rounded-full border border-blue-400/40"></div>
           <div class="apply-success-ring apply-success-ring--delay absolute h-72 w-72 rounded-full border border-blue-400/30"></div>
-          <div class="relative flex items-center gap-3 rounded-2xl border border-blue-100 bg-white/95 px-5 py-4 shadow-2xl backdrop-blur-xl">
+          <div class="relative flex items-center gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 shadow-lg">
             <span class="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white"><CheckCircle2 class="h-5 w-5" /></span>
             <div><div class="text-sm font-semibold text-zinc-950">修改已写入简历</div><div class="mt-0.5 text-xs text-zinc-500">预览已同步更新</div></div>
           </div>
@@ -1437,9 +1433,9 @@ async function sendInitialPrompt() {
           <div class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5 thin-scrollbar bg-white/40">
             <div class="grid grid-cols-2 gap-3.5">
               <article v-for="item in templates" :key="item.template_id" 
-                       class="group flex flex-col rounded-xl border border-zinc-200/60 bg-white p-2.5 sm:p-3 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-zinc-300 cursor-pointer"
+                       class="group flex cursor-pointer flex-col rounded-lg border border-zinc-200/70 bg-white p-2.5 transition-colors hover:border-zinc-300 sm:p-3"
                        @click="selectTemplate(item.template_id)">
-                <div class="relative w-full aspect-[4/3] overflow-hidden rounded-md bg-white border border-zinc-100 transition-transform duration-300 group-hover:scale-[1.02] shadow-sm">
+                <div class="relative aspect-[4/3] w-full overflow-hidden rounded-md border border-zinc-100 bg-white">
                   <div class="absolute inset-x-0 top-0">
                     <TemplatePreview :html="item.preview_html" />
                   </div>
@@ -1465,7 +1461,7 @@ async function sendInitialPrompt() {
     <!-- Toast Notification -->
     <Teleport to="body">
       <Transition name="toast-slide">
-        <div v-if="toastMessage" class="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] flex w-max max-w-[90vw] items-center gap-2 rounded-xl bg-zinc-900 px-5 py-3 text-sm font-medium text-white shadow-xl border border-zinc-800">
+        <div v-if="toastMessage" class="fixed bottom-10 left-1/2 z-[100] flex w-max max-w-[90vw] -translate-x-1/2 items-center gap-2 rounded-md bg-zinc-900 px-4 py-2.5 text-[13px] font-medium text-white shadow-lg">
           <CheckCircle2 v-if="toastType === 'success'" class="h-4 w-4 shrink-0 text-emerald-400" />
           <AlertCircle v-else-if="toastType === 'error'" class="h-4 w-4 shrink-0 text-red-400" />
           <span class="break-words">{{ toastMessage }}</span>
@@ -1475,7 +1471,7 @@ async function sendInitialPrompt() {
 
     <Transition name="export-fade">
       <div v-if="exportLoading" class="fixed inset-0 z-[80] flex items-center justify-center bg-zinc-950/45 px-6 backdrop-blur-sm">
-        <div class="w-full max-w-[320px] rounded-2xl border border-white/20 bg-white px-6 py-7 text-center shadow-2xl">
+        <div class="w-full max-w-[320px] rounded-lg border border-zinc-200 bg-white px-6 py-7 text-center shadow-xl">
           <LoaderCircle class="mx-auto h-10 w-10 animate-spin text-zinc-900" />
           <h3 class="mt-4 text-base font-semibold text-zinc-900">
             {{ exportLoading === 'pdf' ? '正在导出 PDF' : '正在导出 Word' }}
@@ -1487,35 +1483,22 @@ async function sendInitialPrompt() {
       </div>
     </Transition>
 
-    <!-- Mobile Bottom Nav (Apple Liquid Glass Navigation Pod) -->
-    <div class="md:hidden fixed bottom-2.5 left-1/2 -translate-x-1/2 z-50 max-w-[260px] w-[82%] bg-white/55 backdrop-blur-3xl border border-white/80 rounded-full p-1.5 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),_0_8px_32px_-6px_rgba(0,0,0,0.14)] select-none" :class="drawerOpen ? 'hidden' : ''">
-      <div class="relative w-full flex items-center justify-between">
-        <!-- Gliding Active Indicator Pill -->
-        <div 
-          class="absolute top-0 bottom-0 w-1/3 bg-white rounded-full shadow-[0_4px_16px_rgba(0,0,0,0.12),_inset_0_1px_1px_rgba(255,255,255,1)] transition-transform duration-300 ease-out pointer-events-none"
-          :class="{
-            'translate-x-0': mobileTab === 'edit',
-            'translate-x-[100%]': mobileTab === 'ai',
-            'translate-x-[200%]': mobileTab === 'preview'
-          }"
-        ></div>
-
-        <!-- Edit Tab -->
-        <button class="relative z-10 flex items-center justify-center flex-1 h-[34px] gap-1 group active:scale-95 transition-all duration-300 rounded-full bg-transparent" :class="mobileTab === 'edit' ? 'text-zinc-900' : 'text-zinc-500 hover:text-zinc-800'" @click="mobileTab = 'edit'; mainMode = 'edit'">
-          <Edit3 class="w-3.5 h-3.5 transition-transform duration-300" :class="mobileTab === 'edit' ? 'stroke-[2.2]' : ''" />
-          <span class="text-[12px] tracking-tight transition-all duration-300" :class="mobileTab === 'edit' ? 'font-semibold' : 'font-medium'">编辑</span>
+    <!-- Mobile Bottom Nav -->
+    <div class="md:hidden fixed bottom-2.5 left-1/2 z-50 w-[86%] max-w-[280px] -translate-x-1/2 rounded-lg border border-zinc-200 bg-white p-1 select-none" :class="drawerOpen ? 'hidden' : ''">
+      <div class="flex w-full items-center gap-0.5">
+        <button class="flex h-8 flex-1 items-center justify-center gap-1 rounded-md transition-colors" :class="mobileTab === 'edit' ? 'bg-zinc-100 text-zinc-900' : 'text-zinc-500'" @click="mobileTab = 'edit'; mainMode = 'edit'">
+          <Edit3 class="h-3.5 w-3.5" />
+          <span class="text-[12px]" :class="mobileTab === 'edit' ? 'font-medium' : ''">编辑</span>
         </button>
 
-        <!-- Flow Agent AI Tab -->
-        <button class="relative z-10 flex items-center justify-center flex-1 h-[34px] gap-1 group active:scale-95 transition-all duration-300 rounded-full bg-transparent" :class="mobileTab === 'ai' ? 'text-zinc-900' : 'text-zinc-500 hover:text-zinc-800'" @click="mobileTab = 'ai'; mainMode = 'ai'; if(sidePanel === 'none') sidePanel = 'chat'">
-          <FlowAgentIcon class="w-3.5 h-3.5 transition-all duration-300" :class="mobileTab === 'ai' ? 'text-blue-600' : ''" />
-          <span class="text-[12px] tracking-tight transition-all duration-300" :class="mobileTab === 'ai' ? 'font-semibold' : 'font-medium'">Agent</span>
+        <button class="flex h-8 flex-1 items-center justify-center gap-1 rounded-md transition-colors" :class="mobileTab === 'ai' ? 'bg-zinc-100 text-zinc-900' : 'text-zinc-500'" @click="mobileTab = 'ai'; mainMode = 'ai'; if(sidePanel === 'none') sidePanel = 'chat'">
+          <FlowAgentIcon class="h-3.5 w-3.5" :class="mobileTab === 'ai' ? 'text-blue-600' : ''" />
+          <span class="text-[12px]" :class="mobileTab === 'ai' ? 'font-medium' : ''">Agent</span>
         </button>
 
-        <!-- Preview Tab -->
-        <button class="relative z-10 flex items-center justify-center flex-1 h-[34px] gap-1 group active:scale-95 transition-all duration-300 rounded-full bg-transparent" :class="mobileTab === 'preview' ? 'text-zinc-900' : 'text-zinc-500 hover:text-zinc-800'" @click="mobileTab = 'preview'">
-          <Eye class="w-3.5 h-3.5 transition-transform duration-300" :class="mobileTab === 'preview' ? 'stroke-[2.2]' : ''" />
-          <span class="text-[12px] tracking-tight transition-all duration-300" :class="mobileTab === 'preview' ? 'font-semibold' : 'font-medium'">预览</span>
+        <button class="flex h-8 flex-1 items-center justify-center gap-1 rounded-md transition-colors" :class="mobileTab === 'preview' ? 'bg-zinc-100 text-zinc-900' : 'text-zinc-500'" @click="mobileTab = 'preview'">
+          <Eye class="h-3.5 w-3.5" />
+          <span class="text-[12px]" :class="mobileTab === 'preview' ? 'font-medium' : ''">预览</span>
         </button>
       </div>
     </div>

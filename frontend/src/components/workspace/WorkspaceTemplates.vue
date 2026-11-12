@@ -119,14 +119,14 @@ function startFromTemplate(entry: "starter" | "import" | "blank") {
         </button>
       </header>
 
-      <div class="mt-4 flex flex-wrap items-center gap-2">
-        <div class="relative min-w-0 flex-1 sm:max-w-[260px]">
+      <div class="mt-4 space-y-2">
+        <div class="relative w-full max-w-[280px]">
           <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
           <input
             v-model="keyword"
             type="text"
             placeholder="搜索模板名称"
-            class="h-8 w-full rounded-lg border border-zinc-200 bg-white pl-8 pr-8 text-[12.5px] text-zinc-800 outline-none transition-colors placeholder:text-zinc-400 focus:border-zinc-300"
+            class="h-8 w-full rounded-md border-0 bg-white pl-8 pr-8 text-[12.5px] text-zinc-800 ring-1 ring-zinc-200/70 outline-none transition-colors placeholder:text-zinc-400 focus:ring-zinc-300"
             @keydown.esc="keyword = ''"
           />
           <button
@@ -139,16 +139,16 @@ function startFromTemplate(entry: "starter" | "import" | "blank") {
             <X class="h-3 w-3" />
           </button>
         </div>
-        <div class="flex min-w-0 flex-1 flex-wrap gap-1">
+        <div class="flex flex-wrap items-center gap-0.5">
           <button
             v-for="item in categories"
             :key="item"
             type="button"
-            class="h-7 shrink-0 rounded-full border px-2.5 text-[11.5px] font-medium transition-colors"
+            class="h-7 shrink-0 rounded-md px-2 text-[11.5px] font-medium transition-colors"
             :class="
               activeCategory === item
-                ? 'border-zinc-900 bg-zinc-900 text-white'
-                : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:text-zinc-900'
+                ? 'bg-zinc-200/70 text-zinc-900'
+                : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900'
             "
             @click="activeCategory = item"
           >
@@ -193,15 +193,15 @@ function startFromTemplate(entry: "starter" | "import" | "blank") {
         <article
           v-for="item in filteredTemplates"
           :key="item.template_id"
-          class="group flex cursor-pointer flex-col rounded-xl border bg-white p-1.5 transition-all"
+          class="group flex cursor-pointer flex-col rounded-lg border bg-white p-1.5 transition-colors"
           :class="
             selectedTemplate?.template_id === item.template_id
-              ? 'border-zinc-900 shadow-sm ring-1 ring-zinc-900/10'
-              : 'border-zinc-200 hover:border-zinc-300 hover:shadow-sm'
+              ? 'border-zinc-900'
+              : 'border-zinc-200 hover:border-zinc-300'
           "
           @click="selectedId = item.template_id"
         >
-          <div class="relative aspect-[3/4] overflow-hidden rounded-lg border border-zinc-100 bg-zinc-50">
+          <div class="relative aspect-[3/4] overflow-hidden rounded-md border border-zinc-100 bg-zinc-50">
             <div class="absolute inset-x-0 top-0 origin-top transition-transform duration-500 group-hover:scale-[1.02]">
               <TemplatePreview :html="item.preview_html" />
             </div>

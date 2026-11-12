@@ -5,7 +5,6 @@ import WorkspaceShell from "@/components/layout/WorkspaceShell.vue"
 import WorkspaceHome from "@/components/workspace/WorkspaceHome.vue"
 import WorkspaceResumeLibrary from "@/components/workspace/WorkspaceResumeLibrary.vue"
 import WorkspaceTemplates from "@/components/workspace/WorkspaceTemplates.vue"
-import WorkspacePreviewPane from "@/components/workspace/WorkspacePreviewPane.vue"
 import WorkspacePage from "@/components/workspace/WorkspacePage.vue"
 import ResumeCreateFlow from "@/components/resume/ResumeCreateFlow.vue"
 import AnnouncementModal from "@/components/announcement/AnnouncementModal.vue"
@@ -71,7 +70,6 @@ async function handleCreated(id: number) {
     <ResumeEditor v-else-if="panel === 'editor' && resumeId" :key="resumeId" :resume-id="resumeId" />
     <template v-else>
       <WorkspaceHome />
-      <WorkspacePreviewPane />
     </template>
 
     <!-- 创建流程：岗位起稿 / 空白模板 / 导入 / AI 生成，全部在工作区内完成 -->

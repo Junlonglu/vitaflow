@@ -20,6 +20,9 @@
 8. 不引入暗色模式、不使用 `dark:` 前缀——项目不支持。
 9. 语义色：成功 `emerald-600`、危险 `red-600`、警告 `amber-500`，不要换其他色相。
 10. 全局样式/浏览器兜底只能加在 `src/styles/index.css`，且需注释说明原因。
+11. **扁平优先**：静态内容不叠「边框 + 阴影 + 底色」三件套；选中/聚焦只给一处信号（浅灰底 `bg-zinc-100` 或描边），阴影只留给浮层（下拉、弹窗、抽屉）。
+12. **不用胶囊**：`rounded-full` 仅限头像、圆形图标按钮、圆点；分段控件、筛选标签、状态标记一律 `rounded-md`，选中态用 `bg-zinc-100`/`bg-zinc-200/70`，不用「黑底胶囊 + 内嵌白块 + 阴影」。
+13. 图标默认单色（`text-zinc-400`，选中 `text-zinc-500`），不做彩色图标底块与 hover 上浮动画。
 
 ---
 
@@ -41,13 +44,13 @@
 
 | 类 | 用途 |
 |---|---|
-| `rounded-full` | 徽标、pill、圆形图标底 |
-| `rounded-md` | 内联小徽标（text-[10px] 级）、自绘复选框、下拉选项 |
-| `rounded-lg` | 按钮、小控件 |
-| `rounded-xl` | 输入框、卡片、下拉面板、toast |
-| `rounded-2xl` | 大面板、弹窗、管理后台分区卡片 |
+| `rounded-full` | 仅头像、圆形图标按钮、圆点；**不作为分段控件/标签的形状** |
+| `rounded` | 行内极小的标记、徽标内块 |
+| `rounded-md` | 列表行、分段控件、筛选标签、按钮、输入框（工作区现行默认档） |
+| `rounded-lg` | 大面板、卡片、对话输入区、抽屉内分组 |
+| `rounded-xl` / `rounded-2xl` | 仅存量页面（营销页、弹窗）保留；新代码优先 `rounded-lg` |
 
-**阴影阶梯**：`shadow-sm`（卡片/输入框）→ `shadow-lg/xl`（下拉/弹窗/toast）。编辑器画布内允许自绘 rgba 阴影（如 `shadow-[0_2px_8px_rgba(0,0,0,0.04)]`），业务页面不允许。
+**阴影阶梯**：默认**无阴影**（静态卡片用 `ring-1 ring-zinc-200/70` 或 `border-zinc-200` 表达边界）；浮层才给 `shadow-lg` / `shadow-xl`（下拉、弹窗、抽屉、toast）。聚焦态用 `ring-1 ring-zinc-300`、`focus-within:ring-2 ring-zinc-900/[0.04]` 表达，不用彩色 glow。编辑器画布内允许自绘 rgba 阴影，业务页面不允许。
 
 **z-index 约定**（全站递增，新层级插在相邻档之间）：
 
@@ -171,7 +174,7 @@
 | Badge | `ui/badge/Badge.vue`：`rounded-full border bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-700`（gray 待改 zinc） | 状态徽标；彩色徽标按语义色 `-50` 底 + `-600/700` 字 |
 | Alert | `ui/alert/Alert.vue` | 提示条 |
 | Avatar | `ui/avatar/Avatar.vue` | 头像 |
-| Tabs | `ui/tabs/`；编辑器顶栏用自绘 pill 分段控件（`bg-zinc-200/50` 容器 + 白底选中块） | |
+| Tabs | `ui/tabs/`；工作区里的模式切换（内容编辑 / Flow Agent）、模板分类改为扁平 tab：`h-7 rounded-md px-2.5`，选中 `bg-zinc-100 text-zinc-900`，未选中 `text-zinc-500 hover:bg-zinc-50`，容器无底色只留发丝线 | |
 | Pagination | `ui/pagination/PaginationFooter.vue` | 列表分页统一用它 |
 | EmptyState | `common/EmptyState.vue` | 空状态统一入口 |
 | LoadingButton | `common/LoadingButton.vue` | 带加载态的按钮 |
@@ -245,5 +248,7 @@
 | 5 | 表单控件高度 | Input `h-10` vs Select `h-9`，同排不齐 | 统一为 `h-10`（Select 默认档提高，ghost 档不变） | 改 Select 触发器高度 + 目检所有同排场景 | 中（视觉回归） | 已完成 |
 | 6 | 任意字号值 | 大量 `text-[14px]`（与 `text-sm` 等价）、`text-[16px]` 等 | 新代码用阶梯；存量遇改即换，不专项清理 | 渐进 | 低 | 渐进中 |
 | 7 | body 背景 `#f7f8fb` | 非 Tailwind 色阶值（zinc-50 是 `#fafafa`） | 保留（首页观感依赖此值），在 index.css 注释说明与 zinc-50 的关系 | 加注释 | 低 | 已完成 |
+| 8 | 工作区外壳（侧栏、对话页、编辑器顶栏、模板中心、简历卡） | 圆角 1.25~2rem、选中态「白底 + 描边 + 阴影」、图标彩色底块、hover 位移与光斑 | 统一扁平：`rounded-md/lg`、选中态只留浅灰底、图标单色、静态无阴影 | 逐组件改类名 + Playwright 截图目检 | 中（纯样式） | 已完成 |
+| 9 | `ResumeAiChatPanel` 的 Markdown 列表 | Tailwind v4 preflight 清掉 `ul/ol` 符号与缩进，AI 回复的要点变成无符号的连续段落 | 在 `index.css` 补 `.chat-markdown` 的 `!important` 列表重置（与富文本区同一套做法） | 全局样式补一段 | 低 | 已完成 |
 
 > 附带修复（审计 ticket 1~11 新增/重写组件时发现）：`ResumeAiChatPanel` 与 `ResumeList` 各自内造 toast → 统一 `showGlobalToast`；AI 图片灯箱 `z-[9999]` → 弹窗档 `z-[100]`；`PointsAdjustModal` 主按钮 blue-600 → zinc-900（黑主蓝辅）、输入聚焦蓝环 → zinc。

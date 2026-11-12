@@ -42,19 +42,19 @@ function formatUpdateTime(timeStr?: string) {
 
 <template>
   <div
-    class="group relative flex flex-col rounded-[1.5rem] bg-white p-2 shadow-sm ring-1 ring-zinc-100 transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-zinc-200/50 hover:ring-zinc-200 sm:rounded-[2rem] sm:p-2.5 cursor-pointer"
+    class="group relative flex cursor-pointer flex-col rounded-lg bg-white p-2 ring-1 ring-zinc-200/70 transition-colors duration-200 hover:ring-zinc-300 sm:p-2.5"
     @click="$emit('edit', item.id)"
   >
     <div class="absolute right-4 top-4 z-10 flex translate-y-0.5 items-center gap-1.5 opacity-0 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100 sm:right-6 sm:top-6">
-      <button class="rounded-lg border border-zinc-200/60 bg-white/90 p-1 text-zinc-500 shadow-sm backdrop-blur-md transition-all hover:bg-white hover:text-zinc-900 active:scale-95 sm:p-1.5" title="复制" @click.stop="$emit('duplicate', item.id)">
+      <button class="rounded-md border border-zinc-200/70 bg-white p-1 text-zinc-500 transition-colors hover:text-zinc-900 active:scale-95 sm:p-1.5" title="复制" @click.stop="$emit('duplicate', item.id)">
         <Copy class="h-3.5 w-3.5" />
       </button>
-      <button class="rounded-lg border border-zinc-200/60 bg-white/90 p-1 text-zinc-500 shadow-sm backdrop-blur-md transition-all hover:border-red-100 hover:bg-red-50 hover:text-red-600 active:scale-95 sm:p-1.5" title="删除" @click.stop="$emit('delete', item.id)">
+      <button class="rounded-md border border-zinc-200/70 bg-white p-1 text-zinc-500 transition-colors hover:border-red-100 hover:bg-red-50 hover:text-red-600 active:scale-95 sm:p-1.5" title="删除" @click.stop="$emit('delete', item.id)">
         <Trash2 class="h-3.5 w-3.5" />
       </button>
     </div>
 
-    <div class="pointer-events-none relative aspect-[1/1.1] w-full overflow-hidden rounded-[1.25rem] border border-zinc-100/80 bg-zinc-50 sm:rounded-[1.5rem]">
+    <div class="pointer-events-none relative aspect-[1/1.1] w-full overflow-hidden rounded-md border border-zinc-100 bg-zinc-50">
       <div class="absolute inset-x-0 top-0 w-full transform transition-transform duration-700 ease-out group-hover:scale-[1.05]">
         <TemplatePreview :html="template?.preview_html" />
       </div>
@@ -64,7 +64,7 @@ function formatUpdateTime(timeStr?: string) {
     <div class="mb-2 mt-3 flex flex-1 flex-col px-2 sm:mt-4 sm:px-3">
       <div class="group/title relative mb-1.5">
         <h2 class="truncate text-xs font-medium tracking-tight text-zinc-900 transition-colors group-hover/title:text-zinc-950 sm:text-sm" @mouseenter="$emit('checkTitle', $event, item.id)">{{ item.title }}</h2>
-        <div v-if="isTitleTruncated" class="absolute bottom-full left-0 z-50 mb-1.5 hidden w-max max-w-xs animate-in rounded-xl border border-zinc-700/50 bg-zinc-900 p-2.5 text-xs leading-relaxed text-white shadow-2xl backdrop-blur-md fade-in zoom-in-95 group-hover/title:block pointer-events-none whitespace-normal break-words">
+        <div v-if="isTitleTruncated" class="pointer-events-none absolute bottom-full left-0 z-50 mb-1.5 hidden w-max max-w-xs whitespace-normal break-words rounded-md bg-zinc-900 p-2 text-xs leading-relaxed text-white group-hover/title:block">
           {{ item.title }}
           <div class="absolute left-4 top-full -mt-1 h-2 w-2 rotate-45 border-b border-r border-zinc-700/50 bg-zinc-900 pointer-events-none"></div>
         </div>
@@ -72,7 +72,7 @@ function formatUpdateTime(timeStr?: string) {
       <div class="mt-1.5 flex min-h-[24px] items-center justify-between text-[11px] tracking-wide text-zinc-400/90">
         <span class="truncate pr-1 sm:pr-2">{{ formatUpdateTime(item.update_time || item.create_time) }}<span class="hidden sm:inline"> · {{ item.language === "en" ? "English" : "简体中文" }}</span></span>
         <div class="relative flex shrink-0 items-center">
-          <span class="inline-flex shrink-0 items-center rounded-full bg-zinc-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-zinc-600 transition-all duration-200 group-hover:scale-95 group-hover:opacity-0 group-hover:pointer-events-none sm:px-2.5 sm:py-1 sm:text-[10px]">
+          <span class="inline-flex shrink-0 items-center rounded bg-zinc-100 px-1.5 py-0.5 text-[9.5px] font-medium tracking-wide text-zinc-500 transition-opacity duration-200 group-hover:pointer-events-none group-hover:opacity-0 sm:px-2 sm:py-1 sm:text-[10px]">
             {{ templateName }}
           </span>
           <span class="absolute right-0 hidden translate-x-1 shrink-0 items-center gap-1 whitespace-nowrap text-[11px] font-medium text-zinc-700 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:text-zinc-900 group-hover:opacity-100 sm:flex">

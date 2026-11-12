@@ -143,7 +143,7 @@ function addModule(presetType?: string) {
       <div class="relative w-full overflow-hidden flex items-center group/nav flex-1">
       <!-- Left Fade & Arrow -->
       <div v-show="!arrivedState.left" class="absolute left-0 top-0 bottom-0 w-16 bg-gradient-to-r from-white via-white/90 to-transparent z-10 flex items-center justify-start px-2 pointer-events-none transition-opacity duration-300">
-        <button @click="scrollNav('left')" class="h-7 w-7 rounded-full bg-white shadow-sm border border-zinc-200 hidden md:flex items-center justify-center text-zinc-500 hover:text-zinc-900 hover:border-zinc-300 transition-all pointer-events-auto opacity-0 group-hover/nav:opacity-100">
+        <button @click="scrollNav('left')" class="pointer-events-auto hidden h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-500 opacity-0 transition-colors hover:text-zinc-900 hover:border-zinc-300 group-hover/nav:opacity-100 md:flex">
           <ChevronLeft class="h-4 w-4" />
         </button>
       </div>
@@ -153,11 +153,11 @@ function addModule(presetType?: string) {
           v-for="element in orderedSections"
           :key="element"
           :data-module="element"
-          class="group relative flex items-center shrink-0 h-8 md:h-9 rounded-full px-3.5 md:px-4 text-xs md:text-[14px] font-medium transition-all duration-300 cursor-pointer border select-none outline-none focus:outline-none focus-visible:outline-none"
+          class="group relative flex select-none items-center h-8 shrink-0 cursor-pointer rounded-md border px-3 text-xs font-medium transition-colors duration-200 md:h-9 md:px-3.5 md:text-[13px] outline-none focus:outline-none focus-visible:outline-none"
           :class="[
             current === element 
-              ? 'bg-zinc-900 text-white border-zinc-900 shadow-md' 
-              : 'bg-white text-zinc-600 border-zinc-200/80 hover:border-zinc-300 hover:bg-zinc-50 shadow-sm', 
+              ? 'border-zinc-200/80 bg-zinc-100 text-zinc-900' 
+              : 'border-transparent bg-white text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900', 
             !visible(element) && 'opacity-50'
           ]"
           :draggable="element !== 'basics' && !isMobile && !isTouchDevice"
@@ -180,11 +180,11 @@ function addModule(presetType?: string) {
                  (!isMobile && !isTouchDevice) ? 'opacity-0 group-hover:opacity-100' : (current === element ? 'opacity-100' : 'hidden')
                ]"
                v-if="element !== 'basics'">
-              <button class="flex items-center justify-center p-1 rounded-full transition-colors" :class="current === element ? 'text-zinc-300 hover:text-white hover:bg-white/20' : 'text-zinc-400 hover:text-zinc-900 hover:bg-zinc-200/50'" title="显示/隐藏" @click.stop="setVisible(element, !visible(element))">
+              <button class="flex items-center justify-center p-1 rounded-full transition-colors" :class="current === element ? 'text-zinc-500 hover:bg-zinc-200/60 hover:text-zinc-900' : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900'" title="显示/隐藏" @click.stop="setVisible(element, !visible(element))">
                 <Eye v-if="visible(element)" class="h-3.5 w-3.5" />
                 <EyeOff v-else class="h-3.5 w-3.5" />
               </button>
-              <button v-if="!builtIn.includes(element)" class="flex items-center justify-center p-1 rounded-full transition-colors" :class="current === element ? 'text-red-300 hover:text-red-100 hover:bg-red-500/50' : 'text-zinc-400 hover:text-red-600 hover:bg-red-50'" title="删除" @click.stop="triggerDelete(element)">
+              <button v-if="!builtIn.includes(element)" class="flex items-center justify-center p-1 rounded-full transition-colors" :class="current === element ? 'text-zinc-500 hover:bg-red-50 hover:text-red-600' : 'text-zinc-400 hover:bg-red-50 hover:text-red-600'" title="删除" @click.stop="triggerDelete(element)">
                 <Trash2 class="h-3.5 w-3.5" />
               </button>
           </div>
@@ -192,7 +192,7 @@ function addModule(presetType?: string) {
 
         <!-- Add Custom Module Button -->
         <button
-          class="group flex items-center justify-center shrink-0 h-8 md:h-9 rounded-full px-3.5 md:px-4 text-xs md:text-[14px] font-medium transition-all duration-200 border border-dashed border-zinc-300 bg-zinc-50/50 text-zinc-50 text-zinc-500 hover:border-zinc-400 hover:text-zinc-700 hover:bg-zinc-100"
+          class="group flex h-8 shrink-0 items-center justify-center rounded-md border border-dashed border-zinc-300 bg-transparent px-3 text-xs font-medium text-zinc-500 transition-colors duration-200 hover:border-zinc-400 hover:bg-zinc-50 hover:text-zinc-800 md:h-9 md:px-3.5 md:text-[13px]"
           @click="showAddModuleModal = true"
         >
           <Plus class="h-3.5 w-3.5 md:h-4 md:w-4 mr-1" />
@@ -202,7 +202,7 @@ function addModule(presetType?: string) {
 
         <!-- Right Fade & Arrow -->
         <div v-show="!arrivedState.right" class="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-white via-white/80 to-transparent z-10 flex items-center justify-end px-2 pointer-events-none transition-opacity duration-300">
-          <button @click="scrollNav('right')" class="h-7 w-7 rounded-full bg-white shadow-sm border border-zinc-200 hidden md:flex items-center justify-center text-zinc-500 hover:text-zinc-900 hover:border-zinc-300 transition-all pointer-events-auto opacity-0 group-hover/nav:opacity-100">
+          <button @click="scrollNav('right')" class="pointer-events-auto hidden h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-500 opacity-0 transition-colors hover:text-zinc-900 hover:border-zinc-300 group-hover/nav:opacity-100 md:flex">
             <ChevronRight class="h-4 w-4" />
           </button>
         </div>
@@ -211,7 +211,7 @@ function addModule(presetType?: string) {
       <!-- Settings / Sort Button (Sticky) -->
       <div class="relative z-20 flex items-center justify-center pl-0 pr-2 md:pr-3 shrink-0 bg-white">
         <button
-          class="group flex items-center justify-center shrink-0 h-8 w-8 md:h-9 md:w-9 rounded-full transition-all duration-200 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+          class="group flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-zinc-400 transition-colors duration-200 hover:bg-zinc-100 hover:text-zinc-700 md:h-9 md:w-9"
           @click="showSortModal = true"
           title="排序与管理"
         >

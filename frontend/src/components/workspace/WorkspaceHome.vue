@@ -79,19 +79,19 @@ async function submit() {
         描述目标岗位和你的经历，Flow Agent 会在对话里帮你搭结构、改措辞，确认后再写进简历。
       </p>
 
-      <div class="mt-5 flex flex-wrap gap-1.5">
+      <div class="mt-4 flex flex-wrap gap-0.5">
         <button
           v-for="item in scenarios"
           :key="item.key"
           type="button"
-          class="inline-flex h-7 items-center rounded-full border border-zinc-200 bg-white px-3 text-[12px] font-medium text-zinc-600 transition-colors hover:border-zinc-300 hover:text-zinc-900"
+          class="inline-flex h-7 items-center rounded-md px-2 text-[12px] text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
           @click="applySeed(item.seed)"
         >
           {{ item.label }}
         </button>
       </div>
 
-      <div class="mt-4 rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm transition-colors focus-within:border-zinc-300">
+      <div class="mt-4 rounded-lg border border-zinc-200/80 bg-white p-2.5 transition-colors focus-within:border-zinc-300 focus-within:ring-2 focus-within:ring-zinc-900/[0.04]">
         <textarea
           v-model="prompt"
           rows="3"
@@ -103,7 +103,7 @@ async function submit() {
           <span class="text-[11px] text-zinc-400">Enter 发送 · Shift + Enter 换行</span>
           <button
             type="button"
-            class="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-zinc-900 text-white transition-all hover:bg-zinc-800 active:scale-95 disabled:opacity-40"
+            class="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-zinc-900 text-white transition-colors hover:bg-zinc-800 active:scale-95 disabled:opacity-30"
             :disabled="busy"
             aria-label="开始"
             @click="submit"
@@ -118,10 +118,9 @@ async function submit() {
           v-for="item in suggestions"
           :key="item"
           type="button"
-          class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
+          class="flex w-full items-center rounded-md px-2 py-1.5 text-left text-[12px] text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
           @click="applySeed(item)"
         >
-          <span class="h-1 w-1 shrink-0 rounded-full bg-zinc-300"></span>
           <span class="truncate">{{ item }}</span>
         </button>
       </div>

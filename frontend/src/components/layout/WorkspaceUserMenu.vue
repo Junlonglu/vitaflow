@@ -17,7 +17,7 @@ const isAdmin = computed(() => user.userInfo?.role === "admin")
 
 const menuItems = computed(() => {
   const items = [
-    { label: "全部简历", to: "/resumes", icon: Files },
+    { label: "全部简历", to: "/workspace/resumes", icon: Files },
     { label: "模板中心", to: "/workspace/templates", icon: LayoutTemplate },
     { label: "Flow Points", to: "/ai-records", icon: FlowPointIcon },
     { label: "公告", to: "/announcements", icon: Bell },

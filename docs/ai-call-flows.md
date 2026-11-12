@@ -75,7 +75,7 @@ backend (FastAPI, :8000)                      ai-service (Express+pi-agent, :830
 
 ### 3.1 AI 生成简历（generate_resume，流式）
 
-1. 前端：`ResumeList.vue` 的 AI 生成弹窗（AppDialog 外壳）→ `generateResumeStreamApi`（ai.ts:179）→ `POST /api/ai/generate-resume/stream`。
+1. 前端：`ResumeCreateFlow.vue` 的 AI 生成弹窗（工作区根部挂载，AppDialog 外壳）→ `generateResumeStreamApi`（ai.ts:179）→ `POST /api/ai/generate-resume/stream`。
 2. backend：路由 `generate_resume_stream_api`（ai.py:505）→ `new_task`（ai.py:151）：
    - `estimate_tokens` 预估输入 token（token_usage.py:34，中文≈1字/token、非中文≈4字符/token 的保守估算）→ `precheck_flow_points` → `consume_flow_points` **立即预扣**
    - 创建 AiTask（pending），`input_data.model` 记目录模型 ref
@@ -85,7 +85,7 @@ backend (FastAPI, :8000)                      ai-service (Express+pi-agent, :830
 
 ### 3.2 导入简历（import_resume，一次性请求）
 
-1. 前端：`ResumeList.vue:474` / `TemplateGallery.vue:275` → `importResumeFileApi`（api/resume.ts:44，FormData：files + template_id）→ `POST /api/resumes/import-file`。
+1. 前端：`ResumeCreateFlow.vue` → `importResumeFileApi`（api/resume.ts:44，FormData：files + template_id）→ `POST /api/resumes/import-file`。
 2. backend（resumes.py:102）：
    - **本地抽文本**（resume_import_service.py:100）：PDF 走 pypdf（:19）、docx 走 python-docx（:32，段落+表格）、TXT/MD 直接 decode；图片走 pytesseract OCR（:51，需本机 Tesseract）。清洗后 <20 字符拒绝，截断 30000 字符
    - `detect_resume_language`（resume_locale.py:87）判语言 → `estimate_tokens` → `precheck_flow_points` → 建 AiTask → 预扣

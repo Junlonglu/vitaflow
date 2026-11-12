@@ -459,6 +459,17 @@ function formatUpdated(value?: string) {
           </p>
         </div>
       </div>
+
+      <!-- 侧栏只拉最近 50 份，超出的去「全部简历」面板看 -->
+      <RouterLink
+        v-if="store.resumeListTotal > store.resumeList.length"
+        to="/workspace/resumes"
+        class="mt-1 flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[11.5px] text-zinc-500 transition-colors hover:bg-zinc-200/50 hover:text-zinc-900"
+      >
+        <Files class="h-3 w-3 shrink-0" />
+        <span>查看全部 {{ store.resumeListTotal }} 份</span>
+        <ChevronRight class="ml-auto h-3 w-3 shrink-0" />
+      </RouterLink>
     </div>
 
     <!-- 搜索结果：简历按标题本地过滤，对话走后端跨简历搜索 -->

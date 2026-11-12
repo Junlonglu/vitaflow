@@ -24,7 +24,7 @@ import { showGlobalToast } from "@/utils/toast"
 /**
  * 创建简历的全部入口与流程：岗位起稿 / 空白模板 / 导入 / AI 生成。
  *
- * 从 `ResumeList.vue` 抽出来，让工作区（侧栏、首页）和简历列表页共用同一套实现，
+ * 抽出来的公共流程：工作区（侧栏、首页、模板中心、全部简历面板）统一挂在工作区根部，
  * 创建成功只负责发 `created`，由挂载方决定跳转与列表刷新。
  */
 const props = withDefaults(defineProps<{ listenGlobal?: boolean }>(), { listenGlobal: false })

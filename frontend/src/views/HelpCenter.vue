@@ -43,7 +43,7 @@ const quickStartActions = computed(() => [
   {
     title: "我的简历",
     description: "继续编辑、复制、分享或导出",
-    to: user.token ? "/resumes" : "/login",
+    to: user.token ? "/workspace/resumes" : "/login",
     icon: FileText,
     primary: false,
   },

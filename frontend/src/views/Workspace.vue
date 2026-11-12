@@ -3,6 +3,7 @@ import { computed } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import WorkspaceShell from "@/components/layout/WorkspaceShell.vue"
 import WorkspaceHome from "@/components/workspace/WorkspaceHome.vue"
+import WorkspaceResumeLibrary from "@/components/workspace/WorkspaceResumeLibrary.vue"
 import WorkspaceTemplates from "@/components/workspace/WorkspaceTemplates.vue"
 import WorkspacePreviewPane from "@/components/workspace/WorkspacePreviewPane.vue"
 import ResumeCreateFlow from "@/components/resume/ResumeCreateFlow.vue"
@@ -17,6 +18,7 @@ const resumeId = computed(() => {
   return Number.isFinite(value) && value > 0 ? value : null
 })
 const isTemplateView = computed(() => route.path === "/workspace/templates")
+const isLibraryView = computed(() => route.path === "/workspace/resumes")
 
 // 新简历建好后进对应工作区。先 flushSave：创建弹窗是在编辑器之上打开的，
 // 此时当前简历可能还有防抖中的改动，直接换路由会丢。
@@ -29,6 +31,7 @@ async function handleCreated(id: number) {
 <template>
   <WorkspaceShell>
     <WorkspaceTemplates v-if="isTemplateView" />
+    <WorkspaceResumeLibrary v-else-if="isLibraryView" />
     <ResumeEditor v-else-if="resumeId" :key="resumeId" :resume-id="resumeId" />
     <template v-else>
       <WorkspaceHome />

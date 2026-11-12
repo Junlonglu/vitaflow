@@ -80,8 +80,8 @@ function logout() {
             </RouterLink>
             <RouterLink 
               class="flex shrink-0 items-center gap-1.5 rounded-md px-3 py-2 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
-              :class="{ 'bg-zinc-100 text-zinc-900': route.path === '/resumes' }"
-              to="/resumes"
+              :class="{ 'bg-zinc-100 text-zinc-900': route.path === '/workspace/resumes' }"
+              to="/workspace/resumes"
             >
               <Files class="h-4 w-4" />
               <span>我的简历</span>
@@ -104,7 +104,7 @@ function logout() {
           </template>
           
           <template v-else>
-            <RouterLink to="/resumes" class="ml-2 shrink-0">
+            <RouterLink to="/workspace" class="ml-2 shrink-0">
               <Button size="sm" class="h-9 px-4 bg-zinc-900 text-white hover:bg-zinc-800 transition-all active:scale-95 shadow-sm rounded-lg shrink-0">
                 <Sparkles class="h-4 w-4 mr-1.5 shrink-0" />
                 <span class="whitespace-nowrap">开始使用</span>
@@ -124,7 +124,7 @@ function logout() {
               <LayoutTemplate class="h-4 w-4" />
               <span>模板</span>
             </RouterLink>
-            <RouterLink to="/resumes" class="shrink-0">
+            <RouterLink to="/workspace" class="shrink-0">
               <Button size="sm" class="h-8 px-2 min-[420px]:px-3 bg-zinc-900 text-white hover:bg-zinc-800 transition-all active:scale-95 shadow-sm rounded-lg text-xs shrink-0" title="开始使用">
                 <Sparkles class="h-3.5 w-3.5 shrink-0 min-[420px]:mr-1" />
                 <span class="hidden whitespace-nowrap min-[420px]:inline">开始使用</span>
@@ -135,7 +135,7 @@ function logout() {
             <!-- Quick access to My Resumes on mobile -->
             <RouterLink 
               class="flex items-center gap-1 px-3 py-1.5 rounded-full bg-zinc-100 text-zinc-900 text-xs font-medium hover:bg-zinc-200 transition-colors mr-1"
-              to="/resumes"
+              to="/workspace/resumes"
               @click="mobileMenuOpen = false"
             >
               <Files class="h-3.5 w-3.5" />
@@ -205,8 +205,8 @@ function logout() {
           </RouterLink>
           <RouterLink 
             class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 transition-colors"
-            :class="{ 'bg-zinc-100 text-zinc-900': route.path === '/resumes' }"
-            to="/resumes"
+            :class="{ 'bg-zinc-100 text-zinc-900': route.path === '/workspace/resumes' }"
+            to="/workspace/resumes"
             @click="mobileMenuOpen = false"
           >
             <Files class="h-4 w-4 text-zinc-500" />

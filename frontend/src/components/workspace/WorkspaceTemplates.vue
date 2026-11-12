@@ -193,7 +193,7 @@ function startFromTemplate(entry: "starter" | "import" | "blank") {
         <article
           v-for="item in filteredTemplates"
           :key="item.template_id"
-          class="group flex cursor-pointer flex-col rounded-xl border bg-white p-1.5 transition-colors"
+          class="group flex cursor-pointer flex-col overflow-hidden rounded-xl border bg-white transition-colors"
           :class="
             selectedTemplate?.template_id === item.template_id
               ? 'border-zinc-900'
@@ -201,13 +201,13 @@ function startFromTemplate(entry: "starter" | "import" | "blank") {
           "
           @click="selectedId = item.template_id"
         >
-          <div class="relative aspect-[3/4] overflow-hidden rounded-lg border border-zinc-100 bg-zinc-50">
-            <div class="absolute inset-x-0 top-0 origin-top transition-transform duration-500 group-hover:scale-[1.02]">
-              <TemplatePreview :html="item.preview_html" />
+          <div class="relative aspect-[3/4] overflow-hidden bg-zinc-100/60 p-1.5">
+            <div class="absolute inset-x-1.5 top-1.5 origin-top overflow-hidden rounded-[3px] transition-transform duration-500 group-hover:scale-[1.02]">
+              <TemplatePreview :html="item.preview_html" bare />
             </div>
             <div class="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-white/95 to-transparent"></div>
           </div>
-          <div class="mt-2 flex items-center justify-between gap-1 px-0.5 pb-0.5">
+          <div class="flex items-center justify-between gap-1 px-2.5 py-2">
             <div class="min-w-0">
               <p class="truncate text-[12.5px] font-medium text-zinc-900">{{ item.name }}</p>
               <p class="mt-0.5 truncate text-[10.5px] text-zinc-400">{{ item.category }}</p>

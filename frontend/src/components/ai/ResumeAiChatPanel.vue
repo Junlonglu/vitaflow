@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch, computed } from "vue"
-import { CheckCircle2, LoaderCircle, SendHorizontal, Bot, Target, Wand2, Trash2, X, ImagePlus, XCircle, Copy, Check, RotateCcw, Cpu, HelpCircle, Languages, Sparkles, MessageCircle, SquarePen } from "lucide-vue-next"
+import { CheckCircle2, LoaderCircle, Bot, Target, Wand2, Trash2, X, RotateCcw, HelpCircle, Languages, Sparkles, MessageCircle, SquarePen, ArrowUp, Plus } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
 import Select from "@/components/ui/select/Select.vue"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
@@ -378,18 +378,16 @@ watch(
     <section class="chat-stage relative flex min-h-0 flex-1 flex-col bg-transparent z-10">
       <div ref="listRef" class="relative min-h-0 flex-1 flex flex-col overflow-y-auto px-4 py-4 md:px-6 md:py-8 thin-scrollbar">
         <section v-if="!messages.length && !loading" class="mx-auto flex w-full min-h-full max-w-3xl flex-col items-center justify-center py-6 text-center">
-          <div class="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-zinc-100 text-zinc-500" style="view-transition-name: ai-hero-icon;">
-            <Bot class="h-5 w-5" stroke-width="1.6" />
-          </div>
-          <h3 class="mt-3 text-[17px] font-medium tracking-tight text-zinc-900">简历打磨，现在开始</h3>
-          <p class="mt-1 text-[12px] text-zinc-400">输入 <span class="font-mono text-zinc-600">/</span> 可唤起快捷指令</p>
+          <h3 class="text-[19px] font-medium tracking-tight text-zinc-900 sm:text-[21px]">简历打磨，现在开始</h3>
+          <p class="mt-1.5 text-[12.5px] text-zinc-400">直接描述你想改的地方，或输入 <span class="font-mono text-zinc-500">/</span> 唤起快捷指令</p>
 
-          <div class="mt-6 grid w-full grid-cols-1 gap-x-1 gap-y-0.5 px-1 text-left sm:grid-cols-2">
+          <div class="mt-7 grid w-full grid-cols-1 gap-x-1 gap-y-0.5 px-1 text-left sm:grid-cols-2">
             <button
               v-for="cmd in quickCommands"
               :key="cmd.name"
               type="button"
-              class="group flex items-start gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-zinc-100"
+              class="group flex items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-zinc-100"
+              :title="cmd.description"
               @click="useQuickCommand(cmd)"
             >
               <component :is="cmd.icon" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-400 transition-colors group-hover:text-zinc-600" stroke-width="1.8" />
@@ -469,8 +467,8 @@ watch(
         </TransitionGroup>
       </div>
 
-      <form class="composer relative mx-auto mb-18 mt-1 w-[calc(100%-1.5rem)] max-w-3xl shrink-0 rounded-xl border border-zinc-200/80 bg-white p-1 transition-colors focus-within:border-zinc-300 focus-within:ring-2 focus-within:ring-zinc-900/[0.04] sm:mb-4 sm:w-[calc(100%-2rem)] sm:p-2" @submit.prevent="submit">
-        <div v-if="attachments.length || uploadError" class="flex flex-wrap gap-2 sm:gap-3 px-2.5 sm:px-3 pb-1 pt-2">
+      <form class="composer relative mx-auto mb-18 mt-1 w-[calc(100%-1.5rem)] max-w-3xl shrink-0 rounded-2xl border border-zinc-200 bg-white shadow-[0_1px_2px_rgba(24,24,27,0.04)] transition-colors focus-within:border-zinc-300 focus-within:ring-2 focus-within:ring-zinc-900/[0.04] sm:mb-4 sm:w-[calc(100%-2rem)]" @submit.prevent="submit">
+        <div v-if="attachments.length || uploadError" class="flex flex-wrap gap-2 px-3 pt-3 sm:gap-3">
           <div v-for="(item, index) in attachments" :key="item.url" class="group relative h-14 w-14 sm:h-16 sm:w-16 shrink-0 rounded-lg border border-zinc-200/80 bg-white">
             <img :src="item.url" :alt="item.name || '待发送图片'" class="h-full w-full rounded-lg object-cover" />
             <button type="button" class="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-white text-zinc-400 ring-1 ring-zinc-200/80 transition hover:text-red-500 active:scale-95" title="移除图片" @click="removeAttachment(index)">
@@ -496,40 +494,45 @@ watch(
               <span v-if="cmd.argumentHint" class="shrink-0 text-[11px] text-zinc-400">{{ cmd.argumentHint }}</span>
             </button>
           </div>
-          <textarea ref="inputRef" v-model="input" placeholder="输入你想调整的内容，或输入 / 使用快捷指令..." rows="1" class="w-full min-h-[32px] sm:min-h-[44px] max-h-[100px] sm:max-h-[160px] resize-none bg-transparent px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-[15px] leading-relaxed text-zinc-800 placeholder:text-zinc-400 border-0 shadow-none focus-visible:ring-0 outline-none" style="scrollbar-width: none;" @input="adjustHeight" @compositionstart="composing = true" @compositionend="composing = false" @keydown="handleSlashNav" @keydown.enter.exact.prevent="handleEnter($event)" @paste="handlePaste"></textarea>
+          <textarea ref="inputRef" v-model="input" placeholder="输入你想调整的内容，或输入 / 使用快捷指令..." rows="1" class="w-full min-h-[40px] sm:min-h-[46px] max-h-[100px] sm:max-h-[160px] resize-none bg-transparent px-3.5 sm:px-4 pt-2.5 sm:pt-3 pb-1 text-[13px] sm:text-[14.5px] leading-relaxed text-zinc-800 placeholder:text-zinc-400 border-0 shadow-none focus-visible:ring-0 outline-none" style="scrollbar-width: none;" @input="adjustHeight" @compositionstart="composing = true" @compositionend="composing = false" @keydown="handleSlashNav" @keydown.enter.exact.prevent="handleEnter($event)" @paste="handlePaste"></textarea>
         </div>
-        <div class="flex items-center justify-between gap-2 px-2 sm:px-3 pt-2 pb-1">
-          <div v-if="chatModels?.length" class="inline-flex max-w-full items-center gap-1.5 rounded-md px-1 text-xs text-zinc-500 transition-colors hover:text-zinc-900">
-            <Cpu class="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+        <div class="flex items-center gap-1 px-2 pb-2 pt-1">
+          <input ref="fileInputRef" type="file" accept="image/png,image/jpeg,image/webp" multiple class="hidden" @change="handleImageChange" />
+          <!-- 左：添加附件（图片） -->
+          <button v-if="supportsMultimodal" type="button" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 active:scale-95 disabled:opacity-40" :disabled="loading || uploadingImage" title="添加图片" @click="chooseImage">
+            <LoaderCircle v-if="uploadingImage" class="h-4 w-4 animate-spin" stroke-width="1.8" />
+            <Plus v-else class="h-[18px] w-[18px]" stroke-width="1.8" />
+          </button>
+
+          <!-- 左：模型选择（图标 + 名称 + 展开箭头，无边框） -->
+          <div v-if="chatModels?.length" class="flex min-w-0 items-center rounded-lg px-1.5 h-8 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900">
+            <Sparkles class="mr-1 h-3.5 w-3.5 shrink-0 text-zinc-400" stroke-width="1.8" />
             <Select
               :model-value="selectedModelId || ''"
               :options="modelOptions"
               :disabled="loading"
               ghost
-              class="!h-6 !max-w-[200px] !rounded !p-0 !text-xs !font-medium"
+              class="!h-8 !max-w-[190px] !rounded-none !p-0 !text-[12.5px] !font-medium"
               @change="(value) => emit('update:selectedModelId', value ? Number(value) : null)"
             />
           </div>
-          <div v-else class="text-xs text-zinc-400">默认模型</div>
-          
-          <div class="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            <input ref="fileInputRef" type="file" accept="image/png,image/jpeg,image/webp" multiple class="hidden" @change="handleImageChange" />
-            <button v-if="supportsMultimodal" type="button" class="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 active:scale-95 disabled:opacity-50" :disabled="loading || uploadingImage" title="上传图片" @click="chooseImage">
-              <LoaderCircle v-if="uploadingImage" class="h-4 w-4 sm:h-5 sm:w-5 animate-spin" stroke-width="1.5" />
-              <ImagePlus v-else class="h-4 w-4 sm:h-5 sm:w-5" stroke-width="1.5" />
+          <span v-else class="px-2 text-[12.5px] text-zinc-400">默认模型</span>
+
+          <!-- 右：新对话 / 清空 / 发送 -->
+          <div class="ml-auto flex shrink-0 items-center gap-0.5">
+            <button v-if="!loading && !regenerateSource" type="button" class="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 active:scale-95" title="新对话" @click="emit('new-session')">
+              <SquarePen class="h-[17px] w-[17px]" stroke-width="1.6" />
             </button>
-            <button v-if="!loading && !regenerateSource" type="button" class="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 active:scale-95" title="新对话" @click="emit('new-session')">
-              <SquarePen class="h-4 w-4 sm:h-5 sm:w-5" stroke-width="1.5" />
+            <button v-if="messages.length > 0 && !loading && !regenerateSource" type="button" class="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-500 active:scale-95" @click="showClearConfirm = true" title="清空对话">
+              <Trash2 class="h-[17px] w-[17px]" stroke-width="1.6" />
             </button>
-            <button v-if="messages.length > 0 && !loading && !regenerateSource" type="button" class="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-500 active:scale-95" @click="showClearConfirm = true" title="清空对话">
-              <Trash2 class="h-4 w-4 sm:h-5 sm:w-5" stroke-width="1.5" />
-            </button>
-            <button v-if="regenerateSource" type="button" class="flex h-8 items-center justify-center rounded-md px-2.5 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 active:scale-95 sm:h-9 sm:px-3 sm:text-[13px]" title="取消重新生成" @click="cancelRegenerate">
+            <button v-if="regenerateSource" type="button" class="flex h-8 items-center justify-center rounded-lg px-2.5 text-[12.5px] font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 active:scale-95" title="取消重新生成" @click="cancelRegenerate">
               取消
             </button>
-            <button type="button" class="group flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-white transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-30 hover:bg-zinc-800 active:scale-[0.94]" :disabled="loading || (!input.trim() && !attachments.length)" :title="regenerateSource ? '确认重新生成' : '发送'" @click="submit">
-              <RotateCcw v-if="regenerateSource" class="h-4 w-4 sm:h-5 sm:w-5 transition-transform duration-300 ease-out group-hover:rotate-[-25deg]" stroke-width="1.6" />
-              <SendHorizontal v-else class="h-4 w-4 sm:h-5 sm:w-5 transition-transform duration-300 ease-out" :class="{ 'group-hover:translate-x-0.5 group-hover:-translate-y-0.5': !loading && (input.trim() || attachments.length) }" stroke-width="1.5" />
+            <button type="submit" class="group ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-white transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 hover:bg-zinc-800 active:scale-[0.94]" :disabled="loading || (!input.trim() && !attachments.length)" :title="regenerateSource ? '确认重新生成' : '发送'" @click="submit">
+              <RotateCcw v-if="regenerateSource" class="h-4 w-4 transition-transform duration-300 ease-out group-hover:rotate-[-25deg]" stroke-width="1.8" />
+              <LoaderCircle v-else-if="loading" class="h-4 w-4 animate-spin" stroke-width="2" />
+              <ArrowUp v-else class="h-4 w-4 transition-transform duration-200 ease-out group-hover:-translate-y-0.5" stroke-width="2.2" />
             </button>
           </div>
         </div>

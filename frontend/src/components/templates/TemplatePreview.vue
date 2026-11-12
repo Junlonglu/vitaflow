@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue"
 
-const props = defineProps<{ html?: string }>()
+const props = defineProps<{ html?: string; bare?: boolean }>()
 const frameWrap = ref<HTMLDivElement | null>(null)
 const wrapWidth = ref(0)
 let observer: ResizeObserver | null = null
@@ -32,7 +32,13 @@ onBeforeUnmount(() => observer?.disconnect())
 </script>
 
 <template>
-  <div ref="frameWrap" class="overflow-hidden rounded-lg border border-zinc-100/80 bg-white" :style="{ height: wrapHeight }">
+  <!-- bare：由外层卡片提供唯一的边框，避免出现「框中框」 -->
+  <div
+    ref="frameWrap"
+    class="overflow-hidden bg-white"
+    :class="bare ? '' : 'rounded-lg border border-zinc-100/80'"
+    :style="{ height: wrapHeight }"
+  >
     <iframe
       v-if="html"
       :key="html ? html.length : 0"

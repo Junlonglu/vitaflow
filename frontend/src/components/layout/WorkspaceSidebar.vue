@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue"
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue"
 import { RouterLink, useRoute, useRouter } from "vue-router"
-import { ChevronRight, Files, LayoutTemplate, MessageSquare, Plus, Sparkles, Trash2 } from "lucide-vue-next"
+import { ChevronRight, Files, LayoutTemplate, MessageSquare, Plus, Sparkles, Trash2, X } from "lucide-vue-next"
 import BrandLogo from "@/components/common/BrandLogo.vue"
 import WorkspaceUserMenu from "@/components/layout/WorkspaceUserMenu.vue"
 import { useResumeStore } from "@/stores/resume"
 import { useChatStore } from "@/stores/chat"
 import { useWorkspaceBridge } from "@/composables/useWorkspaceBridge"
+import { useWorkspaceDrawer } from "@/composables/useWorkspaceDrawer"
 import { showGlobalToast } from "@/utils/toast"
 
 const route = useRoute()
@@ -14,6 +15,7 @@ const router = useRouter()
 const store = useResumeStore()
 const chatStore = useChatStore()
 const { flushSave } = useWorkspaceBridge()
+const { drawerOpen, closeDrawer } = useWorkspaceDrawer()
 
 const loading = ref(false)
 const creating = ref(false)
@@ -51,8 +53,13 @@ async function refresh() {
 }
 
 onMounted(async () => {
+  window.addEventListener("keydown", handleSessionShortcut)
   await refresh()
   if (activeId.value) await expandActive(activeId.value)
+})
+
+onUnmounted(() => {
+  window.removeEventListener("keydown", handleSessionShortcut)
 })
 
 async function expandActive(resumeId: number) {
@@ -96,13 +103,18 @@ async function createResume() {
 
 async function goWorkspaceHome() {
   await flushSave()
+  closeDrawer()
   router.push("/workspace")
 }
 
 async function openSession(resumeId: number, sessionId: number) {
-  if (activeId.value === resumeId && chatStore.activeSessionId(resumeId) === sessionId) return
+  if (activeId.value === resumeId && chatStore.activeSessionId(resumeId) === sessionId) {
+    closeDrawer()
+    return
+  }
   await flushSave()
   chatStore.setActiveSession(resumeId, sessionId)
+  closeDrawer()
   if (activeId.value !== resumeId) router.push(`/workspace/${resumeId}`)
 }
 
@@ -113,11 +125,47 @@ async function newSession(resumeId: number) {
     await flushSave()
     await chatStore.createSession(resumeId)
     expandedId.value = resumeId
+    closeDrawer()
     if (activeId.value !== resumeId) router.push(`/workspace/${resumeId}`)
   } catch {
     showGlobalToast("新建对话失败，请重试", "error")
   } finally {
     creatingSessionFor.value = null
+  }
+}
+
+// —— 会话快捷键：⌘/Ctrl + Alt + ↑↓ 上下切换，⌘/Ctrl + Alt + N 新对话 ——
+// 只作用于当前简历；输入框里不抢键，避免和输入法/文本编辑操作打架。
+const isMac = computed(() => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform))
+const modLabel = computed(() => (isMac.value ? "⌘" : "Ctrl"))
+
+function isEditableTarget(target: EventTarget | null) {
+  const element = target as HTMLElement | null
+  if (!element) return false
+  return element.tagName === "INPUT" || element.tagName === "TEXTAREA" || element.isContentEditable
+}
+
+function handleSessionShortcut(event: KeyboardEvent) {
+  if (!(event.metaKey || event.ctrlKey) || !event.altKey) return
+  if (isEditableTarget(event.target)) return
+  const resumeId = activeId.value
+  if (!resumeId) return
+
+  if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+    const list = chatStore.sessions(resumeId)
+    if (list.length < 2) return
+    event.preventDefault()
+    const current = chatStore.activeSessionId(resumeId)
+    const index = Math.max(0, list.findIndex((item) => item.id === current))
+    const step = event.key === "ArrowDown" ? 1 : -1
+    const next = list[(index + step + list.length) % list.length]
+    if (next) void openSession(resumeId, next.id)
+    return
+  }
+
+  if (event.key.toLowerCase() === "n") {
+    event.preventDefault()
+    void newSession(resumeId)
   }
 }
 
@@ -171,11 +219,24 @@ function formatUpdated(value?: string) {
 </script>
 
 <template>
-  <aside class="hidden h-full w-[248px] shrink-0 flex-col border-r border-zinc-200/70 bg-zinc-50/70 md:flex">
+  <aside
+    class="fixed inset-y-0 left-0 z-[60] flex h-full w-[272px] shrink-0 flex-col border-r border-zinc-200/70 bg-zinc-50 shadow-2xl transition-transform duration-200 ease-out md:static md:z-auto md:w-[248px] md:translate-x-0 md:bg-zinc-50/70 md:shadow-none"
+    :class="drawerOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'"
+  >
     <div class="shrink-0 px-3 pt-3">
-      <RouterLink to="/workspace" class="flex h-9 items-center rounded-lg px-1.5 transition-colors hover:bg-zinc-200/50" @click.prevent="goWorkspaceHome">
-        <BrandLogo size="sm" />
-      </RouterLink>
+      <div class="flex h-9 items-center">
+        <RouterLink to="/workspace" class="flex h-9 flex-1 items-center rounded-lg px-1.5 transition-colors hover:bg-zinc-200/50" @click.prevent="goWorkspaceHome">
+          <BrandLogo size="sm" />
+        </RouterLink>
+        <button
+          type="button"
+          class="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-200/60 hover:text-zinc-900 md:hidden"
+          aria-label="收起侧栏"
+          @click="closeDrawer"
+        >
+          <X class="h-4 w-4" />
+        </button>
+      </div>
     </div>
 
     <div class="shrink-0 px-3 pt-2">
@@ -291,11 +352,16 @@ function formatUpdated(value?: string) {
             type="button"
             class="flex w-full items-center gap-1.5 rounded-md py-1.5 pl-1.5 pr-1 text-left text-[12px] text-zinc-400 transition-colors hover:bg-zinc-200/40 hover:text-zinc-700 disabled:opacity-60"
             :disabled="creatingSessionFor === item.id"
+            :title="`新建对话（${modLabel} + Alt + N）`"
             @click="newSession(item.id)"
           >
             <Plus class="h-3.5 w-3.5 shrink-0" />
             <span>{{ creatingSessionFor === item.id ? "新建中" : "新对话" }}</span>
           </button>
+
+          <p v-if="chatStore.sessions(item.id).length > 1" class="hidden px-1.5 pb-1 pt-0.5 text-[10px] leading-4 text-zinc-300 md:block">
+            {{ modLabel }} + Alt + ↑↓ 切换对话
+          </p>
         </div>
       </div>
     </div>

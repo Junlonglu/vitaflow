@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import { ArrowLeft, CheckCircle2, Download, FileText, LoaderCircle, Redo2, Save, Settings, Share2, Trash2, Undo2, X, Edit3, Eye, Pencil, AlertCircle, LayoutTemplate, ArrowRight, Menu, Info } from "lucide-vue-next"
+import { CheckCircle2, Download, FileText, LoaderCircle, PanelLeft, Redo2, Save, Settings, Share2, Trash2, Undo2, X, Edit3, Eye, Pencil, AlertCircle, LayoutTemplate, ArrowRight, Menu, Info } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
 import Input from "@/components/ui/input/Input.vue"
 import FlowAgentIcon from "@/components/common/FlowAgentIcon.vue"
@@ -29,11 +29,13 @@ import { createPresetSection } from "@/utils/resumePresets"
 import { buildSelectedResumeData, diffResume, sectionEntriesForReview } from "@/utils/aiDiff"
 import { applyResumeLanguage, normalizeResumeLanguage } from "@/utils/resumeLocale"
 import { useWorkspaceBridge } from "@/composables/useWorkspaceBridge"
+import { useWorkspaceDrawer } from "@/composables/useWorkspaceDrawer"
 
 const props = withDefaults(defineProps<{ resumeId?: number }>(), { resumeId: 0 })
 const route = useRoute()
 const router = useRouter()
 const { registerFlushSave, clearFlushSave } = useWorkspaceBridge()
+const { openDrawer, drawerOpen } = useWorkspaceDrawer()
 const resumeStore = useResumeStore()
 const chatStore = useChatStore()
 const editor = useEditorStore()
@@ -162,6 +164,7 @@ onMounted(() => {
   resizeHandler = () => { isMobile.value = window.innerWidth < 768 }
   window.addEventListener('resize', resizeHandler)
   window.addEventListener('keydown', handleHistoryShortcut)
+  document.addEventListener('visibilitychange', refreshPreviewIfDirty)
   
   getFlowPointSummaryApi().then((data) => (flowPointSummary.value = data)).catch(() => null)
 })
@@ -169,6 +172,7 @@ onMounted(() => {
 onUnmounted(() => {
   if (resizeHandler) window.removeEventListener('resize', resizeHandler)
   window.removeEventListener('keydown', handleHistoryShortcut)
+  document.removeEventListener('visibilitychange', refreshPreviewIfDirty)
 })
 
 watch(sidePanel, (newVal) => {
@@ -361,7 +365,16 @@ async function openShareDialog() {
   }
 }
 
-async function refreshPreviewLatest() {
+/**
+ * 预览可见性：桌面端右栏常驻；移动端只在「预览」tab 里；页面切到后台一律算不可见。
+ * 不可见时不发请求，只记一笔欠账，等回来再补。
+ */
+function isPreviewVisible() {
+  if (typeof document !== "undefined" && document.hidden) return false
+  return !isMobile.value || mobileTab.value === "preview"
+}
+
+async function fetchPreviewHtmlLatest() {
   if (!resumeStore.currentResume) return
   const requestSeq = ++previewRequestSeq
   previewRefreshing.value = true
@@ -383,13 +396,51 @@ async function refreshPreviewLatest() {
   }
 }
 
+// 单飞 + 尾随合并：同一时刻最多一个预览请求，期间的多次触发压成一次，
+// 避免连续勾选 / 快速输入时把 /preview 打成连发。
+let previewRunning = false
+let previewQueued = false
+let previewDirty = false
+
+async function refreshPreviewLatest() {
+  if (!resumeStore.currentResume) return
+  if (!isPreviewVisible()) {
+    previewDirty = true
+    return
+  }
+  if (previewRunning) {
+    previewQueued = true
+    return
+  }
+  previewRunning = true
+  previewDirty = false
+  try {
+    await fetchPreviewHtmlLatest()
+  } finally {
+    previewRunning = false
+    if (previewQueued) {
+      previewQueued = false
+      void refreshPreviewLatest()
+    }
+  }
+}
+
 let previewRefreshTimer: number | undefined
 function schedulePreviewRefresh() {
   window.clearTimeout(previewRefreshTimer)
   previewRefreshTimer = window.setTimeout(() => {
     void refreshPreviewLatest()
-  }, 250)
+  }, 300)
 }
+
+/** 回到可见状态时把欠下的那次刷新补上。 */
+function refreshPreviewIfDirty() {
+  if (previewDirty) void refreshPreviewLatest()
+}
+
+watch(mobileTab, (tab) => {
+  if (tab === "preview") refreshPreviewIfDirty()
+})
 
 // —— AI 修改审阅模式（track-changes）：有 pending 提案时左面板换成 diff 审阅卡 ——
 const selectedDiffIds = ref<string[]>([])
@@ -1066,8 +1117,8 @@ async function sendInitialPrompt() {
   <div v-if="resumeStore.currentResume && resumeStore.resumeData && resumeStore.templateConfig" class="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white" @focusout="handleFocusOut">
     <!-- Premium Header -->
     <header class="flex h-14 md:h-16 shrink-0 items-center gap-1.5 md:gap-4 border-b border-zinc-200/60 bg-white/80 backdrop-blur-md px-2 md:px-6 relative z-40">
-      <Button size="icon" variant="ghost" class="md:hidden h-8 w-8 shrink-0 text-zinc-500 hover:text-zinc-900 rounded-lg hover:bg-zinc-100" @click="router.push('/workspace')">
-        <ArrowLeft class="h-4 w-4" />
+      <Button size="icon" variant="ghost" class="md:hidden h-8 w-8 shrink-0 text-zinc-500 hover:text-zinc-900 rounded-lg hover:bg-zinc-100" aria-label="打开侧栏" @click="openDrawer">
+        <PanelLeft class="h-4 w-4" />
       </Button>
 
       <div class="flex items-center gap-1.5 md:gap-3 flex-1 min-w-0">
@@ -1437,7 +1488,7 @@ async function sendInitialPrompt() {
     </Transition>
 
     <!-- Mobile Bottom Nav (Apple Liquid Glass Navigation Pod) -->
-    <div class="md:hidden fixed bottom-2.5 left-1/2 -translate-x-1/2 z-50 max-w-[260px] w-[82%] bg-white/55 backdrop-blur-3xl border border-white/80 rounded-full p-1.5 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),_0_8px_32px_-6px_rgba(0,0,0,0.14)] select-none">
+    <div class="md:hidden fixed bottom-2.5 left-1/2 -translate-x-1/2 z-50 max-w-[260px] w-[82%] bg-white/55 backdrop-blur-3xl border border-white/80 rounded-full p-1.5 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),_0_8px_32px_-6px_rgba(0,0,0,0.14)] select-none" :class="drawerOpen ? 'hidden' : ''">
       <div class="relative w-full flex items-center justify-between">
         <!-- Gliding Active Indicator Pill -->
         <div 

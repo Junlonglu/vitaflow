@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { ref } from "vue"
 import { useRouter } from "vue-router"
-import { ArrowUp, FileUp, LayoutTemplate, Sparkles } from "lucide-vue-next"
+import { ArrowUp, FileUp, LayoutTemplate, PanelLeft, Sparkles } from "lucide-vue-next"
 import BrandLogo from "@/components/common/BrandLogo.vue"
 import { useResumeStore } from "@/stores/resume"
+import { useWorkspaceDrawer } from "@/composables/useWorkspaceDrawer"
 import { showGlobalToast } from "@/utils/toast"
 
 const router = useRouter()
 const store = useResumeStore()
+const { openDrawer } = useWorkspaceDrawer()
 
 const prompt = ref("")
 const busy = ref(false)
@@ -53,7 +55,17 @@ async function submit() {
   <div class="thin-scrollbar flex h-full min-w-0 flex-1 overflow-y-auto px-6 py-8">
     <div class="m-auto w-full max-w-[620px]">
       <div class="mb-6 flex items-center justify-between md:hidden">
-        <BrandLogo size="sm" />
+        <div class="flex items-center gap-1">
+          <button
+            type="button"
+            class="-ml-1.5 grid h-8 w-8 place-items-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
+            aria-label="打开侧栏"
+            @click="openDrawer"
+          >
+            <PanelLeft class="h-4 w-4" />
+          </button>
+          <BrandLogo size="sm" />
+        </div>
         <RouterLink to="/resumes" class="text-[12px] font-medium text-zinc-600">全部简历</RouterLink>
       </div>
       <h1 class="text-[22px] font-semibold tracking-tight text-zinc-950 sm:text-[26px]">VitaFlow，帮你写好一份简历</h1>

@@ -341,7 +341,16 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 
 路由守卫：登录态检查 + `requiresAdmin` 前端拦截（**仅体验优化，真正边界在后端**）。
 
-### 8.2 目录职责
+### 8.2 工作区外壳行为
+
+| 维度 | 说明 |
+|---|---|
+| 布局 | `WorkspaceShell` = 左栏（`WorkspaceSidebar`，桌面常驻）+ 右侧 slot；`h-dvh` 整体不滚动，滚动只发生在其内部容器 |
+| 移动端（<768px） | 左栏变抽屉：`fixed` + `translate-x` 滑出，遮罩层 `z-[55]`、抽屉 `z-[60]`（编辑器顶栏 `z-40`、弹窗 `z-[100]`）；开合状态在 `composables/useWorkspaceDrawer.ts`，路由变化 / Esc / 点击遮罩 / 断点回到桌面都会自动收起，抽屉开着时底部胶囊导航隐藏 |
+| 会话切换 | 点侧栏会话写 `chatStore.setActiveSession`，编辑器 watch 它换消息；`⌘/Ctrl + Alt + ↑↓` 在当前简历的会话间循环，`⌘/Ctrl + Alt + N` 新建对话（焦点在输入框内不抢键） |
+| 预览刷新 | `refreshPreviewLatest` 单飞 + 尾随合并：同时只有一个 `/preview` 请求；预览不可见（移动端非「预览」tab、`document.hidden`）时不发请求，只记 `previewDirty`，切回可见时补一次 |
+
+### 8.3 目录职责
 
 | 目录 | 内容 |
 |---|---|
@@ -352,19 +361,19 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 | `components/templates/` | 模板选择与缩略预览（**注意：`ClassicTemplate.vue`/`ModernTemplate.vue`/`TechTemplate.vue` 在 `src` 内已无引用，属旧渲染路径残留**） |
 | `components/workspace/` | 工作区首页（对话起始态）、右侧预览空态 |
 | `components/admin/` `announcement/` `resume/` `home/` `layout/` `common/` `ui/` | 分域组件；`layout/` 下 `MainLayout.vue` 是全站顶栏，`WorkspaceShell.vue` / `WorkspaceSidebar.vue` / `WorkspaceUserMenu.vue` 是工作区外壳 |
-| `composables/` | `useWorkspaceBridge.ts`：侧栏切换简历前调用编辑器注册的 `flushSave`，避免防抖间隙丢改动 |
+| `composables/` | `useWorkspaceBridge.ts`：侧栏切换简历前调用编辑器注册的 `flushSave`，避免防抖间隙丢改动；`useWorkspaceDrawer.ts`：移动端侧栏抽屉的开合状态 |
 | `stores/` | 4 个：`user`（登录态、积分）、`resume`（列表）、`editor`（当前简历、脏标记、保存、预览刷新）、`chat`（每份简历的会话列表与当前会话，侧栏与编辑器共用） |
 | `api/` | 每个业务域一个文件；`request.ts` 是 axios 封装，`ai.ts` 是流式专用 |
 | `types/` | 与后端 schema 对齐的 TS 类型（`resume.ts` / `ai.ts` / `api.ts` / `user.ts`） |
 | `utils/` | `aiDiff.ts` / `wordDiff.ts`（变更 diff）、`resumePagination.ts`（分页估算）、`resumePresets.ts`（预设）、`printResume.ts`、`toast.ts` |
 | `lib/` | `markdown.ts` 渲染、通用工具 |
 
-### 8.3 双通道请求
+### 8.4 双通道请求
 
 - **普通接口**：`api/request.ts` axios 实例 → 注入 token → 401 跳登录 → 解包 `{code,message,data}` → 统一中文错误提示。
 - **AI 流式接口**：`api/ai.ts` 原生 `fetch` + `ReadableStream` + 逐行 `JSON.parse`，手动处理 401 与中断，逐事件回调给组件。
 
-### 8.4 编辑器状态流
+### 8.5 编辑器状态流
 
 表单编辑 → 更新 `editor` store 中的 `resumeData` → 标脏 → 防抖自动保存（`PUT /resumes/{id}`）→ 预览区通过 `POST /resumes/{id}/preview-html` 传入**当前未保存数据**刷新，保证预览与表单实时一致。
 

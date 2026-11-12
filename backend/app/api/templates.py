@@ -18,5 +18,5 @@ def templates(db: Session = Depends(get_db)):
 def template_detail(template_id: str, db: Session = Depends(get_db)):
     template = get_template(template_id, db)
     if not template:
-        raise AppException("模板不存在")
+        raise AppException("模板不存在", 404)
     return success(template)

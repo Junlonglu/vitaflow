@@ -60,12 +60,12 @@ def normalize_custom_share_token(db: Session, value: str | None, resume_id: int 
     if not token:
         return None
     if not CUSTOM_SHARE_TOKEN_PATTERN.fullmatch(token):
-        raise AppException("自定义链接仅支持 3-64 位字母、数字、短横线或下划线，且需以字母或数字开头")
+        raise AppException("自定义链接仅支持 3-64 位字母、数字、短横线或下划线，且需以字母或数字开头", 400)
     query = select(Resume.id).where(Resume.share_token == token)
     if resume_id is not None:
         query = query.where(Resume.id != resume_id)
     if db.scalar(query):
-        raise AppException("该自定义链接已被使用，请换一个")
+        raise AppException("该自定义链接已被使用，请换一个", 409)
     return token
 
 

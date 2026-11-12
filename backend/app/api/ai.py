@@ -244,7 +244,7 @@ def ai_metadata(task_type: str, payload: Any, model_name: str, model_config_id: 
 
 def new_task(db: Session, user: User, task_type: str, payload: Any, resume_id: int | None = None):
     if task_type not in ACTIVE_AI_FEATURE_TYPES:
-        raise AppException("该 AI 功能已停用")
+        raise AppException("该 AI 功能已停用", 400)
     is_admin = getattr(user, "role", "") == "admin"
     requested_model_id = getattr(payload, "model_config_id", None) if task_type == "ai_chat" else None
     config = (
@@ -491,7 +491,7 @@ def my_ai_histories(
     current_user: User = Depends(get_current_user),
 ):
     if task_type not in {"resume_score", "jd_optimize", "resume_translate"}:
-        raise AppException("只支持查看简历诊断、JD 优化和简历翻译历史")
+        raise AppException("只支持查看简历诊断、JD 优化和简历翻译历史", 400)
     return my_ai_records(page, page_size, task_type, db, current_user)
 
 

@@ -452,9 +452,9 @@ def _normalize_redeem_code(raw: str) -> str:
     if not code:
         return ""
     if len(code) > 64:
-        raise AppException("兑换码不能超过 64 个字符")
+        raise AppException("兑换码不能超过 64 个字符", 400)
     if not re.fullmatch(r"[A-Z0-9][A-Z0-9_-]*", code):
-        raise AppException("兑换码只能包含字母、数字、下划线和短横线，且需以字母或数字开头")
+        raise AppException("兑换码只能包含字母、数字、下划线和短横线，且需以字母或数字开头", 400)
     return code
 
 
@@ -471,23 +471,23 @@ def _increase_redeem_attempt(db: Session, user_id: int) -> None:
         logger.warning("Failed to update redeem attempt cache", exc_info=True)
         return
     if attempts > limit:
-        raise AppException(f"今日兑换码尝试次数已达上限（{limit} 次），请明天再试")
+        raise AppException(f"今日兑换码尝试次数已达上限（{limit} 次），请明天再试", 429)
 
 
 def redeem_flow_points(db: Session, user: User, code: str, ip_address: str | None = None) -> FlowPointRedeemRecord:
     _increase_redeem_attempt(db, user.id)
     value = code.strip().upper()
     if not value:
-        raise AppException("请输入兑换码")
+        raise AppException("请输入兑换码", 400)
     value = _normalize_redeem_code(value)
     client_ip = (ip_address or "").strip()[:64] or None
     item = db.scalar(select(FlowPointRedeemCode).where(FlowPointRedeemCode.code == value).with_for_update())
     if not item or item.status != "active":
-        raise AppException("兑换码不存在")
+        raise AppException("兑换码不存在", 404)
     if item.expire_time and item.expire_time < datetime.now():
-        raise AppException("兑换码已过期")
+        raise AppException("兑换码已过期", 400)
     if item.used_count >= item.total_count:
-        raise AppException("兑换码已被使用完")
+        raise AppException("兑换码已被使用完", 400)
     exists = db.scalar(
         select(FlowPointRedeemRecord.id).where(
             FlowPointRedeemRecord.code_id == item.id,
@@ -495,10 +495,10 @@ def redeem_flow_points(db: Session, user: User, code: str, ip_address: str | Non
         )
     )
     if exists:
-        raise AppException("你已经使用过这个兑换码")
+        raise AppException("你已经使用过这个兑换码", 400)
     if item.ip_once:
         if not client_ip:
-            raise AppException("无法识别当前 IP，不能兑换该 IP 限制兑换码")
+            raise AppException("无法识别当前 IP，不能兑换该 IP 限制兑换码", 400)
         ip_exists = db.scalar(
             select(FlowPointRedeemRecord.id).where(
                 FlowPointRedeemRecord.code_id == item.id,
@@ -506,7 +506,7 @@ def redeem_flow_points(db: Session, user: User, code: str, ip_address: str | Non
             )
         )
         if ip_exists:
-            raise AppException("当前 IP 已使用过这个兑换码")
+            raise AppException("当前 IP 已使用过这个兑换码", 400)
     record = FlowPointRedeemRecord(
         code_id=item.id,
         code=item.code,
@@ -520,7 +520,7 @@ def redeem_flow_points(db: Session, user: User, code: str, ip_address: str | Non
         db.flush()
     except IntegrityError as exc:
         db.rollback()
-        raise AppException("你已经使用过这个兑换码") from exc
+        raise AppException("你已经使用过这个兑换码", 400) from exc
     item.used_count += 1
     db.add(item)
     add_point_transaction(
@@ -569,15 +569,15 @@ def generate_redeem_codes(
     if cleaned_custom:
         count = len(cleaned_custom)
     if count < 1 or count > 500:
-        raise AppException("单次生成数量需要在 1 到 500 之间")
+        raise AppException("单次生成数量需要在 1 到 500 之间", 400)
     if len(cleaned_custom) > 500:
-        raise AppException("单次自定义创建最多 500 个兑换码")
+        raise AppException("单次自定义创建最多 500 个兑换码", 400)
     if points <= 0:
-        raise AppException("兑换点数必须大于 0")
+        raise AppException("兑换点数必须大于 0", 400)
     if price < 0:
-        raise AppException("兑换码价格不能小于 0")
+        raise AppException("兑换码价格不能小于 0", 400)
     if total_count <= 0:
-        raise AppException("每个兑换码可兑换人数必须大于 0")
+        raise AppException("每个兑换码可兑换人数必须大于 0", 400)
     batch_no = datetime.now().strftime(("CUS" if cleaned_custom else "FP") + "%Y%m%d%H%M%S")
     items: list[FlowPointRedeemCode] = []
     existing = set(db.scalars(select(FlowPointRedeemCode.code)).all())
@@ -586,7 +586,7 @@ def generate_redeem_codes(
         if duplicates:
             preview = "、".join(duplicates[:5])
             suffix = "等" if len(duplicates) > 5 else ""
-            raise AppException(f"自定义兑换码已存在：{preview}{suffix}")
+            raise AppException(f"自定义兑换码已存在：{preview}{suffix}", 409)
         codes = cleaned_custom
     else:
         codes = []
@@ -642,15 +642,15 @@ def import_redeem_codes(
         cleaned.append(code)
         seen.add(code)
     if not cleaned:
-        raise AppException("请提供要导入的兑换码")
+        raise AppException("请提供要导入的兑换码", 400)
     if len(cleaned) > 2000:
-        raise AppException("单次导入最多 2000 个兑换码")
+        raise AppException("单次导入最多 2000 个兑换码", 400)
     if points <= 0:
-        raise AppException("兑换点数必须大于 0")
+        raise AppException("兑换点数必须大于 0", 400)
     if price < 0:
-        raise AppException("兑换码价格不能小于 0")
+        raise AppException("兑换码价格不能小于 0", 400)
     if total_count <= 0:
-        raise AppException("每个兑换码可兑换人数必须大于 0")
+        raise AppException("每个兑换码可兑换人数必须大于 0", 400)
     existing = set(db.scalars(select(FlowPointRedeemCode.code).where(FlowPointRedeemCode.code.in_(cleaned))).all())
     batch_no = datetime.now().strftime("IMP%Y%m%d%H%M%S")
     items: list[FlowPointRedeemCode] = []
@@ -673,7 +673,7 @@ def import_redeem_codes(
         db.add(item)
         items.append(item)
     if not items:
-        raise AppException("导入的兑换码都已存在")
+        raise AppException("导入的兑换码都已存在", 409)
     db.commit()
     for item in items:
         db.refresh(item)

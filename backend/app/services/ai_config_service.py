@@ -118,9 +118,9 @@ def _select_active_config(session: Session) -> AiModelConfig | None:
 def get_ai_config_by_id(db: Session, config_id: int, *, require_chat_selectable: bool = False) -> AiRuntimeConfig:
     item = db.get(AiModelConfig, config_id)
     if not item:
-        raise AppException("模型配置不存在或已停用")
+        raise AppException("模型配置不存在或已停用", 404)
     if require_chat_selectable and not bool(getattr(item, "is_chat_selectable", True)):
-        raise AppException("该模型暂未开放给 AI 助手使用")
+        raise AppException("该模型暂未开放给 AI 助手使用", 403)
     return _require_model_ref(_from_model(item))
 
 

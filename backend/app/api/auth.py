@@ -47,7 +47,7 @@ def get_user_agreement(db: Session = Depends(get_db)):
 def send_verification_code(payload: SendVerificationCodeRequest, db: Session = Depends(get_db)):
     email = normalize_email(payload.email)
     if db.scalar(select(User.id).where(func.lower(User.email) == email)):
-        raise AppException("该邮箱已注册")
+        raise AppException("该邮箱已注册", 409)
 
     verification_code_service.issue_registration_code(email, send_registration_code)
     return success(message="验证码已发送")
@@ -61,9 +61,9 @@ def send_password_reset_verification_code(
     email = normalize_email(payload.email)
     user = db.scalar(select(User).where(func.lower(User.email) == email))
     if not user:
-        raise AppException("该邮箱尚未注册")
+        raise AppException("该邮箱尚未注册", 400)
     if user.status != "active":
-        raise AppException("账号已被停用")
+        raise AppException("账号已被停用", 403)
 
     verification_code_service.issue_password_reset_code(email, send_password_reset_code)
     return success(message="验证码已发送")
@@ -76,9 +76,9 @@ def register(payload: RegisterRequest, request: Request, db: Session = Depends(g
     lock_token = verification_code_service.acquire_registration_lock(email)
     try:
         if db.scalar(select(User).where(User.username == payload.username)):
-            raise AppException("用户名已存在")
+            raise AppException("用户名已存在", 409)
         if db.scalar(select(User).where(func.lower(User.email) == email)):
-            raise AppException("邮箱已存在")
+            raise AppException("邮箱已存在", 409)
 
         verification_code_service.verify_registration_code(email, payload.verification_code)
         user = User(
@@ -92,7 +92,7 @@ def register(payload: RegisterRequest, request: Request, db: Session = Depends(g
             db.commit()
         except IntegrityError as exc:
             db.rollback()
-            raise AppException("用户名或邮箱已存在") from exc
+            raise AppException("用户名或邮箱已存在", 409) from exc
         db.refresh(user)
         gift_points = get_int_setting(db, "signup_gift_points", 0)
         if gift_points > 0:
@@ -115,9 +115,9 @@ def register(payload: RegisterRequest, request: Request, db: Session = Depends(g
 def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(func.lower(User.email) == normalize_email(payload.email)))
     if not user or not verify_password(payload.password, user.password_hash):
-        raise AppException("邮箱或密码错误")
+        raise AppException("邮箱或密码错误", 400)
     if user.status != "active":
-        raise AppException("账号已被停用")
+        raise AppException("账号已被停用", 403)
     if user.email.lower() in settings.admin_email_list and user.role != "admin":
         user.role = "admin"
     user.last_login_ip = get_client_ip(request)
@@ -136,11 +136,11 @@ def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db))
     try:
         user = db.scalar(select(User).where(func.lower(User.email) == email))
         if not user:
-            raise AppException("该邮箱尚未注册")
+            raise AppException("该邮箱尚未注册", 400)
         if user.status != "active":
-            raise AppException("账号已被停用")
+            raise AppException("账号已被停用", 403)
         if verify_password(payload.new_password, user.password_hash):
-            raise AppException("新密码不能与原密码相同")
+            raise AppException("新密码不能与原密码相同", 400)
 
         verification_code_service.verify_password_reset_code(email, payload.verification_code)
         user.password_hash = get_password_hash(payload.new_password)
@@ -166,7 +166,7 @@ def update_profile(
     username = payload.username.strip()
     exists = db.scalar(select(User.id).where(User.username == username, User.id != current_user.id))
     if exists:
-        raise AppException("用户名已存在")
+        raise AppException("用户名已存在", 409)
     current_user.username = username
     db.commit()
     db.refresh(current_user)
@@ -180,9 +180,9 @@ def change_password(
     db: Session = Depends(get_db),
 ):
     if not verify_password(payload.current_password, current_user.password_hash):
-        raise AppException("当前密码错误")
+        raise AppException("当前密码错误", 400)
     if payload.current_password == payload.new_password:
-        raise AppException("新密码不能与当前密码相同")
+        raise AppException("新密码不能与当前密码相同", 400)
     current_user.password_hash = get_password_hash(payload.new_password)
     db.commit()
     return success(message="密码已修改")

@@ -28,8 +28,9 @@ def list_resumes(db: Session, user_id: int, page: int = 1, page_size: int = 8) -
 
 def get_resume(db: Session, user_id: int, resume_id: int) -> Resume:
     resume = db.get(Resume, resume_id)
+    # 越权和不存在返回同一个 404，不向调用方泄露「这个 id 存在但不属于你」
     if not resume or resume.user_id != user_id:
-        raise AppException("简历不存在")
+        raise AppException("简历不存在", 404)
     return resume
 
 

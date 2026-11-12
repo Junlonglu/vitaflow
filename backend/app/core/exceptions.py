@@ -40,6 +40,13 @@ def friendly_validation_message(exc: RequestValidationError) -> str:
 
 
 class AppException(Exception):
+    """业务异常。
+
+    `code` 默认 500，表示「约定之外的意外」。资源查找失败请显式传 404，
+    参数不合法传 400，状态冲突传 409 —— 否则前端和其它服务调用方只能看到
+    「服务端炸了」，无法区分是数据不存在还是真的出错。
+    """
+
     def __init__(self, message: str, code: int = 500):
         self.message = message
         self.code = code

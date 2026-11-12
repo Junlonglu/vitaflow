@@ -395,10 +395,10 @@ def create_announcement(
     db: Session = Depends(get_db),
 ):
     if not payload.title.strip():
-        raise AppException("请填写公告标题")
+        raise AppException("请填写公告标题", 400)
     content = sanitize_announcement_html(payload.content)
     if not announcement_has_text(content):
-        raise AppException("请填写公告内容")
+        raise AppException("请填写公告内容", 400)
     item = Announcement(
         title=payload.title.strip(),
         content=content,
@@ -423,10 +423,10 @@ def update_announcement(
     if not item:
         raise AppException("公告不存在", 404)
     if not payload.title.strip():
-        raise AppException("请填写公告标题")
+        raise AppException("请填写公告标题", 400)
     content = sanitize_announcement_html(payload.content)
     if not announcement_has_text(content):
-        raise AppException("请填写公告内容")
+        raise AppException("请填写公告内容", 400)
     was_published = item.status == "published"
     item.title = payload.title.strip()
     item.content = content
@@ -1053,7 +1053,7 @@ def send_feedback_email(feedback_id: int, payload: FeedbackStatusUpdate, db: Ses
         raise AppException("反馈用户不存在", 404)
     apply_feedback_update(item, payload)
     if not item.admin_reply:
-        raise AppException("请先填写用户可见回复")
+        raise AppException("请先填写用户可见回复", 400)
     db.add(item)
     db.commit()
     db.refresh(item)
@@ -1152,7 +1152,7 @@ def revoke_all_users_flow_points_grant(
         .limit(1)
     )
     if revoked_exists:
-        raise AppException("该全员发放批次已经撤回，不能重复撤回")
+        raise AppException("该全员发放批次已经撤回，不能重复撤回", 409)
 
     description = payload.description.strip() or "管理员撤回误发放 Flow Points"
     transaction_description = _batch_description(GRANT_ALL_REVOKE_PREFIX, batch_no, description)
@@ -1406,9 +1406,9 @@ def update_user_status(
     if not user:
         raise AppException("用户不存在", 404)
     if user.id == admin.id:
-        raise AppException("不能停用当前管理员账号")
+        raise AppException("不能停用当前管理员账号", 403)
     if user.role == "admin":
-        raise AppException("不能在此停用其他管理员")
+        raise AppException("不能在此停用其他管理员", 403)
     user.status = payload.status
     db.commit()
     return success({"id": user.id, "status": user.status}, "用户状态已更新")
@@ -1424,7 +1424,7 @@ def update_user_flow_points(
     if not user:
         raise AppException("用户不存在", 404)
     if payload.points_delta == 0:
-        raise AppException("调整点数不能为 0")
+        raise AppException("调整点数不能为 0", 400)
     add_point_transaction(
         db,
         user,
@@ -1585,7 +1585,7 @@ def _validate_model_ref(model_ref: str | None) -> tuple[bool, str]:
 def create_ai_config(payload: AiConfigWrite, db: Session = Depends(get_db)):
     ok, message = _validate_model_ref(payload.model_ref)
     if not ok:
-        raise AppException(message)
+        raise AppException(message, 400)
     if payload.is_active:
         db.query(AiModelConfig).update({AiModelConfig.is_active: False})
     item = AiModelConfig(
@@ -1613,7 +1613,7 @@ def update_ai_config(config_id: int, payload: AiConfigWrite, db: Session = Depen
         raise AppException("模型配置不存在", 404)
     ok, message = _validate_model_ref(payload.model_ref)
     if not ok:
-        raise AppException(message)
+        raise AppException(message, 400)
     if payload.is_active:
         db.query(AiModelConfig).filter(AiModelConfig.id != item.id).update({AiModelConfig.is_active: False})
     _policy_payload(item, payload)
@@ -1630,7 +1630,7 @@ def delete_ai_config(config_id: int, db: Session = Depends(get_db)):
     if not item:
         raise AppException("模型配置不存在", 404)
     if item.is_active:
-        raise AppException("不能删除正在使用的模型配置")
+        raise AppException("不能删除正在使用的模型配置", 409)
     db.delete(item)
     db.commit()
     invalidate_ai_config_cache()
@@ -1694,7 +1694,7 @@ def _assert_provider_models_unreferenced(db: Session, provider_key: str) -> None
         for model in provider.get("models") or []:
             ref = str(model.get("ref") or "")
             if _catalog_ref_in_use(db, ref):
-                raise AppException(f"模型 {ref} 正被模型策略使用，请先在模型策略中改选")
+                raise AppException(f"模型 {ref} 正被模型策略使用，请先在模型策略中改选", 409)
     return
 
 
@@ -1733,7 +1733,7 @@ def update_catalog_model(provider_key: str, model_id: str, payload: CatalogModel
 def delete_catalog_model(provider_key: str, model_id: str, db: Session = Depends(get_db)):
     ref = f"{provider_key}/{model_id}"
     if _catalog_ref_in_use(db, ref):
-        raise AppException(f"模型 {ref} 正被模型策略使用，请先在模型策略中改选")
+        raise AppException(f"模型 {ref} 正被模型策略使用，请先在模型策略中改选", 409)
     result = success(call_catalog("DELETE", f"/v1/catalog/providers/{provider_key}/models/{model_id}"))
     invalidate_catalog_capabilities_cache()
     return result
@@ -1912,7 +1912,7 @@ def update_redeem_code_batch_price(
     note = payload.note.strip() if payload.note else ""
     batch_no = payload.batch_no.strip().upper() if payload.batch_no else ""
     if not note and not batch_no:
-        raise AppException("请输入要匹配的备注或批次 ID")
+        raise AppException("请输入要匹配的备注或批次 ID", 400)
     price = point_amount(payload.price)
     filters = []
     if note:
@@ -1977,11 +1977,11 @@ def update_redeem_code(
         )
     )
     if duplicate:
-        raise AppException("兑换码已存在")
+        raise AppException("兑换码已存在", 409)
     if payload.total_count < item.used_count:
-        raise AppException(f"可兑换人数不能小于已兑换人数（{item.used_count}）")
+        raise AppException(f"可兑换人数不能小于已兑换人数（{item.used_count}）", 400)
     if item.used_count > 0 and normalized_code != item.code:
-        raise AppException("已有兑换记录，不能修改兑换码")
+        raise AppException("已有兑换记录，不能修改兑换码", 409)
 
     item.code = normalized_code
     item.points = point_amount(payload.points)
@@ -2010,7 +2010,7 @@ def delete_redeem_code(
     if not item:
         raise AppException("兑换码不存在", 404)
     if item.used_count > 0:
-        raise AppException("该兑换码已有兑换记录，不能删除，请改为下架")
+        raise AppException("该兑换码已有兑换记录，不能删除，请改为下架", 409)
 
     db.delete(item)
     db.commit()
@@ -2083,7 +2083,7 @@ def update_template(template_id: str, payload: TemplateDisplayUpdate, db: Sessio
             is_visible=payload.is_visible,
         )
     except ValueError:
-        raise AppException("模板不存在")
+        raise AppException("模板不存在", 404)
     return success(item)
 
 
@@ -2142,7 +2142,7 @@ def resume_starter_industry_templates(
 def update_resume_starter_industry_template(industry_id: str, payload: IndustryTemplateWrite, db: Session = Depends(get_db)):
     template_ids = {item["template_id"] for item in ordered_template_records(db, include_hidden=True)}
     if payload.default_template_id not in template_ids:
-        raise AppException("模板不存在")
+        raise AppException("模板不存在", 404)
     item = save_industry_template_config(db, industry_id, payload.default_template_id, payload.note)
     template = next((row for row in ordered_template_records(db, include_hidden=True) if row["template_id"] == payload.default_template_id), None)
     if template:

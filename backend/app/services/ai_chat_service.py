@@ -1419,7 +1419,7 @@ def _persist_resume_change(
     # Pending AI changes are stored as a fully validated resume snapshot.
     next_data = deepcopy(_unwrap_resume_data(optimized_data))
     if next_data == before_data:
-        raise AppException("本次方案没有产生实际内容变化，请重新生成修改")
+        raise AppException("本次方案没有产生实际内容变化，请重新生成修改", 400)
     resume.resume_data = next_data
     flag_modified(resume, "resume_data")
     resume.update_by = user.id
@@ -1455,14 +1455,14 @@ def resolve_chat_change(
     resume_data: dict[str, Any] | None = None
     if action == "apply":
         if not message.optimized_resume_data:
-            raise AppException("这次对话没有可写入的修改")
+            raise AppException("这次对话没有可写入的修改", 400)
         # 审阅模式部分采纳：前端把勾选的变更合并到「当前」简历数据后提交；
         # 缺省走整包快照（整包替换会冲掉提案之后的手动编辑）。
         # 标题属于内容（翻译/重命名后与简历 language 列无关），规范化后必须原样保留，
         # 否则已知默认标题（Basic Information 等）会被本地化重置回简历原语言。
         if merged_resume_data is not None:
             if not isinstance(merged_resume_data, dict) or not merged_resume_data:
-                raise AppException("提交的修改数据无效")
+                raise AppException("提交的修改数据无效", 400)
             pending_data = _normalize_keeping_section_titles(deepcopy(merged_resume_data), {"language": resume.language})
         else:
             pending_data = message.optimized_resume_data

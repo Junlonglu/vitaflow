@@ -56,7 +56,7 @@ class VerificationCodeService:
                 remaining = max(self.client.ttl(rate_key), 1)
             except RedisError:
                 remaining = settings.email_code_send_interval_seconds
-            raise AppException(f"请在 {remaining} 秒后重新发送")
+            raise AppException(f"请在 {remaining} 秒后重新发送", 429)
 
         code = f"{secrets.randbelow(1_000_000):06d}"
         code_id = self._code_id(email, code)
@@ -89,7 +89,7 @@ class VerificationCodeService:
         except RedisError as exc:
             raise AppException("验证码服务暂不可用，请稍后重试") from exc
         if not valid:
-            raise AppException("验证码错误或已过期，请重新获取")
+            raise AppException("验证码错误或已过期，请重新获取", 400)
 
     def acquire_lock(self, email: str, purpose: str, conflict_message: str) -> str:
         lock_key = self._key(email, "lock", purpose)
@@ -104,7 +104,7 @@ class VerificationCodeService:
         except RedisError as exc:
             raise AppException("验证码服务暂不可用，请稍后重试") from exc
         if not acquired:
-            raise AppException(conflict_message)
+            raise AppException(conflict_message, 409)
         return token
 
     def release_lock(self, email: str, token: str, purpose: str) -> None:

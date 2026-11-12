@@ -106,10 +106,10 @@ def _upload_aliyun_oss(object_name: str, content: bytes, content_type: str) -> N
 
 def upload_avatar(db: Session, user_id: int, file: UploadFile) -> dict[str, str]:
     if file.content_type not in ALLOWED_TYPES:
-        raise AppException("头像仅支持 jpg、jpeg、png、webp")
+        raise AppException("头像仅支持 jpg、jpeg、png、webp", 400)
     content = file.file.read()
     if len(content) > MAX_SIZE:
-        raise AppException("头像不能超过 3MB")
+        raise AppException("头像不能超过 3MB", 400)
 
     suffix = ALLOWED_TYPES[file.content_type]
     object_name = f"avatar/{user_id}_{uuid4().hex}{suffix}"
@@ -137,10 +137,10 @@ def upload_avatar(db: Session, user_id: int, file: UploadFile) -> dict[str, str]
 
 def upload_announcement_image(db: Session, user_id: int, file: UploadFile) -> dict[str, str]:
     if file.content_type not in ALLOWED_TYPES:
-        raise AppException("公告图片仅支持 jpg、jpeg、png、webp")
+        raise AppException("公告图片仅支持 jpg、jpeg、png、webp", 400)
     content = file.file.read()
     if len(content) > 5 * 1024 * 1024:
-        raise AppException("公告图片不能超过 5MB")
+        raise AppException("公告图片不能超过 5MB", 400)
 
     suffix = ALLOWED_TYPES[file.content_type]
     object_name = f"announcement/{uuid4().hex}{suffix}"
@@ -167,10 +167,10 @@ def upload_announcement_image(db: Session, user_id: int, file: UploadFile) -> di
 
 def upload_ai_chat_image(db: Session, user_id: int, file: UploadFile) -> dict[str, str]:
     if file.content_type not in ALLOWED_TYPES:
-        raise AppException("AI 对话图片仅支持 jpg、jpeg、png、webp")
+        raise AppException("AI 对话图片仅支持 jpg、jpeg、png、webp", 400)
     content = file.file.read()
     if len(content) > 5 * 1024 * 1024:
-        raise AppException("AI 对话图片不能超过 5MB")
+        raise AppException("AI 对话图片不能超过 5MB", 400)
 
     suffix = ALLOWED_TYPES[file.content_type]
     object_name = f"ai-chat/{user_id}_{uuid4().hex}{suffix}"

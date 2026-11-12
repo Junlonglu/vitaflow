@@ -155,7 +155,7 @@ def import_resume_file(
             model_ref=ai_config.model_ref,
         )
         if not isinstance(result.get("resume_data"), dict):
-            raise AppException("AI 返回的导入结果缺少 resume_data")
+            raise AppException("AI 返回的导入结果缺少 resume_data", 502)
         result["resume_data"] = normalize_resume_data(result["resume_data"], payload)
         token_usage = build_token_usage(
             sum(int(item.get("input_tokens") or 0) for item in usage_entries),
@@ -265,7 +265,7 @@ def update_share_settings(
     resume = get_resume(db, current_user.id, resume_id)
     expire_time = normalize_expire_time(payload.expire_time)
     if payload.enabled and expire_time and expire_time <= datetime.now():
-        raise AppException("分享有效期必须晚于当前时间")
+        raise AppException("分享有效期必须晚于当前时间", 400)
     custom_token = normalize_custom_share_token(db, payload.custom_token, resume.id) if payload.custom_token is not None else None
     if payload.enabled and custom_token:
         if custom_token != resume.share_token:

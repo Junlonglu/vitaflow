@@ -728,7 +728,7 @@ def list_industry_template_configs(db: Session, templates: list[dict[str, Any]])
 def save_industry_template_config(db: Session, industry_id: str, template_id: str, note: str = "") -> dict[str, Any]:
     option = next((item for item in builtin_industry_options() if item["industry_id"] == industry_id), None)
     if not option:
-        raise AppException("行业不存在")
+        raise AppException("行业不存在", 404)
     row = db.scalar(select(ResumeStarterIndustryTemplate).where(ResumeStarterIndustryTemplate.industry_id == industry_id))
     if not row:
         row = ResumeStarterIndustryTemplate(
@@ -862,10 +862,10 @@ def create_admin_resume_starter(db: Session, data: dict[str, Any], templates: li
     template_ids = {item["template_id"] for item in templates}
     template_id = data.get("default_template_id") or "tech"
     if template_id not in template_ids:
-        raise AppException("模板不存在")
+        raise AppException("模板不存在", 404)
     starter_id = (data.get("starter_id") or "").strip() or _new_starter_id(db)
     if db.scalar(select(ResumeStarter.id).where(ResumeStarter.starter_id == starter_id)):
-        raise AppException("岗位预设 ID 已存在")
+        raise AppException("岗位预设 ID 已存在", 409)
     keywords = [str(item).strip() for item in (data.get("keywords") or []) if str(item).strip()]
     row = ResumeStarter(
         starter_id=starter_id,
@@ -889,7 +889,7 @@ def create_admin_resume_starter(db: Session, data: dict[str, Any], templates: li
         is_visible=1 if data.get("is_visible", True) else 0,
     )
     if not row.role_title:
-        raise AppException("岗位名称不能为空")
+        raise AppException("岗位名称不能为空", 400)
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -900,10 +900,10 @@ def update_admin_resume_starter(db: Session, starter_id: str, data: dict[str, An
     template_ids = {item["template_id"] for item in templates}
     template_id = data.get("default_template_id") or "tech"
     if template_id not in template_ids:
-        raise AppException("模板不存在")
+        raise AppException("模板不存在", 404)
     row = db.scalar(select(ResumeStarter).where(ResumeStarter.starter_id == starter_id))
     if not row:
-        raise AppException("岗位预设不存在")
+        raise AppException("岗位预设不存在", 404)
     keywords = [str(item).strip() for item in (data.get("keywords") or []) if str(item).strip()]
     row.industry_id = (data.get("industry_id") or "custom").strip()
     row.industry_name = (data.get("industry_name") or "自定义行业").strip()
@@ -924,7 +924,7 @@ def update_admin_resume_starter(db: Session, starter_id: str, data: dict[str, An
     row.sort_order = int(data.get("sort_order") or row.sort_order or 1000)
     row.is_visible = 1 if data.get("is_visible", True) else 0
     if not row.role_title:
-        raise AppException("岗位名称不能为空")
+        raise AppException("岗位名称不能为空", 400)
     db.commit()
     db.refresh(row)
     return _admin_starter_payload(row, {item["template_id"]: item for item in templates})
@@ -1136,7 +1136,7 @@ def _get_starter(db: Session, starter_id: str) -> ResumeStarter:
     _sync_builtin_resume_starters(db)
     row = db.scalar(select(ResumeStarter).where(ResumeStarter.starter_id == starter_id, ResumeStarter.is_visible == 1))
     if not row:
-        raise AppException("岗位起稿内容不存在")
+        raise AppException("岗位起稿内容不存在", 404)
     return row
 
 

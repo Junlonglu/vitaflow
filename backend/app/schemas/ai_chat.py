@@ -39,14 +39,25 @@ class AiChatSessionRenameRequest(BaseModel):
     title: str = Field(min_length=1, max_length=MAX_CHAT_SESSION_TITLE_LENGTH)
 
 
+class AiChatSessionPinRequest(BaseModel):
+    is_pinned: bool
+
+
 class AiChatSessionOut(BaseModel):
     id: int
     resume_id: int
     title: str
     message_count: int = 0
     last_message: str = ""
+    # 置顶会话排在同简历其余会话之前，不随「最近活动」下沉。
+    is_pinned: bool = False
     create_time: datetime
     update_time: datetime
+
+
+class AiChatSessionSearchOut(AiChatSessionOut):
+    # 跨简历搜索时，侧栏要显示这条会话属于哪份简历。
+    resume_title: str = ""
 
 
 class AiChatRegenerateRequest(BaseModel):

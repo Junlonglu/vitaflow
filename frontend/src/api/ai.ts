@@ -67,15 +67,24 @@ export type AiChatSession = {
   title: string
   message_count: number
   last_message: string
+  /** 置顶会话排在同简历其余会话之前，不受「最近活动」影响 */
+  is_pinned?: boolean
   create_time: string
   update_time: string
 }
+
+/** 跨简历搜索的结果行：多带一个 resume_title，侧栏要显示归属。 */
+export type AiChatSessionSearchItem = AiChatSession & { resume_title: string }
 
 export const getResumeChatSessionsApi = (resumeId: number) => request.get<any, AiChatSession[]>(`/ai/resume-chat/${resumeId}/sessions`)
 export const createResumeChatSessionApi = (resumeId: number, title?: string) =>
   request.post<any, AiChatSession>(`/ai/resume-chat/${resumeId}/sessions`, title ? { title } : {})
 export const renameResumeChatSessionApi = (resumeId: number, sessionId: number, title: string) =>
   request.patch<any, AiChatSession>(`/ai/resume-chat/${resumeId}/sessions/${sessionId}`, { title })
+export const pinResumeChatSessionApi = (resumeId: number, sessionId: number, isPinned: boolean) =>
+  request.post<any, AiChatSession>(`/ai/resume-chat/${resumeId}/sessions/${sessionId}/pin`, { is_pinned: isPinned })
+export const searchResumeChatSessionsApi = (q: string, limit = 20) =>
+  request.get<any, AiChatSessionSearchItem[]>("/ai/resume-chat/sessions/search", { params: { q, limit } })
 export const deleteResumeChatSessionApi = (resumeId: number, sessionId: number) =>
   request.delete<any, boolean>(`/ai/resume-chat/${resumeId}/sessions/${sessionId}`)
 

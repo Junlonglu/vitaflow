@@ -8,7 +8,7 @@ from copy import deepcopy
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -101,6 +101,9 @@ DEFAULT_CHAT_SESSION_TITLE = "新对话"
 _PLACEHOLDER_SESSION_TITLES = {"", DEFAULT_CHAT_SESSION_TITLE, "AI 简历助手"}
 _AUTO_SESSION_TITLE_LENGTH = 24
 _SESSION_PREVIEW_LENGTH = 60
+# 会话搜索：关键词最长 60 字，一次最多返回 20 条（侧栏面板只做快速跳转）。
+_CHAT_SEARCH_KEYWORD_LENGTH = 60
+_CHAT_SEARCH_LIMIT = 20
 
 
 def _session_title(value: str | None) -> str:
@@ -121,25 +124,18 @@ def chat_session_data(session: AiChatSession, message_count: int = 0, last_messa
         "title": session.title or DEFAULT_CHAT_SESSION_TITLE,
         "message_count": message_count,
         "last_message": last_message,
+        "is_pinned": bool(getattr(session, "is_pinned", False)),
         "create_time": session.create_time,
         "update_time": session.update_time,
     }
 
 
-def list_chat_sessions(db: Session, user_id: int, resume_id: int) -> list[dict[str, Any]]:
-    """List the caller's sessions of one resume, newest activity first.
+def _session_payloads(db: Session, sessions: list[AiChatSession]) -> list[dict[str, Any]]:
+    """给一批会话补上「消息条数 + 最后一条预览」。
 
-    Sidebar payload: each row carries the message count and a one-line preview of
-    the last message, so the UI never has to load a session's messages to render
-    the list. Two extra aggregate queries instead of N+1.
+    一次聚合查询 + 一次按 id 取内容，避免逐条会话再查一遍（N+1）。列表接口和
+    搜索接口共用，保证两处的行数据形状一致。
     """
-    sessions = list(
-        db.scalars(
-            select(AiChatSession)
-            .where(AiChatSession.user_id == user_id, AiChatSession.resume_id == resume_id)
-            .order_by(AiChatSession.update_time.desc(), AiChatSession.id.desc())
-        )
-    )
     if not sessions:
         return []
 
@@ -175,6 +171,79 @@ def list_chat_sessions(db: Session, user_id: int, resume_id: int) -> list[dict[s
     return result
 
 
+def list_chat_sessions(db: Session, user_id: int, resume_id: int) -> list[dict[str, Any]]:
+    """List the caller's sessions of one resume: pinned first, then newest activity."""
+    sessions = list(
+        db.scalars(
+            select(AiChatSession)
+            .where(AiChatSession.user_id == user_id, AiChatSession.resume_id == resume_id)
+            .order_by(
+                AiChatSession.is_pinned.desc(),
+                AiChatSession.update_time.desc(),
+                AiChatSession.id.desc(),
+            )
+        )
+    )
+    return _session_payloads(db, sessions)
+
+
+def _search_like_pattern(keyword: str | None) -> str:
+    """把用户输入转成 LIKE 模式，转义 ``%`` / ``_`` / ``\\``。
+
+    不转义的话搜一个 ``%`` 会命中全部会话；``\\`` 自身必须先转义，否则会吞掉
+    后面接的转义符。
+    """
+    text = re.sub(r"\s+", " ", str(keyword or "")).strip()[:_CHAT_SEARCH_KEYWORD_LENGTH]
+    if not text:
+        return ""
+    escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+def search_chat_sessions(
+    db: Session, user_id: int, keyword: str | None, limit: int = _CHAT_SEARCH_LIMIT
+) -> list[dict[str, Any]]:
+    """跨简历搜会话：命中标题或任意一条消息内容。
+
+    结果带上 ``resume_title``，侧栏搜索面板要能直接显示「属于哪份简历」。
+    """
+    pattern = _search_like_pattern(keyword)
+    if not pattern:
+        return []
+
+    matched_message = (
+        select(AiChatMessage.id)
+        .where(
+            AiChatMessage.session_id == AiChatSession.id,
+            AiChatMessage.user_id == user_id,
+            AiChatMessage.content.like(pattern, escape="\\"),
+        )
+        .exists()
+    )
+    rows = db.execute(
+        select(AiChatSession, Resume.title)
+        .join(Resume, Resume.id == AiChatSession.resume_id)
+        .where(
+            AiChatSession.user_id == user_id,
+            Resume.user_id == user_id,
+            or_(AiChatSession.title.like(pattern, escape="\\"), matched_message),
+        )
+        .order_by(
+            AiChatSession.is_pinned.desc(),
+            AiChatSession.update_time.desc(),
+            AiChatSession.id.desc(),
+        )
+        .limit(max(1, min(int(limit or _CHAT_SEARCH_LIMIT), _CHAT_SEARCH_LIMIT)))
+    ).all()
+
+    sessions = [row[0] for row in rows]
+    resume_titles = {row[0].id: row[1] for row in rows}
+    payloads = _session_payloads(db, sessions)
+    for payload in payloads:
+        payload["resume_title"] = resume_titles.get(payload["id"]) or ""
+    return payloads
+
+
 def create_chat_session(
     db: Session, user_id: int, resume_id: int, title: str | None = None
 ) -> AiChatSession:
@@ -204,6 +273,17 @@ def rename_chat_session(
     if not next_title:
         raise AppException("会话标题不能为空", 400)
     session.title = next_title
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return session
+
+
+def set_chat_session_pinned(
+    db: Session, user_id: int, resume_id: int, session_id: int, is_pinned: bool
+) -> AiChatSession:
+    session = get_chat_session(db, user_id, resume_id, session_id)
+    session.is_pinned = bool(is_pinned)
     db.add(session)
     db.commit()
     db.refresh(session)

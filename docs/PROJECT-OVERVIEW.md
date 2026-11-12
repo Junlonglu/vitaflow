@@ -119,7 +119,8 @@ vitaflow/
 - 能力与记录：`GET /ai/capability`、`GET /ai/records`、`GET /ai/histories`
 - 积分：`GET /ai/flow-points`、`GET /ai/flow-points/transactions`、`POST /ai/flow-points/redeem`
 - 流式：`POST /ai/generate-resume/stream`（按目标岗位生成整份简历）、`POST /ai/resume-chat/{resume_id}/messages/stream`、`POST /ai/resume-chat/{resume_id}/messages/{message_id}/regenerate/stream`
-- 会话（一份简历多条对话）：`GET /ai/resume-chat/{resume_id}/sessions`（含条数与末条预览）、`POST .../sessions`、`PATCH .../sessions/{session_id}`（重命名）、`DELETE .../sessions/{session_id}`
+- 会话（一份简历多条对话）：`GET /ai/resume-chat/{resume_id}/sessions`（置顶优先 + 含条数与末条预览）、`POST .../sessions`、`PATCH .../sessions/{session_id}`（重命名）、`POST .../sessions/{session_id}/pin`（置顶/取消）、`DELETE .../sessions/{session_id}`
+- 会话搜索（跨简历，命中标题或任意消息内容）：`GET /ai/resume-chat/sessions/search?q=&limit=`，结果带 `resume_title`
 - 变更决策：`POST /ai/resume-chat/{resume_id}/messages/{message_id}/decision`（apply / reject）、`DELETE /ai/resume-chat/{resume_id}/messages?session_id=`
 - 历史：`GET /ai/resume-chat/{resume_id}/messages?session_id=`（省略 session_id 时落在该简历最近一次会话，兼容旧前端）
 - **服务间回调（供 ai-service 调用）**：`POST /ai/service/tool/update-basics-field`、`POST /ai/service/tool/update-section`、`POST /ai/service/tool/propose-change`、`GET /ai/service/tool/get-resume-context`、`POST /ai/service/tool/search-evidence`、`POST /ai/service/usage`
@@ -172,7 +173,7 @@ vitaflow/
 
 | 表 | 说明 |
 |---|---|
-| `ai_chat_sessions` | 会话（按 user + resume 组织，一份简历可有多条对话），含滚动摘要 `context_summary` 与其覆盖到的 `summary_message_id` |
+| `ai_chat_sessions` | 会话（按 user + resume 组织，一份简历可有多条对话），`is_pinned` 置顶标记，含滚动摘要 `context_summary` 与其覆盖到的 `summary_message_id` |
 | `ai_chat_messages` | 消息；assistant 消息可带 `optimized_resume_data`(待确认变更)、`suggestions`(变更摘要)、`action_status`(pending/applied/rejected)、usage 字段 |
 | `ai_tasks` | 一次性任务记录（类型、输入、输出、状态、错误、耗时、token） |
 | `ai_model_configs` | **业务策略**：`model_ref` 指向模型目录中的 provider/model；含 `name`、`context_messages`、`is_chat_selectable`、`sort_order`、`is_active`，以及三种费率 `chat_points_per_call` / `chat_points_per_million_input_tokens` / `chat_points_per_million_output_tokens` |
@@ -348,6 +349,8 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 | 布局 | `WorkspaceShell` = 左栏（`WorkspaceSidebar`，桌面常驻）+ 右侧 slot；`h-dvh` 整体不滚动，滚动只发生在其内部容器 |
 | 移动端（<768px） | 左栏变抽屉：`fixed` + `translate-x` 滑出，遮罩层 `z-[55]`、抽屉 `z-[60]`（编辑器顶栏 `z-40`、弹窗 `z-[100]`）；开合状态在 `composables/useWorkspaceDrawer.ts`，路由变化 / Esc / 点击遮罩 / 断点回到桌面都会自动收起，抽屉开着时底部胶囊导航隐藏 |
 | 会话切换 | 点侧栏会话写 `chatStore.setActiveSession`，编辑器 watch 它换消息；`⌘/Ctrl + Alt + ↑↓` 在当前简历的会话间循环，`⌘/Ctrl + Alt + N` 新建对话（焦点在输入框内不抢键） |
+| 搜索 | 侧栏搜索框：简历部分按标题在内存里过滤，会话走后端跨简历搜索（标题或消息内容命中，260ms 防抖）；点结果先 `fetchSessions(resume_id)` 再切会话，否则 active 会被回退成第一条 |
+| 置顶 | `POST .../sessions/{id}/pin`；列表顺序 = 置顶优先 → `update_time` 倒序 → id 倒序，前端 `sortSessions` 与后端 SQL 保持同一规则，`PATCH` 后不会出现「钉了却还在下面」 |
 | 预览刷新 | `refreshPreviewLatest` 单飞 + 尾随合并：同时只有一个 `/preview` 请求；预览不可见（移动端非「预览」tab、`document.hidden`）时不发请求，只记 `previewDirty`，切回可见时补一次 |
 
 ### 8.3 目录职责

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue"
 import { RouterLink, useRoute, useRouter } from "vue-router"
-import { ChevronRight, Files, LayoutTemplate, MessageSquare, Plus, Sparkles, Trash2, X } from "lucide-vue-next"
+import { ChevronRight, Files, LayoutTemplate, MessageSquare, Pin, Plus, Search, Sparkles, Trash2, X } from "lucide-vue-next"
 import BrandLogo from "@/components/common/BrandLogo.vue"
 import WorkspaceUserMenu from "@/components/layout/WorkspaceUserMenu.vue"
 import { useResumeStore } from "@/stores/resume"
@@ -9,6 +9,7 @@ import { useChatStore } from "@/stores/chat"
 import { useWorkspaceBridge } from "@/composables/useWorkspaceBridge"
 import { useWorkspaceDrawer } from "@/composables/useWorkspaceDrawer"
 import { showGlobalToast } from "@/utils/toast"
+import type { AiChatSession, AiChatSessionSearchItem } from "@/api/ai"
 
 const route = useRoute()
 const router = useRouter()
@@ -41,6 +42,68 @@ function toggleExpanded(resumeId: number) {
   if (!chatStore.isLoaded(resumeId)) void chatStore.fetchSessions(resumeId).catch(() => undefined)
 }
 
+// —— 搜索 ——
+// 简历部分在前端过滤（列表本来就在内存里）；会话走后端跨简历搜索，命中标题
+// 或任意一条消息内容，这样不用把所有简历的会话都拉下来。
+const searchQuery = ref("")
+const searchResults = ref<AiChatSessionSearchItem[]>([])
+const searchLoading = ref(false)
+let searchTimer: number | undefined
+let searchSeq = 0
+
+const isSearching = computed(() => searchQuery.value.trim().length > 0)
+
+const matchedResumes = computed(() => {
+  const keyword = searchQuery.value.trim().toLowerCase()
+  if (!keyword) return []
+  return store.resumeList.filter((item) => String(item.title || "").toLowerCase().includes(keyword)).slice(0, 8)
+})
+
+watch(searchQuery, (value) => {
+  window.clearTimeout(searchTimer)
+  const keyword = value.trim()
+  if (!keyword) {
+    searchSeq += 1
+    searchResults.value = []
+    searchLoading.value = false
+    return
+  }
+  searchLoading.value = true
+  searchTimer = window.setTimeout(async () => {
+    const seq = ++searchSeq
+    try {
+      const items = await chatStore.searchSessions(keyword)
+      if (seq === searchSeq) searchResults.value = items
+    } catch {
+      if (seq === searchSeq) searchResults.value = []
+    } finally {
+      if (seq === searchSeq) searchLoading.value = false
+    }
+  }, 260)
+})
+
+const pinningId = ref<number | null>(null)
+
+async function togglePin(resumeId: number, session: AiChatSession) {
+  if (pinningId.value === session.id) return
+  pinningId.value = session.id
+  try {
+    await chatStore.pinSession(resumeId, session.id, !session.is_pinned)
+  } catch {
+    showGlobalToast("置顶失败，请重试", "error")
+  } finally {
+    pinningId.value = null
+  }
+}
+
+/** 搜索结果跳转：先把目标简历的会话列表拉下来，否则 active 会话会被回退成第一条。 */
+async function openSearchSession(item: AiChatSessionSearchItem) {
+  if (!chatStore.isLoaded(item.resume_id)) await chatStore.fetchSessions(item.resume_id).catch(() => undefined)
+  searchQuery.value = ""
+  expandedId.value = item.resume_id
+  await openSession(item.resume_id, item.id)
+}
+
 async function refresh() {
   loading.value = true
   try {
@@ -60,6 +123,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener("keydown", handleSessionShortcut)
+  window.clearTimeout(searchTimer)
 })
 
 async function expandActive(resumeId: number) {
@@ -79,10 +143,12 @@ watch(
 
 async function openResume(id: number) {
   if (activeId.value === id) {
+    searchQuery.value = ""
     toggleExpanded(id)
     return
   }
   await flushSave()
+  searchQuery.value = ""
   router.push(`/workspace/${id}`)
 }
 
@@ -266,13 +332,35 @@ function formatUpdated(value?: string) {
       </RouterLink>
     </div>
 
-    <div class="mt-4 flex shrink-0 items-center gap-1.5 px-5 text-[11px] font-medium tracking-wider text-zinc-400">
+    <div class="mt-3 shrink-0 px-3">
+      <div class="relative">
+        <Search class="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="搜索简历或对话"
+          class="h-8 w-full rounded-lg border border-zinc-200 bg-white pl-7 pr-7 text-[12px] text-zinc-800 outline-none transition-colors placeholder:text-zinc-400 focus:border-zinc-300"
+          @keydown.esc="searchQuery = ''"
+        />
+        <button
+          v-if="searchQuery"
+          type="button"
+          class="absolute right-1 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
+          aria-label="清空搜索"
+          @click="searchQuery = ''"
+        >
+          <X class="h-3 w-3" />
+        </button>
+      </div>
+    </div>
+
+    <div v-if="!isSearching" class="mt-4 flex shrink-0 items-center gap-1.5 px-5 text-[11px] font-medium tracking-wider text-zinc-400">
       <Files class="h-3 w-3" />
       <span>简历</span>
       <span v-if="store.resumeListTotal" class="text-zinc-300">{{ store.resumeListTotal }}</span>
     </div>
 
-    <div class="thin-scrollbar mt-1 min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+    <div v-if="!isSearching" class="thin-scrollbar mt-1 min-h-0 flex-1 overflow-y-auto px-2 pb-2">
       <div v-if="loading && !store.resumeList.length" class="space-y-1 px-1 pt-1">
         <div v-for="i in 4" :key="i" class="h-8 animate-pulse rounded-lg bg-zinc-200/60"></div>
       </div>
@@ -320,7 +408,8 @@ function formatUpdated(value?: string) {
             @click="openSession(item.id, session.id)"
             @dblclick.stop="startRename(item.id, session.id, session.title)"
           >
-            <MessageSquare class="h-3.5 w-3.5 shrink-0 text-zinc-400" />
+            <Pin v-if="session.is_pinned" class="h-3 w-3 shrink-0 text-amber-500" />
+            <MessageSquare v-else class="h-3.5 w-3.5 shrink-0 text-zinc-400" />
             <span class="min-w-0 flex-1">
               <input
                 v-if="editingSessionId === session.id"
@@ -338,6 +427,16 @@ function formatUpdated(value?: string) {
                 <span class="block truncate text-[10.5px] leading-4 text-zinc-400">{{ sessionSnippet(session) }}</span>
               </template>
             </span>
+            <button
+              type="button"
+              class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-400 transition-all hover:bg-amber-50 hover:text-amber-600 group-hover/session:opacity-100"
+              :class="session.is_pinned ? 'text-amber-500 opacity-100' : 'opacity-0'"
+              :title="session.is_pinned ? '取消置顶' : '置顶对话'"
+              :disabled="pinningId === session.id"
+              @click.stop="togglePin(item.id, session)"
+            >
+              <Pin class="h-3 w-3" :class="session.is_pinned ? 'fill-amber-400' : ''" />
+            </button>
             <button
               type="button"
               class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-400 opacity-0 transition-all hover:bg-red-50 hover:text-red-500 group-hover/session:opacity-100"
@@ -363,6 +462,65 @@ function formatUpdated(value?: string) {
             {{ modLabel }} + Alt + ↑↓ 切换对话
           </p>
         </div>
+      </div>
+    </div>
+
+    <!-- 搜索结果：简历按标题本地过滤，对话走后端跨简历搜索 -->
+    <div v-else class="thin-scrollbar mt-4 min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+      <p
+        v-if="!searchLoading && !matchedResumes.length && !searchResults.length"
+        class="px-3 py-6 text-center text-[12px] leading-5 text-zinc-400"
+      >
+        没有匹配的简历或对话
+      </p>
+
+      <div v-if="matchedResumes.length" class="mb-3">
+        <div class="flex items-center gap-1.5 px-3 pb-1 text-[11px] font-medium tracking-wider text-zinc-400">
+          <Files class="h-3 w-3" />
+          <span>简历</span>
+          <span class="text-zinc-300">{{ matchedResumes.length }}</span>
+        </div>
+        <button
+          v-for="item in matchedResumes"
+          :key="item.id"
+          type="button"
+          class="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-zinc-700 transition-colors hover:bg-zinc-200/50"
+          @click="openResume(item.id)"
+        >
+          <Files class="h-3.5 w-3.5 shrink-0 text-zinc-400" />
+          <span class="min-w-0 flex-1 truncate text-[12.5px] font-medium">{{ item.title || "无标题简历" }}</span>
+          <span v-if="activeId === item.id" class="shrink-0 text-[10px] text-zinc-400">当前</span>
+        </button>
+      </div>
+
+      <div>
+        <div class="flex items-center gap-1.5 px-3 pb-1 text-[11px] font-medium tracking-wider text-zinc-400">
+          <MessageSquare class="h-3 w-3" />
+          <span>对话</span>
+          <span v-if="searchResults.length" class="text-zinc-300">{{ searchResults.length }}</span>
+        </div>
+
+        <div v-if="searchLoading" class="space-y-1 px-1">
+          <div v-for="i in 3" :key="i" class="h-9 animate-pulse rounded-lg bg-zinc-200/60"></div>
+        </div>
+
+        <template v-else>
+          <button
+            v-for="item in searchResults"
+            :key="`${item.resume_id}-${item.id}`"
+            type="button"
+            class="flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-zinc-200/50"
+            @click="openSearchSession(item)"
+          >
+            <Pin v-if="item.is_pinned" class="mt-0.5 h-3 w-3 shrink-0 text-amber-500" />
+            <MessageSquare v-else class="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-400" />
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-[12.5px] font-medium leading-4 text-zinc-800">{{ item.title || "无标题对话" }}</span>
+              <span class="block truncate text-[10.5px] leading-4 text-zinc-400">{{ item.resume_title || "未知简历" }}</span>
+            </span>
+          </button>
+          <p v-if="!searchResults.length" class="px-3 py-3 text-center text-[11px] text-zinc-400">没有匹配的对话</p>
+        </template>
       </div>
     </div>
 

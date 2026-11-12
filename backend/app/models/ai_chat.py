@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import BigInteger, DateTime, JSON, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -16,6 +16,8 @@ class AiChatSession(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, index=True)
     resume_id: Mapped[int] = mapped_column(BigInteger, index=True)
     title: Mapped[str] = mapped_column(String(120), default="AI 简历助手")
+    # 置顶：排序时排在所有会话之前，与「最近活动」解耦（用户主动钉住的对话不被新对话顶下去）。
+    is_pinned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # 滚动摘要压缩：窗口外旧消息的 LLM 摘要 + 覆盖到的最后一条消息 id，
     # 每轮注入系统提示词（# 更早的对话摘要），让长对话保留早期意图与决定。
     context_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

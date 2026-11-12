@@ -27,6 +27,7 @@ from app.schemas.ai_chat import (
     AiChatRegenerateRequest,
     AiChatSendRequest,
     AiChatSessionCreateRequest,
+    AiChatSessionPinRequest,
     AiChatSessionRenameRequest,
 )
 from app.services.ai.token_usage import build_token_usage, normalize_token_usage
@@ -39,6 +40,8 @@ from app.services.ai_chat_service import (
     list_chat_messages,
     list_chat_sessions,
     rename_chat_session,
+    search_chat_sessions,
+    set_chat_session_pinned,
     stream_ai_service_chat,
     stream_ai_service_regenerate,
     resolve_chat_change,
@@ -614,9 +617,20 @@ def generate_resume_stream_api(payload: GenerateResumeRequest, db: Session = Dep
 def resume_chat_sessions(
     resume_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
-    """该简历下的会话列表（按最近活动排序），侧栏据此渲染多会话。"""
+    """该简历下的会话列表（置顶优先，其余按最近活动），侧栏据此渲染多会话。"""
     get_resume(db, current_user.id, resume_id)
     return success(list_chat_sessions(db, current_user.id, resume_id))
+
+
+@router.get("/resume-chat/sessions/search")
+def resume_chat_search_sessions(
+    q: str = "",
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """跨简历搜会话（标题或消息内容），侧栏搜索面板据此跳转。"""
+    return success(search_chat_sessions(db, current_user.id, q, limit=limit))
 
 
 @router.post("/resume-chat/{resume_id}/sessions")
@@ -641,6 +655,19 @@ def resume_chat_rename_session(
 ):
     get_resume(db, current_user.id, resume_id)
     session = rename_chat_session(db, current_user.id, resume_id, session_id, payload.title)
+    return success(chat_session_data(session))
+
+
+@router.post("/resume-chat/{resume_id}/sessions/{session_id}/pin")
+def resume_chat_pin_session(
+    resume_id: int,
+    session_id: int,
+    payload: AiChatSessionPinRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    get_resume(db, current_user.id, resume_id)
+    session = set_chat_session_pinned(db, current_user.id, resume_id, session_id, payload.is_pinned)
     return success(chat_session_data(session))
 
 

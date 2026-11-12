@@ -4,9 +4,23 @@ import {
   createResumeChatSessionApi,
   deleteResumeChatSessionApi,
   getResumeChatSessionsApi,
+  pinResumeChatSessionApi,
   renameResumeChatSessionApi,
+  searchResumeChatSessionsApi,
   type AiChatSession,
+  type AiChatSessionSearchItem,
 } from "@/api/ai"
+
+/** 与会话列表接口保持同一套顺序：置顶 → 最近活动 → id 倒序。 */
+function sortSessions(list: AiChatSession[]): AiChatSession[] {
+  return [...list].sort((a, b) => {
+    const pinnedDiff = Number(Boolean(b.is_pinned)) - Number(Boolean(a.is_pinned))
+    if (pinnedDiff) return pinnedDiff
+    const timeDiff = String(b.update_time || "").localeCompare(String(a.update_time || ""))
+    if (timeDiff) return timeDiff
+    return b.id - a.id
+  })
+}
 
 /**
  * 一份简历的多个 AI 会话。
@@ -41,7 +55,7 @@ export const useChatStore = defineStore("chat", () => {
   }
 
   function writeSessions(resumeId: number, list: AiChatSession[]) {
-    sessionsByResume.value = { ...sessionsByResume.value, [resumeId]: list }
+    sessionsByResume.value = { ...sessionsByResume.value, [resumeId]: sortSessions(list) }
     if (!loadedResumeIds.value.includes(resumeId)) loadedResumeIds.value = [...loadedResumeIds.value, resumeId]
   }
 
@@ -90,6 +104,23 @@ export const useChatStore = defineStore("chat", () => {
     if (activeByResume.value[resumeId] === sessionId) setActiveSession(resumeId, next[0]?.id ?? null)
   }
 
+  /** 置顶 / 取消置顶。列表顺序跟着重排（置顶恒在最前），不做假乐观更新。 */
+  async function pinSession(resumeId: number, sessionId: number, isPinned: boolean) {
+    const updated = await pinResumeChatSessionApi(resumeId, sessionId, isPinned)
+    writeSessions(
+      resumeId,
+      sessions(resumeId).map((item) => (item.id === updated.id ? { ...item, ...updated } : item)),
+    )
+    return updated
+  }
+
+  /** 跨简历搜索会话（标题或消息内容），不写缓存，结果只用于侧栏跳转。 */
+  async function searchSessions(keyword: string): Promise<AiChatSessionSearchItem[]> {
+    const text = keyword.trim()
+    if (!text) return []
+    return (await searchResumeChatSessionsApi(text)) || []
+  }
+
   /** 一轮对话结束后把会话顶到列表最前，并刷新标题/预览。 */
   function touchSession(resumeId: number, sessionId: number) {
     const list = sessions(resumeId)
@@ -122,6 +153,8 @@ export const useChatStore = defineStore("chat", () => {
     createSession,
     renameSession,
     removeSession,
+    pinSession,
+    searchSessions,
     touchSession,
     forgetResume,
   }

@@ -271,7 +271,7 @@ async function handleResetPassword() {
                 <Input v-model="loginPassword" type="password" placeholder="请输入密码" class="mt-1.5 focus:ring-zinc-900 focus:border-zinc-900 transition-all" @keyup.enter="handleLogin" />
               </div>
               <div class="flex items-center gap-2 pt-1">
-                <button type="button" @click="agreed = !agreed" class="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-zinc-300 bg-white transition-colors focus:outline-none" :class="{ '!border-zinc-900 !bg-zinc-900': agreed }">
+                <button type="button" role="checkbox" :aria-checked="agreed" aria-label="同意用户协议与隐私政策" @click="agreed = !agreed" class="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-zinc-300 bg-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900/20" :class="{ '!border-zinc-900 !bg-zinc-900': agreed }">
                   <Check v-if="agreed" class="h-3 w-3 text-white stroke-[3]" />
                 </button>
                 <span class="text-xs text-zinc-600 select-none">
@@ -342,7 +342,7 @@ async function handleResetPassword() {
                 </div>
               </div>
               <div class="flex items-center gap-2 pt-1">
-                <button type="button" @click="agreed = !agreed" class="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-zinc-300 bg-white transition-colors focus:outline-none" :class="{ '!border-zinc-900 !bg-zinc-900': agreed }">
+                <button type="button" role="checkbox" :aria-checked="agreed" aria-label="同意用户协议与隐私政策" @click="agreed = !agreed" class="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-zinc-300 bg-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900/20" :class="{ '!border-zinc-900 !bg-zinc-900': agreed }">
                   <Check v-if="agreed" class="h-3 w-3 text-white stroke-[3]" />
                 </button>
                 <span class="text-xs text-zinc-600 select-none">

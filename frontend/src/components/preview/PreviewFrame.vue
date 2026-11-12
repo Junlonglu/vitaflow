@@ -399,17 +399,14 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* 内容窄时撑满容器（页面居中），内容宽于容器时按实际宽度撑开以便横向拖动。
+   之前用 calc(100% + 360px) 预留拖动余量，会让纸张在「比容器宽」的轨道里居中，
+   宽度算准时反而被裁掉几像素。 */
 .preview-page-rail {
   display: flex;
-  width: calc(100% + 360px);
-  min-width: max-content;
+  width: max-content;
+  min-width: 100%;
   flex-direction: column;
   align-items: center;
-}
-
-@supports (width: max(1px, 2px)) {
-  .preview-page-rail {
-    width: max(calc(100% + 360px), max-content);
-  }
 }
 </style>

@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vue-tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui"
   },
   "dependencies": {
     "@types/cropperjs": "^1.1.5",
@@ -34,8 +37,10 @@
     "@tailwindcss/postcss": "latest",
     "@types/diff": "^7.0.2",
     "@vitejs/plugin-legacy": "^8.0.2",
+    "@vue/test-utils": "^2.5.1",
     "autoprefixer": "latest",
     "browserslist": "^4.28.4",
+    "jsdom": "^31.0.0",
     "lightningcss": "^1.32.0",
     "postcss": "latest",
     "postcss-preset-env": "^11.3.1",
@@ -43,6 +48,7 @@
     "terser": "^5.48.0",
     "typescript": "latest",
     "vite": "latest",
+    "vitest": "^5.1.0",
     "vue-tsc": "latest"
   }
 }

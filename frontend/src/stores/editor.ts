@@ -30,7 +30,10 @@ export const useEditorStore = defineStore("editor", {
     saving: false,
     saved: true,
     saveError: false,
+    /** 手动缩放档位；自动适应宽度时不动它，切回手动继续沿用。 */
     previewScale: 0.72,
+    /** fit：按可用宽度自动缩放（默认）；manual：用户手动放大缩小。 */
+    previewScaleMode: "fit" as "fit" | "manual",
     history: [] as EditorHistoryEntry[],
     historyIndex: -1,
     applyingHistory: false,
@@ -49,6 +52,11 @@ export const useEditorStore = defineStore("editor", {
     },
     setPreviewScale(scale: number) {
       this.previewScale = scale
+      this.previewScaleMode = "manual"
+    },
+    /** 回到「适应宽度」，由视图按容器宽度重新计算。 */
+    fitPreviewWidth() {
+      this.previewScaleMode = "fit"
     },
     setSaving(value: boolean) {
       this.saving = value

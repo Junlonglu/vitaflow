@@ -157,6 +157,32 @@ const supportsChatImages = computed(() => Boolean(selectedChatModel.value?.suppo
 const isMobile = ref(false)
 
 /**
+ * 预览缩放：默认「适应宽度」，按预览栏实测宽度算 A4 缩放，避免默认档超出容器被裁掉；
+ * 用户手动缩放后切到 manual，点「适应宽度」再切回来。
+ */
+const A4_WIDTH_PX = 794
+const previewPaneRef = ref<HTMLElement | null>(null)
+const previewPaneWidth = ref(0)
+let previewPaneObserver: ResizeObserver | null = null
+
+const previewFitScale = computed(() => {
+  // 预览区 p-8（左右各 32）+ 竖向滚动条余量 12
+  const usable = previewPaneWidth.value ? Math.max(previewPaneWidth.value - 76, 320) : 0
+  if (!usable) return editor.previewScale
+  return Math.min(1, Math.max(0.35, Number((usable / A4_WIDTH_PX).toFixed(3))))
+})
+
+const previewScale = computed(() =>
+  editor.previewScaleMode === "fit" ? previewFitScale.value : editor.previewScale,
+)
+const previewAutoFit = computed(() => editor.previewScaleMode === "fit")
+
+function zoomPreview(delta: number) {
+  const next = Number((previewScale.value + delta).toFixed(2))
+  editor.setPreviewScale(Math.min(1, Math.max(0.4, next)))
+}
+
+/**
  * 左栏（内容编辑 / Flow Agent）默认占工作区一半略多，预览让出空间。
  * 拖拽后的宽度记在 localStorage 里，下次进来沿用；没拖过则跟随窗口宽度保持比例。
  */
@@ -195,10 +221,23 @@ onMounted(() => {
   getFlowPointSummaryApi().then((data) => (flowPointSummary.value = data)).catch(() => null)
 })
 
+// 预览栏可能因为加载态晚于 mounted 出现，用 watch 绑定 ref 更稳。
+watch(previewPaneRef, (el) => {
+  previewPaneObserver?.disconnect()
+  previewPaneObserver = null
+  if (!el) return
+  previewPaneObserver = new ResizeObserver((entries) => {
+    previewPaneWidth.value = Math.round(entries[0]?.contentRect.width || 0)
+  })
+  previewPaneObserver.observe(el)
+})
+
 onUnmounted(() => {
   if (resizeHandler) window.removeEventListener('resize', resizeHandler)
   window.removeEventListener('keydown', handleHistoryShortcut)
   document.removeEventListener('visibilitychange', refreshPreviewIfDirty)
+  previewPaneObserver?.disconnect()
+  previewPaneObserver = null
 })
 
 watch(sidePanel, (newVal) => {
@@ -1377,8 +1416,8 @@ async function sendInitialPrompt() {
         </div>
 
         <!-- Preview Canvas -->
-        <div :class="['relative flex-1 bg-zinc-100/50 flex-col overflow-hidden', mobileTab === 'preview' ? 'flex' : 'hidden md:flex']">
-          <A4Preview class="flex-1" :html="resumeStore.previewHtml" :scale="editor.previewScale" @zoom-in="editor.setPreviewScale(Math.min(1, editor.previewScale + 0.05))" @zoom-out="editor.setPreviewScale(Math.max(0.45, editor.previewScale - 0.05))" />
+        <div ref="previewPaneRef" :class="['relative flex-1 bg-zinc-100/50 flex-col overflow-hidden', mobileTab === 'preview' ? 'flex' : 'hidden md:flex']">
+          <A4Preview class="flex-1" :html="resumeStore.previewHtml" :scale="previewScale" :auto-fit="previewAutoFit" @zoom-in="zoomPreview(0.05)" @zoom-out="zoomPreview(-0.05)" @fit="editor.fitPreviewWidth()" />
           <div v-if="previewRefreshing" class="pointer-events-none absolute right-5 top-16 rounded-md border border-zinc-200/80 bg-white px-2.5 py-1 text-[11.5px] font-medium text-zinc-500">
             预览更新中
           </div>

@@ -143,7 +143,7 @@ function addModule(presetType?: string) {
       <div class="relative w-full overflow-hidden flex items-center group/nav flex-1">
       <!-- Left Fade & Arrow -->
       <div v-show="!arrivedState.left" class="absolute left-0 top-0 bottom-0 w-16 bg-gradient-to-r from-white via-white/90 to-transparent z-10 flex items-center justify-start px-2 pointer-events-none transition-opacity duration-300">
-        <button @click="scrollNav('left')" class="pointer-events-auto hidden h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-500 opacity-0 transition-colors hover:text-zinc-900 hover:border-zinc-300 group-hover/nav:opacity-100 md:flex">
+        <button @click="scrollNav('left')" aria-label="向左滚动模块" title="向左滚动" class="pointer-events-auto hidden h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-500 opacity-0 transition-colors hover:text-zinc-900 hover:border-zinc-300 group-hover/nav:opacity-100 md:flex">
           <ChevronLeft class="h-4 w-4" />
         </button>
       </div>
@@ -202,7 +202,7 @@ function addModule(presetType?: string) {
 
         <!-- Right Fade & Arrow -->
         <div v-show="!arrivedState.right" class="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-white via-white/80 to-transparent z-10 flex items-center justify-end px-2 pointer-events-none transition-opacity duration-300">
-          <button @click="scrollNav('right')" class="pointer-events-auto hidden h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-500 opacity-0 transition-colors hover:text-zinc-900 hover:border-zinc-300 group-hover/nav:opacity-100 md:flex">
+          <button @click="scrollNav('right')" aria-label="向右滚动模块" title="向右滚动" class="pointer-events-auto hidden h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-500 opacity-0 transition-colors hover:text-zinc-900 hover:border-zinc-300 group-hover/nav:opacity-100 md:flex">
             <ChevronRight class="h-4 w-4" />
           </button>
         </div>

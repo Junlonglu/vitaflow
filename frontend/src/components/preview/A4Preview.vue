@@ -4,10 +4,10 @@ import PdfPreviewFrame from "./PdfPreviewFrame.vue"
 import PreviewFrame from "./PreviewFrame.vue"
 
 // html 用于编辑时快速预览，pdfBlob 保留给需要精确 PDF 渲染的场景。
-defineProps<{ html?: string; pdfBlob?: Blob | null; scale: number }>()
+defineProps<{ html?: string; pdfBlob?: Blob | null; scale: number; autoFit?: boolean }>()
 
 // 定义组件事件：用于向外抛出放大 (zoomIn) 和缩小 (zoomOut) 动作
-const emit = defineEmits<{ zoomIn: []; zoomOut: [] }>()
+const emit = defineEmits<{ zoomIn: []; zoomOut: []; fit: [] }>()
 function handleWheel(event: WheelEvent) {
   if (!event.ctrlKey && !event.metaKey) return
   event.preventDefault()
@@ -17,7 +17,7 @@ function handleWheel(event: WheelEvent) {
 </script>
 <template>
   <section class="flex min-w-0 flex-1 flex-col overflow-hidden" @wheel="handleWheel">
-    <PreviewToolbar :scale="scale" @zoom-in="$emit('zoomIn')" @zoom-out="$emit('zoomOut')" />
+    <PreviewToolbar :scale="scale" :auto-fit="autoFit" @zoom-in="$emit('zoomIn')" @zoom-out="$emit('zoomOut')" @fit="$emit('fit')" />
     <PreviewFrame v-if="html" :html="html" :scale="scale" />
     <PdfPreviewFrame v-else :pdf-blob="pdfBlob || null" :scale="scale" />
   </section>

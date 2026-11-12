@@ -377,7 +377,7 @@ watch(
   <div class="flex h-full min-h-0 flex-col gap-4 relative overflow-x-hidden">
     <section class="chat-stage relative flex min-h-0 flex-1 flex-col bg-transparent z-10">
       <div ref="listRef" class="relative min-h-0 flex-1 flex flex-col overflow-y-auto px-4 py-4 md:px-6 md:py-8 thin-scrollbar">
-        <section v-if="!messages.length && !loading" class="mx-auto flex w-full min-h-full max-w-xl flex-col items-center justify-center py-6 text-center">
+        <section v-if="!messages.length && !loading" class="mx-auto flex w-full min-h-full max-w-3xl flex-col items-center justify-center py-6 text-center">
           <div class="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-zinc-100 text-zinc-500" style="view-transition-name: ai-hero-icon;">
             <Bot class="h-5 w-5" stroke-width="1.6" />
           </div>
@@ -404,7 +404,7 @@ watch(
           </div>
         </section>
 
-        <TransitionGroup name="message-list" tag="div" class="space-y-5 md:space-y-6">
+        <TransitionGroup name="message-list" tag="div" class="mx-auto w-full max-w-3xl space-y-5 md:space-y-6">
           <article v-for="(message, index) in messages" :key="message.id" class="group relative flex gap-2 md:gap-4" :class="message.role === 'user' ? 'justify-end' : 'justify-start'">
             <div v-if="message.role === 'assistant'" class="absolute opacity-0 pointer-events-none md:relative md:opacity-100 md:pointer-events-auto self-start mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded bg-zinc-100 text-zinc-500" :style="index === lastAssistantIndex ? 'view-transition-name: ai-hero-icon;' : ''">
               <Bot class="h-3.5 w-3.5" stroke-width="1.6" />
@@ -469,7 +469,7 @@ watch(
         </TransitionGroup>
       </div>
 
-      <form class="composer relative mx-3 sm:mx-4 mb-18 sm:mb-4 mt-1 shrink-0 rounded-lg border border-zinc-200/80 bg-white p-1 transition-colors focus-within:border-zinc-300 focus-within:ring-2 focus-within:ring-zinc-900/[0.04] sm:p-2" @submit.prevent="submit">
+      <form class="composer relative mx-auto mb-18 mt-1 w-[calc(100%-1.5rem)] max-w-3xl shrink-0 rounded-lg border border-zinc-200/80 bg-white p-1 transition-colors focus-within:border-zinc-300 focus-within:ring-2 focus-within:ring-zinc-900/[0.04] sm:mb-4 sm:w-[calc(100%-2rem)] sm:p-2" @submit.prevent="submit">
         <div v-if="attachments.length || uploadError" class="flex flex-wrap gap-2 sm:gap-3 px-2.5 sm:px-3 pb-1 pt-2">
           <div v-for="(item, index) in attachments" :key="item.url" class="group relative h-14 w-14 sm:h-16 sm:w-16 shrink-0 rounded-md border border-zinc-200/80 bg-white">
             <img :src="item.url" :alt="item.name || '待发送图片'" class="h-full w-full rounded-md object-cover" />

@@ -155,13 +155,39 @@ const effectiveChatModelId = computed(() => selectedChatModel.value?.id ?? selec
 const supportsChatImages = computed(() => Boolean(selectedChatModel.value?.supports_multimodal ?? aiCapability.value?.supports_multimodal))
 
 const isMobile = ref(false)
+
+/**
+ * 左栏（内容编辑 / Flow Agent）默认占工作区一半略多，预览让出空间。
+ * 拖拽后的宽度记在 localStorage 里，下次进来沿用；没拖过则跟随窗口宽度保持比例。
+ */
+const PANEL_STORAGE_KEY = 'vitaflow_editor_panel_width'
+const PANEL_MIN = 520
+const PANEL_MAX = 1000
+const PANEL_RATIO = 0.52
+
+function preferredPanelWidth() {
+  // 工作区可用宽度 = 视口 - 侧栏 248 - 拖拽条 16；预览至少保住 380
+  const available = Math.max(window.innerWidth - 264, 640)
+  const maxByPreview = Math.max(available - 380, 380)
+  return Math.round(Math.min(Math.max(available * PANEL_RATIO, PANEL_MIN), PANEL_MAX, maxByPreview))
+}
+
+function savedPanelWidth() {
+  const raw = Number(localStorage.getItem(PANEL_STORAGE_KEY) || 0)
+  return Number.isFinite(raw) && raw >= PANEL_MIN ? Math.min(raw, PANEL_MAX) : 0
+}
+
 const leftPanelWidth = ref(560)
 const isWide = computed(() => !isMobile.value && leftPanelWidth.value >= 800)
 let resizeHandler: () => void
 
 onMounted(() => {
   isMobile.value = window.innerWidth < 768
-  resizeHandler = () => { isMobile.value = window.innerWidth < 768 }
+  leftPanelWidth.value = savedPanelWidth() || preferredPanelWidth()
+  resizeHandler = () => {
+    isMobile.value = window.innerWidth < 768
+    if (!savedPanelWidth()) leftPanelWidth.value = preferredPanelWidth()
+  }
   window.addEventListener('resize', resizeHandler)
   window.addEventListener('keydown', handleHistoryShortcut)
   document.addEventListener('visibilitychange', refreshPreviewIfDirty)
@@ -214,6 +240,8 @@ function startResize(e: MouseEvent) {
     document.body.style.userSelect = ''
     document.removeEventListener('mousemove', onMouseMove)
     document.removeEventListener('mouseup', onMouseUp)
+    // 记住用户手动拖出来的宽度
+    localStorage.setItem(PANEL_STORAGE_KEY, String(leftPanelWidth.value))
   }
   
   document.addEventListener('mousemove', onMouseMove)

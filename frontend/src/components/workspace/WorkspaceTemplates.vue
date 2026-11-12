@@ -228,8 +228,8 @@ function startFromTemplate(entry: "starter" | "import" | "blank") {
     <aside class="hidden w-[42%] min-w-[380px] max-w-[560px] shrink-0 flex-col border-l border-zinc-200/70 bg-zinc-100/50 lg:flex">
       <div class="thin-scrollbar flex h-full flex-col overflow-y-auto px-6 py-6">
         <template v-if="selectedTemplate">
-          <!-- 预览、标题、入口放同一列，避免按钮比预览宽出一截 -->
-          <div class="mx-auto flex w-full max-w-[380px] flex-col">
+          <!-- 预览、标题、入口放同一列，整列在面板内垂直居中 -->
+          <div class="m-auto flex w-full max-w-[380px] flex-col">
             <TemplatePreview :html="selectedTemplate.preview_html" />
             <div class="mt-5">
               <p class="text-[13px] font-semibold text-zinc-900">{{ selectedTemplate.name }}</p>

@@ -329,8 +329,8 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 | `/landing` | `Home.vue` | 营销落地页（登录后仍可访问） |
 | `/login`、`/register` | `Login.vue` | 登录/注册合并组件，验证码 |
 | `/workspace` | `Workspace.vue` | **工作区外壳**：左侧栏（简历列表 + 用户区）+ 中间对话首页 + 右侧预览空态 |
-| `/workspace/:id` | `Workspace.vue` → `ResumeEditor.vue` | **核心页面**，外壳内的编辑器：中栏「Flow Agent 对话 ⇄ 内容编辑」可切换，右栏 A4 预览 |
-| `/workspace/templates` | `Workspace.vue` → `WorkspaceTemplates.vue` | **工作区内的模板中心**：左侧模板网格（搜索 + 分类筛选），右侧选中模板大图 + 「用此模板创建 / 按岗位起稿 / 导入已有简历」，选好模板后带着 `template_id` 进创建流程；网格最多 3 列（`2xl` 才 4 列），右栏占主区 42%（380–560px），预览、标题、入口同宽成列 |
+| `/workspace/:id` | `Workspace.vue` → `ResumeEditor.vue` | **核心页面**，外壳内的编辑器：中栏「Flow Agent 对话 ⇄ 内容编辑」可切换，右栏 A4 预览；中栏默认占工作区 52%（520–1000px 夹取），拖拽分隔条可改并记在 `localStorage` 的 `vitaflow_editor_panel_width` |
+| `/workspace/templates` | `Workspace.vue` → `WorkspaceTemplates.vue` | **工作区内的模板中心**：左侧模板网格（搜索 + 分类筛选），右侧选中模板大图 + 「用此模板创建 / 按岗位起稿 / 导入已有简历」，选好模板后带着 `template_id` 进创建流程；网格最多 3 列（`2xl` 才 4 列），右栏占主区 42%（380–560px），预览、标题、入口同宽成列并在面板内垂直居中 |
 | `/workspace/resumes` | `Workspace.vue` → `WorkspaceResumeLibrary.vue` | **全部简历**面板：卡片网格、复制、删除、响应式分页（桌面 8 / 窄屏 6），创建入口复用 `ResumeCreateFlow`；列表分页状态本地维护，避免与侧栏共用的 store 互相顶掉 |
 | `/resumes` | — | 重定向到 `/workspace/resumes`，兼容旧链接与历史导航 |
 | `/resumes/:id/edit` | — | 重定向到 `/workspace/:id`，兼容旧链接 |

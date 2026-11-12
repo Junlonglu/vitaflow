@@ -5,6 +5,14 @@ import { applyResumeLanguage, defaultFieldConfigLabel, defaultSectionTitle, norm
 
 const builtInSections = ["basics", "summary", "education", "skills", "work", "projects", "awards"]
 
+/**
+ * 侧栏一次拉多少份简历。
+ *
+ * 后端 `GET /resumes` 的 `page_size` 上限是 48（`Query(8, ge=1, le=48)`），
+ * 传 50 会直接 422、整个侧栏空白。这里跟后端对齐，别随手改大。
+ */
+export const SIDEBAR_PAGE_SIZE = 48
+
 export function normalizeResumeData(input: any, language: unknown = "zh-CN"): ResumeData {
   const normalizedLanguage = normalizeResumeLanguage(language)
   const data = input && typeof input === "object" ? input : {}

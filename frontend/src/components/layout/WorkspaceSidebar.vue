@@ -4,7 +4,7 @@ import { RouterLink, useRoute, useRouter } from "vue-router"
 import { ChevronRight, Files, LayoutTemplate, MessageSquare, Pin, Plus, Search, Sparkles, Trash2, X } from "lucide-vue-next"
 import BrandLogo from "@/components/common/BrandLogo.vue"
 import WorkspaceUserMenu from "@/components/layout/WorkspaceUserMenu.vue"
-import { useResumeStore } from "@/stores/resume"
+import { SIDEBAR_PAGE_SIZE, useResumeStore } from "@/stores/resume"
 import { useChatStore } from "@/stores/chat"
 import { useWorkspaceBridge } from "@/composables/useWorkspaceBridge"
 import { useWorkspaceDrawer } from "@/composables/useWorkspaceDrawer"
@@ -108,7 +108,7 @@ async function openSearchSession(item: AiChatSessionSearchItem) {
 async function refresh() {
   loading.value = true
   try {
-    await store.fetchResumeList(1, 50)
+    await store.fetchResumeList(1, SIDEBAR_PAGE_SIZE)
   } catch {
     /* 侧栏加载失败不阻塞主区，下一次切换会重试 */
   } finally {

@@ -12,7 +12,7 @@ import ResumeListPagination from "@/components/resume/ResumeListPagination.vue"
 import { deleteResumeApi, duplicateResumeApi, listResumesApi } from "@/api/resume"
 import { listTemplatesApi, type TemplateItem } from "@/api/template"
 import type { ResumeItem } from "@/types/resume"
-import { useResumeStore } from "@/stores/resume"
+import { SIDEBAR_PAGE_SIZE, useResumeStore } from "@/stores/resume"
 import { useWorkspaceCreate } from "@/composables/useWorkspaceCreate"
 import { useWorkspaceDrawer } from "@/composables/useWorkspaceDrawer"
 import { templateNames } from "@/utils/templateNames"
@@ -64,7 +64,7 @@ async function load(nextPage = page.value, size = pageSize.value) {
 
 /** 侧栏读的是 store 那份列表，增删后要让它跟上，否则切回侧栏还是旧的。 */
 function syncSidebar() {
-  void store.fetchResumeList(1, 50).catch(() => undefined)
+  void store.fetchResumeList(1, SIDEBAR_PAGE_SIZE).catch(() => undefined)
 }
 
 function handleBreakpointChange() {

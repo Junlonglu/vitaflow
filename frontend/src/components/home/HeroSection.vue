@@ -31,7 +31,7 @@ const handleMouseMove = (e: MouseEvent) => {
             用极简的方式打造专业简历。AI 帮你提炼亮点，一键生成清晰优雅的 PDF 排版。
           </p>
           <div class="mt-10 flex gap-4 items-center">
-            <RouterLink to="/resumes" class="inline-flex h-12 items-center justify-center rounded-full bg-zinc-900 px-8 text-sm font-medium text-white transition-transform hover:scale-105 hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-2 !text-white">
+            <RouterLink to="/workspace" class="inline-flex h-12 items-center justify-center rounded-full bg-zinc-900 px-8 text-sm font-medium text-white transition-transform hover:scale-105 hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-2 !text-white">
               开始创建 <ArrowRight class="ml-2 h-4 w-4 text-white" />
             </RouterLink>
             <RouterLink to="/templates" class="inline-flex h-12 items-center justify-center rounded-full border border-zinc-200 bg-white px-8 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-zinc-200 focus:ring-offset-2">
@@ -264,7 +264,7 @@ const handleMouseMove = (e: MouseEvent) => {
 
               <!-- Call to Actions -->
               <div class="flex flex-col w-full gap-3 max-w-[220px] animate-fade-in-up">
-                <RouterLink to="/resumes" class="w-full inline-flex h-11 items-center justify-center rounded-full bg-zinc-900 px-6 text-xs font-medium text-white shadow-sm active:scale-95 transition-all !text-white">
+                <RouterLink to="/workspace" class="w-full inline-flex h-11 items-center justify-center rounded-full bg-zinc-900 px-6 text-xs font-medium text-white shadow-sm active:scale-95 transition-all !text-white">
                   开始创建 <ArrowRight class="ml-2 h-4 w-4 text-white" />
                 </RouterLink>
                 <RouterLink to="/templates" class="w-full inline-flex h-11 items-center justify-center rounded-full border border-zinc-200 bg-white px-6 text-xs font-medium text-zinc-900 shadow-sm active:scale-95 transition-all hover:bg-zinc-50">

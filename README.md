@@ -281,9 +281,10 @@ ADMIN_EMAILS=admin@example.com
 - `/login`、`/register`：登录与注册
 - `/workspace`：工作区首页（左侧栏为简历与会话入口，中间为对话）
 - `/workspace/:id`：工作区内的简历编辑器与预览
+- `/workspace/templates`：工作区内的模板中心（选好模板直接起稿）
 - `/resumes`：简历列表（创建、岗位起稿、导入）
 - `/resumes/:id/edit`：旧编辑链接，重定向到 `/workspace/:id`
-- `/templates`：模板库
+- `/templates`：未登录访客的公开模板页（登录后重定向到 `/workspace/templates`）
 - `/share/:token`：公开分享页
 - `/profile`：个人中心
 - `/announcements`：公告历史

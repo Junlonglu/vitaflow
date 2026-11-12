@@ -315,10 +315,15 @@ function formatUpdated(value?: string) {
         <span>AI 生成简历</span>
       </button>
       <RouterLink
-        to="/templates"
-        class="flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-[13px] font-medium text-zinc-600 transition-colors hover:bg-zinc-200/60 hover:text-zinc-900"
+        to="/workspace/templates"
+        class="flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-[13px] font-medium transition-colors"
+        :class="
+          route.path === '/workspace/templates'
+            ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200/80'
+            : 'text-zinc-600 hover:bg-zinc-200/60 hover:text-zinc-900'
+        "
       >
-        <LayoutTemplate class="h-4 w-4 shrink-0 text-zinc-400" />
+        <LayoutTemplate class="h-4 w-4 shrink-0" :class="route.path === '/workspace/templates' ? 'text-zinc-900' : 'text-zinc-400'" />
         <span>模板中心</span>
       </RouterLink>
     </div>

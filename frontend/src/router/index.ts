@@ -21,7 +21,10 @@ const router = createRouter({
     // 旧编辑链接统一收敛到工作区，避免历史书签/分享链接失效
     { path: "/resumes/:id/edit", redirect: (to) => `/workspace/${to.params.id}` },
     { path: "/workspace", component: Workspace },
+    // 模板中心已收编进工作区，静态段优先于 /workspace/:id
+    { path: "/workspace/templates", component: Workspace },
     { path: "/workspace/:id", component: Workspace },
+    // 未登录时的公开模板页；登录后由守卫转到 /workspace/templates
     { path: "/templates", component: TemplateGallery },
     { path: "/profile", component: Profile },
     { path: "/announcements", component: () => import("@/views/AnnouncementHistory.vue") },
@@ -36,6 +39,8 @@ router.beforeEach(async (to) => {
   const isPublicShare = to.path.startsWith("/share/")
   // 已登录用户直接进入工作区，营销页保留在 /landing
   if (to.path === "/" && token) return "/workspace"
+  // 模板中心只有工作区这一份实现，登录后不再走公开的营销版模板页
+  if (to.path === "/templates" && token) return "/workspace/templates"
   if (!publicPages.includes(to.path) && !isPublicShare && !token) return "/login"
   if (to.meta.requiresAdmin) {
     try {

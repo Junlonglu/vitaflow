@@ -9,15 +9,20 @@ import { ref } from "vue"
  */
 export type CreateEntry = "choice" | "starter" | "ai" | "import" | "blank"
 
-type CreateIntent = { entry: CreateEntry; nonce: number }
+export type CreateOptions = {
+  /** 已在模板中心选好模板时带上，创建流程会跳过模板选择那一步。 */
+  templateId?: string
+}
+
+type CreateIntent = { entry: CreateEntry; nonce: number; templateId?: string }
 
 const intent = ref<CreateIntent | null>(null)
 let nonce = 0
 
 export function useWorkspaceCreate() {
-  function openCreate(entry: CreateEntry = "choice") {
+  function openCreate(entry: CreateEntry = "choice", options: CreateOptions = {}) {
     nonce += 1
-    intent.value = { entry, nonce }
+    intent.value = { entry, nonce, templateId: options.templateId }
   }
 
   function consumeCreateIntent(): CreateIntent | null {

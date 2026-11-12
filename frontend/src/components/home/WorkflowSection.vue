@@ -21,7 +21,7 @@ import { ArrowRight } from "lucide-vue-next"
       </div>
       
       <div class="mt-12 sm:mt-20">
-        <RouterLink to="/resumes" class="inline-flex h-11 sm:h-14 items-center justify-center rounded-full bg-zinc-900 px-8 sm:px-10 text-xs sm:text-base font-medium !text-white transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-2">
+        <RouterLink to="/workspace" class="inline-flex h-11 sm:h-14 items-center justify-center rounded-full bg-zinc-900 px-8 sm:px-10 text-xs sm:text-base font-medium !text-white transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-2">
           立即免费创建
           <ArrowRight class="w-4 h-4 ml-2 text-white" />
         </RouterLink>

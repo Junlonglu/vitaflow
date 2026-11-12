@@ -43,6 +43,8 @@ const templateSelectMode = ref<TemplateSelectMode>("create")
 const createMode = ref<"entry" | "starter">("entry")
 const modalPage = ref(1)
 const isImportRendering = ref(false)
+// 从模板中心带过来的模板：空白创建直接套用，岗位起稿 / 导入沿用它而不必再选一次。
+const pendingTemplateId = ref("")
 
 const templates = ref<TemplateItem[]>([])
 const templatesLoaded = ref(false)
@@ -181,7 +183,19 @@ function openBlankFlow() {
   }, 250)
 }
 
-function applyEntry(entry: CreateEntry) {
+function applyEntry(entry: CreateEntry, templateId = "") {
+  pendingTemplateId.value = templateId
+  // 模板已选定又选了「空白简历」：直接建，不再弹模板网格。
+  if (templateId && entry === "blank") {
+    void createResume(templateId)
+    return
+  }
+  if (entry === "import" && templateId) {
+    selectedImportTemplateId.value = templateId
+    importConfirmOpen.value = true
+    refreshPoints()
+    return
+  }
   if (entry === "ai") openAiCreate()
   else if (entry === "import") openImportFlow()
   else if (entry === "blank") openBlankFlow()
@@ -305,7 +319,7 @@ async function createStarterResume() {
     const item = await store.createResumeFromStarter(
       selectedStarterRole.value.starter_id,
       selectedStarterLevelId.value,
-      "__industry_default",
+      pendingTemplateId.value || "__industry_default",
     )
     showCreate.value = false
     emit("created", item.id)
@@ -477,13 +491,13 @@ async function handleImportFile(event: Event) {
 
 watch(intent, (next) => {
   if (!props.listenGlobal || !next) return
-  applyEntry(next.entry)
+  applyEntry(next.entry, next.templateId)
   consumeCreateIntent()
 })
 
 onMounted(() => {
   if (props.listenGlobal && intent.value) {
-    applyEntry(intent.value.entry)
+    applyEntry(intent.value.entry, intent.value.templateId)
     consumeCreateIntent()
   }
 

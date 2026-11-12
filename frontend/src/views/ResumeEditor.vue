@@ -27,9 +27,12 @@ import { showGlobalToast } from "@/utils/toast"
 import { createPresetSection } from "@/utils/resumePresets"
 import { buildSelectedResumeData, diffResume, sectionEntriesForReview } from "@/utils/aiDiff"
 import { applyResumeLanguage, normalizeResumeLanguage } from "@/utils/resumeLocale"
+import { useWorkspaceBridge } from "@/composables/useWorkspaceBridge"
 
+const props = withDefaults(defineProps<{ resumeId?: number }>(), { resumeId: 0 })
 const route = useRoute()
 const router = useRouter()
+const { registerFlushSave, clearFlushSave } = useWorkspaceBridge()
 const resumeStore = useResumeStore()
 const editor = useEditorStore()
 const showStyle = ref(false)
@@ -50,7 +53,7 @@ async function confirmDelete() {
     await resumeStore.deleteResume(resumeStore.currentResume.id)
     showDeleteConfirm.value = false
     showGlobalToast("删除成功", "success")
-    router.push("/resumes")
+    router.push("/workspace")
   } catch (error) {
     showGlobalToast("删除失败，请重试")
   }
@@ -115,7 +118,7 @@ type SidePanel = "none" | "style" | "chat" | "outline" | "suggestions" | "global
 const sidePanel = ref<SidePanel>("chat")
 
 
-const mainMode = ref<"edit" | "ai">("edit")
+const mainMode = ref<"edit" | "ai">("ai")
 const mobileTab = ref<"edit" | "ai" | "preview">("edit")
 const formPanelExpanded = ref(true)
 
@@ -142,7 +145,7 @@ const effectiveChatModelId = computed(() => selectedChatModel.value?.id ?? selec
 const supportsChatImages = computed(() => Boolean(selectedChatModel.value?.supports_multimodal ?? aiCapability.value?.supports_multimodal))
 
 const isMobile = ref(false)
-const leftPanelWidth = ref(600)
+const leftPanelWidth = ref(560)
 const isWide = computed(() => !isMobile.value && leftPanelWidth.value >= 800)
 let resizeHandler: () => void
 
@@ -228,7 +231,7 @@ let historyCommitTimer: ReturnType<typeof setTimeout> | undefined
 let pendingHistoryLabel = "编辑内容"
 let saveChain: Promise<unknown> = Promise.resolve()
 let previewRequestSeq = 0
-const resumeId = computed(() => Number(route.params.id))
+const resumeId = computed(() => props.resumeId || Number(route.params.id))
 
 function debouncedSave() {
   if (saveDebounceTimer) clearTimeout(saveDebounceTimer)
@@ -246,6 +249,7 @@ function cancelDebouncedSave() {
 
 onMounted(async () => {
   await loadResumeEditor()
+  await sendInitialPrompt()
 })
 
 async function loadResumeEditor() {
@@ -266,7 +270,7 @@ async function loadResumeEditor() {
   } catch (error: any) {
     console.error("Failed to load resume:", error)
     showToast("简历不存在或无权限访问", "error")
-    router.replace("/")
+    router.replace("/workspace")
   }
 }
 
@@ -284,6 +288,7 @@ watch(resumeId, async (newId, oldId) => {
 
 onBeforeUnmount(() => {
   if (applyTimer) clearTimeout(applyTimer)
+  clearFlushSave(flushPendingSave)
   cancelDebouncedSave()
   cancelHistoryCommit()
   editor.setCurrentSection("basics")
@@ -634,7 +639,7 @@ async function confirmSaveAsNewResume(title: string) {
     saveAsDialogOpen.value = false
     jdOptimizedMessageId.value = null
     showGlobalToast("已另存为新简历", "success")
-    router.push(`/resumes/${created.id}/edit`)
+    router.push(`/workspace/${created.id}`)
   } catch (error: any) {
     showGlobalToast(error?.message || "另存失败，请重试", "error")
   } finally {
@@ -964,18 +969,43 @@ function handleFocusOut(event: Event) {
     }, 50)
   }
 }
+
+// —— 工作区桥接：侧栏切换简历前先落库，避免防抖间隙里丢改动 ——
+const initialPromptSent = ref(false)
+
+async function flushPendingSave() {
+  cancelDebouncedSave()
+  flushHistoryCommit()
+  if (!editor.saved) await save({ refreshPreview: false })
+}
+
+onMounted(() => {
+  registerFlushSave(flushPendingSave)
+})
+
+/** 从工作区首页带着一句话进来时，把它作为第一条对话直接发出去。 */
+async function sendInitialPrompt() {
+  const raw = route.query.prompt
+  const text = Array.isArray(raw) ? raw[0] : raw
+  if (!text || initialPromptSent.value || !resumeStore.currentResume) return
+  initialPromptSent.value = true
+  await router.replace({ path: route.path, query: {} })
+  mainMode.value = "ai"
+  if (sidePanel.value !== "chat") sidePanel.value = "chat"
+  if (!chatLoaded.value) await loadChatMessages()
+  if (!aiCapabilityLoaded.value) await loadAiCapability()
+  await sendChatMessage(String(text))
+}
 </script>
 
 <template>
-  <div v-if="resumeStore.currentResume && resumeStore.resumeData && resumeStore.templateConfig" class="fixed inset-0 flex flex-col overflow-hidden bg-zinc-100/60" @focusout="handleFocusOut">
+  <div v-if="resumeStore.currentResume && resumeStore.resumeData && resumeStore.templateConfig" class="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white" @focusout="handleFocusOut">
     <!-- Premium Header -->
     <header class="flex h-14 md:h-16 shrink-0 items-center gap-1.5 md:gap-4 border-b border-zinc-200/60 bg-white/80 backdrop-blur-md px-2 md:px-6 relative z-40">
-      <Button size="icon" variant="ghost" class="h-8 w-8 md:h-10 md:w-10 shrink-0 text-zinc-500 hover:text-zinc-900 rounded-lg hover:bg-zinc-100" @click="router.push('/resumes')">
-        <ArrowLeft class="h-4 w-4 md:h-5 md:w-5" />
+      <Button size="icon" variant="ghost" class="md:hidden h-8 w-8 shrink-0 text-zinc-500 hover:text-zinc-900 rounded-lg hover:bg-zinc-100" @click="router.push('/workspace')">
+        <ArrowLeft class="h-4 w-4" />
       </Button>
-      
-      <div class="h-8 w-[1px] bg-zinc-200 hidden sm:block"></div>
-      
+
       <div class="flex items-center gap-1.5 md:gap-3 flex-1 min-w-0">
         <div class="group relative inline-grid items-center min-w-[40px] max-w-[140px] sm:max-w-[400px]">
           <span class="col-start-1 row-start-1 invisible whitespace-pre pl-1 md:pl-2 pr-6 md:pr-8 py-1 border border-transparent text-[14px] sm:text-[18px] font-semibold tracking-tight overflow-hidden">{{ resumeStore.currentResume.title || '无标题简历' }}</span>
@@ -1395,7 +1425,7 @@ function handleFocusOut(event: Event) {
     <QuestionDialog :open="questionsDialogOpen" :questions="questionsDialogList" @close="questionsDialogOpen = false" @submit="submitQuestionAnswers" />
     <SaveAsResumeDialog :open="saveAsDialogOpen" :default-title="saveAsTitle" :loading="saveAsLoading" @close="saveAsDialogOpen = false" @confirm="confirmSaveAsNewResume" />
   </div>
-  <div v-else class="flex h-screen flex-col items-center justify-center bg-zinc-50">
+  <div v-else class="flex h-full w-full flex-col items-center justify-center bg-zinc-50">
     <div class="h-8 w-8 animate-spin rounded-full border-4 border-zinc-200 border-t-zinc-900 mb-4"></div>
     <span class="text-sm font-medium text-zinc-500 tracking-wide">加载简历中...</span>
   </div>

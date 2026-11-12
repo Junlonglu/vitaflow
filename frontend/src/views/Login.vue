@@ -95,7 +95,7 @@ async function handleLogin() {
     }
     if (!loginPassword.value) throw new Error("请输入密码")
     await user.login(loginEmail.value, loginPassword.value)
-    router.push("/resumes")
+    router.push("/workspace")
   } catch (e: any) {
     loginError.value = e.message
   }

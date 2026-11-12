@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue"
-import { useRouter } from "vue-router"
+import { useRoute, useRouter } from "vue-router"
 import { Plus, Sparkles } from "lucide-vue-next"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
 import AppDialog from "@/components/ui/dialog/AppDialog.vue"
@@ -23,6 +23,7 @@ import { listResumeStartersApi, type ResumeStarterIndustry, type ResumeStarterLe
 import { showGlobalToast } from "@/utils/toast"
 
 const router = useRouter()
+const route = useRoute()
 const store = useResumeStore()
 const showAiCreate = ref(false)
 const showCreateChoice = ref(false)
@@ -227,6 +228,13 @@ onMounted(async () => {
   ])
   announcement.value = currentAnnouncement
   window.addEventListener("resize", handleResumeListBreakpointChange)
+
+  // 工作区侧栏的「AI 生成 / 导入」入口通过 query 把创建意图带过来
+  const intent = route.query.create
+  if (intent === "ai") openAiCreate()
+  else if (intent === "import") openImportFlow()
+  else if (intent === "blank") openBlankFlow()
+  if (intent) router.replace({ path: "/resumes" })
 })
 onBeforeUnmount(() => {
   window.removeEventListener("resize", handleResumeListBreakpointChange)
@@ -247,7 +255,7 @@ function selectTemplate(templateId: string) {
 async function createResume(templateId: string) {
   const item = await store.createResume(templateId)
   showCreateChoice.value = false
-  router.push(`/resumes/${item.id}/edit`)
+  router.push(`/workspace/${item.id}`)
 }
 
 async function createStarterResume() {
@@ -256,7 +264,7 @@ async function createStarterResume() {
   try {
     const item = await store.createResumeFromStarter(selectedStarterRole.value.starter_id, selectedStarterLevelId.value, "__industry_default")
     showCreateChoice.value = false
-    router.push(`/resumes/${item.id}/edit`)
+    router.push(`/workspace/${item.id}`)
   } finally {
     starterCreating.value = false
   }
@@ -275,7 +283,7 @@ async function generateResume(payload: any) {
     }
     const item = await store.createResumeFromAi(result)
     showAiCreate.value = false
-    router.push(`/resumes/${item.id}/edit`)
+    router.push(`/workspace/${item.id}`)
   } catch (error: any) {
     aiError.value = error.message === "SILENT_ERROR" ? "" : (error.message || "AI 生成失败")
   } finally {
@@ -423,7 +431,7 @@ function handlePointConfirm() {
 }
 
 function goToEdit(id: number) {
-  router.push(`/resumes/${id}/edit`)
+  router.push(`/workspace/${id}`)
 }
 
 function showToast(message: string) {
@@ -474,7 +482,7 @@ async function handleImportFile(event: Event) {
     const item = await importResumeFileApi(files.length === 1 ? files[0] : files, selectedImportTemplateId.value)
     finishImportProgress()
     showToast("导入成功")
-    router.push(`/resumes/${item.id}/edit`)
+    router.push(`/workspace/${item.id}`)
   } catch (error: any) {
     showToast(error?.message || "导入失败，未识别到有效简历内容")
     stopImportProgress()

@@ -323,10 +323,13 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 
 | 路径 | 页面 | 职责 |
 |---|---|---|
-| `/` | `Home.vue` | 落地页、功能引导、公告 |
+| `/` | `Home.vue` | 落地页、功能引导、公告；已登录访问时重定向到 `/workspace` |
+| `/landing` | `Home.vue` | 营销落地页（登录后仍可访问） |
 | `/login`、`/register` | `Login.vue` | 登录/注册合并组件，验证码 |
-| `/resumes` | `ResumeList.vue` | 简历列表、新建、从起手式创建、导入文件 |
-| `/resumes/:id/edit` | `ResumeEditor.vue` | **核心页面**，三栏：左侧 section 导航 / 中间表单 / 右侧 AI 对话或预览（1527 行） |
+| `/workspace` | `Workspace.vue` | **工作区外壳**：左侧栏（简历列表 + 用户区）+ 中间对话首页 + 右侧预览空态 |
+| `/workspace/:id` | `Workspace.vue` → `ResumeEditor.vue` | **核心页面**，外壳内的编辑器：中栏「Flow Agent 对话 ⇄ 内容编辑」可切换，右栏 A4 预览 |
+| `/resumes` | `ResumeList.vue` | 简历列表、新建、从起手式创建、导入文件（工作区的「AI 生成 / 导入」入口经 `?create=` 打开对应流程） |
+| `/resumes/:id/edit` | — | 重定向到 `/workspace/:id`，兼容旧链接 |
 | `/templates` | `TemplateGallery.vue` | 模板库与实时预览 |
 | `/profile` | `Profile.vue` | 个人资料、积分、密码 |
 | `/ai-records` | `AiRecords.vue` | AI 使用记录与积分流水 |
@@ -346,7 +349,9 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 | `components/preview/` | 预览容器、缩放、分页提示 |
 | `components/ai/` | 对话面板、消息气泡、`ThinkingProcess.vue`（思考过程可视化）、变更确认卡片、提问卡片、工具进度 |
 | `components/templates/` | 模板选择与缩略预览（**注意：`ClassicTemplate.vue`/`ModernTemplate.vue`/`TechTemplate.vue` 在 `src` 内已无引用，属旧渲染路径残留**） |
-| `components/admin/` `announcement/` `resume/` `home/` `layout/` `common/` `ui/` | 分域组件 |
+| `components/workspace/` | 工作区首页（对话起始态）、右侧预览空态 |
+| `components/admin/` `announcement/` `resume/` `home/` `layout/` `common/` `ui/` | 分域组件；`layout/` 下 `MainLayout.vue` 是全站顶栏，`WorkspaceShell.vue` / `WorkspaceSidebar.vue` / `WorkspaceUserMenu.vue` 是工作区外壳 |
+| `composables/` | `useWorkspaceBridge.ts`：侧栏切换简历前调用编辑器注册的 `flushSave`，避免防抖间隙丢改动 |
 | `stores/` | 仅 3 个：`user`（登录态、积分）、`resume`（列表）、`editor`（当前简历、脏标记、保存、预览刷新） |
 | `api/` | 每个业务域一个文件；`request.ts` 是 axios 封装，`ai.ts` 是流式专用 |
 | `types/` | 与后端 schema 对齐的 TS 类型（`resume.ts` / `ai.ts` / `api.ts` / `user.ts`） |

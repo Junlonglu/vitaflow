@@ -17,3 +17,6 @@ backend/logs/*.log
 .vscode/
 .claude/settings.local.json
 .scratch/
+
+# 本地 AI 协作数据（记忆、会话缓存）
+.workbuddy/

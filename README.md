@@ -276,10 +276,13 @@ ADMIN_EMAILS=admin@example.com
 
 前端主要页面：
 
-- `/`：首页
+- `/`：首页（已登录自动进入工作区）
+- `/landing`：营销落地页
 - `/login`、`/register`：登录与注册
-- `/resumes`：简历列表
-- `/resumes/:id/edit`：简历编辑器
+- `/workspace`：工作区首页（左侧栏为简历与会话入口，中间为对话）
+- `/workspace/:id`：工作区内的简历编辑器与预览
+- `/resumes`：简历列表（创建、岗位起稿、导入）
+- `/resumes/:id/edit`：旧编辑链接，重定向到 `/workspace/:id`
 - `/templates`：模板库
 - `/share/:token`：公开分享页
 - `/profile`：个人中心

@@ -152,8 +152,13 @@ class AiServiceTaskStreamResponseTest(unittest.TestCase):
 
         from app.api.ai import _ai_service_task_stream_response
 
-        db = SimpleNamespace(refresh=lambda *_a, **_k: None)
         task = task or SimpleNamespace(id=1, points_used=100, tokens_used=0, input_data={"request_input_tokens": 10})
+        db = SimpleNamespace(
+            refresh=lambda *_a, **_k: None,
+            close=lambda: None,
+            rollback=lambda: None,
+            get=lambda _model, _pk: task,
+        )
         finished = []
 
         def fake_finish(db, task, status, error_message=None, output_data=None, token_usage=None):
@@ -167,7 +172,7 @@ class AiServiceTaskStreamResponseTest(unittest.TestCase):
                 patch("app.api.ai.normalize_resume_data", side_effect=lambda data, _payload: data),
             ):
                 response = _ai_service_task_stream_response(
-                    db, task, "generate_resume", {}, normalize_context={}
+                    task.id, "generate_resume", {}, normalize_context={}, db_factory=lambda: db
                 )
                 return [chunk async for chunk in response.body_iterator]
 

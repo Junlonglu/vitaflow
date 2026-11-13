@@ -1,5 +1,7 @@
 import hmac
 import json
+import logging
+from collections.abc import Callable
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Request
@@ -9,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.database import get_db
+from app.core.database import SessionLocal, get_db
 from app.core.exceptions import AppException
 from app.core.request_utils import get_client_ip
 from app.core.response import success
@@ -88,6 +90,8 @@ from app.services.search_evidence_service import get_recent_search_evidence, sto
 from app.services.resume_service import get_resume
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+
+logger = logging.getLogger(__name__)
 
 
 class FlowPointRedeemRequest(BaseModel):
@@ -375,7 +379,6 @@ def _ndjson_stream_response(iterator) -> StreamingResponse:
 
 
 def _ai_service_stream_response(
-    db: Session,
     user: User,
     resume: Resume,
     content: str,
@@ -389,9 +392,12 @@ def _ai_service_stream_response(
     The AI service stream is transparent to the client except that the
     ``result`` event's ``assistant_message`` is the DB-backed row (MySQL is the
     single source of truth for the UI message list).
+
+    这里刻意不接请求级的 ``db``：流式响应开始发送时依赖已经清理，会话早被
+    close。会话由 ``stream_ai_service_chat`` 在生成器内自建自关。
     """
     events = stream_ai_service_chat(
-        db, user, resume, content, attachments, model_config_id, session_id, user_model_id
+        user, resume, content, attachments, model_config_id, session_id, user_model_id
     )
 
     async def iterator():
@@ -405,13 +411,13 @@ def _ai_service_stream_response(
 
 
 def _ai_service_task_stream_response(
-    db: Session,
-    task: AiTask,
+    task_id: int,
     task_type: str,
     input_payload: dict[str, Any],
     *,
     model_ref: str | None = None,
     normalize_context: dict[str, Any] | None = None,
+    db_factory: Callable[[], Session] = SessionLocal,
 ) -> StreamingResponse:
     """Proxy a one-shot AI-service task (ticket 09) and settle its Flow Points.
 
@@ -419,10 +425,24 @@ def _ai_service_task_stream_response(
     per-model token usage on the ``result`` event, so this relay settles the
     pre-created AiTask synchronously — the same finish/refund path the legacy
     LangChain stream used, minus the estimated-token tracker.
+
+    只接 ``task_id`` 而不是 ORM 对象：结算发生在流中间，必须用一个属于当前
+    会话的 persistent 实例（``db.refresh`` 不接受 detached 对象），而且这个
+    会话不能是请求依赖提前 close 掉的那个。
     """
     events = ai_service_task_events(task_type, input_payload, model_ref=model_ref)
 
     async def iterator():
+        db = db_factory()
+        try:
+            task = db.get(AiTask, task_id)
+        except Exception:
+            db.close()
+            raise
+        if task is None:
+            db.close()
+            yield json.dumps({"type": "error", "message": "AI 任务不存在或已被删除"}, ensure_ascii=False) + "\n"
+            return
         finished = False
         try:
             async for event in events:
@@ -467,8 +487,14 @@ def _ai_service_task_stream_response(
                 finish_ai_task(db, task, "failed", error_message=str(exc) or "AI 调用失败")
             yield json.dumps({"type": "error", "message": f"AI 任务处理失败：{exc}"}, ensure_ascii=False) + "\n"
         finally:
-            if not finished:
-                finish_ai_task(db, task, "failed", error_message="前端连接已断开，AI 流式响应未完成")
+            try:
+                if not finished:
+                    finish_ai_task(db, task, "failed", error_message="前端连接已断开，AI 流式响应未完成")
+            except Exception:
+                # 收尾失败不能掩盖原异常，但要留痕：否则任务会永远停在 pending。
+                logger.warning("AI 任务收尾失败 task_id=%s", task_id, exc_info=True)
+            finally:
+                db.close()
 
     return _ndjson_stream_response(iterator())
 
@@ -656,8 +682,7 @@ def generate_resume_stream_api(payload: GenerateResumeRequest, db: Session = Dep
     config = get_active_ai_config(db)
     task = new_task(db, current_user, "generate_resume", payload)
     return _ai_service_task_stream_response(
-        db,
-        task,
+        task.id,
         "generate_resume",
         ai_payload(payload),
         model_ref=config.model_ref,
@@ -770,7 +795,7 @@ def resume_chat_send_stream(
         return _ndjson_stream_response(empty_message())
     attachments = [item.model_dump() for item in payload.attachments]
     return _ai_service_stream_response(
-        db, current_user, resume, content, attachments,
+        current_user, resume, content, attachments,
         payload.model_config_id, payload.session_id, payload.user_model_id,
     )
 
@@ -785,7 +810,6 @@ def resume_chat_regenerate_stream(
 ):
     resume = get_resume(db, current_user.id, resume_id)
     events = stream_ai_service_regenerate(
-        db,
         current_user,
         resume,
         message_id,

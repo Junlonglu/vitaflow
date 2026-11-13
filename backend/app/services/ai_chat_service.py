@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from copy import deepcopy
 from datetime import datetime
 from typing import Any
@@ -804,7 +804,6 @@ async def _stream_ai_service_reply(
 
 
 async def stream_ai_service_chat(
-    db: Session,
     user: User,
     resume: Resume,
     content: str,
@@ -812,6 +811,8 @@ async def stream_ai_service_chat(
     model_config_id: int | None = None,
     session_id: int | None = None,
     user_model_id: int | None = None,
+    *,
+    db_factory: Callable[[], Session] = SessionLocal,
 ) -> AsyncIterator[dict[str, Any]]:
     """Stream a chat turn backed by the Node AI service.
 
@@ -823,7 +824,35 @@ async def stream_ai_service_chat(
 
     ``session_id`` picks the conversation; omitting it keeps the legacy
     "latest session of this resume" behaviour.
+
+    会话由生成器自己持有：FastAPI 的 ``Depends(get_db)`` 在响应体开始发送前就
+    会 close，把那个请求级会话带进流里等于在已关闭的 Session 上 add/commit。
+    所以这里只接收 ``db_factory``，在流结束时关闭；客户端中途断开时
+    ``already-committed`` 的消息保留，未提交的部分随 close 回滚。
     """
+    db = db_factory()
+    try:
+        async for event in _stream_chat_turn(
+            db, user, resume, content, attachments, model_config_id, session_id, user_model_id
+        ):
+            yield event
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+async def _stream_chat_turn(
+    db: Session,
+    user: User,
+    resume: Resume,
+    content: str,
+    attachments: list[dict[str, Any]] | None = None,
+    model_config_id: int | None = None,
+    session_id: int | None = None,
+    user_model_id: int | None = None,
+) -> AsyncIterator[dict[str, Any]]:
     message = (content or "").strip()
     if not message:
         yield {"type": "error", "message": "请输入要咨询的问题"}
@@ -872,7 +901,6 @@ async def stream_ai_service_chat(
 
 
 async def stream_ai_service_regenerate(
-    db: Session,
     user: User,
     resume: Resume,
     message_id: int,
@@ -881,6 +909,8 @@ async def stream_ai_service_regenerate(
     model_config_id: int | None = None,
     session_id: int | None = None,
     user_model_id: int | None = None,
+    *,
+    db_factory: Callable[[], Session] = SessionLocal,
 ) -> AsyncIterator[dict[str, Any]]:
     """Regenerate the reply to a user message via the Node AI service (ticket 09).
 
@@ -891,7 +921,41 @@ async def stream_ai_service_regenerate(
 
     The drop stays inside the message's own session, so regenerating in one
     conversation can never truncate another one.
+
+    与 ``stream_ai_service_chat`` 一样，会话由生成器自持而不是复用请求级依赖。
     """
+    db = db_factory()
+    try:
+        async for event in _regenerate_turn(
+            db,
+            user,
+            resume,
+            message_id,
+            override_content,
+            override_attachments,
+            model_config_id,
+            session_id,
+            user_model_id,
+        ):
+            yield event
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+async def _regenerate_turn(
+    db: Session,
+    user: User,
+    resume: Resume,
+    message_id: int,
+    override_content: str | None = None,
+    override_attachments: list[dict[str, Any]] | None = None,
+    model_config_id: int | None = None,
+    session_id: int | None = None,
+    user_model_id: int | None = None,
+) -> AsyncIterator[dict[str, Any]]:
     user_message = db.get(AiChatMessage, message_id)
     if (
         not user_message

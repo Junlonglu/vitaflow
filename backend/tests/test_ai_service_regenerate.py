@@ -49,6 +49,18 @@ class _DbStub:
     def scalar(self, *_args, **_kwargs):
         return None
 
+    def rollback(self):
+        pass
+
+    def close(self):
+        pass
+
+
+def _run_regenerate(db, user, resume, *args, **kwargs):
+    """测试适配层：服务端现在自己开会话（请求级依赖在流开始前就被关闭了），
+    所以 db 通过工厂注入，不再当第一个位置参数传。"""
+    return stream_ai_service_regenerate(user, resume, *args, db_factory=lambda: db, **kwargs)
+
 
 def _stub_chat_config(model_ref: str | None = "deepseek/deepseek-v4-flash-vision-exp"):
     return SimpleNamespace(
@@ -118,7 +130,7 @@ class StreamAiServiceRegenerateTest(unittest.TestCase):
             for p in patches:
                 stack.enter_context(p)
             with patch.object(ai_chat_service, "ai_service_chat_events", side_effect=faux_events) as events:
-                results = _drain_events(stream_ai_service_regenerate(db, user, resume, 10))
+                results = _drain_events(_run_regenerate(db, user, resume, 10))
 
         # start event carries the target user message id so the frontend can splice.
         start = [event for event in results if event["type"] == "start"][0]
@@ -145,7 +157,7 @@ class StreamAiServiceRegenerateTest(unittest.TestCase):
         for target in cases:
             with self.subTest(target=role_or_none(target)):
                 with patch.object(ai_chat_service, "resolve_chat_ai_config", return_value=_stub_chat_config()):
-                    results = _drain_events(stream_ai_service_regenerate(_DbStub(target), user, resume, 10))
+                    results = _drain_events(_run_regenerate(_DbStub(target), user, resume, 10))
                 self.assertEqual(results[0]["type"], "error")
                 self.assertIn("自己的用户消息", results[0]["message"])
 
@@ -169,7 +181,7 @@ class StreamAiServiceRegenerateTest(unittest.TestCase):
                 stack.enter_context(p)
             with patch.object(ai_chat_service, "ai_service_chat_events", side_effect=faux_events) as events:
                 _drain_events(
-                    stream_ai_service_regenerate(db, user, resume, 10, override_content="  重新问：看下工作经历  ", override_attachments=attachments)
+                    _run_regenerate(db, user, resume, 10, override_content="  重新问：看下工作经历  ", override_attachments=attachments)
                 )
 
         self.assertEqual(target.content, "重新问：看下工作经历")
@@ -189,7 +201,7 @@ class StreamAiServiceRegenerateTest(unittest.TestCase):
             for p in patches:
                 stack.enter_context(p)
             results = _drain_events(
-                stream_ai_service_regenerate(db, user, resume, 10, override_content="   ", override_attachments=[])
+                _run_regenerate(db, user, resume, 10, override_content="   ", override_attachments=[])
             )
 
         self.assertEqual(results[0]["type"], "error")
@@ -207,7 +219,7 @@ class StreamAiServiceRegenerateTest(unittest.TestCase):
             for p in patches:
                 stack.enter_context(p)
             results = _drain_events(
-                stream_ai_service_regenerate(
+                _run_regenerate(
                     db, user, resume, 10,
                     override_attachments=[{"url": "http://x/1.png", "content_type": "image/png", "object_name": "ai-chat/1.png"}],
                 )
@@ -237,7 +249,7 @@ class StreamAiServiceRegenerateTest(unittest.TestCase):
             for p in patches[1:]:
                 stack.enter_context(p)
             with patch.object(ai_chat_service, "ai_service_chat_events", side_effect=faux_events):
-                results = _drain_events(stream_ai_service_regenerate(db, user, resume, 10))
+                results = _drain_events(_run_regenerate(db, user, resume, 10))
 
         result_event = [event for event in results if event["type"] == "result"][0]
         self.assertEqual(result_event["data"]["assistant_message"]["content"], "faux 回复")

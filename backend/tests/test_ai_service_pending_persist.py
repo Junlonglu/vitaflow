@@ -28,10 +28,15 @@ def _drain_events(generator):
 
 class _DbStub:
     """Minimal session stand-in: the DB-touching helpers are patched, so only the
-    user-message add/commit/refresh and the (patched) assistant save run here."""
+    user-message add/commit/refresh and the (patched) assistant save run here.
+
+    The service opens its own session now (FastAPI closes the request-scoped one
+    before the response body starts), so the stub is injected as a factory.
+    """
 
     def __init__(self) -> None:
         self.added = []
+        self.closed = False
 
     def add(self, obj):
         self.added.append(obj)
@@ -41,6 +46,12 @@ class _DbStub:
 
     def refresh(self, *_args, **_kwargs):
         pass
+
+    def rollback(self):
+        pass
+
+    def close(self):
+        self.closed = True
 
     def scalar(self, *_args, **_kwargs):
         return None
@@ -99,7 +110,7 @@ class StreamAiServiceMultimodalTest(unittest.TestCase):
             patch.object(ai_chat_service, "owned_object_names", side_effect=lambda _db, _uid, names: set(names)),
             patch.object(ai_chat_service, "ai_service_chat_events", side_effect=_faux_events) as events,
         ):
-            results = _drain_events(stream_ai_service_chat(_DbStub(), user, resume, "按图片改简历", attachments))
+            results = _drain_events(stream_ai_service_chat(user, resume, "按图片改简历", attachments, db_factory=_DbStub))
 
         self.assertEqual(results[0]["type"], "error")
         self.assertIn("多模态", results[0]["message"])
@@ -134,7 +145,7 @@ class StreamAiServiceMultimodalTest(unittest.TestCase):
             patch.object(ai_chat_service, "owned_object_names", side_effect=lambda _db, _uid, names: set(names)),
             patch.object(ai_chat_service, "_save_assistant_message", side_effect=lambda *a, **k: SimpleNamespace(timing=None, model_dump=lambda *_a, **_k: {"id": 1, "content": "我看到了图片"})),
         ):
-            _drain_events(stream_ai_service_chat(_DbStub(), user, resume, "按图片改简历", attachments))
+            _drain_events(stream_ai_service_chat(user, resume, "按图片改简历", attachments, db_factory=_DbStub))
 
         # The proxy forwards the attachment so the Node side can resolve it into a
         # base64 ImageContent block for the model.
@@ -168,8 +179,7 @@ class StreamAiServicePendingPersistTest(unittest.TestCase):
             patch.object(ai_chat_service, "ai_service_chat_events", side_effect=_faux_events),
             patch.object(ai_chat_service, "_save_assistant_message", side_effect=fake_save) as save,
         ):
-            db = _DbStub()
-            results = _drain_events(stream_ai_service_chat(db, user, resume, "帮我把地点从广州改成深圳"))
+            results = _drain_events(stream_ai_service_chat(user, resume, "帮我把地点从广州改成深圳", db_factory=_DbStub))
 
         # Only one assistant persistence call, and it carries the validated pending data.
         self.assertEqual(save.call_count, 1)
@@ -209,7 +219,7 @@ class StreamAiServicePendingPersistTest(unittest.TestCase):
             patch.object(ai_chat_service, "ai_service_chat_events", side_effect=faux_events),
             patch.object(ai_chat_service, "_save_assistant_message", side_effect=fake_save) as save,
         ):
-            _drain_events(stream_ai_service_chat(_DbStub(), user, resume, "早上好"))
+            _drain_events(stream_ai_service_chat(user, resume, "早上好", db_factory=_DbStub))
 
         self.assertEqual(save.call_count, 1)
         self.assertIsNone(captured["optimized_resume_data"])

@@ -14,6 +14,19 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+export interface CatalogModelCost {
+  /** $ per million tokens, models.dev convention. */
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+}
+
+/** Provenance written by models.dev sync (see modelsdev.ts). */
+export interface CatalogModelMeta {
+  models_dev?: { provider: string; updated_at: string | null; synced_at: string };
+}
+
 export interface CatalogModel {
   id: string;
   name?: string;
@@ -21,6 +34,8 @@ export interface CatalogModel {
   input?: string[];
   contextWindow?: number;
   maxTokens?: number;
+  cost?: CatalogModelCost;
+  meta?: CatalogModelMeta;
 }
 
 export interface CatalogProvider {
@@ -50,6 +65,11 @@ export interface CatalogProviderView {
     input: string[];
     context_window: number | null;
     max_tokens: number | null;
+    price_input: number | null;
+    price_output: number | null;
+    dev_provider: string | null;
+    dev_updated_at: string | null;
+    dev_synced_at: string | null;
   }>;
 }
 
@@ -80,6 +100,11 @@ export function fauxCatalog(): CatalogProviderView[] {
           input: ["text", "image"],
           context_window: 32000,
           max_tokens: 4096,
+          price_input: null,
+          price_output: null,
+          dev_provider: null,
+          dev_updated_at: null,
+          dev_synced_at: null,
         },
       ],
     },
@@ -165,6 +190,11 @@ export function renderProviders(catalog: CatalogFile): CatalogProviderView[] {
       input: Array.isArray(model.input) ? model.input : ["text"],
       context_window: typeof model.contextWindow === "number" ? model.contextWindow : null,
       max_tokens: typeof model.maxTokens === "number" ? model.maxTokens : null,
+      price_input: typeof model.cost?.input === "number" ? model.cost.input : null,
+      price_output: typeof model.cost?.output === "number" ? model.cost.output : null,
+      dev_provider: model.meta?.models_dev?.provider ?? null,
+      dev_updated_at: model.meta?.models_dev?.updated_at ?? null,
+      dev_synced_at: model.meta?.models_dev?.synced_at ?? null,
     })),
   }));
 }

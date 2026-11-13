@@ -204,6 +204,13 @@ export interface AdminCatalogModel {
   input: string[]
   context_window: number | null
   max_tokens: number | null
+  /** $ / million tokens, filled from models.dev when absent in models.json. */
+  price_input: number | null
+  price_output: number | null
+  /** models.dev provenance (null = never matched or not synced). */
+  dev_provider: string | null
+  dev_updated_at: string | null
+  dev_synced_at: string | null
 }
 
 export interface AdminCatalogProvider {
@@ -219,6 +226,14 @@ export interface AdminCatalogProvider {
 export interface AdminCatalog {
   provider_mode: "faux" | "real"
   providers: AdminCatalogProvider[]
+  /** Present on sync-dev responses only. */
+  sync?: AdminCatalogSyncSummary
+}
+
+export interface AdminCatalogSyncSummary {
+  dev_provider: string | null
+  matched: number
+  filled: number
 }
 
 export interface AdminCatalogProviderWrite {
@@ -362,6 +377,8 @@ export const updateAdminCatalogModelApi = (providerKey: string, modelId: string,
   request.put<AdminCatalog, AdminCatalog>(`/admin/ai-catalog/providers/${encodeURIComponent(providerKey)}/models/${encodeURIComponent(modelId)}`, data)
 export const deleteAdminCatalogModelApi = (providerKey: string, modelId: string) =>
   request.delete<AdminCatalog, AdminCatalog>(`/admin/ai-catalog/providers/${encodeURIComponent(providerKey)}/models/${encodeURIComponent(modelId)}`)
+export const syncAdminCatalogProviderDevApi = (key: string) =>
+  request.post<AdminCatalog, AdminCatalog>(`/admin/ai-catalog/providers/${encodeURIComponent(key)}/sync-dev`)
 export const getAdminPointRulesApi = () => request.get<AdminPointRule[], AdminPointRule[]>("/admin/point-rules")
 export const updateAdminPointRuleApi = (
   featureType: string,

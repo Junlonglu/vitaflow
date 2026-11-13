@@ -22,6 +22,7 @@ import {
   getAdminPointRulesApi,
   getAdminRedeemCodesApi,
   importAdminRedeemCodesApi,
+  syncAdminCatalogProviderDevApi,
   updateAdminCatalogModelApi,
   updateAdminCatalogProviderApi,
   updateAdminRedeemCodeBatchPriceApi,
@@ -359,6 +360,28 @@ async function deleteCatalogProvider(key: string) {
   }
 }
 
+const syncingDevKey = ref<string | null>(null)
+
+async function syncCatalogProviderDev(key: string) {
+  syncingDevKey.value = key
+  error.value = ""
+  try {
+    const data = await syncAdminCatalogProviderDevApi(key)
+    catalog.value = data
+    const sync = data.sync
+    if (!sync || !sync.dev_provider) {
+      showGlobalToast("未在 models.dev 匹配到该服务商的资料，请检查服务商标识是否为官方 id（如 deepseek）")
+    } else {
+      showGlobalToast(`已同步 models.dev 资料：匹配 ${sync.matched} 个模型，补全 ${sync.filled} 项`)
+    }
+  } catch (err: any) {
+    error.value = err.message || "同步模型资料失败"
+    showGlobalToast(error.value, "error")
+  } finally {
+    syncingDevKey.value = null
+  }
+}
+
 async function createCatalogModel(providerKey: string, data: AdminCatalogModelWrite) {
   error.value = ""
   try {
@@ -650,10 +673,12 @@ watch(
         :providers="catalogProviders"
         :provider-mode="catalogProviderMode"
         :saving="savingConfig"
+        :syncing-dev-key="syncingDevKey"
         @refresh="refreshCatalog"
         @create-provider="createCatalogProvider"
         @update-provider="updateCatalogProvider"
         @delete-provider="deleteCatalogProvider"
+        @sync-dev="syncCatalogProviderDev"
         @create-model="createCatalogModel"
         @update-model="updateCatalogModel"
         @delete-model="deleteCatalogModel"

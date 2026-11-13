@@ -30,6 +30,7 @@ import { runChat, runTask, type ChatRuntime, type ChatStreamEvent } from "./agen
 import { reportUsage } from "./billing.js";
 import { loadConfig } from "./config.js";
 import { createFauxRuntime } from "./faux.js";
+import { enrichProviderFromModelsDev, fetchModelsDev } from "./modelsdev.js";
 import { appendSkillsToPrompt, buildContextPrompt, DEFAULT_SYSTEM_PROMPT, parseSkills, type AiServiceContext } from "./prompt.js";
 import { createRealRuntime, parseByokOverride, registerByokModel, type ThinkingLevelSetting } from "./real.js";
 import { appendSkillPrompt, extractSkillCommand, skillPromptBlock } from "./skills.js";
@@ -109,13 +110,15 @@ function catalogViews(): Record<string, unknown> {
   return { provider_mode: config.provider, providers: config.provider === "faux" ? fauxCatalog() : [] };
 }
 
-async function catalogResponse(res: express.Response): Promise<void> {
+async function catalogResponse(res: express.Response, syncSummary?: unknown): Promise<void> {
   if (config.provider === "faux") {
     res.json({ ...catalogViews(), providers: fauxCatalog() });
     return;
   }
   const catalog = await readCatalog(AGENT_DIR);
-  res.json({ ...catalogViews(), providers: renderProviders(catalog) });
+  const payload: Record<string, unknown> = { ...catalogViews(), providers: renderProviders(catalog) };
+  if (syncSummary !== undefined) payload.sync = syncSummary;
+  res.json(payload);
 }
 
 function handleCatalogError(res: express.Response, err: unknown): void {
@@ -270,6 +273,31 @@ app.delete("/v1/catalog/providers/:key/models/:modelId", async (req, res) => {
     await catalogResponse(res);
   } catch (err) {
     handleCatalogError(res, err);
+  }
+});
+
+// models.dev metadata sync: fills contextWindow / maxTokens / reasoning /
+// input / cost that the operator left blank in models.json. Manual values are
+// never overwritten; provenance lands under the model's meta.models_dev. The
+// runtime is rebuilt because pi reads contextWindow from the live model.
+app.post("/v1/catalog/providers/:key/sync-dev", async (req, res) => {
+  if (!authorize(req)) return void res.status(401).json({ type: "error", message: "未授权：需要有效的服务令牌" });
+  if (rejectMutations(res)) return;
+  try {
+    const key = validateProviderKey(req.params.key);
+    const dev = await fetchModelsDev();
+    let summary: ReturnType<typeof enrichProviderFromModelsDev> | null = null;
+    await mutateCatalog(AGENT_DIR, (catalog) => {
+      const provider = requireEditableProvider(catalog, key);
+      summary = enrichProviderFromModelsDev(key, provider, dev, new Date());
+    });
+    await rebuildRuntime();
+    await catalogResponse(res, summary);
+  } catch (err) {
+    // Network/parse failures are operator-actionable, surface the real reason.
+    if (err instanceof CatalogError) return handleCatalogError(res, err);
+    console.error("[vitaflow-ai] models.dev sync failed:", err);
+    res.status(502).json({ type: "error", message: (err as Error).message || "同步模型资料失败" });
   }
 });
 

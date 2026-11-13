@@ -197,6 +197,14 @@ def get_ai_catalog_env_keys():
     return success(call_catalog("GET", "/v1/catalog/env-keys"))
 
 
+@router.post("/ai-catalog/providers/{provider_key}/sync-dev")
+def sync_catalog_provider_dev(provider_key: str):
+    """Fill blank model fields from models.dev (manual values are never overwritten)."""
+    result = success(call_catalog("POST", f"/v1/catalog/providers/{provider_key}/sync-dev"))
+    invalidate_catalog_capabilities_cache()
+    return result
+
+
 @router.post("/ai-catalog/providers")
 def create_catalog_provider(payload: CatalogProviderWrite):
     body = {"key": payload.key.strip(), "name": payload.name.strip(), "baseUrl": payload.base_url.strip(), "apiKey": payload.api_key.strip()}

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Check, Eye, EyeOff, KeyRound, Pencil, Plus, Server, Trash2 } from "lucide-vue-next"
+import { Check, DatabaseZap, Eye, EyeOff, KeyRound, Pencil, Plus, Server, Trash2 } from "lucide-vue-next"
 import { computed, ref } from "vue"
 import Button from "@/components/ui/button/Button.vue"
 import Select from "@/components/ui/select/Select.vue"
@@ -9,6 +9,7 @@ const props = defineProps<{
   providers: AdminCatalogProvider[]
   providerMode: "faux" | "real"
   saving: boolean
+  syncingDevKey: string | null
 }>()
 
 const emit = defineEmits<{
@@ -16,6 +17,7 @@ const emit = defineEmits<{
   createProvider: [data: AdminCatalogProviderWrite]
   updateProvider: [key: string, data: { name: string; base_url: string; api_key?: string }]
   deleteProvider: [key: string]
+  syncDev: [key: string]
   createModel: [providerKey: string, data: AdminCatalogModelWrite]
   updateModel: [providerKey: string, modelId: string, data: AdminCatalogModelWrite]
   deleteModel: [providerKey: string, modelId: string]
@@ -156,6 +158,11 @@ function toggleInput(kind: "text" | "image") {
   modelForm.value.input = list.includes(kind) ? list.filter((item) => item !== kind) : [...list, kind]
 }
 
+function formatPrice(value: number | null) {
+  if (value == null) return ""
+  return `$${value}/M`
+}
+
 function onRefresh() {
   envKeysLoaded.value = false
   void loadEnvKeys()
@@ -190,6 +197,7 @@ function onRefresh() {
           <p v-if="provider.api_key_masked" class="mt-0.5 flex items-center gap-1 text-xs text-zinc-400"><KeyRound class="h-3 w-3 shrink-0" />Key {{ provider.api_key_masked }}</p>
         </div>
         <div v-if="provider.editable && !fauxProvider" class="flex shrink-0 items-center gap-1">
+          <button class="rounded-full p-1.5 text-zinc-400 transition-all hover:bg-zinc-100 hover:text-zinc-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50" title="从 models.dev 补全模型资料（仅填空白，不覆盖手填值）" :disabled="syncingDevKey !== null" @click="emit('syncDev', provider.key)"><DatabaseZap class="h-3.5 w-3.5" :class="syncingDevKey === provider.key ? 'animate-pulse' : ''" /></button>
           <button class="rounded-full p-1.5 text-zinc-400 transition-all hover:bg-zinc-100 hover:text-zinc-700 active:scale-95" title="编辑服务商" @click="openEditProvider(provider)"><Pencil class="h-3.5 w-3.5" /></button>
           <button class="rounded-full p-1.5 text-zinc-400 transition-all hover:bg-red-50 hover:text-red-600 active:scale-95" title="删除服务商" @click="emit('deleteProvider', provider.key)"><Trash2 class="h-3.5 w-3.5" /></button>
         </div>
@@ -203,6 +211,8 @@ function onRefresh() {
           <div class="flex shrink-0 items-center gap-1.5">
             <span v-for="kind in model.input" :key="kind" class="inline-flex items-center whitespace-nowrap rounded-md border border-zinc-200/50 bg-white px-2 py-0.5 text-[10px] font-medium text-zinc-600" :class="kind === 'image' ? 'border-purple-200/60 bg-purple-50 text-purple-700' : ''">{{ kind === "image" ? "多模态" : "文本" }}</span>
             <span v-if="model.context_window" class="inline-flex items-center whitespace-nowrap rounded-md border border-zinc-200/50 bg-white px-2 py-0.5 text-[10px] font-medium text-zinc-600">{{ formatContextWindow(model.context_window) }}</span>
+            <span v-if="model.price_input != null || model.price_output != null" class="inline-flex items-center whitespace-nowrap rounded-md border border-emerald-200/60 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700" :title="`输入 ${formatPrice(model.price_input)} / 输出 ${formatPrice(model.price_output)}（美元/百万 tokens）`">{{ formatPrice(model.price_input) }} / {{ formatPrice(model.price_output) }}</span>
+            <span v-if="model.dev_synced_at" class="inline-flex items-center whitespace-nowrap rounded-md border border-blue-200/60 bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700" :title="`资料来自 models.dev（${model.dev_provider}），厂商更新 ${model.dev_updated_at ?? '未知'}，同步于 ${model.dev_synced_at.slice(0, 10)}`">models.dev</span>
             <button v-if="provider.editable && !fauxProvider" class="rounded-full p-1.5 text-zinc-400 transition-all hover:bg-zinc-100 hover:text-zinc-700 active:scale-95" title="编辑模型" @click="openEditModel(provider.key, model)"><Pencil class="h-3.5 w-3.5" /></button>
             <button v-if="provider.editable && !fauxProvider" class="rounded-full p-1.5 text-zinc-400 transition-all hover:bg-red-50 hover:text-red-600 active:scale-95" title="删除模型" @click="emit('deleteModel', provider.key, model.id)"><Trash2 class="h-3.5 w-3.5" /></button>
           </div>

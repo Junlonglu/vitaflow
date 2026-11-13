@@ -8,7 +8,7 @@ Pure function, no DB.
 """
 import unittest
 
-from app.api.admin import _stage_quality_breakdown
+from app.api.admin.dashboard import _stage_quality_breakdown
 
 
 def _timing(**overrides):

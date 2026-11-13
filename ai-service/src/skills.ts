@@ -142,9 +142,17 @@ export function extractSkillCommand(message: string): { skill: ResumeSkill; args
 }
 
 /**
- * 本轮选定了技能时，把它的正文接到系统提示词末尾。
+ * 本轮技能正文，独立成节。位置由调用方决定（放在规则区末尾、简历之前），
+ * 所以这里只渲染内容，不负责拼接顺序。
+ */
+export function skillPromptBlock(skill: ResumeSkill): string {
+  return `# 本轮技能：${skill.name}\n${skill.body}`;
+}
+
+/**
+ * 本轮选定了技能时，把它的正文接到给定提示词之后。
  * 参数作为用户消息的一部分由调用方拼装，这里只管方法。
  */
 export function appendSkillPrompt(basePrompt: string, skill: ResumeSkill): string {
-  return `${basePrompt}\n\n# 本轮技能：${skill.name}\n${skill.body}`;
+  return `${basePrompt}\n\n${skillPromptBlock(skill)}`;
 }

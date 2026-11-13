@@ -305,8 +305,10 @@ createAgentSession({ cwd, sessionManager: SessionManager.inMemory(cwd), resource
 | 层 | 内容 | 量级 |
 |---|---|---|
 | 常驻 | `DEFAULT_SYSTEM_PROMPT`（`src/prompt.ts`）：唯一写入入口 `update_resume`、事实底线、信息库用法、回复风格，外加一行技能目录 | 约 600 字 |
-| 每轮 | `buildContextPrompt()`：当前简历 JSON（代码块）+ `resume_fields` 字段清单（一行一模块）+ 更早对话摘要 + 最近对话 + 待确认修改 | 随简历变化 |
-| 按需 | 内置技能正文（`src/skills.ts`）、用户自建技能（`appendSkillsToPrompt()`） | 只在本轮用到时 |
+| 每轮 | `buildContextPrompt()`：字段清单（一行一模块）→ 用户写作偏好 → 本轮技能正文 → 当前简历 JSON（代码块）→ 摘要 → 最近对话 → 待确认修改 | 随简历与历史变化 |
+| 按需 | 内置技能正文（`src/skills.ts`）、用户自建技能（`req.body.skills`） | 只在本轮用到时 |
+
+**顺序不是随意的**：按「常驻规则 → 字段结构 → 写作偏好 → 技能正文 → 简历 → 摘要 → 历史 → 待确认」排，稳定内容连续在前，供供应商前缀缓存命中；顺序只在 `buildContextPrompt()` 一处决定，技能正文与写作偏好通过 `options` 传入而非预先拼进 `basePrompt`。
 
 - **写入契约**：`schema_compact()` 把每个模块压成一行（`work: id, company, position, …`），简历全文随上下文下发，模型照现有 JSON 的形状写字段。字段表只有 Python 一份（`core/resume_schema.py`），Node 不复制、不推断字段名；合法性由唯一的工具端点判定。
 - **内置技能（6 个）**：诊断 / JD匹配 / 重写经历 / 润色 / 翻译 / 开场白。前端点技能卡或输入 `/名称`，`extractSkillCommand()` 在服务端解析，用户消息被替换成技能自带的 `ask`，技能正文注入这一轮的系统提示词；用户用自然语言提需求时，模型按技能目录自行 `use_skill(name)` 取用。
@@ -369,7 +371,7 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
   → ai_service_client 在 /v1/chat payload 附带 model_override（含 reasoning_effort）/ skills
   → ai-service registerByokModel() 动态注册临时 provider（id = owner + 配置哈希 + 推理强度）
   → createAgentSession(thinkingLevel=...) → 兼容端点收到 reasoning_effort
-  → appendSkillsToPrompt() 把技能追加到系统提示词末尾
+  → buildContextPrompt(options.skills) 把技能偏好放在字段结构之后、简历之前
   → usage 回调按 provider 前缀识别 byok 并跳过结算
 ```
 

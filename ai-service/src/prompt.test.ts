@@ -6,7 +6,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { appendSkillsToPrompt, buildContextPrompt, DEFAULT_SYSTEM_PROMPT } from "./prompt.js";
-import { appendSkillPrompt, findSkill } from "./skills.js";
+import { findSkill, skillPromptBlock } from "./skills.js";
 
 describe("DEFAULT_SYSTEM_PROMPT", () => {
   it("states the single write path and the fact boundary", () => {
@@ -82,7 +82,7 @@ describe("buildContextPrompt", () => {
     assert.ok(summaryIdx !== -1 && summaryIdx < historyIdx, "summary precedes recent history");
   });
 
-  it("keeps section order: resume → fields → summary → history → pending", () => {
+  it("keeps section order: fields → resume → summary → history → pending", () => {
     const prompt = buildContextPrompt(DEFAULT_SYSTEM_PROMPT, {
       resume: { id: 1, title: "前端简历", data: { basics: {} } },
       resume_fields: "basics: name",
@@ -101,19 +101,43 @@ describe("buildContextPrompt", () => {
   it("keeps every stable section ahead of the resume for prefix caching", () => {
     const skill = findSkill("诊断");
     assert.ok(skill, "skill exists");
-    const withRules = appendSkillsToPrompt(appendSkillPrompt(DEFAULT_SYSTEM_PROMPT, skill), [
-      { name: "量化成果", instructions: "每条经历补一个可核验数字" },
-    ]);
-    const prompt = buildContextPrompt(withRules, {
-      resume: { id: 1, data: { basics: { name: "张三" } } },
-      resume_fields: "basics: name",
-    });
+    const prompt = buildContextPrompt(
+      DEFAULT_SYSTEM_PROMPT,
+      {
+        resume: { id: 1, data: { basics: { name: "张三" } } },
+        resume_fields: "basics: name",
+      },
+      {
+        skills: [{ name: "量化成果", instructions: "每条经历补一个可核验数字" }],
+        skillBody: skillPromptBlock(skill),
+      },
+    );
 
     const resumeAt = prompt.indexOf("# 当前简历");
-    for (const stable of ["# 怎么改", "# 本轮技能：诊断", "# 用户的写作偏好", "# 字段结构"]) {
+    for (const stable of ["# 怎么改", "# 字段结构", "# 用户的写作偏好", "# 本轮技能：诊断"]) {
       const at = prompt.indexOf(stable);
       assert.ok(at !== -1, `${stable} present`);
       assert.ok(at < resumeAt, `${stable} must precede the resume (cache-friendly order)`);
     }
+  });
+
+  it("puts the field list before the per-turn skill body and user preferences", () => {
+    const skill = findSkill("JD匹配");
+    assert.ok(skill, "skill exists");
+    const prompt = buildContextPrompt(
+      DEFAULT_SYSTEM_PROMPT,
+      { resume: { id: 1, data: { basics: { name: "张三" } } }, resume_fields: "basics: name" },
+      {
+        skills: [{ name: "量化成果", instructions: "每条经历补一个可核验数字" }],
+        skillBody: skillPromptBlock(skill),
+      },
+    );
+
+    // 稳定度递减：字段结构（部署内恒定）→ 写作偏好（改设置才变）→ 技能正文（换技能就变）。
+    const order = ["# 怎么改", "# 字段结构", "# 用户的写作偏好", "# 本轮技能：JD匹配", "# 当前简历"].map((title) =>
+      prompt.indexOf(title),
+    );
+    assert.ok(order.every((index) => index !== -1), "all sections present");
+    assert.deepEqual([...order].sort((a, b) => a - b), order, "stable content first, per-turn skill body last");
   });
 });

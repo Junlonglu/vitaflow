@@ -32,7 +32,7 @@ import { loadConfig } from "./config.js";
 import { createFauxRuntime } from "./faux.js";
 import { appendSkillsToPrompt, buildContextPrompt, DEFAULT_SYSTEM_PROMPT, parseSkills, type AiServiceContext } from "./prompt.js";
 import { createRealRuntime, parseByokOverride, registerByokModel, type ThinkingLevelSetting } from "./real.js";
-import { appendSkillPrompt, extractSkillCommand } from "./skills.js";
+import { appendSkillPrompt, extractSkillCommand, skillPromptBlock } from "./skills.js";
 import { buildTaskPrompts, isTaskType } from "./taskPrompts.js";
 
 const config = loadConfig();
@@ -317,17 +317,20 @@ app.post("/v1/chat", async (req, res) => {
   const skillCommand = extractSkillCommand(message);
   const userMessage = skillCommand ? skillCommand.args || skillCommand.skill.ask : message;
   const skills = parseSkills(req.body?.skills);
-  const rulesPrompt = skillCommand
-    ? appendSkillPrompt(DEFAULT_SYSTEM_PROMPT, skillCommand.skill)
-    : DEFAULT_SYSTEM_PROMPT;
-  // 提示词按「稳定 → 易变」拼：常驻规则 → 技能正文 → 用户写作偏好 → 字段结构 → 简历 → 历史。
-  // 用户偏好属于半稳定内容，必须排到简历之前，否则每轮都被上下文变动带成未命中。
-  const stablePrompt = appendSkillsToPrompt(rulesPrompt, skills);
+  // 章节顺序统一由 buildContextPrompt 决定：常驻规则 → 字段结构（部署内恒定）→
+  // 用户写作偏好 → 本轮技能正文 → 简历 → 摘要 → 历史 → 待确认。技能正文与偏好
+  // 都作为 options 传入而不是预先拼进 basePrompt，否则会排到字段结构之前。
   const overridePrompt =
     typeof req.body?.system_prompt === "string" && req.body.system_prompt.trim() ? req.body.system_prompt : "";
   const systemPrompt = overridePrompt
-    ? appendSkillsToPrompt(overridePrompt, skills)
-    : buildContextPrompt(stablePrompt, context);
+    ? appendSkillsToPrompt(
+        skillCommand ? appendSkillPrompt(overridePrompt, skillCommand.skill) : overridePrompt,
+        skills,
+      )
+    : buildContextPrompt(DEFAULT_SYSTEM_PROMPT, context, {
+        skills,
+        skillBody: skillCommand ? skillPromptBlock(skillCommand.skill) : "",
+      });
 
   res.status(200);
   res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");

@@ -316,14 +316,18 @@ app.post("/v1/chat", async (req, res) => {
   // 模型仍可自己调用 use_skill 取用。
   const skillCommand = extractSkillCommand(message);
   const userMessage = skillCommand ? skillCommand.args || skillCommand.skill.ask : message;
-  const basePrompt = typeof req.body?.system_prompt === "string" && req.body.system_prompt.trim()
-    ? req.body.system_prompt
-    : buildContextPrompt(
-        skillCommand ? appendSkillPrompt(DEFAULT_SYSTEM_PROMPT, skillCommand.skill) : DEFAULT_SYSTEM_PROMPT,
-        context,
-      );
-  // Only enabled skills reach here; they are appended after all platform rules.
-  const systemPrompt = appendSkillsToPrompt(basePrompt, parseSkills(req.body?.skills));
+  const skills = parseSkills(req.body?.skills);
+  const rulesPrompt = skillCommand
+    ? appendSkillPrompt(DEFAULT_SYSTEM_PROMPT, skillCommand.skill)
+    : DEFAULT_SYSTEM_PROMPT;
+  // 提示词按「稳定 → 易变」拼：常驻规则 → 技能正文 → 用户写作偏好 → 字段结构 → 简历 → 历史。
+  // 用户偏好属于半稳定内容，必须排到简历之前，否则每轮都被上下文变动带成未命中。
+  const stablePrompt = appendSkillsToPrompt(rulesPrompt, skills);
+  const overridePrompt =
+    typeof req.body?.system_prompt === "string" && req.body.system_prompt.trim() ? req.body.system_prompt : "";
+  const systemPrompt = overridePrompt
+    ? appendSkillsToPrompt(overridePrompt, skills)
+    : buildContextPrompt(stablePrompt, context);
 
   res.status(200);
   res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");

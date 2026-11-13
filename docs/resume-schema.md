@@ -88,7 +88,7 @@ projects: id, name, role, …
 layout: section_order, hidden_sections, section_titles, field_labels
 ```
 
-`prompt.ts` 把它拼成 `# 字段结构` 一节，并说明「列表模块的条目必须带原 id，新增条目不要自带 id」。
+`prompt.ts` 把它拼成 `# 字段结构` 一节（排在简历 JSON 之前，稳定内容先入缓存），并说明「新增条目只用这些字段名，结构照简历 JSON 写」。条目 id 的规则在第 3 条。
 
 规则由 `schema_prompt()` 维护（同一份字段表的人读版本，也用于文档与调试）：
 

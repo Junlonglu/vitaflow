@@ -5,7 +5,8 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildContextPrompt, DEFAULT_SYSTEM_PROMPT } from "./prompt.js";
+import { appendSkillsToPrompt, buildContextPrompt, DEFAULT_SYSTEM_PROMPT } from "./prompt.js";
+import { appendSkillPrompt, findSkill } from "./skills.js";
 
 describe("DEFAULT_SYSTEM_PROMPT", () => {
   it("states the single write path and the fact boundary", () => {
@@ -89,11 +90,30 @@ describe("buildContextPrompt", () => {
       history: [{ role: "user", content: "突出项目经历" }],
       pending_change: { exists: true, message_id: 12, summary: ["强化后端项目描述"] },
     });
-    const indexes = ["# 当前简历", "# 字段结构", "# 更早的对话摘要", "# 最近的对话", "# 待确认的修改"].map((title) =>
+    const indexes = ["# 字段结构", "# 当前简历", "# 更早的对话摘要", "# 最近的对话", "# 待确认的修改"].map((title) =>
       prompt.indexOf(title),
     );
     assert.ok(indexes.every((index) => index !== -1), "all sections present");
     assert.deepEqual([...indexes].sort((a, b) => a - b), indexes, "sections appear in order");
     assert.match(prompt, /用户还没确认这些改动/);
+  });
+
+  it("keeps every stable section ahead of the resume for prefix caching", () => {
+    const skill = findSkill("诊断");
+    assert.ok(skill, "skill exists");
+    const withRules = appendSkillsToPrompt(appendSkillPrompt(DEFAULT_SYSTEM_PROMPT, skill), [
+      { name: "量化成果", instructions: "每条经历补一个可核验数字" },
+    ]);
+    const prompt = buildContextPrompt(withRules, {
+      resume: { id: 1, data: { basics: { name: "张三" } } },
+      resume_fields: "basics: name",
+    });
+
+    const resumeAt = prompt.indexOf("# 当前简历");
+    for (const stable of ["# 怎么改", "# 本轮技能：诊断", "# 用户的写作偏好", "# 字段结构"]) {
+      const at = prompt.indexOf(stable);
+      assert.ok(at !== -1, `${stable} present`);
+      assert.ok(at < resumeAt, `${stable} must precede the resume (cache-friendly order)`);
+    }
   });
 });

@@ -9,6 +9,10 @@
  * 旧版把同一批规则在系统提示词、工具 description、promptGuidelines 里各写一遍，
  * 每轮上下文里还有一份完整字段表（约 1.5k tokens）。现在字段表只给一行紧凑版，
  * 简历本身随上下文下发，模型照着已有结构写即可。
+ *
+ * 章节顺序按「稳定 → 易变」排：常驻规则 → 技能正文 → 用户写作偏好 → 字段结构 →
+ * 简历 JSON → 摘要 → 历史 → 待确认。供应商的前缀缓存按 token 逐位匹配，稳定内容
+ * 排在前面，改简历时只失效尾段；反过来排会让简历后面所有内容每轮重算。
  */
 import { skillCatalogLine } from "./skills.js";
 
@@ -56,18 +60,21 @@ export function buildContextPrompt(basePrompt: string, context?: AiServiceContex
   if (!context) return basePrompt;
   const parts: string[] = [basePrompt];
 
+  // 字段名清单放在简历之前：它是稳定的（schema 不随对话变化），而简历每轮都可能被改。
+  // 提示词缓存按 token 前缀匹配，稳定内容排在易变内容之前，改简历时不会连带把它打掉。
+  const fields = (context.resume_fields ?? "").trim();
+  if (fields) {
+    parts.push(
+      `# 字段结构\n${fields}\n\n新增条目只用这些字段名，不要自造；basics / summary / layout 是对象，其余是数组，结构照简历 JSON 写。`,
+    );
+  }
+
   const resume = context.resume;
   const data = resume?.data;
   if (data && Object.keys(data).length) {
     parts.push(`# 当前简历\n\`\`\`json\n${JSON.stringify(data)}\n\`\`\``);
   } else if (resume?.title) {
     parts.push(`# 当前简历\n（还没有内容，标题：${resume.title}）`);
-  }
-
-  // 字段名清单：只有一行一模块，用来约束新增条目的字段名；结构本身由上面的 JSON 示范。
-  const fields = (context.resume_fields ?? "").trim();
-  if (fields) {
-    parts.push(`# 字段结构\n${fields}\n\n新增条目只用这些字段名，不要自造；basics / summary / layout 是对象，其余是数组。`);
   }
 
   const contextSummary = (context.context_summary ?? "").trim();
@@ -112,7 +119,8 @@ export function parseSkills(value: unknown, max = 20): UserSkillPayload[] {
 }
 
 /**
- * 把用户自建技能追加到系统提示词末尾。它们是用户自己的写作偏好，随启用状态常驻；
+ * 把用户自建技能追加到「规则之后、上下文之前」。它们是用户自己的写作偏好，
+ * 随启用状态常驻；位置固定在简历等内容之前，避免每轮被上下文变动连带打掉缓存。
  * 明确标注为「不得覆盖上方平台规则」，并清洗标题换行，避免伪造新的章节边界。
  */
 export function appendSkillsToPrompt(basePrompt: string, skills?: UserSkillPayload[] | null): string {

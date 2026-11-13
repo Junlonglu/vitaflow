@@ -20,8 +20,3 @@ export async function exportPdfApi(id: number, title?: string) {
   const res = await request.post(`/resumes/${id}/export/pdf`, {}, { responseType: "blob", timeout: 120000 })
   downloadBlob((res as any).data, `${safeFilename(title, `vitaflow_resume_${id}`)}.pdf`)
 }
-
-export async function exportWordApi(id: number, title?: string) {
-  const res = await request.post(`/resumes/${id}/export/word`, {}, { responseType: "blob", timeout: 120000 })
-  downloadBlob((res as any).data, `${safeFilename(title, `vitaflow_resume_${id}`)}.docx`)
-}

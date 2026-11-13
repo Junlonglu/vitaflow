@@ -1,24 +1,31 @@
-fastapi
-uvicorn[standard]
-sqlalchemy
-alembic
-pymysql
-redis>=5.0
-pydantic
-pydantic-settings
-python-dotenv
-python-jose[cryptography]
-passlib[bcrypt]
+# 依赖锁定：这些版本是当前后端实际运行并跑通全部测试的版本。
+# 不锁版本时，换台机器装出来的就是另一个项目（FastAPI 0.106 前后流式响应的
+# Session 语义就变过一次），线上问题很难复现。升级请连同测试一起改。
+fastapi==0.138.1
+uvicorn[standard]==0.49.0
+sqlalchemy==2.0.51
+alembic==1.18.5
+pymysql==1.2.0
+redis==8.0.1
+pydantic==2.13.4
+pydantic-settings==2.14.2
+python-dotenv==1.2.2
+python-jose[cryptography]==3.5.0
+passlib[bcrypt]==1.7.4
+# bcrypt 4.1+ 会破坏 passlib 1.7.4 的自动探测，保持 4.0.x。
 bcrypt==4.0.1
-python-multipart
-python-docx
-pypdf
-Pillow
-pytesseract
-jinja2
-weasyprint
-playwright
-bleach
-minio
-oss2
-httpx
+python-multipart==0.0.32
+python-docx==1.2.0
+pypdf==6.14.2
+Pillow==12.2.0
+pytesseract==0.3.13
+jinja2==3.1.6
+weasyprint==69.0
+playwright==1.60.0
+bleach==6.4.0
+minio==7.2.20
+oss2==2.19.1
+httpx==0.28.1
+
+# 测试
+pytest==9.2.0

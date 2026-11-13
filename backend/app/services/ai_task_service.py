@@ -46,9 +46,15 @@ def finish_ai_task(
     token_usage: dict[str, Any] | None = None,
     settle: bool = True,
 ) -> None:
-    # AI services may have used the same session. Clear a failed transaction
-    # before persisting the monitoring result, which was already committed at creation.
-    db.rollback()
+    # AI 服务可能复用过同一个 Session，事务可能停在失败状态。只在真的需要时
+    # 回滚：无条件 rollback 会把调用方尚未提交的变更一起丢掉，这是个随时会
+    # 被踩的坑（当前调用点恰好都先 commit 过，不代表以后也是）。
+    if not db.is_active:
+        db.rollback()
+        refreshed = db.get(AiTask, task.id)
+        if refreshed is None:
+            return
+        task = refreshed
     task.status = status
     task.error_message = error_message[:4000] if error_message else None
     task.output_data = output_data or {}

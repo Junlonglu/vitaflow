@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from docx import Document
 from sqlalchemy.orm import Session
@@ -181,7 +182,9 @@ def export_word(db: Session, user_id: int, resume: Resume) -> Path:
                     if item.get(field):
                         doc.add_paragraph(_plain(item.get(field), colon))
 
-    file_name = f"vitaflow_resume_{resume.id}.docx"
+    # 每次导出独立文件名：固定用 resume_id 时，同一份简历并发导出会互相覆盖，
+    # 下载到的那份可能是另一个人的编辑结果。
+    file_name = f"vitaflow_resume_{resume.id}_{uuid4().hex[:8]}.docx"
     file_path = settings.export_path / file_name
     doc.save(file_path)
     db.add(ExportRecord(user_id=user_id, resume_id=resume.id, file_type="word", file_name=file_name, file_path=str(file_path)))

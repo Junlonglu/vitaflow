@@ -138,9 +138,11 @@ def duplicate_resume(db: Session, user_id: int, resume_id: int, title: str | Non
         user_id=user_id,
         title=(title or "").strip()[:120] or f"{source.title} 副本",
         language=source.language,
-        resume_data=source.resume_data,
+        # JSON 列不做深拷贝的话，两份简历会挂同一个 dict：SQLAlchemy 不追踪
+        # 原地修改，改副本会静默改到原件（反之亦然）。
+        resume_data=deepcopy(source.resume_data),
         template_id=source.template_id,
-        template_config=source.template_config,
+        template_config=deepcopy(source.template_config),
         create_by=user_id,
         update_by=user_id,
     )
@@ -154,8 +156,9 @@ def create_version(db: Session, user_id: int, resume_id: int, reason: str) -> Re
     resume = get_resume(db, user_id, resume_id)
     version = ResumeVersion(
         resume_id=resume.id,
-        resume_data=resume.resume_data,
-        template_config=resume.template_config,
+        # 版本是快照：必须和当前简历脱离引用，否则后续编辑会改到历史版本。
+        resume_data=deepcopy(resume.resume_data),
+        template_config=deepcopy(resume.template_config),
         reason=reason,
     )
     db.add(version)

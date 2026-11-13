@@ -9,6 +9,7 @@ from typing import Any
 
 from app.core.config import settings
 from app.core.exceptions import AppException
+from app.services.rich_text_service import sanitize_rich_text_html
 
 
 def _send_message(message: EmailMessage, fail_message: str) -> None:
@@ -129,7 +130,10 @@ def send_feedback_notification(to_email: str, feedback: Any, user: Any) -> None:
         f"反馈内容：\n{content}"
     )
     message.set_content(text_content)
-    html_display_content = content.replace("<img ", '<img style="max-width: 100%; max-height: 280px; width: auto; height: auto; border-radius: 8px; display: block; margin: 12px 0; object-fit: contain;" ')
+    # 反馈正文是用户提交的 HTML，直接拼进邮件等于把任意标签送给收件人
+    # （追踪像素、伪造表单、外部样式）。先走和展示层同一条清理链路。
+    safe_content = sanitize_rich_text_html(content, allow_images=True)
+    html_display_content = safe_content.replace("<img ", '<img style="max-width: 100%; max-height: 280px; width: auto; height: auto; border-radius: 8px; display: block; margin: 12px 0; object-fit: contain;" ')
     html_content = f"""
     <!DOCTYPE html>
     <html>

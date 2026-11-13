@@ -572,7 +572,29 @@ def _schedule_chat_summary(db: Session, session: AiChatSession, context_limit: i
         .where(AiChatMessage.session_id == session.id, AiChatMessage.id > after)
     ) or 0
     if pending_count > context_limit + 8:
-        asyncio.create_task(_compact_chat_context(session.id, context_limit, model_ref))
+        _spawn_background(_compact_chat_context(session.id, context_limit, model_ref))
+
+
+# asyncio 只对任务持有弱引用：不自己存一份，任务可能在跑完前被 GC 回收，
+# 摘要就会偶发不执行。这里同时兜住异常，避免出现 "Task exception was never
+# retrieved" 的静默失败。
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
+
+
+def _spawn_background(coro) -> asyncio.Task:
+    task = asyncio.create_task(coro)
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_release_background_task)
+    return task
+
+
+def _release_background_task(task: asyncio.Task) -> None:
+    _BACKGROUND_TASKS.discard(task)
+    if task.cancelled():
+        return
+    error = task.exception()
+    if error is not None:
+        logger.warning("后台摘要任务失败", exc_info=error)
 
 
 def _resolve_turn_model_config(db: Session, user: User, model_config_id: int | None):

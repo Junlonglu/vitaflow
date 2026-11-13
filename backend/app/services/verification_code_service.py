@@ -39,6 +39,33 @@ class VerificationCodeService:
     def _code_key(self, email: str, code_id: str, purpose: str = "register") -> str:
         return self._key(email, f"code:{code_id}", purpose)
 
+    def _attempt_key(self, email: str, purpose: str = "register") -> str:
+        return self._key(email, "verify-attempts", purpose)
+
+    def _verify_attempts(self, email: str, purpose: str) -> int:
+        try:
+            return int(self.client.get(self._attempt_key(email, purpose)) or 0)
+        except (RedisError, ValueError):
+            return 0
+
+    def _record_verify_failure(self, email: str, purpose: str) -> int:
+        key = self._attempt_key(email, purpose)
+        try:
+            with self.client.pipeline(transaction=True) as pipe:
+                pipe.incr(key)
+                pipe.expire(key, settings.email_code_expire_minutes * 60)
+                count, _ = pipe.execute()
+            return int(count or 0)
+        except RedisError:
+            logger.warning("Failed to record verification attempt", exc_info=True)
+            return 0
+
+    def _clear_verify_attempts(self, email: str, purpose: str) -> None:
+        try:
+            self.client.delete(self._attempt_key(email, purpose))
+        except RedisError:
+            logger.warning("Failed to clear verification attempts", exc_info=True)
+
     def issue_code(self, email: str, send_email: Callable[[str, str], None], purpose: str) -> None:
         rate_key = self._key(email, "send-rate", purpose)
         try:
@@ -70,6 +97,8 @@ class VerificationCodeService:
                 pipe.sadd(index_key, code_id)
                 # 索引仅用于注册成功后的批量清理；每个验证码仍由独立 Key 的 TTL 控制有效期。
                 pipe.expire(index_key, ttl_seconds)
+                # 新验证码重新给满试错次数。
+                pipe.delete(self._attempt_key(email, purpose))
                 pipe.execute()
         except RedisError as exc:
             self._delete_quietly(rate_key)
@@ -83,13 +112,21 @@ class VerificationCodeService:
             raise
 
     def verify_code(self, email: str, code: str, purpose: str) -> None:
+        # 6 位数字在有效期内可被穷举：先看失败次数，超限就把已发验证码一并作废，
+        # 用户必须重新获取，攻击者每次只能多试 settings.email_code_max_verify_attempts 次。
+        if self._verify_attempts(email, purpose) >= settings.email_code_max_verify_attempts:
+            self.invalidate_codes(email, purpose)
+            raise AppException("验证码尝试次数过多，请重新获取验证码", 429)
+
         code_key = self._code_key(email, self._code_id(email, code), purpose)
         try:
             valid = bool(self.client.exists(code_key))
         except RedisError as exc:
             raise AppException("验证码服务暂不可用，请稍后重试") from exc
         if not valid:
+            self._record_verify_failure(email, purpose)
             raise AppException("验证码错误或已过期，请重新获取", 400)
+        self._clear_verify_attempts(email, purpose)
 
     def acquire_lock(self, email: str, purpose: str, conflict_message: str) -> str:
         lock_key = self._key(email, "lock", purpose)
@@ -127,6 +164,9 @@ class VerificationCodeService:
             keys.extend([index_key, self._key(email, "send-rate", purpose)])
             if keys:
                 self.client.delete(*keys)
+        except RedisError:
+            # 操作已完成，残留 Key 也会自动过期。
+            logger.warning("Failed to invalidate registration codes", exc_info=True)
         except RedisError:
             # 操作已完成，残留 Key 也会自动过期。
             logger.warning("Failed to invalidate registration codes", exc_info=True)

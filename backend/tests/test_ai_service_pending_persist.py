@@ -96,6 +96,7 @@ class StreamAiServiceMultimodalTest(unittest.TestCase):
             patch.object(ai_chat_service, "resolve_chat_ai_config", return_value=config),
             patch.object(ai_chat_service, "precheck_flow_points"),
             _caps_patch(multimodal=False),
+            patch.object(ai_chat_service, "owned_object_names", side_effect=lambda _db, _uid, names: set(names)),
             patch.object(ai_chat_service, "ai_service_chat_events", side_effect=_faux_events) as events,
         ):
             results = _drain_events(stream_ai_service_chat(_DbStub(), user, resume, "按图片改简历", attachments))
@@ -130,6 +131,7 @@ class StreamAiServiceMultimodalTest(unittest.TestCase):
             patch.object(ai_chat_service, "get_or_create_chat_session", return_value=session),
             patch.object(ai_chat_service, "build_ai_service_context", return_value={"resume": {}, "history": [], "pending_change": {}}),
             patch.object(ai_chat_service, "ai_service_chat_events", side_effect=faux_events),
+            patch.object(ai_chat_service, "owned_object_names", side_effect=lambda _db, _uid, names: set(names)),
             patch.object(ai_chat_service, "_save_assistant_message", side_effect=lambda *a, **k: SimpleNamespace(timing=None, model_dump=lambda *_a, **_k: {"id": 1, "content": "我看到了图片"})),
         ):
             _drain_events(stream_ai_service_chat(_DbStub(), user, resume, "按图片改简历", attachments))

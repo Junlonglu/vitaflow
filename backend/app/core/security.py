@@ -34,24 +34,45 @@ def create_access_token(subject: Union[str, int], expires_delta: Optional[timede
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
+def _token_subject(token: str) -> int | None:
+    """解出 JWT 里的用户 id；签名/过期/格式异常一律返回 None。"""
+    try:
+        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        subject = payload.get("sub")
+        return int(subject) if subject is not None else None
+    except (JWTError, ValueError):
+        return None
+
+
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="登录已过期，请重新登录",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    try:
-        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
-        user_id = payload.get("sub")
-        if user_id is None:
-            raise credentials_exception
-    except JWTError as exc:
-        raise credentials_exception from exc
-    user = db.get(User, int(user_id))
+    user_id = _token_subject(token)
+    if user_id is None:
+        raise credentials_exception
+    user = db.get(User, user_id)
     if user is None:
         raise credentials_exception
     if user.status != "active":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="账号已被停用")
+    return user
+
+
+def user_from_token(db: Session, token: str) -> User | None:
+    """按 token 取可用用户，取不到返回 None。
+
+    给「浏览器直接发起的图片请求」用：<img> 带不了 Authorization 头，
+    只能用 query 里的 token，失败时由调用方决定回 401 还是 404。
+    """
+    user_id = _token_subject(token)
+    if user_id is None:
+        return None
+    user = db.get(User, user_id)
+    if user is None or user.status != "active":
+        return None
     return user
 
 

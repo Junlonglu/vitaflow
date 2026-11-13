@@ -7,6 +7,7 @@ from uuid import uuid4
 from fastapi import UploadFile
 from fastapi.responses import StreamingResponse
 from minio import Minio
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -19,6 +20,45 @@ MAX_SIZE = 3 * 1024 * 1024
 CHUNK_SIZE = 32 * 1024
 CACHE_MAX_AGE = 31536000
 CACHE_CONTROL = f"public, max-age={CACHE_MAX_AGE}, immutable"
+
+# 桶里可以对外代理的对象前缀。上传入口只会写这几种，白名单把「拿任意 key
+# 去读桶」挡在业务层，路径穿越（..、绝对路径、反斜杠）也一并拒绝。
+PUBLIC_OBJECT_PREFIXES = ("avatar/", "announcement/")
+PRIVATE_OBJECT_PREFIXES = ("ai-chat/",)
+ALLOWED_OBJECT_PREFIXES = (*PUBLIC_OBJECT_PREFIXES, *PRIVATE_OBJECT_PREFIXES)
+
+
+def is_allowed_object_name(object_name: str) -> bool:
+    """对象名是否落在受管的业务前缀内；顺带挡住路径穿越写法。"""
+    value = (object_name or "").strip()
+    if not value or len(value) > 500:
+        return False
+    if value.startswith("/") or "\\" in value or ".." in value or "//" in value:
+        return False
+    return value.startswith(ALLOWED_OBJECT_PREFIXES)
+
+
+def is_private_object_name(object_name: str) -> bool:
+    """私有对象（当前只有对话图片）需要登录且只能被上传者读取。"""
+    return (object_name or "").strip().startswith(PRIVATE_OBJECT_PREFIXES)
+
+
+def owned_object_names(db: Session, user_id: int, object_names: list[str]) -> set[str]:
+    """从候选对象名里挑出确实属于该用户的上传记录。
+
+    这是「前端传来的 object_name 不可信」的唯一收敛点：调用方拿到返回值后
+    只能读取集合内的对象，越权名在这里被静默丢弃（不报错，避免探测）。
+    """
+    candidates = {name for name in object_names if name}
+    if not candidates:
+        return set()
+    rows = db.scalars(
+        select(UploadedFile.object_name).where(
+            UploadedFile.user_id == user_id,
+            UploadedFile.object_name.in_(candidates),
+        )
+    )
+    return set(rows.all())
 
 
 def _provider() -> str:
@@ -209,6 +249,10 @@ def _iter_oss_object(obj) -> Iterator[bytes]:
 
 
 def stream_uploaded_file(object_name: str) -> StreamingResponse:
+    # 对象名来自 URL 路径，必须先过业务前缀白名单：否则可以拿任意桶内 key
+    # （包括其他模块写的对象）走这个公开代理。
+    if not is_allowed_object_name(object_name):
+        raise AppException("文件不存在", 404)
     if _provider() == "aliyun_oss":
         obj = get_aliyun_oss_bucket().get_object(object_name)
         content_type = getattr(obj, "headers", {}).get("Content-Type", "application/octet-stream")

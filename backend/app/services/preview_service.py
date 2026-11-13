@@ -7,6 +7,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup
 
 from app.core.config import settings
+from app.core.template_config import normalize_template_config
 from app.services.resume_locale import (
     localized_section_title,
     resolve_resume_language,
@@ -96,18 +97,16 @@ def _quote_font(font: str) -> str:
 
 
 def css_font_family(value: Any) -> Markup:
-    raw = str(value or "vf-sans").strip() or "vf-sans"
-    if raw in FONT_PRESETS:
-        fonts = FONT_PRESETS[raw]
-    else:
-        fonts = []
-        for item in raw.split(","):
-            font = item.strip().strip("\"'")
-            if font:
-                fonts.append(font.replace("\\", "").replace('"', "").replace("'", ""))
-        fonts = fonts or FONT_PRESETS["vf-sans"]
+    """只接受预设字体键。
+
+    早期实现允许传入任意 font stack 并逐项清洗，但 CSS 里 `;`、`{}`、`()` 不会
+    被 Jinja 转义，任何自由文本都是一条注入通道。字体选项本来就来自固定预设，
+    这里直接按预设键查表，未知值回落到默认无衬线。
+    """
+    raw = str(value or "").strip()
+    fonts = FONT_PRESETS.get(raw) or FONT_PRESETS["vf-sans"]
     if not any(font.lower() in {"arial", "sans-serif"} for font in fonts):
-        fonts.extend(["Arial", "sans-serif"])
+        fonts = [*fonts, "Arial", "sans-serif"]
     return Markup(", ".join(_quote_font(font) for font in fonts))
 
 
@@ -256,8 +255,11 @@ def render_resume_html(
 ) -> str:
     safe_template = template_id if template_id in AVAILABLE_TEMPLATES else "classic"
     template = env.get_template(f"resume/{safe_template}.html")
-    config = template_config or {}
-    config.setdefault("template_id", safe_template)
+    # 渲染前统一收敛：这份 dict 会被直接插进 <style>，也是 PDF（Chromium）
+    # 的资源来源，白名单是 CSS 注入与渲染期 SSRF 的唯一防线。
+    # 用新 dict，不回写调用方持有的 ORM 字段（否则预览会改到简历本身）。
+    config = normalize_template_config(template_config)
+    config["template_id"] = safe_template
     return template.render(
         resume=_prepare_resume_data(resume_data, language),
         config=config,

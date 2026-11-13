@@ -25,6 +25,11 @@ from app.core.config import settings
 from app.services.storage.storage_service import read_uploaded_file
 
 
+# 上传入口只接受这三种图片；附件体的 content_type 是客户端给的，这里再收一次，
+# 免得任意 mime 被塞进 provider 请求。
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+
+
 def _extract_error(raw: bytes) -> str:
     text = raw.decode("utf-8", errors="replace").strip()
     if not text:
@@ -41,24 +46,34 @@ def _http_timeout() -> httpx.Timeout:
     return httpx.Timeout(connect=5, read=180, write=10, pool=5)
 
 
-def _attachment_image_blocks(attachments: list[dict[str, Any]] | None) -> list[dict[str, str]]:
+def _attachment_image_blocks(
+    attachments: list[dict[str, Any]] | None,
+    allowed_object_names: set[str],
+) -> list[dict[str, str]]:
     """Resolve uploaded image attachments into pi-agent ``ImageContent`` blocks.
 
     Each attachment carries a MinIO/OSS ``object_name``; we read the bytes and
     base64-encode them so the Node AI service can attach them natively (pi builds
     ``data:<mime>;base64,<data>`` for the provider). Non-image, or an attachment
     we cannot resolve, is skipped — a bad image must never break a text-only turn.
+
+    ``allowed_object_names`` comes from the caller's ownership lookup. The
+    attachment payload is client-controlled, so an ``object_name`` that is not in
+    this set is dropped instead of read: without it, editing the request body
+    would let a user feed another user's uploads to the model.
     """
     blocks: list[dict[str, str]] = []
     for item in attachments or []:
         if not isinstance(item, dict):
             continue
         url = item.get("url")
-        content_type = (item.get("content_type") or "").strip()
+        content_type = (item.get("content_type") or "").strip().lower()
         object_name = item.get("object_name")
         # Only images the user actually uploaded reach this point; the url is the
         # frontend's marker of an image attachment, so guard on it too.
-        if not url or not content_type.startswith("image/") or not object_name:
+        if not url or content_type not in ALLOWED_IMAGE_TYPES or not object_name:
+            continue
+        if object_name not in allowed_object_names:
             continue
         # content_type is already guaranteed image/* above, so carry it through
         # unchanged; the storage-read content type is not needed.
@@ -82,6 +97,7 @@ async def ai_service_chat_events(
     model_ref: str | None = None,
     model_override: dict[str, Any] | None = None,
     skills: list[dict[str, str]] | None = None,
+    allowed_attachment_names: set[str] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Stream NDJSON chat events from the AI service, yielding event dicts.
 
@@ -110,7 +126,9 @@ async def ai_service_chat_events(
         payload["resume_id"] = resume_id
     # Uploaded images → base64 ImageContent blocks so the agent sees them natively
     # (ticket 06). Absent attachments, no "images" key is sent — text-only unchanged.
-    image_blocks = _attachment_image_blocks(attachments)
+    # ``allowed_attachment_names`` is required-ish: omitting it means "nothing is
+    # owned", so a forgotten call site drops images instead of leaking them.
+    image_blocks = _attachment_image_blocks(attachments, allowed_attachment_names or set())
     if image_blocks:
         payload["images"] = image_blocks
     # pi model ref (ticket 07): routes the turn to the mapped model in the Node

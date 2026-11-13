@@ -5,6 +5,7 @@ import Button from "@/components/ui/button/Button.vue"
 import Select from "@/components/ui/select/Select.vue"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
 import { renderMarkdown } from "@/lib/markdown"
+import { privateFileUrl } from "@/lib/fileUrl"
 import { uploadAiChatImageApi } from "@/api/file"
 import { showGlobalToast } from "@/utils/toast"
 import type { AiChatAttachment, AiChatModelOption, ToolStep, PendingQuestion } from "@/api/ai"
@@ -509,8 +510,8 @@ watch(
                   <X class="h-4 w-4" /> {{ message.optimized_resume_data ? "修改已取消" : "已忽略" }}
                 </div>
                 <div v-if="message.attachments?.length" class="mt-3 flex flex-wrap gap-2">
-                  <button v-for="item in message.attachments" :key="item.url" type="button" class="block h-20 w-20 sm:h-24 sm:w-24 shrink-0 cursor-zoom-in overflow-hidden rounded-lg border border-zinc-200/70 bg-white transition-colors hover:border-zinc-300 active:scale-95" @click="openPreview(item.url)">
-                    <img :src="item.url" :alt="item.name || '对话图片'" class="h-full w-full object-cover" />
+                  <button v-for="item in message.attachments" :key="item.url" type="button" class="block h-20 w-20 sm:h-24 sm:w-24 shrink-0 cursor-zoom-in overflow-hidden rounded-lg border border-zinc-200/70 bg-white transition-colors hover:border-zinc-300 active:scale-95" @click="openPreview(privateFileUrl(item.url))">
+                    <img :src="privateFileUrl(item.url)" :alt="item.name || '对话图片'" class="h-full w-full object-cover" />
                   </button>
                 </div>
               </div>
@@ -528,7 +529,7 @@ watch(
       <form class="composer relative mx-auto mb-18 mt-1 w-[calc(100%-1.5rem)] max-w-3xl shrink-0 rounded-2xl border border-zinc-200 bg-white shadow-[0_1px_2px_rgba(24,24,27,0.04)] transition-colors focus-within:border-zinc-300 focus-within:ring-2 focus-within:ring-zinc-900/[0.04] sm:mb-4 sm:w-[calc(100%-2rem)]" @submit.prevent="submit">
         <div v-if="attachments.length || uploadError" class="flex flex-wrap gap-2 px-3 pt-3 sm:gap-3">
           <div v-for="(item, index) in attachments" :key="item.url" class="group relative h-14 w-14 sm:h-16 sm:w-16 shrink-0 rounded-lg border border-zinc-200/80 bg-white">
-            <img :src="item.url" :alt="item.name || '待发送图片'" class="h-full w-full rounded-lg object-cover" />
+            <img :src="privateFileUrl(item.url)" :alt="item.name || '待发送图片'" class="h-full w-full rounded-lg object-cover" />
             <button type="button" class="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-white text-zinc-400 ring-1 ring-zinc-200/80 transition hover:text-red-500 active:scale-95" title="移除图片" @click="removeAttachment(index)">
               <X class="h-3 w-3" stroke-width="2.5" />
             </button>

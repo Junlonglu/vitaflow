@@ -76,6 +76,10 @@ def _relay_patches(model_config=None, capabilities=None):
         patch.object(ai_chat_service, "get_or_create_chat_session", return_value=SimpleNamespace(id=42, title="AI 简历助手", update_time=None, context_summary=None, summary_message_id=None)),
         patch.object(ai_chat_service, "build_ai_service_context", return_value={"resume": {}, "history": [], "pending_change": {}}),
         patch.object(ai_chat_service, "flag_modified"),
+        # 归属校验走真实库（uploaded_files）查询，这里只关注重新生成流程，
+        # 于是把「是否属于本人」简化成恒真；越权过滤由
+        # tests/test_chat_attachment_ownership.py 单独覆盖。
+        patch.object(ai_chat_service, "owned_object_names", side_effect=lambda _db, _uid, names: set(names)),
         patch.object(ai_chat_service, "_save_assistant_message", side_effect=_fake_save),
     )
 

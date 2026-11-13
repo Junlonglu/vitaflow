@@ -1,8 +1,11 @@
+from copy import deepcopy
+
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppException
 from app.core.resume_schema import normalize_resume_document
+from app.core.template_config import normalize_template_config
 from app.models.ai_chat import AiChatMessage, AiChatSession
 from app.models.resume import Resume, ResumeVersion
 from app.schemas.resume import ResumeCreate, ResumeUpdate, default_template_config
@@ -64,7 +67,9 @@ def get_resume(db: Session, user_id: int, resume_id: int) -> Resume:
 
 
 def create_resume(db: Session, user_id: int, payload: ResumeCreate) -> Resume:
-    config = payload.template_config or default_template_config(payload.template_id)
+    # 白名单收敛后再落库：模板配置会被插进 <style>，非法值一旦入库就会
+    # 在预览/分享/PDF 三条链路上同时生效。
+    config = normalize_template_config(payload.template_config or default_template_config(payload.template_id))
     config["template_id"] = payload.template_id
     language = normalize_resume_language(payload.language)
     # 统一结构：补 schema 版本、条目 id、字段类型清洗（前端 / 导入 / AI 共用同一入口）
@@ -91,8 +96,17 @@ def update_resume(db: Session, user_id: int, resume_id: int, payload: ResumeUpda
     if "language" in data:
         data["language"] = normalize_resume_language(data["language"])
     if "template_id" in data and data["template_id"]:
-        data.setdefault("template_config", resume.template_config or {})
-        data["template_config"]["template_id"] = data["template_id"]
+        # 复制一份再改：直接 setdefault(resume.template_config) 会原地改写 ORM
+        # 上那份共享 dict，等于「只是换个模板」也顺手改了简历对象。
+        base_config = data.get("template_config") or deepcopy(resume.template_config) or {}
+        base_config["template_id"] = data["template_id"]
+        data["template_config"] = base_config
+    if isinstance(data.get("template_config"), dict):
+        # 新建一份 dict：既做白名单，也避免原地改写 ORM 上那份共享对象。
+        config = normalize_template_config(data["template_config"])
+        if data.get("template_id"):
+            config["template_id"] = data["template_id"]
+        data["template_config"] = config
     if isinstance(data.get("resume_data"), dict):
         # 前端保存与 AI 写回走同一套规范化，避免出现「同一份简历两种形状」。
         data["resume_data"] = normalize_resume_document(

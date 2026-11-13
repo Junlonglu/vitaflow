@@ -12,6 +12,12 @@ from app.core.config import settings
 from app.core.exceptions import AppException
 from app.core.request_utils import get_client_ip
 from app.core.response import success
+from app.core.throttle import (
+    clear as clear_throttle,
+    failure_count,
+    lock_remaining_minutes,
+    record_failure,
+)
 from app.core.security import create_access_token, get_current_user, get_password_hash, verify_password
 from app.models.user import User
 from app.schemas.auth import (
@@ -113,11 +119,19 @@ def register(payload: RegisterRequest, request: Request, db: Session = Depends(g
 
 @router.post("/login")
 def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
-    user = db.scalar(select(User).where(func.lower(User.email) == normalize_email(payload.email)))
+    email = normalize_email(payload.email)
+    # 按 邮箱+IP 计数：只按邮箱会被用来锁死别人账号，只按 IP 在 NAT 下误伤。
+    throttle_id = f"{email}|{get_client_ip(request)}"
+    if failure_count("login", throttle_id) >= settings.auth_login_max_attempts:
+        raise AppException(f"登录失败次数过多，请 {lock_remaining_minutes('login', throttle_id)} 分钟后再试", 429)
+
+    user = db.scalar(select(User).where(func.lower(User.email) == email))
     if not user or not verify_password(payload.password, user.password_hash):
+        record_failure("login", throttle_id, settings.auth_login_lock_seconds)
         raise AppException("邮箱或密码错误", 400)
     if user.status != "active":
         raise AppException("账号已被停用", 403)
+    clear_throttle("login", throttle_id)
     if user.email.lower() in settings.admin_email_list and user.role != "admin":
         user.role = "admin"
     user.last_login_ip = get_client_ip(request)

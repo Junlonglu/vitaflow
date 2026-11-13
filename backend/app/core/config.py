@@ -61,6 +61,14 @@ class Settings(BaseSettings):
     email_code_expire_minutes: int = Field(default=10, gt=0)
     email_code_send_interval_seconds: int = Field(default=60, gt=0)
     email_code_register_lock_seconds: int = Field(default=30, gt=0)
+    # 验证码是 6 位数字，10 分钟内可穷举：同一邮箱同一用途连续试错到上限后
+    # 直接作废已发验证码，必须重新获取。
+    email_code_max_verify_attempts: int = Field(default=5, ge=1, le=20)
+
+    # 登录失败限频（按 邮箱+IP 计数）。命中上限后在窗口内一律拒绝，
+    # 避免在线爆破密码。
+    auth_login_max_attempts: int = Field(default=5, ge=1, le=50)
+    auth_login_lock_seconds: int = Field(default=600, gt=0)
 
     # Node「AI 服务」（pi-agent 旁路服务）：AI 对话与一次性任务（生成/导入）
     # 均代理到该服务，由 Node 侧承载 pi-agent 运行时。模型目录与 API Key

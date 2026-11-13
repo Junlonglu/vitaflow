@@ -37,6 +37,7 @@ class AiServiceClientTest(unittest.TestCase):
         model_ref: str | None = None,
         model_override: dict | None = None,
         skills: list[dict] | None = None,
+        allowed_attachment_names: set[str] | None = None,
     ) -> list[dict]:
         async def run() -> list[dict]:
             return [
@@ -46,6 +47,7 @@ class AiServiceClientTest(unittest.TestCase):
                     context=context,
                     transport=transport,
                     attachments=attachments,
+                    allowed_attachment_names=allowed_attachment_names,
                     model_ref=model_ref,
                     model_override=model_override,
                     skills=skills,
@@ -109,13 +111,57 @@ class AiServiceClientTest(unittest.TestCase):
             }
         ]
         with patch("app.services.ai_service_client.read_uploaded_file", return_value=(raw, "image/png")):
-            self._collect(httpx.MockTransport(handler), "帮我照图片改简历", attachments=attachments)
+            self._collect(
+                httpx.MockTransport(handler),
+                "帮我照图片改简历",
+                attachments=attachments,
+                allowed_attachment_names={"ai-chat/1.png"},
+            )
 
         images = captured["payload"]["images"]
         self.assertEqual(len(images), 1, "one image attachment becomes one ImageContent block")
         self.assertEqual(images[0]["type"], "image")
         self.assertEqual(images[0]["mimeType"], "image/png")
         self.assertEqual(images[0]["data"], base64.b64encode(raw).decode("ascii"))
+
+    def test_drops_an_attachment_the_caller_does_not_own(self) -> None:
+        captured: dict = {}
+        read = patch("app.services.ai_service_client.read_uploaded_file", return_value=(b"png", "image/png"))
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["payload"] = json.loads(request.content)
+            return _ndjson_response(['{"type":"start","data":{}}'])
+
+        # 前端把别人的 object_name 塞进请求体：这条附件必须被丢弃，
+        # 绝不能读存储再喂给模型。
+        attachments = [
+            {"url": "http://x/1.png", "object_name": "ai-chat/someone-else.png", "content_type": "image/png"},
+        ]
+        with read as reader:
+            self._collect(
+                httpx.MockTransport(handler),
+                "看看这张图",
+                attachments=attachments,
+                allowed_attachment_names={"ai-chat/mine.png"},
+            )
+
+        reader.assert_not_called()
+        self.assertNotIn("images", captured["payload"])
+
+    def test_omitting_the_allowlist_forwards_no_images(self) -> None:
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["payload"] = json.loads(request.content)
+            return _ndjson_response(['{"type":"start","data":{}}'])
+
+        attachments = [
+            {"url": "http://x/1.png", "object_name": "ai-chat/1.png", "content_type": "image/png"},
+        ]
+        with patch("app.services.ai_service_client.read_uploaded_file", return_value=(b"png", "image/png")):
+            self._collect(httpx.MockTransport(handler), "按图片改", attachments=attachments)
+
+        self.assertNotIn("images", captured["payload"], "没有归属白名单时一律不读对象")
 
     def test_omits_images_key_when_no_attachments(self) -> None:
         captured: dict = {}
@@ -143,7 +189,12 @@ class AiServiceClientTest(unittest.TestCase):
             {"url": "http://x/3.png", "object_name": "ai-chat/missing.png", "content_type": "image/png"},
         ]
         with patch("app.services.ai_service_client.read_uploaded_file", side_effect=OSError("no object")):
-            self._collect(httpx.MockTransport(handler), "按图片改", attachments=attachments)
+            self._collect(
+                httpx.MockTransport(handler),
+                "按图片改",
+                attachments=attachments,
+                allowed_attachment_names={"ai-chat/1.txt", "ai-chat/missing.png"},
+            )
         self.assertNotIn("images", captured["payload"], "no resolvable image → no images key")
 
     def test_forwards_model_ref_as_model_field(self) -> None:

@@ -32,6 +32,7 @@ from app.services.ai_task_service import create_ai_task, finish_ai_task
 from app.services.flow_points_service import precheck_flow_points
 from app.services.info_fragment_service import apply_proposals
 from app.services.resume_normalization import localize_ai_text, strip_thinking_text
+from app.services.storage.storage_service import owned_object_names
 from app.services.user_ai_service import audit_chat_use, build_skills_payload, resolve_model_override
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,27 @@ def _attachment_data(attachment: Any) -> dict[str, Any]:
     if isinstance(attachment, dict):
         return attachment
     return {}
+
+
+def _sanitize_attachments(db: Session, user_id: int, attachments: list[Any] | None) -> list[dict[str, Any]]:
+    """只保留确属当前用户上传的附件对象。
+
+    ``object_name`` 完全由前端提供，直接拿去读存储等于把对象桶当成公开读接口：
+    换个 object_name 就能把别人的对话图片喂给模型。这里按 uploaded_files 的
+    ``(user_id, object_name)`` 归属过滤，越权项静默丢弃（不报错，避免探测）。
+    没有 object_name 的附件不读存储，保持原样即可。
+    """
+    items = [_attachment_data(item) for item in attachments or []]
+    names = [item["object_name"] for item in items if isinstance(item.get("object_name"), str) and item["object_name"]]
+    owned = owned_object_names(db, user_id, names) if names else set()
+    kept: list[dict[str, Any]] = []
+    for item in items:
+        object_name = item.get("object_name")
+        if isinstance(object_name, str) and object_name and object_name not in owned:
+            logger.warning("丢弃不属于当前用户的对话附件：user=%s object=%s", user_id, object_name)
+            continue
+        kept.append(item)
+    return kept
 
 
 def _message_out(message: AiChatMessage) -> AiChatMessageOut:
@@ -651,12 +673,21 @@ async def _stream_ai_service_reply(
         session_id=session.id,
     )
     text_parts: list[str] = []
+    # 转发前再按归属收一次：历史消息里可能残留早期未校验的 object_name，
+    # 代理层只允许读这个集合内的对象。
+    attachment_names = [
+        item["object_name"]
+        for item in (_attachment_data(raw) for raw in (user_message.attachments or []))
+        if isinstance(item.get("object_name"), str) and item["object_name"]
+    ]
+    allowed_attachment_names = owned_object_names(db, user.id, attachment_names)
     events = ai_service_chat_events(
         user_message.content or "",
         context=context,
         user_id=user.id,
         resume_id=resume.id,
         attachments=user_message.attachments or [],
+        allowed_attachment_names=allowed_attachment_names,
         model_ref=model_config.model_ref if model_config else None,
         model_override=model_override,
         skills=skills,
@@ -768,6 +799,9 @@ async def stream_ai_service_chat(
         yield {"type": "error", "message": "请输入要咨询的问题"}
         return
 
+    # 附件对象名来自前端，先按归属收一遍，再落库/转发给 AI 服务。
+    attachments = _sanitize_attachments(db, user.id, attachments)
+
     model_config = _resolve_turn_model_config(db, user, model_config_id)
     # 用户自带模型（BYOK）与启用中的技能每轮解析一次：关闭或密钥失效时自动
     # 回落到平台默认，不需要前端传任何开关。
@@ -846,7 +880,11 @@ async def stream_ai_service_regenerate(
     next_attachments: list[dict[str, Any]] = []
     if applying_overrides:
         next_content = (override_content if override_content is not None else user_message.content or "").strip()
-        next_attachments = override_attachments if override_attachments is not None else (user_message.attachments or [])
+        next_attachments = _sanitize_attachments(
+            db,
+            user.id,
+            override_attachments if override_attachments is not None else (user_message.attachments or []),
+        )
         if not next_content and not next_attachments:
             yield {"type": "error", "message": "重新生成内容不能为空"}
             return

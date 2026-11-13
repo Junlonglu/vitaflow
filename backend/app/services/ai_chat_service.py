@@ -651,6 +651,7 @@ async def _stream_ai_service_reply(
     model_config,
     model_override: dict[str, Any] | None = None,
     skills: list[dict[str, str]] | None = None,
+    trigger: str = "free_text",
 ) -> AsyncIterator[dict[str, Any]]:
     """Relay one AI-service turn for an already-persisted user message.
 
@@ -691,6 +692,13 @@ async def _stream_ai_service_reply(
         model_ref=model_config.model_ref if model_config else None,
         model_override=model_override,
         skills=skills,
+        # 轨迹关联键（docs/ai-trajectory.md）：被回复的用户消息 id + 会话 id，
+        # 让 ai-service 落盘的回合能和消息表对上；trigger 区分重新生成。
+        # 用 getattr 而非直取：轨迹是"锦上添花"的旁路，不能因为一个缺字段的
+        # 会话对象把整个回复打挂。
+        turn_id=getattr(user_message, "id", None),
+        session_id=getattr(session, "id", None),
+        trigger=trigger,
     )
     try:
         async for event in events:
@@ -925,7 +933,7 @@ async def stream_ai_service_regenerate(
 
     yield {"type": "start", "data": {"user_message_id": user_message.id}}
     async for event in _stream_ai_service_reply(
-        db, user, resume, session, user_message, model_config, model_override, skills
+        db, user, resume, session, user_message, model_config, model_override, skills, trigger="regenerate"
     ):
         yield event
 

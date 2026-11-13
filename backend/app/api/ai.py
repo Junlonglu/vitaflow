@@ -16,6 +16,7 @@ from app.core.response import success
 from app.core.security import get_current_user
 from app.models.ai_config import FlowPointRule, FlowPointTransaction
 from app.models.ai_task import AiTask
+from app.models.ai_trace import AiAgentTrace
 from app.models.resume import Resume
 from app.models.user import User
 from app.schemas.ai import (
@@ -236,6 +237,30 @@ class AiServiceUsageRequest(BaseModel):
     def _cap_tool_quality(cls, value: list[ToolQualityStep]) -> list[ToolQualityStep]:
         # 质量摘要是辅助数据：超限只截断，绝不能把整份计费上报顶成 422
         return value[:50]
+
+
+class AiServiceTraceRequest(BaseModel):
+    """Agent 轨迹（L1）上报体，见 docs/ai-trajectory.md。
+
+    刻意不做严格的事件模型：轨迹 schema 会随分析需求加字段，用 dict 接住
+    才不会让一次字段扩展把整条上报顶成 422。长度做上限保护即可 —— 事件数
+    是回合内工具次数的量级，200 条已远超正常值。
+    """
+
+    trace_id: str = Field(min_length=8, max_length=64)
+    turn_id: int | None = None
+    session_id: int | None = None
+    user_id: int
+    resume_id: int | None = None
+    outcome: Literal["ok", "failed"] | None = None
+    model: str | None = None
+    prompt_versions: dict[str, Any] = Field(default_factory=dict)
+    events: list[dict[str, Any]] = Field(default_factory=list)
+
+    @field_validator("events", mode="after")
+    @classmethod
+    def _cap_events(cls, value: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return value[:200]
 
 
 def require_ai_service_token(request: Request) -> None:
@@ -1223,3 +1248,45 @@ def report_ai_service_usage(
             }
         )
     return success({"entries": entries})
+
+
+@router.post("/service/trace")
+def report_agent_trace(
+    payload: AiServiceTraceRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Persist one agent turn's L1 trajectory (docs/ai-trajectory.md, P0).
+
+    L1 只有结构：工具名、参数结构摘要、成败类别、耗时、token、分段版本 hash。
+    没有简历内容、没有用户原话，所以不设外键、不随简历删除 —— 删了简历还能
+    拿它做"改了提示词之后效果变好没有"的对比，这是这张表存在的唯一理由。
+
+    幂等：ai-service 在回合末尾整包 POST 一次并自带一次重试，重试打回来时按
+    ``trace_id`` 覆盖同一行，不产生重复轨迹。
+    """
+    require_ai_service_token(request)
+
+    events = [event for event in payload.events if isinstance(event, dict)]
+    values = {
+        "turn_id": payload.turn_id,
+        "session_id": payload.session_id,
+        "user_id": payload.user_id,
+        "resume_id": payload.resume_id,
+        "outcome": payload.outcome,
+        "model": payload.model,
+        "prompt_versions": payload.prompt_versions or None,
+        "events": events,
+        "event_count": len(events),
+    }
+
+    existing = db.scalar(select(AiAgentTrace).where(AiAgentTrace.trace_id == payload.trace_id))
+    if existing:
+        for key, value in values.items():
+            setattr(existing, key, value)
+        db.add(existing)
+    else:
+        db.add(AiAgentTrace(trace_id=payload.trace_id, **values))
+    db.commit()
+
+    return success({"trace_id": payload.trace_id, "event_count": len(events)})

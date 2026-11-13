@@ -8,29 +8,11 @@ import { renderMarkdown } from "@/lib/markdown"
 import { privateFileUrl } from "@/lib/fileUrl"
 import { uploadAiChatImageApi } from "@/api/file"
 import { showGlobalToast } from "@/utils/toast"
-import type { AiChatAttachment, AiChatModelOption, ToolStep, PendingQuestion } from "@/api/ai"
+import type { AiChatAttachment, AiChatModelOption, ToolStep } from "@/api/ai"
+import type { ChatMessage } from "@/types/chat"
 import ToolSteps from "@/components/ai/ToolSteps.vue"
 import ThinkingProcess from "@/components/ai/ThinkingProcess.vue"
-
-type ChatMessage = {
-  id: number | string
-  role: "user" | "assistant"
-  content: string
-  suggestions?: string[]
-  optimized_resume_data?: any
-  /** Agent 整理出的待入库信息（确认后写入信息库，不是简历） */
-  pending_info_fragments?: Array<{ id?: number | null; kind: string; kind_label: string; title: string; summary?: string }>
-  action_status?: "none" | "pending" | "applying" | "applied" | "rejected"
-  streaming?: boolean
-  phase?: string
-  phaseText?: string
-  /** 已广播的阶段文本序列（单调前进），最后一项为当前阶段。 */
-  phaseTrail?: string[]
-  thinking?: string
-  attachments?: AiChatAttachment[]
-  tool_trace?: ToolStep[]
-  pending_questions?: PendingQuestion[]
-}
+import ChatTurnMeta from "@/components/ai/ChatTurnMeta.vue"
 
 type ModelChoice = {
   value: string
@@ -351,8 +333,11 @@ const latestPendingId = computed<number | string | null>(() => {
 })
 
 /** 流式进度时间线：已广播的阶段序列；无轨迹时退回单行 phaseText。 */
-function phaseItems(message: ChatMessage): string[] {
-  return message.phaseTrail?.length ? message.phaseTrail : [message.phaseText || "正在处理"]
+/** 正文开始输出后，阶段尾巴让位给正文——正文本身就是进度。 */
+function liveStatus(message: ChatMessage): string {
+  if (!message.streaming || message.content) return ""
+  const trail = message.phaseTrail || []
+  return message.phaseText || trail[trail.length - 1] || ""
 }
 
 const lastAssistantIndex = computed(() => {
@@ -443,16 +428,10 @@ watch(
               <div class="message-bubble relative text-[13px] md:text-[14.5px] leading-relaxed transition-all" :class="message.role === 'user' ? 'rounded-xl bg-zinc-100 px-3.5 py-2 text-zinc-900 md:px-4 md:py-2.5' : 'text-zinc-800'">
                 <p v-if="message.role === 'user'" class="whitespace-pre-wrap break-words">{{ message.content }}</p>
                 <template v-else>
+                  <ChatTurnMeta :timing="message.timing" :streaming="message.streaming" :started-at="message.startedAt" />
                   <ThinkingProcess :text="message.thinking || ''" :streaming="message.streaming" />
-                  <ToolSteps :steps="message.tool_trace || []" :streaming="message.streaming" />
+                  <ToolSteps :steps="message.tool_trace || []" :streaming="message.streaming" :status="liveStatus(message)" />
                   <div v-if="message.content" class="chat-markdown break-words" v-html="renderMarkdown(message.content)" />
-                  <div v-else-if="message.streaming" class="flex min-h-[24px] flex-wrap items-center gap-x-2 gap-y-1" aria-label="AI 正在处理">
-                    <template v-for="(item, index) in phaseItems(message)" :key="`${item}-${index}`">
-                      <CheckCircle2 v-if="index < phaseItems(message).length - 1" class="h-3.5 w-3.5 text-emerald-500" />
-                      <LoaderCircle v-else class="h-3.5 w-3.5 animate-spin text-blue-500" />
-                      <span class="text-xs md:text-[13px] font-medium" :class="index < phaseItems(message).length - 1 ? 'text-zinc-400' : 'text-blue-500/80'">{{ item }}</span>
-                    </template>
-                  </div>
                 </template>
 
                 <div v-if="message.role === 'assistant' && !message.streaming && message.pending_questions?.length" class="mt-4 flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-4">

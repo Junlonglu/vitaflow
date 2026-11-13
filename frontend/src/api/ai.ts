@@ -106,6 +106,11 @@ export interface ToolStep {
   id: string
   name: string
   label: string
+  /**
+   * 活动行类别：skill = 本轮加载的技能（点技能卡 / 斜杠命令注入，或模型调 use_skill），
+   * tool = 真正的工具执行。两者同一套行样式，只有图标不同；缺省按 tool 处理。
+   */
+  kind?: "tool" | "skill"
   status: "start" | "end"
   ok?: boolean
   detail?: string

@@ -25,7 +25,8 @@ import { createAskUserTool } from "./tools/questions.js";
 import { createUseSkillTool } from "./tools/skill.js";
 import { createTurnState, type TurnState } from "./tools/state.js";
 import { createWebSearchTool } from "./tools/search.js";
-import { toolQualitySteps, toolStepEnd, toolStepLabel, type ToolQualityStep, type ToolTraceEntry } from "./tools/labels.js";
+import { skillTraceEntry, toolQualitySteps, toolStepEnd, toolStepLabel, type ToolQualityStep, type ToolTraceEntry } from "./tools/labels.js";
+import type { TurnTracer } from "./trace.js";
 
 /** Faux mode drives the deterministic demo provider; real mode uses models.json. */
 export type ChatRuntime = FauxRuntime | RealRuntime;
@@ -75,10 +76,21 @@ export interface AgentInput {
    */
   images?: ImageContent[];
   /**
+   * 本轮由 `/名称` 或技能卡直接注入的技能。注入发生在提示词层，没有工具调用，
+   * 但对话里要能看见「用了哪个技能」，所以 agent 会补一条 kind="skill" 的活动行。
+   */
+  skill?: { id: string; name: string };
+  /**
    * Optional explicit reasoning strength for this turn (BYOK per-model config).
    * Values match pi's thinking levels; "off"/undefined keep the runtime default.
    */
   thinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+  /**
+   * 轨迹收集器（P0，docs/ai-trajectory.md）。由 server 按本轮元信息创建并注入，
+   * 这里只负责在工具开始/结束与回合收尾时把决策点记进去。测试可传假实现，
+   * 没有它时行为与之前完全一致。
+   */
+  trace?: TurnTracer;
 }
 
 type Emit = (event: ChatStreamEvent) => void;
@@ -147,9 +159,17 @@ function toolStageText(toolName: string): string {
   return "正在改简历";
 }
 
+/** 失败原因的体积（字符数），轨迹里只记长度不记原文。序列化失败时给 0。 */
+function payloadLength(value: unknown): number {
+  try {
+    return JSON.stringify(value ?? "").length;
+  } catch {
+    return 0;
+  }
+}
+
 /** 直接把文本包成 assistant 消息骨架；FastAPI 会用数据库行替换它。 */
-function buildAssistantMessage(text: string, now: number) {
-  return {
+function buildAssistantMessage(text: string, now: number) {  return {
     id: now,
     role: "assistant",
     content: text,
@@ -170,6 +190,10 @@ function buildAssistantMessage(text: string, now: number) {
  */
 export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSignal): Promise<ChatTurnOutcome> {
   const { message, systemPrompt, config, runtime, modelRef, userId, resumeId, toolPlan, images } = input;
+  // 轨迹的回合级计数器；提前建好是为了让"模型都解析失败"这种早期返回也能收尾，
+  // 否则这类失败在轨迹里会永远停在 turn_start，看不出结局。
+  const trace = input.trace;
+  const traceSteps = { tool_calls: 0, skills: 0, thinking_chars: 0 };
   const cwd = process.cwd();
   // Isolate the agent config from whatever lives in the developer's global
   // ~/.pi/agent so the service never picks up unrelated auth/models/skills.
@@ -182,14 +206,18 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     const resolved = resolveRealModel(runtime, modelRef);
     if (!resolved.model) {
       emit({ type: "error", message: resolved.error ?? "模型不可用" });
+      trace?.end({ outcome: "failed", error: resolved.error ?? "模型不可用", replyChars: 0, steps: traceSteps });
       return { usage: [], failed: true, error: resolved.error ?? "模型不可用", toolCalls: 0, toolQuality: [] };
     }
     model = resolved.model;
   }
   if (!model) {
     emit({ type: "error", message: "没有可用的模型" });
+    trace?.end({ outcome: "failed", error: "没有可用的模型", replyChars: 0, steps: traceSteps });
     return { usage: [], failed: true, error: "没有可用的模型", toolCalls: 0, toolQuality: [] };
   }
+  // 以实际解析出的模型为准：平台没配 model_ref 时 server 只能猜，这里补准。
+  trace?.setModel(model.provider, model.id);
 
   // 工具不写库，只把「这一轮产生了什么」记进 state，由 result 事件带回 FastAPI。
   // 简历改动、待入库条目、待回答问题三块互相独立，可以同时存在。
@@ -331,7 +359,9 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
 
   if (modelFallbackMessage) {
     emit({ type: "error", message: `模型不可用：${modelFallbackMessage}` });
-    return { usage: [], failed: true, error: `模型不可用：${modelFallbackMessage}`, toolCalls: 0, toolQuality: [], timing: buildTurnTiming() };
+    const timing = buildTurnTiming();
+    trace?.end({ outcome: "failed", error: `模型不可用：${modelFallbackMessage}`, timing, replyChars: 0, steps: traceSteps });
+    return { usage: [], failed: true, error: `模型不可用：${modelFallbackMessage}`, toolCalls: 0, toolQuality: [], timing };
   }
 
   let text = "";
@@ -363,6 +393,7 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
           console.log(`[vitaflow-ai] first token +${firstTokenAt - turnStart}ms (loader ${loaderDoneAt - resolveDoneAt} / session ${sessionDoneAt - loaderDoneAt} / provider ttfb ${firstTokenAt - sessionDoneAt})`);
         }
         advanceStage("working", "正在思考");
+        traceSteps.thinking_chars += ae.delta.length;
         emit({ type: "thinking", text: ae.delta });
       }
     }
@@ -394,6 +425,8 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
       const entry: ToolTraceEntry = {
         id: event.toolCallId,
         name: event.toolName,
+        // 模型自己调 use_skill 与命令注入的技能行同类：UI 上都是「加载技能」。
+        ...(event.toolName === "use_skill" ? { kind: "skill" as const } : {}),
         label: toolStepLabel(event.toolName, event.args),
         status: "start",
       };
@@ -402,6 +435,7 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
       // Emit a copy: the end handler below mutates the trace entry in place,
       // and an already-emitted start event must not change under the consumer.
       emit({ type: "tool", data: { ...entry } });
+      trace?.toolCall({ callId: event.toolCallId, name: event.toolName, args: event.args });
     }
     if (event.type === "tool_execution_end") {
       const startedAt = toolStarts.get(event.toolCallId);
@@ -412,6 +446,7 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
       const settled: ToolTraceEntry = {
         id: event.toolCallId,
         name: event.toolName,
+        ...(entry?.kind ? { kind: entry.kind } : event.toolName === "use_skill" ? { kind: "skill" as const } : {}),
         label: entry?.label ?? toolStepLabel(event.toolName, undefined),
         status: "end",
         ok: outcome.ok,
@@ -427,6 +462,15 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
         entry.duration_ms = settled.duration_ms;
       }
       emit({ type: "tool", data: settled });
+      // 轨迹记的是决策点本身：工具名 + 参数结构 + 成功/失败类别 + 耗时。
+      trace?.toolResult({
+        callId: event.toolCallId,
+        name: event.toolName,
+        ok: outcome.ok,
+        category: outcome.category,
+        durationMs: settled.duration_ms,
+        reasonChars: event.isError ? payloadLength(event.result) : 0,
+      });
     }
     if (event.type === "agent_settled") {
       sendResult(text);
@@ -436,6 +480,14 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
   signal?.addEventListener("abort", abortHandler, { once: true });
 
   emit({ type: "start", data: {} });
+  // 技能在提示词层生效（正文已随 systemPrompt 下发），没有 tool_execution_start。
+  // 这里补一条与工具步骤同构的活动行，让「点技能卡 / 斜杠命令」和「模型自己调
+  // use_skill」在对话里是同一行、同一套样式，只是 kind 不同。
+  if (input.skill) {
+    const entry = skillTraceEntry(input.skill);
+    toolTrace.push(entry);
+    emit({ type: "tool", data: { ...entry } });
+  }
   emit({ type: "phase", phase: "understanding", text: "正在理解需求" });
 
   // Program the fake response for this turn right before prompting (faux only —
@@ -475,10 +527,20 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
   // Only a turn that completed without an error is billed (the finally block
   // always sends a result, so resultSent alone can't distinguish failure);
   // failed turns carry no usage, mirroring the legacy rule that refunds them.
+  // 技能生效行借道 tool_trace 送到前端（同一套行样式），但它不是一次工具执行：
+  // 计费与失败率只看真正的工具。
+  const toolCallCount = toolTrace.filter((entry) => (entry.kind ?? "tool") === "tool").length;
+  // 技能行不算工具执行，但"这轮用了几个技能"是轨迹里有意义的一维（尤其技能轮）。
+  traceSteps.tool_calls = toolCallCount;
+  traceSteps.skills = toolTrace.filter((entry) => entry.kind === "skill").length;
+  const timing = buildTurnTiming();
   if (sawError) {
-    return { usage: [], failed: true, error: turnError, toolCalls: toolTrace.length, toolQuality: toolQualitySteps(toolTrace), timing: buildTurnTiming() };
+    trace?.end({ outcome: "failed", error: turnError, timing, usage: [], replyChars: text.length, steps: traceSteps });
+    return { usage: [], failed: true, error: turnError, toolCalls: toolCallCount, toolQuality: toolQualitySteps(toolTrace), timing };
   }
-  return { usage: usage.snapshot(), failed: false, toolCalls: toolTrace.length, toolQuality: toolQualitySteps(toolTrace), timing: buildTurnTiming() };
+  const finalUsage = usage.snapshot();
+  trace?.end({ outcome: "ok", timing, usage: finalUsage, replyChars: text.length, steps: traceSteps });
+  return { usage: finalUsage, failed: false, toolCalls: toolCallCount, toolQuality: toolQualitySteps(toolTrace), timing };
 }
 
 /**

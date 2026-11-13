@@ -172,7 +172,12 @@ interface TurnState {
 `understanding` → `working` → `replying`，只能前进。同一阶段可以换文案（多个工具调用时），重复文案不重复推进。
 
 `toolStageText()` 把工具映射成人话：`正在读取信息库` / `正在整理信息 / 正在联网核实 / 正在准备方法 / 正在改简历`。
-工具步骤标签由 `toolStepLabel()` 生成，例如 `修改工作经历（2 条）`、`修改基本信息、项目经历…`、`从信息库导入 2 条`、`检索信息库「字节」`、`使用技能「JD匹配」`。原始参数与结果不出 ai-service。
+
+**活动行只有一种**：技能加载与工具执行共用 `tool_trace`，靠 `kind` 区分（`skill` / `tool`，缺省按 tool 兼容历史数据）。用户点技能卡或输入 `/名称` 时技能正文直接进提示词、没有工具调用，agent 仍补一条 `kind:"skill"` 的 `加载技能「诊断」` 行；模型自己调 `use_skill` 是同一行、同一措辞。计费与失败率只统计 `kind:"tool"`——`toolQualitySteps()` 与 `toolCalls` 都过滤掉技能行。
+
+工具步骤标签由 `toolStepLabel()` 生成，例如 `修改工作经历（2 条）`、`基本信息、项目经历…`、`从信息库导入 2 条`、`检索信息库「字节」`、`加载技能「JD匹配」`。原始参数与结果不出 ai-service。
+
+前端把它渲染成一条时间线（`ToolSteps.vue`）：单步平铺一行，多步收进折叠块（回合结束自动收起），进行中的阶段作为末尾转圈行，正文开始输出后让位给正文。助手消息顶部另有一行 `用时 12.4s`（`ChatTurnMeta.vue`），数据来自已落库的 `ai_chat_messages.timing`，hover 展开 `首字 / 工具 / 生成` 分解；流式期间用本地计时兜底。
 
 ### 5.2 待确认卡
 
@@ -213,8 +218,9 @@ interface TurnState {
 | 技能 | `cd ai-service && npm test`（`skills.test.ts`） | 六技能可取、`/名称` 解析、无参数用 `ask`、未知技能不误吞 |
 | 提示词 | `prompt.test.ts` | 章节顺序、空简历文案、用户技能不覆盖平台规则 |
 | 工具 | `tools/{resume,library,skill,questions,labels}.test.ts` | 参数归一、空 change 丢弃、标签文案、失败 envelope |
-| 回合 | `agent.e2e.test.ts`（faux provider） | 工具调用 → 阶段推进 → result 带 pending |
+| 回合 | `agent.e2e.test.ts`（faux provider） | 工具调用 → 阶段推进 → result 带 pending；技能轮出现 `kind:"skill"` 行 |
 | 后端 | `backend/pytest`（`test_ai_update_resume.py`） | 端点合并、导入、空改动、权限 |
+| 前端 | `cd frontend && npm test`（`components/ai/__tests__`） | 时间线单步平铺/多步折叠、技能与工具同块、顶部用时位置与分解 |
 | 交互 | `.scratch/verify-agent.mjs`（Playwright） | 技能卡渲染、`/` 菜单、预填、待确认卡三种按钮、点应用后落库 |
 
 本地跑交互巡检需要把后端指向一个 faux 实例（真实模型地址不通时也能验证全链路）：

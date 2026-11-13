@@ -9,11 +9,18 @@
  */
 import { SECTION_LABELS } from "./resume.js";
 
+/**
+ * 活动行的类别。工具与技能在 UI 上是同一种「这一步做了什么」的行，
+ * 只有图标不同，所以共用一条 trace；缺省（历史数据）按 tool 处理。
+ */
+export type TraceKind = "tool" | "skill";
+
 /** One persisted/executed tool step; `status:"start"` rows carry no ok yet. */
 export interface ToolTraceEntry {
   id: string;
   name: string;
   label: string;
+  kind?: TraceKind;
   status: "start" | "end";
   ok?: boolean;
   /** Curated outcome line (failure reason / change summary) — never raw payloads. */
@@ -49,7 +56,8 @@ export interface ToolQualityStep {
  * 超长回合截断到 50 步——质量摘要是辅助数据，超限不能把整份计费上报顶成 422。 */
 export function toolQualitySteps(trace: ToolTraceEntry[]): ToolQualityStep[] {
   return trace
-    .filter((entry) => entry.status === "end")
+    // 技能加载行和工具调用同构，但它不是一次工具执行：计费口径与失败率只统计真正的工具。
+    .filter((entry) => entry.status === "end" && (entry.kind ?? "tool") === "tool")
     .slice(0, 50)
     .map((entry) => ({
       name: entry.name,
@@ -88,6 +96,23 @@ function changeLabels(raw: unknown, max = 3): { labels: string[]; items: number 
   return { labels: shown, items };
 }
 
+/**
+ * 本轮技能生效行。用户点技能卡 / 输入 `/名称` 时技能正文直接被注入提示词，
+ * 没有任何工具调用，但对话里必须能看见「这一步用了哪个技能」——所以补一条
+ * 与工具步骤同构的 trace：同一套行样式，只换图标，不再另开一种事件。
+ */
+export function skillTraceEntry(skill: { id: string; name: string }): ToolTraceEntry {
+  return {
+    id: `skill-${skill.id}`,
+    // name 保持 use_skill：模型自己调工具加载技能时也是这一行，两条路径同一个名字。
+    name: "use_skill",
+    kind: "skill",
+    label: `加载技能「${skill.name}」`,
+    status: "end",
+    ok: true,
+  };
+}
+
 /** Map a tool call to the step label the chat UI renders; unknown tools fall back to their name. */
 export function toolStepLabel(toolName: string, args: unknown): string {
   const raw = (args ?? {}) as Record<string, unknown>;
@@ -114,7 +139,7 @@ export function toolStepLabel(toolName: string, args: unknown): string {
     }
     case "use_skill": {
       const name = clamp(String(raw.name ?? ""), 20);
-      return name ? `使用技能「${name}」` : "加载技能";
+      return name ? `加载技能「${name}」` : "加载技能";
     }
     case "web_search": {
       const query = clamp(String(raw.query ?? ""), 20);

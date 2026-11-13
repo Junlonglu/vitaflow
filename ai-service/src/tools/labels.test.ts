@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { toolQualitySteps, toolStepEnd, toolStepLabel, type ToolTraceEntry } from "./labels.js";
+import { skillTraceEntry, toolQualitySteps, toolStepEnd, toolStepLabel, type ToolTraceEntry } from "./labels.js";
 
 test("update_resume renders the changed sections and item count", () => {
   assert.equal(toolStepLabel("update_resume", { changes: [{ section: "work" }] }), "修改工作经历");
@@ -24,7 +24,7 @@ test("ask_user / library / skill steps read naturally", () => {
   assert.equal(toolStepLabel("search_library", { query: "VitaFlow" }), "检索信息库「VitaFlow」");
   assert.equal(toolStepLabel("search_library", {}), "检索信息库");
   assert.equal(toolStepLabel("save_library", { items: [{}, {}] }), "整理 2 条信息到信息库");
-  assert.equal(toolStepLabel("use_skill", { name: "JD匹配" }), "使用技能「JD匹配」");
+  assert.equal(toolStepLabel("use_skill", { name: "JD匹配" }), "加载技能「JD匹配」");
 });
 
 test("web_search echoes the clamped query and result count", () => {
@@ -122,4 +122,25 @@ test("toolQualitySteps keeps the failure reason only on failed steps, clamped to
   const long = toolQualitySteps([{ id: "tc4", name: "update_resume", label: "修改", status: "end", ok: false, detail: "原".repeat(45) }])[0];
   assert.equal(long.reason?.length, 41, "40 chars plus the ellipsis");
   assert.ok(long.reason?.endsWith("…"));
+});
+
+test("skillTraceEntry is shaped like a tool step so the UI renders one timeline", () => {
+  const entry = skillTraceEntry({ id: "diagnose", name: "诊断" });
+  assert.equal(entry.kind, "skill");
+  assert.equal(entry.label, "加载技能「诊断」");
+  assert.equal(entry.name, "use_skill", "same name as the model-driven path");
+  assert.equal(entry.status, "end");
+  assert.equal(entry.ok, true);
+});
+
+test("toolQualitySteps drops skill rows — billing counts tool executions only", () => {
+  const trace: ToolTraceEntry[] = [
+    skillTraceEntry({ id: "diagnose", name: "诊断" }),
+    { id: "tc1", name: "search_library", label: "检索信息库", status: "end", ok: true },
+    // 历史数据没有 kind 字段，必须按 tool 统计
+    { id: "tc2", name: "update_resume", label: "修改简历", status: "end", ok: true },
+  ];
+  const steps = toolQualitySteps(trace);
+  assert.equal(steps.length, 2);
+  assert.deepEqual(steps.map((step) => step.name), ["search_library", "update_resume"]);
 });

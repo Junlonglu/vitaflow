@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { Brain } from "lucide-vue-next"
 import LiveRegion from "@/components/ai/LiveRegion.vue"
 
 /**
@@ -16,7 +15,6 @@ defineProps<{
 <template>
   <LiveRegion v-if="text" :streaming="streaming" :watch="text.length">
     <template #header>
-      <Brain class="h-3.5 w-3.5" />
       <span>{{ streaming ? "思考中" : "思考过程" }}</span>
     </template>
     <div class="whitespace-pre-wrap text-xs leading-relaxed text-zinc-400">{{ text }}</div>

@@ -34,6 +34,7 @@ import { appendSkillsToPrompt, buildContextPrompt, DEFAULT_SYSTEM_PROMPT, parseS
 import { createRealRuntime, parseByokOverride, registerByokModel, type ThinkingLevelSetting } from "./real.js";
 import { appendSkillPrompt, extractSkillCommand, skillPromptBlock } from "./skills.js";
 import { buildTaskPrompts, isTaskType } from "./taskPrompts.js";
+import { createTurnTrace, reportTrace, versionTag, type TraceMeta } from "./trace.js";
 
 const config = loadConfig();
 const AGENT_DIR = join(process.cwd(), ".pi-agent");
@@ -332,6 +333,48 @@ app.post("/v1/chat", async (req, res) => {
         skillBody: skillCommand ? skillPromptBlock(skillCommand.skill) : "",
       });
 
+  // ---- 轨迹（P0, docs/ai-trajectory.md）：一段回合只记结构，不记内容。
+  // 版本 hash 落在三段稳定文本上，而不是 systemPrompt 全文 —— 全文含当前简历，
+  // 每轮都变，hash 它等于没有版本概念。
+  const resumeChars = context?.resume?.data ? JSON.stringify(context.resume.data).length : 0;
+  const historyTurns = Array.isArray(context?.history) ? context.history.length : 0;
+  const modelRefParts = (modelRef ?? "").split("/");
+  const triggerRaw = typeof req.body?.trigger === "string" ? req.body.trigger : "";
+  const trigger: TraceMeta["trigger"] =
+    triggerRaw === "skill_command" || triggerRaw === "free_text" || triggerRaw === "regenerate" || triggerRaw === "question_answer"
+      ? triggerRaw
+      : skillCommand
+        ? "skill_command"
+        : "free_text";
+  const turnTrace = createTurnTrace({
+    user_id: userId,
+    resume_id: resumeId,
+    // 后端转发时带上被回复的用户消息 id 与会话 id，轨迹才能和消息表对上。
+    turn_id: Number.isInteger(req.body?.turn_id) ? (req.body.turn_id as number) : null,
+    session_id: Number.isInteger(req.body?.session_id) ? (req.body.session_id as number) : null,
+    trigger,
+    skill: skillCommand ? { id: skillCommand.skill.id, name: skillCommand.skill.name } : null,
+    versions: {
+      rules: versionTag("r", overridePrompt || DEFAULT_SYSTEM_PROMPT),
+      schema: versionTag("s", (context?.resume_fields ?? "").trim()),
+      skill: skillCommand?.skill.id ?? null,
+      prompt_chars: systemPrompt.length,
+      agent: `ai-service@${process.env.npm_package_version ?? "0.1.0"}`,
+    },
+    model: {
+      provider: runtime.kind === "faux" ? "faux" : modelRefParts[0] || "unknown",
+      model: runtime.kind === "faux" ? runtime.model?.id ?? "faux" : modelRefParts.slice(1).join("/") || "unknown",
+      thinking: thinkingLevel ?? (runtime.kind === "faux" ? "off" : "default"),
+    },
+    context: {
+      resume_chars: resumeChars,
+      history_turns: historyTurns,
+      summary_chars: (context?.context_summary ?? "").length,
+      skills_declared: skills.length,
+    },
+    input: { chars: userMessage.length, attachments: images?.length ?? 0 },
+  });
+
   res.status(200);
   res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache, no-transform");
@@ -342,7 +385,21 @@ app.post("/v1/chat", async (req, res) => {
   res.on("close", () => controller.abort());
 
   const outcome = await runChat(
-    { message: userMessage, systemPrompt, config, runtime, modelRef, userId, resumeId, images, thinkingLevel },
+    {
+      message: userMessage,
+      systemPrompt,
+      config,
+      runtime,
+      modelRef,
+      userId,
+      resumeId,
+      images,
+      thinkingLevel,
+      // 技能正文已经进了提示词；把技能本身也告诉 agent，好让对话里出现
+      // 一行「加载技能「诊断」」——与模型自己调 use_skill 时完全同构。
+      ...(skillCommand ? { skill: { id: skillCommand.skill.id, name: skillCommand.skill.name } } : {}),
+      trace: turnTrace,
+    },
     (event) => sendEvent(res, event),
     controller.signal,
   );
@@ -356,6 +413,10 @@ app.post("/v1/chat", async (req, res) => {
   // Fire-and-forget: a billing hiccup must never fail a turn the user already
   // received, but it is still awaited briefly so process shutdown sees it.
   const reportDeps = { fetch: globalThis.fetch, fastapiBaseUrl: config.fastapiBaseUrl, serviceToken: config.serviceToken };
+  // 轨迹整包上报（P0）：事件只有个位数，一次 POST 就够；它不影响用户与结算，
+  // 失败只丢分析数据，所以 reportTrace 自带日志、不向链路抛错。
+  const tracePayload = turnTrace.snapshot();
+  if (tracePayload) await reportTrace(reportDeps, tracePayload);
   const billableUsage = outcome.usage.filter((entry) => entry.provider !== "faux");
   if (billableUsage.length) {
     try {

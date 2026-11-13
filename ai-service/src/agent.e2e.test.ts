@@ -15,6 +15,7 @@ import { createFauxRuntime } from "./faux.js";
 import { createRealRuntime } from "./real.js";
 import { loadConfig } from "./config.js";
 import type { ToolTraceEntry } from "./tools/labels.js";
+import type { ToolCallInput, ToolResultInput, TurnEndInput } from "./trace.js";
 
 function successResponse(data: unknown): Response {
   return new Response(JSON.stringify({ code: 0, message: "success", data }), {
@@ -329,5 +330,114 @@ NkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
       globalThis.fetch = originalFetch;
       runtime.dispose();
     }
+  });
+});
+
+describe("skill activation rides the same activity trace as tool steps", () => {
+  it("emits one kind=skill row for a slash-command turn and keeps it out of tool counts", async () => {
+    const runtime = await createFauxRuntime();
+    const config = loadConfig();
+
+    try {
+      const events = await collect({
+        message: "帮我诊断这份简历，指出最影响通过率的问题。",
+        systemPrompt: "你是简历助手。",
+        config,
+        runtime,
+        userId: 7,
+        resumeId: 3,
+        skill: { id: "diagnose", name: "诊断" },
+      });
+
+      const skillEvents = (events.filter((event) => event.type === "tool") as Array<{ type: "tool"; data: ToolTraceEntry }>)
+        .map((event) => event.data)
+        .filter((entry) => entry.kind === "skill");
+      assert.equal(skillEvents.length, 1, "注入技能也要在对话里出现一行");
+      assert.equal(skillEvents[0].label, "加载技能「诊断」");
+      assert.equal(skillEvents[0].ok, true, "注入成功，不需要转圈就结束");
+
+      const result = events.find((event) => event.type === "result") as { type: "result"; data: Record<string, unknown> } | undefined;
+      assert.ok(result, "expected a result event");
+      const trace = result.data.tool_trace as ToolTraceEntry[];
+      assert.equal(trace[0].kind, "skill");
+      assert.equal(trace[0].label, "加载技能「诊断」");
+    } finally {
+      runtime.dispose();
+    }
+  });
+});
+
+describe("turn trace (P0, docs/ai-trajectory.md)", () => {
+  /** 记录 tracer 的调用顺序，验证 agent 把决策点交给了轨迹而不是丢掉。 */
+  function fakeTracer() {
+    const calls: Array<Record<string, unknown>> = [];
+    let ended: Record<string, unknown> | null = null;
+    let modelInfo: { provider: string; model: string } | null = null;
+    return {
+      traceId: "test-trace",
+      calls,
+      get modelInfo() {
+        return modelInfo;
+      },
+      setModel(provider: string, model: string) {
+        modelInfo = { provider, model };
+      },
+      get ended() {
+        return ended;
+      },
+      toolCall(input: ToolCallInput) {
+        calls.push({ kind: "call", ...input } as Record<string, unknown>);
+      },
+      toolResult(input: ToolResultInput) {
+        calls.push({ kind: "result", ...input } as Record<string, unknown>);
+      },
+      end(input: TurnEndInput) {
+        ended = input as unknown as Record<string, unknown>;
+      },
+      snapshot() {
+        return null;
+      },
+    };
+  }
+
+  it("records the tool decision point and closes the turn with counts", async () => {
+    const runtime = await createFauxRuntime();
+    const config = loadConfig();
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      successResponse({
+        ok: true,
+        optimized_resume_data: { basics: { name: "张三", location: "深圳" } },
+        suggestions: ["已修改：基本信息（所在城市）"],
+      })) as typeof fetch;
+
+    const trace = fakeTracer();
+    try {
+      await collect({
+        message: "帮我把地点从广州改成深圳",
+        systemPrompt: "你是简历助手。",
+        config,
+        runtime,
+        userId: 7,
+        resumeId: 3,
+        toolPlan: { name: "update_resume", args: { changes: [{ section: "basics", fields: { location: "深圳" } }] } },
+        trace,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+      runtime.dispose();
+    }
+
+    assert.equal(trace.calls.length, 2, "一次工具执行 = 一个 call + 一个 result");
+    assert.equal(trace.calls[0].kind, "call");
+    assert.equal(trace.calls[0].name, "update_resume");
+    assert.equal(trace.calls[1].kind, "result");
+    assert.equal(trace.calls[1].ok, true);
+
+    assert.ok(trace.modelInfo, "模型名以 agent 实际解析结果回填");
+    assert.ok(trace.ended, "回合必须收尾，否则轨迹永远停在 turn_start");
+    assert.equal(trace.ended?.outcome, "ok");
+    assert.equal((trace.ended?.steps as { tool_calls: number }).tool_calls, 1);
+    assert.ok((trace.ended?.timing as Record<string, number>).total_ms >= 0);
   });
 });

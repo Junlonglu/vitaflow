@@ -16,6 +16,11 @@ const stubs = {
   ConfirmDialog: { props: ["open"], template: '<div v-if="open" class="confirm" />' },
   ToolSteps: { template: "<div class='tool-steps' />" },
   ThinkingProcess: { template: "<div class='thinking' />" },
+  // 真实组件会起计时器；这里只验证位置与数据透传，形状由 ToolSteps.spec 覆盖。
+  ChatTurnMeta: {
+    props: ["timing", "streaming", "startedAt"],
+    template: '<div class="turn-meta">{{ timing && timing.total_ms }}|{{ streaming }}|{{ startedAt }}</div>',
+  },
 }
 
 function mountPanel(messages: any[]) {
@@ -111,5 +116,20 @@ describe("ResumeAiChatPanel 双通道待确认卡", () => {
     expect(text).toContain("信息已保存到信息库")
     expect(text).toContain("修改已取消")
     expect(text).toContain("已忽略")
+  })
+
+  it("助手消息顶部带本轮用时，且位置在思考/工具之前", async () => {
+    const wrapper = mountPanel([
+      { id: 7, role: "assistant", content: "改好了。", timing: { total_ms: 8400 }, streaming: false },
+    ])
+    await flushPromises()
+
+    const meta = wrapper.find(".turn-meta")
+    expect(meta.exists()).toBe(true)
+    expect(meta.text()).toContain("8400")
+    // 顶部：先于思考和工具块出现在 DOM 里
+    const html = wrapper.html()
+    expect(html.indexOf("turn-meta")).toBeLessThan(html.indexOf("thinking"))
+    expect(html.indexOf("turn-meta")).toBeLessThan(html.indexOf("tool-steps"))
   })
 })

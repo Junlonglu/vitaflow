@@ -1,57 +1,72 @@
 <script setup lang="ts">
-import { CheckCircle2, LoaderCircle, Wrench, XCircle } from "lucide-vue-next"
+import { computed } from "vue"
 import type { ToolStep } from "@/api/ai"
 import LiveRegion from "@/components/ai/LiveRegion.vue"
+import ToolStepRow from "@/components/ai/ToolStepRow.vue"
 
 /**
- * 工具调用步骤行：流式中逐行展开（转圈 → 绿勾/红叉 + 一行结果摘要），
- * 内容区限高自动吸底，结束后自动收起为一行摘要。纯展示组件，
- * 数据来自 tool 流事件 / tool_trace。
+ * 一轮对话里的「活动时间线」：技能加载、工具执行、当前阶段全部套进同一种行
+ * （状态点 + 一句话 + 右侧耗时 + 下方结果摘要），不再分成两个视觉体系。
+ *
+ * - 只有一步时平铺成一行（点技能卡后常见），不为了折叠而折叠；
+ * - 多步时收进折叠块，回合结束自动收起为一行摘要；
+ * - 当前阶段作为时间线末尾的「进行中」一行，正文开始输出后由调用方清空。
+ * 视觉上不铺图标：状态交给行首的小圆点，这里只有折叠箭头。
  */
 const props = defineProps<{
   steps: ToolStep[]
   streaming?: boolean
+  /** 当前阶段文案（phase 事件），渲染为时间线末尾的进行中一行。 */
+  status?: string
 }>()
 
+const toolCount = computed(() => props.steps.filter((step) => (step.kind ?? "tool") === "tool").length)
+const skillCount = computed(() => props.steps.filter((step) => step.kind === "skill").length)
+
+/** 有阶段尾巴在动时才让容器跟随（否则空闲也会吸底）。 */
+const tail = computed(() => (props.streaming && props.status ? props.status : ""))
 const lastChange = () => {
   const last = props.steps[props.steps.length - 1]
-  return `${props.steps.length}-${last?.status ?? ""}-${last?.ok ?? ""}-${last?.detail ?? ""}`
+  return `${props.steps.length}-${last?.status ?? ""}-${last?.ok ?? ""}-${last?.detail ?? ""}-${tail.value}`
 }
 
-const formatDuration = (ms?: number) => {
-  if (ms === undefined) return ""
-  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
-}
+/** 单步且已结束：直接平铺一行，折叠头反而多一层噪音。 */
+const flat = computed(() => props.steps.length === 1 && !tail.value)
 
-const categoryText = (category?: string) => {
-  if (category === "infra") return "服务不可用"
-  if (category === "business") return "需换数据"
-  if (category === "validation") return "参数错误"
-  return category
-}
+const headerText = computed(() => {
+  if (props.streaming) {
+    // 有工具正在跑才说「正在处理」；当前阶段本身由末尾那一行表达，不在这里重复。
+    return props.steps.some((step) => step.status === "start") ? "正在处理" : "处理过程"
+  }
+  const parts: string[] = []
+  if (skillCount.value) parts.push(`${skillCount.value} 个技能`)
+  if (toolCount.value) parts.push(`${toolCount.value} 个工具`)
+  return parts.length ? `已处理 ${parts.join(" · ")}` : "处理过程"
+})
 </script>
 
 <template>
-  <LiveRegion v-if="steps.length" :streaming="streaming" :watch="lastChange()" max-height="max-h-40">
+  <div v-if="!steps.length && streaming" class="mb-2">
+    <div class="flex items-center gap-2 text-xs">
+      <span class="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-blue-500" aria-hidden="true" />
+      <span class="text-blue-500/80">{{ status || "正在处理" }}</span>
+    </div>
+  </div>
+
+  <div v-else-if="flat" class="mb-2">
+    <ToolStepRow :step="steps[0]" />
+  </div>
+
+  <LiveRegion v-else-if="steps.length" :streaming="streaming" :watch="lastChange()" max-height="max-h-40" :fullscreen="false">
     <template #header>
-      <Wrench class="h-3.5 w-3.5" />
-      <span>{{ streaming ? "正在调用工具" : `已执行 ${steps.length} 步工具操作` }}</span>
+      <span>{{ headerText }}</span>
     </template>
     <div class="space-y-1">
-      <div v-for="step in steps" :key="step.id" class="min-w-0">
-        <div class="flex items-center gap-2 text-xs">
-          <template v-if="step.status === 'end'">
-            <CheckCircle2 v-if="step.ok" class="h-3.5 w-3.5 shrink-0 text-emerald-500" />
-            <XCircle v-else class="h-3.5 w-3.5 shrink-0 text-red-400" />
-          </template>
-          <LoaderCircle v-else class="h-3.5 w-3.5 shrink-0 animate-spin text-zinc-400" />
-          <span class="truncate" :class="step.status === 'end' && !step.ok ? 'text-zinc-400' : 'text-zinc-600'">{{ step.label }}</span>
-          <span v-if="step.status === 'end' && step.duration_ms !== undefined" class="ml-auto shrink-0 tabular-nums text-zinc-400">{{ formatDuration(step.duration_ms) }}</span>
-        </div>
-        <p v-if="step.detail" class="ml-5.5 mt-0.5 flex items-center gap-1.5 truncate text-[11px]" :class="step.ok ? 'text-zinc-400' : 'text-red-400'">
-          <span v-if="step.ok === false && step.category" class="shrink-0 rounded bg-red-50 px-1 text-[10px]">{{ categoryText(step.category) }}</span>
-          <span class="truncate">{{ step.detail }}</span>
-        </p>
+      <ToolStepRow v-for="step in steps" :key="step.id" :step="step" />
+      <!-- 时间线尾巴：当前阶段与上面的步骤同一行样式，只是那个点还在呼吸。 -->
+      <div v-if="tail" class="flex items-center gap-2 text-xs">
+        <span class="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-blue-500" aria-hidden="true" />
+        <span class="truncate text-blue-500/80">{{ tail }}</span>
       </div>
     </div>
   </LiveRegion>

@@ -98,6 +98,9 @@ async def ai_service_chat_events(
     model_override: dict[str, Any] | None = None,
     skills: list[dict[str, str]] | None = None,
     allowed_attachment_names: set[str] | None = None,
+    turn_id: int | None = None,
+    session_id: int | None = None,
+    trigger: str | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Stream NDJSON chat events from the AI service, yielding event dicts.
 
@@ -143,6 +146,14 @@ async def ai_service_chat_events(
     # Enabled user skills are appended to the system prompt by the Node side.
     if skills:
         payload["skills"] = skills
+    # 轨迹关联键：ai-service 拿不到数据库 id，只有代理知道这一轮回复的是哪条消息、
+    # 属于哪个会话。trigger 让"重新生成"和普通提问在轨迹里可区分。
+    if turn_id is not None:
+        payload["turn_id"] = turn_id
+    if session_id is not None:
+        payload["session_id"] = session_id
+    if trigger:
+        payload["trigger"] = trigger
 
     url = f"{settings.ai_service_url.rstrip('/')}/v1/chat"
     headers = {"Authorization": f"Bearer {settings.ai_service_token}"}

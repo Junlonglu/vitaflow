@@ -16,6 +16,8 @@ const props = defineProps<{
   watch?: number | string
   /** 内容区最大高度（Tailwind class，默认 max-h-48）。 */
   maxHeight?: string
+  /** 是否提供全屏阅读入口；工具时间线这类短内容不需要，默认开。 */
+  fullscreen?: boolean
 }>()
 
 const expanded = ref(true)
@@ -99,6 +101,7 @@ function overlayToBottom() {
         <slot name="header" />
       </button>
       <button
+        v-if="fullscreen !== false"
         type="button"
         class="mr-1.5 shrink-0 rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-zinc-200/60 hover:text-zinc-700"
         title="全屏查看"

@@ -1,23 +1,23 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import { CheckCircle2, Download, FileText, LoaderCircle, PanelLeft, Redo2, Save, Settings, Share2, Trash2, Undo2, X, Edit3, Eye, Pencil, AlertCircle, LayoutTemplate, ArrowRight, Menu, Info } from "lucide-vue-next"
+import { CheckCircle2, Download, LoaderCircle, PanelLeft, Redo2, Save, Settings, Share2, Trash2, Undo2, X, Edit3, Eye, Pencil, AlertCircle, LayoutTemplate, ArrowRight, Menu, Info } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
 import Input from "@/components/ui/input/Input.vue"
 import FlowAgentIcon from "@/components/common/FlowAgentIcon.vue"
 import FlowPointIcon from "@/components/ui/FlowPointIcon.vue"
 import ModuleSidebar from "@/components/editor/ModuleSidebar.vue"
 import ResumeFormPanel from "@/components/editor/ResumeFormPanel.vue"
-import ResumeReviewPanel, { type ReviewSection } from "@/components/editor/review/ResumeReviewPanel.vue"
+import ResumeReviewPanel from "@/components/editor/review/ResumeReviewPanel.vue"
 import StyleConfigPanel from "@/components/editor/StyleConfigPanel.vue"
 import A4Preview from "@/components/preview/A4Preview.vue"
 import ResumeAiChatPanel from "@/components/ai/ResumeAiChatPanel.vue"
 import { normalizeResumeData, useResumeStore } from "@/stores/resume"
 import { useChatStore } from "@/stores/chat"
-import { useEditorStore, type EditorHistorySnapshot } from "@/stores/editor"
-import { exportPdfApi, exportWordApi } from "@/api/export"
-import { clearResumeChatMessagesApi, decideResumeChatChangeApi, getAiCapabilityApi, getResumeChatMessagesApi, sendResumeChatMessageStreamApi, regenerateResumeChatMessageStreamApi, getFlowPointSummaryApi, type FlowPointSummary, type AiCapability, type AiChatAttachment, type AiChatModelOption, type ToolStep, type PendingQuestion, type QuestionAnswer } from "@/api/ai"
-import { previewHtmlApi, previewResumeDataApi, duplicateResumeApi } from "@/api/resume"
+import { useEditorStore } from "@/stores/editor"
+import { exportPdfApi } from "@/api/export"
+import { getAiCapabilityApi, getFlowPointSummaryApi, type FlowPointSummary, type AiCapability, type AiChatModelOption, type PendingQuestion, type QuestionAnswer } from "@/api/ai"
+import { duplicateResumeApi } from "@/api/resume"
 import { listTemplatesApi, type TemplateItem } from "@/api/template"
 import TemplatePreview from "@/components/templates/TemplatePreview.vue"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
@@ -27,10 +27,12 @@ import SaveAsResumeDialog from "@/components/ai/SaveAsResumeDialog.vue"
 import { listUserAiModelsApi, type UserAiCredential } from "@/api/userAi"
 import { showGlobalToast } from "@/utils/toast"
 import { createPresetSection } from "@/utils/resumePresets"
-import { buildSelectedResumeData, diffResume, sectionEntriesForReview } from "@/utils/aiDiff"
 import { applyResumeLanguage, normalizeResumeLanguage } from "@/utils/resumeLocale"
 import { useWorkspaceBridge } from "@/composables/useWorkspaceBridge"
 import { useWorkspaceDrawer } from "@/composables/useWorkspaceDrawer"
+import { useResumeChatStream } from "@/composables/useResumeChatStream"
+import { useResumeHistory } from "@/composables/useResumeHistory"
+import { useResumePreview } from "@/composables/useResumePreview"
 
 const props = withDefaults(defineProps<{ resumeId?: number }>(), { resumeId: 0 })
 const route = useRoute()
@@ -129,17 +131,11 @@ const mainMode = ref<"edit" | "ai">("ai")
 const mobileTab = ref<"edit" | "ai" | "preview">("edit")
 const formPanelExpanded = ref(true)
 
-const chatMessages = ref<any[]>([])
-const chatLoading = ref(false)
-const chatLoaded = ref(false)
 // 当前会话：会话列表与选中态都在 chat store 里（侧栏共用），这里只跟随它。
 const activeSessionId = computed(() => chatStore.activeSessionId(resumeId.value))
-// 发送流程自己切会话（首次发送会新建会话）时上锁，避免 watch 抢着重载消息。
-const sessionSwitchLock = ref(false)
 const aiCapability = ref<AiCapability | null>(null)
 const flowPointSummary = ref<FlowPointSummary | null>(null)
 const aiCapabilityLoaded = ref(false)
-const chatDecisionLoadingId = ref<number | string | null>(null)
 // 补充信息对话框（ask_user_questions → pending_questions）
 const questionsDialogOpen = ref(false)
 const questionsDialogList = ref<PendingQuestion[]>([])
@@ -147,7 +143,6 @@ const questionsDialogList = ref<PendingQuestion[]>([])
 const saveAsDialogOpen = ref(false)
 const saveAsTitle = ref("")
 const saveAsLoading = ref(false)
-const jdOptimizeArmed = ref(false)
 const jdOptimizedMessageId = ref<number | null>(null)
 // 模型选择器用 "p:<平台模型id>" / "u:<用户自带模型id>" 作为值；旧版本存的是纯数字。
 function readStoredModelKey(): string | null {
@@ -201,32 +196,6 @@ const supportsChatImages = computed(() => {
 const isMobile = ref(false)
 
 /**
- * 预览缩放：默认「适应宽度」，按预览栏实测宽度算 A4 缩放，避免默认档超出容器被裁掉；
- * 用户手动缩放后切到 manual，点「适应宽度」再切回来。
- */
-const A4_WIDTH_PX = 794
-const previewPaneRef = ref<HTMLElement | null>(null)
-const previewPaneWidth = ref(0)
-let previewPaneObserver: ResizeObserver | null = null
-
-const previewFitScale = computed(() => {
-  // 预览区 p-8（左右各 32）+ 竖向滚动条余量 12
-  const usable = previewPaneWidth.value ? Math.max(previewPaneWidth.value - 76, 320) : 0
-  if (!usable) return editor.previewScale
-  return Math.min(1, Math.max(0.35, Number((usable / A4_WIDTH_PX).toFixed(3))))
-})
-
-const previewScale = computed(() =>
-  editor.previewScaleMode === "fit" ? previewFitScale.value : editor.previewScale,
-)
-const previewAutoFit = computed(() => editor.previewScaleMode === "fit")
-
-function zoomPreview(delta: number) {
-  const next = Number((previewScale.value + delta).toFixed(2))
-  editor.setPreviewScale(Math.min(1, Math.max(0.4, next)))
-}
-
-/**
  * 左栏（内容编辑 / Flow Agent）默认占工作区一半略多，预览让出空间。
  * 拖拽后的宽度记在 localStorage 里，下次进来沿用；没拖过则跟随窗口宽度保持比例。
  */
@@ -265,23 +234,11 @@ onMounted(() => {
   getFlowPointSummaryApi().then((data) => (flowPointSummary.value = data)).catch(() => null)
 })
 
-// 预览栏可能因为加载态晚于 mounted 出现，用 watch 绑定 ref 更稳。
-watch(previewPaneRef, (el) => {
-  previewPaneObserver?.disconnect()
-  previewPaneObserver = null
-  if (!el) return
-  previewPaneObserver = new ResizeObserver((entries) => {
-    previewPaneWidth.value = Math.round(entries[0]?.contentRect.width || 0)
-  })
-  previewPaneObserver.observe(el)
-})
-
 onUnmounted(() => {
   if (resizeHandler) window.removeEventListener('resize', resizeHandler)
   window.removeEventListener('keydown', handleHistoryShortcut)
   document.removeEventListener('visibilitychange', refreshPreviewIfDirty)
-  previewPaneObserver?.disconnect()
-  previewPaneObserver = null
+  disposePreview()
 })
 
 watch(sidePanel, (newVal) => {
@@ -331,9 +288,7 @@ function startResize(e: MouseEvent) {
 }
 
 const showAiOptimizeModal = ref(false)
-const chatError = ref("")
-const previewRefreshing = ref(false)
-const exportLoading = ref<"" | "pdf" | "word">("")
+const exportLoading = ref<"" | "pdf">("")
 const applySuccess = ref(false)
 let applyTimer: ReturnType<typeof setTimeout> | undefined
 const toastMessage = ref("")
@@ -349,11 +304,121 @@ function showToast(msg: string, type: "success" | "error" = "success") {
   }, 3000)
 }
 let saveDebounceTimer: ReturnType<typeof setTimeout> | undefined
-let historyCommitTimer: ReturnType<typeof setTimeout> | undefined
-let pendingHistoryLabel = "编辑内容"
 let saveChain: Promise<unknown> = Promise.resolve()
-let previewRequestSeq = 0
 const resumeId = computed(() => props.resumeId || Number(route.params.id))
+
+/** 撤销/重做：快照采集、防抖提交、快捷键。 */
+const {
+  captureEditorSnapshot,
+  commitEditorHistory,
+  cancelHistoryCommit,
+  scheduleHistoryCommit,
+  flushHistoryCommit,
+  restoreHistorySnapshot,
+  undoLastChange,
+  redoLastChange,
+  handleHistoryShortcut,
+  markChanged,
+} = useResumeHistory({ save, cancelDebouncedSave, debouncedSave })
+
+/**
+ * 对话回合（发送/重新生成/确认修改/清空）全部收在 composable 里：
+ * 原来 send 与 regenerate 各复制了一份流式处理，约 100 行重复。
+ * 这里只负责把「页面侧的业务动作」注入进去，绑定名保持原样以便模板不动。
+ */
+const {
+  messages: chatMessages,
+  loading: chatLoading,
+  loaded: chatLoaded,
+  error: chatError,
+  decisionLoadingId: chatDecisionLoadingId,
+  sessionSwitchLock,
+  load: loadChatMessages,
+  send: sendChatMessage,
+  regenerate: regenerateChatMessage,
+  decide: resolveChatDecision,
+  clear: clearChatMessages,
+  startNewSession: startNewChatSession,
+  reset: resetChatSession,
+} = useResumeChatStream({
+  resumeId,
+  supportsImages: supportsChatImages,
+  modelConfigId: effectiveChatModelId,
+  userModelId: effectiveUserModelId,
+  ensureReady: async () => {
+    if (!resumeStore.currentResume) return false
+    if (!aiCapabilityLoaded.value) await loadAiCapability()
+    return true
+  },
+  flushHistory: flushHistoryCommit,
+  beforeRequest: async () => {
+    if (!editor.saved) await save({ refreshPreview: false })
+  },
+  applyResumeSnapshot: async () => {
+    if (!resumeStore.currentResume) return
+    cancelDebouncedSave()
+    await resumeStore.fetchResumeDetail(resumeId.value)
+    commitEditorHistory("AI 助手修改")
+    editor.setSaved(true)
+    showApplySuccess()
+  },
+  onPendingQuestions: (list) => {
+    questionsDialogList.value = list
+    questionsDialogOpen.value = true
+  },
+  onJdOptimized: (messageId) => {
+    jdOptimizedMessageId.value = messageId
+  },
+  onPointsUsed: (points, kind) => {
+    showGlobalToast(`本次${kind === "chat" ? "对话" : "重新生成"}消耗了 ${points} 点 Flow Points`, "success")
+  },
+  onTurnEnd: () => {
+    getFlowPointSummaryApi().then((data) => (flowPointSummary.value = data)).catch(() => null)
+  },
+  onDecisionApplied: (message, action, response) => {
+    if (action !== "apply") return
+    if (!response?.resume_data) {
+      // 只入库、不改简历：简历无需刷新，提示用户去信息库查看即可
+      showGlobalToast("已保存到信息库")
+      return
+    }
+    if (!resumeStore.resumeData?.layout.section_order.includes(editor.currentSection)) editor.setCurrentSection("basics")
+    if (jdOptimizedMessageId.value !== null && Number(message.id) === jdOptimizedMessageId.value) {
+      jdOptimizedMessageId.value = null
+      saveAsTitle.value = `${resumeStore.currentResume?.title || "简历"} · JD优化`
+      saveAsDialogOpen.value = true
+    }
+  },
+})
+
+/** 右侧预览与 AI 修改审阅态：缩放、单飞刷新、勾选驱动的合并预览。 */
+const {
+  previewPaneRef,
+  previewScale,
+  previewAutoFit,
+  zoomPreview,
+  previewRefreshing,
+  refreshPreviewLatest,
+  refreshPreviewIfDirty,
+  selectedDiffIds,
+  pendingReviewMessage,
+  pendingReviewChangeCount,
+  currentReviewSections,
+  toggleReviewChange,
+  toggleAllReviewChanges,
+  applySelectedReviewChanges,
+  goToReviewMode,
+  dispose: disposePreview,
+} = useResumePreview({
+  resumeId,
+  isMobile,
+  mobileTab,
+  chatMessages,
+  applyDecision: resolveChatDecision,
+  onReviewModeRequested: () => {
+    mainMode.value = "edit"
+  },
+})
 
 function debouncedSave() {
   if (saveDebounceTimer) clearTimeout(saveDebounceTimer)
@@ -402,9 +467,7 @@ watch(resumeId, async (newId, oldId) => {
   cancelDebouncedSave()
   cancelHistoryCommit()
   editor.setCurrentSection("basics")
-  chatMessages.value = []
-  chatLoading.value = false
-  chatLoaded.value = false
+  resetChatSession()
   await loadResumeEditor()
 })
 
@@ -479,234 +542,6 @@ async function openShareDialog() {
  * 预览可见性：桌面端右栏常驻；移动端只在「预览」tab 里；页面切到后台一律算不可见。
  * 不可见时不发请求，只记一笔欠账，等回来再补。
  */
-function isPreviewVisible() {
-  if (typeof document !== "undefined" && document.hidden) return false
-  return !isMobile.value || mobileTab.value === "preview"
-}
-
-async function fetchPreviewHtmlLatest() {
-  if (!resumeStore.currentResume) return
-  const requestSeq = ++previewRequestSeq
-  previewRefreshing.value = true
-  try {
-    const pending = pendingReviewMessage.value
-    let html: string
-    if (pending?.optimized_resume_data && resumeStore.resumeData) {
-      // 审阅模式：预览实时跟随勾选——渲染「当前数据 + 已选变更」的合并结果
-      const merged = buildSelectedResumeData(resumeStore.resumeData, pending.optimized_resume_data, selectedDiffIds.value, pendingReviewSections.value)
-      html = await previewResumeDataApi(resumeStore.currentResume.id, merged)
-    } else {
-      html = await previewHtmlApi(resumeStore.currentResume.id)
-    }
-    if (requestSeq === previewRequestSeq) {
-      resumeStore.previewHtml = html
-    }
-  } finally {
-    if (requestSeq === previewRequestSeq) previewRefreshing.value = false
-  }
-}
-
-// 单飞 + 尾随合并：同一时刻最多一个预览请求，期间的多次触发压成一次，
-// 避免连续勾选 / 快速输入时把 /preview 打成连发。
-let previewRunning = false
-let previewQueued = false
-let previewDirty = false
-
-async function refreshPreviewLatest() {
-  if (!resumeStore.currentResume) return
-  if (!isPreviewVisible()) {
-    previewDirty = true
-    return
-  }
-  if (previewRunning) {
-    previewQueued = true
-    return
-  }
-  previewRunning = true
-  previewDirty = false
-  try {
-    await fetchPreviewHtmlLatest()
-  } finally {
-    previewRunning = false
-    if (previewQueued) {
-      previewQueued = false
-      void refreshPreviewLatest()
-    }
-  }
-}
-
-let previewRefreshTimer: number | undefined
-function schedulePreviewRefresh() {
-  window.clearTimeout(previewRefreshTimer)
-  previewRefreshTimer = window.setTimeout(() => {
-    void refreshPreviewLatest()
-  }, 300)
-}
-
-/** 回到可见状态时把欠下的那次刷新补上。 */
-function refreshPreviewIfDirty() {
-  if (previewDirty) void refreshPreviewLatest()
-}
-
-watch(mobileTab, (tab) => {
-  if (tab === "preview") refreshPreviewIfDirty()
-})
-
-// —— AI 修改审阅模式（track-changes）：有 pending 提案时左面板换成 diff 审阅卡 ——
-const selectedDiffIds = ref<string[]>([])
-
-const pendingReviewMessage = computed(() => {
-  for (let index = chatMessages.value.length - 1; index >= 0; index--) {
-    const message = chatMessages.value[index]
-    if (message.role === "assistant" && !message.streaming && (message.action_status || "none") === "pending" && message.optimized_resume_data) return message
-  }
-  return null
-})
-
-const pendingReviewSections = computed(() => {
-  const message = pendingReviewMessage.value
-  if (!message?.optimized_resume_data || !resumeStore.resumeData) return []
-  return diffResume(resumeStore.resumeData, message.optimized_resume_data)
-})
-
-const pendingReviewChangeCount = computed(() =>
-  pendingReviewSections.value.reduce((sum, section) => sum + section.changes.length, 0),
-)
-
-const currentReviewSections = computed<ReviewSection[]>(() => {
-  const message = pendingReviewMessage.value
-  if (!message?.optimized_resume_data || !resumeStore.resumeData) return []
-  const sectionKey = editor.currentSection
-  const matched = pendingReviewSections.value.find((section) => section.key === sectionKey)
-  const { changes, unchanged } = sectionEntriesForReview(
-    sectionKey,
-    resumeStore.resumeData,
-    message.optimized_resume_data,
-    matched?.title,
-  )
-  if (!changes.length && !unchanged.length) return []
-  return [{ key: sectionKey, title: matched?.title || "当前模块", changes, unchanged }]
-})
-
-watch(pendingReviewMessage, (message) => {
-  selectedDiffIds.value = message ? pendingReviewSections.value.flatMap((section) => section.changes.map((item) => item.id)) : []
-})
-
-// 勾选变化或 pending 变化都实时刷新右侧预览（防抖合并连续勾选）
-watch([pendingReviewMessage, selectedDiffIds], () => schedulePreviewRefresh())
-
-function toggleReviewChange(id: string) {
-  selectedDiffIds.value = selectedDiffIds.value.includes(id)
-    ? selectedDiffIds.value.filter((item) => item !== id)
-    : [...selectedDiffIds.value, id]
-}
-
-function toggleAllReviewChanges() {
-  const all = pendingReviewSections.value.flatMap((section) => section.changes.map((item) => item.id))
-  selectedDiffIds.value = selectedDiffIds.value.length >= all.length ? [] : all
-}
-
-function applySelectedReviewChanges() {
-  const message = pendingReviewMessage.value
-  if (!message?.optimized_resume_data || !resumeStore.resumeData) return
-  const merged = buildSelectedResumeData(resumeStore.resumeData, message.optimized_resume_data, selectedDiffIds.value, pendingReviewSections.value)
-  resolveChatDecision(message, "apply", merged)
-}
-
-function goToReviewMode() {
-  mainMode.value = "edit"
-}
-
-function captureEditorSnapshot(): EditorHistorySnapshot | null {
-  const current = resumeStore.currentResume
-  if (!current) return null
-  return JSON.parse(JSON.stringify({
-    title: current.title || "",
-    language: current.language || "zh-CN",
-    resume_data: current.resume_data,
-    template_id: current.template_id,
-    template_config: current.template_config,
-  })) as EditorHistorySnapshot
-}
-
-function commitEditorHistory(label = "编辑内容") {
-  const snapshot = captureEditorSnapshot()
-  return snapshot ? editor.commitHistory(snapshot, label) : false
-}
-
-function cancelHistoryCommit() {
-  if (!historyCommitTimer) return
-  clearTimeout(historyCommitTimer)
-  historyCommitTimer = undefined
-}
-
-function scheduleHistoryCommit(label = "编辑内容") {
-  if (editor.applyingHistory) return
-  pendingHistoryLabel = label
-  cancelHistoryCommit()
-  historyCommitTimer = setTimeout(() => {
-    historyCommitTimer = undefined
-    commitEditorHistory(pendingHistoryLabel)
-  }, 600)
-}
-
-function flushHistoryCommit() {
-  if (!historyCommitTimer) return false
-  cancelHistoryCommit()
-  return commitEditorHistory(pendingHistoryLabel)
-}
-
-async function restoreHistorySnapshot(snapshot: EditorHistorySnapshot | null) {
-  if (!snapshot || !resumeStore.currentResume) return
-  cancelDebouncedSave()
-  cancelHistoryCommit()
-  editor.applyingHistory = true
-  const restored = JSON.parse(JSON.stringify(snapshot)) as EditorHistorySnapshot
-  resumeStore.currentResume.title = restored.title
-  resumeStore.currentResume.language = normalizeResumeLanguage(restored.language)
-  resumeStore.currentResume.resume_data = normalizeResumeData(restored.resume_data, restored.language)
-  resumeStore.currentResume.template_id = restored.template_id
-  resumeStore.currentResume.template_config = restored.template_config as any
-  if (!resumeStore.currentResume.resume_data.layout.section_order.includes(editor.currentSection)) {
-    editor.setCurrentSection("basics")
-  }
-  editor.saved = false
-  try {
-    await save()
-  } finally {
-    editor.applyingHistory = false
-  }
-}
-
-async function undoLastChange() {
-  if (editor.applyingHistory) return
-  flushHistoryCommit()
-  await restoreHistorySnapshot(editor.takeUndoSnapshot())
-}
-
-async function redoLastChange() {
-  if (editor.applyingHistory) return
-  flushHistoryCommit()
-  await restoreHistorySnapshot(editor.takeRedoSnapshot())
-}
-
-function handleHistoryShortcut(event: KeyboardEvent) {
-  if (!(event.metaKey || event.ctrlKey) || event.altKey) return
-  const key = event.key.toLowerCase()
-  const wantsUndo = key === "z" && !event.shiftKey
-  const wantsRedo = (key === "z" && event.shiftKey) || (key === "y" && !event.shiftKey)
-  if (!wantsUndo && !wantsRedo) return
-  event.preventDefault()
-  if (wantsUndo) void undoLastChange()
-  else void redoLastChange()
-}
-
-function markChanged(label: unknown = "编辑内容") {
-  editor.saved = false
-  scheduleHistoryCommit(typeof label === "string" ? label : "编辑内容")
-  debouncedSave()
-}
-
 function setResumeLanguage(language: "zh-CN" | "en") {
   const current = resumeStore.currentResume
   if (!current) return
@@ -769,40 +604,10 @@ async function exportPdf() {
   }
 }
 
-async function exportWord() {
-  if (exportLoading.value) return
-  exportLoading.value = "word"
-  try {
-    if (!editor.saved) await save({ refreshPreview: false })
-    await exportWordApi(resumeId.value, resumeStore.currentResume?.title || "简历")
-  } catch (error: any) {
-    showToast(error?.message || "Word 导出失败", "error")
-  } finally {
-    exportLoading.value = ""
-  }
-}
-
 function showApplySuccess() {
   applySuccess.value = true
   if (applyTimer) clearTimeout(applyTimer)
   applyTimer = setTimeout(() => (applySuccess.value = false), 1800)
-}
-
-async function loadChatMessages() {
-  chatError.value = ""
-  try {
-    if (!chatStore.isLoaded(resumeId.value)) await chatStore.fetchSessions(resumeId.value)
-    const sessionId = activeSessionId.value
-    // 还没建过会话（简历刚创建）时不发请求：GET 会在后端凭空建一个空会话，
-    // 会话留给第一条消息去创建，标题才能拿到内容。
-    chatMessages.value = sessionId
-      ? ((await getResumeChatMessagesApi(resumeId.value, sessionId)) as unknown as any[])
-      : []
-    chatLoaded.value = true
-    jdOptimizeArmed.value = false
-  } catch (error: any) {
-    chatError.value = error.message || "对话记录加载失败"
-  }
 }
 
 /** 补充信息框提交：把答案合成一条对话消息，模型据此继续生成提案。 */
@@ -885,314 +690,9 @@ async function loadAiCapability() {
   }
 }
 
-/** 流式工具步骤按 id upsert：start 插入 running 行，end 原地更新结果状态。 */
-function upsertToolStep(assistant: any, step: ToolStep) {
-  if (!assistant) return
-  const trace: ToolStep[] = assistant.tool_trace || (assistant.tool_trace = [])
-  const existing = trace.find((item) => item.id === step.id && item.status === "start")
-  if (step.status === "start") {
-    if (!existing) trace.push({ ...step })
-    return
-  }
-  if (existing) {
-    existing.status = "end"
-    existing.ok = step.ok
-    existing.detail = step.detail
-    existing.category = step.category
-    existing.duration_ms = step.duration_ms
-  } else {
-    trace.push({ ...step })
-  }
-}
-
-async function sendChatMessage(content: string, attachments: AiChatAttachment[] = []) {
-  if (!resumeStore.currentResume || chatLoading.value) return
-  if (!aiCapabilityLoaded.value) await loadAiCapability()
-  if (attachments.length && !supportsChatImages.value) {
-    chatError.value = "当前选择的模型不支持图片输入，请切换到支持多模态的模型后再发送。"
-    return
-  }
-  flushHistoryCommit()
-  sessionSwitchLock.value = true
-  let sessionId = activeSessionId.value
-  if (!sessionId) {
-    try {
-      sessionId = (await chatStore.ensureSession(resumeId.value)).id
-    } catch (error: any) {
-      sessionSwitchLock.value = false
-      chatError.value = error?.message || "创建对话失败，请重试"
-      return
-    }
-  }
-  chatLoading.value = true
-  chatError.value = ""
-  if (content.trim().startsWith("/JD优化")) jdOptimizeArmed.value = true
-  const stamp = Date.now()
-  const pendingUser = { id: `user-${stamp}`, role: "user", content, attachments }
-  const pendingAssistant = { id: `assistant-${stamp}`, role: "assistant", content: "", streaming: true, phase: "replying", phaseText: "正在组织回复", phaseTrail: [] as string[], thinking: "", tool_trace: [] as ToolStep[] }
-  chatMessages.value.push(pendingUser, pendingAssistant)
-  const assistantIndex = chatMessages.value.length - 1
-  try {
-    if (!editor.saved) await save({ refreshPreview: false })
-    const response = (await sendResumeChatMessageStreamApi(
-      resumeId.value,
-      { content, attachments, model_config_id: effectiveChatModelId.value, user_model_id: effectiveUserModelId.value, session_id: sessionId },
-      {
-        onDelta: (text) => {
-          const assistant = chatMessages.value[assistantIndex]
-          if (assistant) assistant.content += text
-        },
-        onPhase: (phase, text) => {
-          const assistant = chatMessages.value[assistantIndex]
-          if (!assistant) return
-          Object.assign(assistant, { phase, phaseText: text })
-          const trail = assistant.phaseTrail || (assistant.phaseTrail = [])
-          if (text && trail[trail.length - 1] !== text) trail.push(text)
-        },
-        onThinking: (text) => {
-          const assistant = chatMessages.value[assistantIndex]
-          if (assistant) assistant.thinking = (assistant.thinking || "") + text
-        },
-        onTool: (step) => upsertToolStep(chatMessages.value[assistantIndex], step),
-      },
-    )) as any
-    const savedAssistant = response?.assistant_message
-    const assistant = chatMessages.value[assistantIndex]
-    if (assistant && savedAssistant) Object.assign(assistant, savedAssistant, { streaming: false })
-    else if (assistant) assistant.streaming = false
-    if (savedAssistant?.pending_questions?.length) {
-      questionsDialogList.value = savedAssistant.pending_questions
-      questionsDialogOpen.value = true
-    }
-    if (savedAssistant?.action_status === "pending" && jdOptimizeArmed.value) {
-      jdOptimizedMessageId.value = Number(savedAssistant.id) || null
-      jdOptimizeArmed.value = false
-    }
-    if (response?.resolved_message) {
-      const resolved = chatMessages.value.find((item) => item.id === response.resolved_message.id)
-      if (resolved) Object.assign(resolved, response.resolved_message)
-    }
-    if (response?.resume_data && resumeStore.currentResume) {
-      cancelDebouncedSave()
-      await resumeStore.fetchResumeDetail(resumeId.value)
-      commitEditorHistory("AI 助手修改")
-      editor.setSaved(true)
-      showApplySuccess()
-    }
-    const usage = response?.usage
-    if (usage) {
-      const points = Number(usage.points_used || 0)
-      if (points > 0) {
-        showGlobalToast(`本次对话消耗了 ${points} 点 Flow Points`, "success")
-      }
-    }
-    chatLoaded.value = true
-  } catch (error: any) {
-    const assistant = chatMessages.value[assistantIndex]
-    if (assistant) assistant.streaming = false
-    if (!assistant?.content) chatMessages.value = chatMessages.value.filter((item) => item.id !== pendingAssistant.id)
-    chatError.value = error.message === "SILENT_ERROR" ? "" : (error.message || "AI 对话失败")
-  } finally {
-    chatLoading.value = false
-    sessionSwitchLock.value = false
-    // 会话标题/预览/排序由后端维护（首条消息自动命名），回合结束后同步一次。
-    if (sessionId) {
-      chatStore.touchSession(resumeId.value, sessionId)
-      chatStore.fetchSessions(resumeId.value, { force: true }).catch(() => undefined)
-    }
-    getFlowPointSummaryApi().then((data) => (flowPointSummary.value = data)).catch(() => null)
-  }
-}
-
-async function regenerateChatMessage(message?: any, overrideContent?: string, overrideAttachments?: AiChatAttachment[]) {
-  if (!resumeStore.currentResume || chatLoading.value) return
-  if (!aiCapabilityLoaded.value) await loadAiCapability()
-  let userIndex = -1
-  if (message) {
-    userIndex = chatMessages.value.findIndex((item) => item.id === message.id)
-  } else {
-    for (let index = chatMessages.value.length - 1; index >= 0; index -= 1) {
-      if (chatMessages.value[index]?.role === "user") {
-        userIndex = index
-        break
-      }
-    }
-  }
-  if (userIndex < 0) return
-
-  const userMessage = chatMessages.value[userIndex]
-  if (!userMessage || userMessage.role !== "user") return
-  const content = String(overrideContent ?? userMessage.content ?? "").trim()
-  const attachments = overrideAttachments ? [...overrideAttachments] : [...(userMessage.attachments || [])]
-  if (!content && !attachments.length) return
-  if (attachments.length && !supportsChatImages.value) {
-    chatError.value = "当前选择的模型不支持图片输入，请切换到支持多模态的模型后再重新生成。"
-    return
-  }
-
-  const numericId = Number(userMessage.id)
-  const hasPersistedMessage = Number.isFinite(numericId) && !String(userMessage.id).startsWith("user-")
-  if (!hasPersistedMessage) {
-    chatMessages.value = chatMessages.value.slice(0, userIndex)
-    chatError.value = ""
-    await sendChatMessage(content || "请结合我上传的图片分析简历。", attachments)
-    return
-  }
-
-  flushHistoryCommit()
-  chatLoading.value = true
-  chatError.value = ""
-  if (content.trim().startsWith("/JD优化")) jdOptimizeArmed.value = true
-  userMessage.content = content || "请结合我上传的图片分析简历。"
-  userMessage.attachments = attachments
-  chatMessages.value = chatMessages.value.slice(0, userIndex + 1)
-  const pendingAssistant = {
-    id: `assistant-regenerate-${Date.now()}`,
-    role: "assistant",
-    content: "",
-    streaming: true,
-    phase: "understanding_intent",
-    phaseText: "正在重新理解这条消息",
-    phaseTrail: [] as string[],
-    thinking: "",
-    tool_trace: [] as ToolStep[],
-  }
-  chatMessages.value.push(pendingAssistant)
-  const assistantIndex = chatMessages.value.length - 1
-
-  try {
-    if (!editor.saved) await save({ refreshPreview: false })
-    const response = (await regenerateResumeChatMessageStreamApi(
-      resumeId.value,
-      numericId,
-      { content: content || "请结合我上传的图片分析简历。", attachments, model_config_id: effectiveChatModelId.value, user_model_id: effectiveUserModelId.value, session_id: activeSessionId.value },
-      {
-        onDelta: (text: string) => {
-          const assistant = chatMessages.value[assistantIndex]
-          if (assistant) assistant.content += text
-        },
-        onPhase: (phase: string, text: string) => {
-          const assistant = chatMessages.value[assistantIndex]
-          if (!assistant) return
-          Object.assign(assistant, { phase, phaseText: text })
-          const trail = assistant.phaseTrail || (assistant.phaseTrail = [])
-          if (text && trail[trail.length - 1] !== text) trail.push(text)
-        },
-        onThinking: (text: string) => {
-          const assistant = chatMessages.value[assistantIndex]
-          if (assistant) assistant.thinking = (assistant.thinking || "") + text
-        },
-        onTool: (step: ToolStep) => upsertToolStep(chatMessages.value[assistantIndex], step),
-      },
-    )) as any
-    const assistant = chatMessages.value[assistantIndex]
-    if (assistant && response?.assistant_message) {
-      Object.assign(assistant, response.assistant_message, { streaming: false })
-    } else if (assistant) {
-      assistant.streaming = false
-    }
-    const regeneratedAssistant = response?.assistant_message
-    if (regeneratedAssistant?.pending_questions?.length) {
-      questionsDialogList.value = regeneratedAssistant.pending_questions
-      questionsDialogOpen.value = true
-    }
-    if (regeneratedAssistant?.action_status === "pending" && jdOptimizeArmed.value) {
-      jdOptimizedMessageId.value = Number(regeneratedAssistant.id) || null
-      jdOptimizeArmed.value = false
-    }
-    if (response?.resolved_message) {
-      const resolved = chatMessages.value.find((item) => item.id === response.resolved_message.id)
-      if (resolved) Object.assign(resolved, response.resolved_message)
-    }
-    if (response?.resume_data && resumeStore.currentResume) {
-      cancelDebouncedSave()
-      await resumeStore.fetchResumeDetail(resumeId.value)
-      commitEditorHistory("AI 助手修改")
-      editor.setSaved(true)
-      showApplySuccess()
-    }
-    const points = Number(response?.usage?.points_used || 0)
-    if (points > 0) {
-      showGlobalToast(`本次重新生成消耗了 ${points} 点 Flow Points`, "success")
-    }
-    chatLoaded.value = true
-  } catch (error: any) {
-    await loadChatMessages().catch(() => null)
-    chatError.value = error.message === "SILENT_ERROR" ? "" : (error.message || "重新发送失败")
-  } finally {
-    chatLoading.value = false
-    if (activeSessionId.value) chatStore.fetchSessions(resumeId.value, { force: true }).catch(() => undefined)
-    getFlowPointSummaryApi().then((data) => (flowPointSummary.value = data)).catch(() => null)
-  }
-}
-
-async function clearChatMessages() {
-  chatError.value = ""
-  if (!activeSessionId.value) {
-    chatMessages.value = []
-    chatLoaded.value = true
-    return
-  }
-  try {
-    await clearResumeChatMessagesApi(resumeId.value, activeSessionId.value)
-    chatMessages.value = []
-    chatLoaded.value = true
-    if (activeSessionId.value) chatStore.fetchSessions(resumeId.value, { force: true }).catch(() => undefined)
-  } catch (error: any) {
-    chatError.value = error.message || "清除对话记录失败"
-  }
-}
-
-/** 面板里的「新对话」：开一条新会话（侧栏会同步出现，首条消息自动命名）。 */
-async function startNewChatSession() {
-  if (chatLoading.value) return
-  chatError.value = ""
-  try {
-    await chatStore.createSession(resumeId.value)
-    chatMessages.value = []
-    chatLoaded.value = true
-  } catch (error: any) {
-    chatError.value = error?.message || "新建对话失败，请重试"
-  }
-}
-
 async function confirmClearChatMessages() {
   if (chatLoading.value || !chatMessages.value.length) return
   if (window.confirm("确定清除当前简历的 AI 对话记录吗？")) await clearChatMessages()
-}
-
-async function resolveChatDecision(message: any, action: "apply" | "reject", mergedResumeData?: any) {
-  if (!resumeStore.currentResume || !message?.id || chatDecisionLoadingId.value !== null) return
-  if (action === "apply") flushHistoryCommit()
-  const previousStatus = message.action_status || "pending"
-  chatDecisionLoadingId.value = message.id
-  message.action_status = "applying"
-  chatError.value = ""
-  try {
-    const response = (await decideResumeChatChangeApi(resumeId.value, Number(message.id), action, mergedResumeData)) as any
-    if (response?.assistant_message) Object.assign(message, response.assistant_message)
-    if (action === "apply" && response?.resume_data) {
-      cancelDebouncedSave()
-      await resumeStore.fetchResumeDetail(resumeId.value)
-      commitEditorHistory("AI 助手修改")
-      editor.setSaved(true)
-      if (!resumeStore.resumeData?.layout.section_order.includes(editor.currentSection)) editor.setCurrentSection("basics")
-      showApplySuccess()
-      if (jdOptimizedMessageId.value !== null && Number(message.id) === jdOptimizedMessageId.value) {
-        jdOptimizedMessageId.value = null
-        saveAsTitle.value = `${resumeStore.currentResume?.title || "简历"} · JD优化`
-        saveAsDialogOpen.value = true
-      }
-    } else if (action === "apply") {
-      // 只入库、不改简历：简历无需刷新，提示用户去信息库查看即可
-      showGlobalToast("已保存到信息库")
-    }
-  } catch (error: any) {
-    message.action_status = previousStatus
-    chatError.value = error.message || (action === "apply" ? "修改写入失败" : "取消修改失败")
-  } finally {
-    chatDecisionLoadingId.value = null
-  }
 }
 
 function openStylePanel() {
@@ -1323,9 +823,6 @@ async function sendInitialPrompt() {
           </Button>
           <Button size="sm" variant="outline" class="flex h-9 shrink-0 items-center justify-center border-zinc-200 px-3 text-[13px] font-medium text-zinc-600 shadow-none hover:bg-zinc-50 hover:text-zinc-900" @click="openShareDialog" title="分享简历">
             <Share2 class="h-4 w-4 shrink-0 mr-1.5" /> <span>分享</span>
-          </Button>
-          <Button v-if="false" size="sm" variant="outline" class="!hidden md:!inline-flex shrink-0 h-10 px-4 border-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 rounded-lg shadow-sm font-medium" :disabled="!!exportLoading" @click="exportWord">
-            <FileText class="h-4 w-4 shrink-0 mr-1.5" /> Word
           </Button>
           <Button size="sm" class="flex h-9 shrink-0 items-center justify-center whitespace-nowrap bg-zinc-900 px-4 text-[13px] font-medium text-white shadow-none transition-colors hover:bg-zinc-800 active:scale-95" :disabled="!!exportLoading" @click="exportPdf">
             <Download class="h-4 w-4 shrink-0 mr-1.5" /> 导出
@@ -1605,7 +1102,7 @@ async function sendInitialPrompt() {
         <div class="w-full max-w-[320px] rounded-2xl border border-zinc-200 bg-white px-6 py-7 text-center shadow-xl">
           <LoaderCircle class="mx-auto h-10 w-10 animate-spin text-zinc-900" />
           <h3 class="mt-4 text-base font-semibold text-zinc-900">
-            {{ exportLoading === 'pdf' ? '正在导出 PDF' : '正在导出 Word' }}
+            {{ exportLoading === 'pdf' ? '正在导出 PDF' : '正在导出' }}
           </h3>
           <p class="mt-2 text-sm leading-6 text-zinc-500">
             正在生成文件，请勿关闭页面。

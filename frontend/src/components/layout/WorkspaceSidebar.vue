@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue"
 import { RouterLink, useRoute, useRouter } from "vue-router"
-import { ChevronRight, Copy, Files, FolderOpen, LayoutTemplate, MessageSquare, Pin, Plus, Search, Sparkles, Trash2, X } from "lucide-vue-next"
+import { ChevronRight, Copy, Database, Files, FolderOpen, LayoutTemplate, MessageSquare, Pin, Plus, Search, Sparkles, Trash2, X } from "lucide-vue-next"
 import BrandLogo from "@/components/common/BrandLogo.vue"
 import WorkspaceUserMenu from "@/components/layout/WorkspaceUserMenu.vue"
 import ConfirmPopover from "@/components/ui/dialog/ConfirmPopover.vue"
@@ -454,6 +454,18 @@ function formatUpdated(value?: string) {
       >
         <LayoutTemplate class="h-4 w-4 shrink-0" :class="route.path === '/workspace/templates' ? 'text-zinc-700' : 'text-zinc-400'" />
         <span>模板中心</span>
+      </RouterLink>
+      <RouterLink
+        to="/workspace/info"
+        class="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-[13px] font-medium transition-colors"
+        :class="
+          route.path === '/workspace/info'
+            ? 'bg-zinc-200/60 text-zinc-900'
+            : 'text-zinc-600 hover:bg-zinc-200/40 hover:text-zinc-900'
+        "
+      >
+        <Database class="h-4 w-4 shrink-0" :class="route.path === '/workspace/info' ? 'text-zinc-700' : 'text-zinc-400'" />
+        <span>信息库</span>
       </RouterLink>
     </div>
 

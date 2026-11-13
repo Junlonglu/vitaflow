@@ -17,6 +17,8 @@ type ChatMessage = {
   content: string
   suggestions?: string[]
   optimized_resume_data?: any
+  /** Agent 整理出的待入库信息（确认后写入信息库，不是简历） */
+  pending_info_fragments?: Array<{ id?: number | null; kind: string; kind_label: string; title: string; summary?: string }>
   action_status?: "none" | "pending" | "applying" | "applied" | "rejected"
   streaming?: boolean
   phase?: string
@@ -315,15 +317,37 @@ async function copyAttachmentUrl(url: string) {
 }
 
 function actionStatus(message: ChatMessage) {
-  if (!message.optimized_resume_data) return "none"
+  if (!message.optimized_resume_data && !message.pending_info_fragments?.length) return "none"
   return message.action_status || "pending"
+}
+
+/** 待确认卡的文案：简历修改 / 信息入库 / 两者同时存在。 */
+function pendingSummary(message: ChatMessage) {
+  const resume = Boolean(message.optimized_resume_data)
+  const count = message.pending_info_fragments?.length || 0
+  if (resume && count) return `AI 准备了简历修改，并整理了 ${count} 条信息`
+  if (resume) return "AI 准备了简历修改，可在编辑器中逐条审阅"
+  return `AI 整理了 ${count} 条信息，确认后保存到信息库`
+}
+
+function pendingActionLabel(message: ChatMessage) {
+  return message.optimized_resume_data ? "去审阅" : "保存到信息库"
+}
+
+function resultText(message: ChatMessage) {
+  return message.optimized_resume_data ? "修改已生效" : "信息已保存到信息库"
 }
 
 /** 只有最新一条 pending 提案可以审阅；更早的提示已被新版本取代。 */
 const latestPendingId = computed<number | string | null>(() => {
   for (let index = props.messages.length - 1; index >= 0; index--) {
     const message = props.messages[index]
-    if (message.role === "assistant" && !message.streaming && (message.action_status || "none") === "pending" && message.optimized_resume_data) return message.id
+    if (
+      message.role === "assistant" &&
+      !message.streaming &&
+      (message.action_status || "none") === "pending" &&
+      (message.optimized_resume_data || message.pending_info_fragments?.length)
+    ) return message.id
   }
   return null
 })
@@ -444,20 +468,39 @@ watch(
                 </div>
                 <div v-if="message.role === 'assistant' && !message.streaming && ['pending', 'applying'].includes(actionStatus(message))" class="mt-4 flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-4">
                   <template v-if="message.id === latestPendingId">
-                    <span class="mr-auto min-w-[180px] text-xs md:text-[13px] font-medium text-zinc-600">AI 准备了简历修改，可在编辑器中逐条审阅</span>
+                    <div class="mr-auto min-w-[180px]">
+                      <p class="text-xs md:text-[13px] font-medium text-zinc-600">{{ pendingSummary(message) }}</p>
+                      <div v-if="message.pending_info_fragments?.length" class="mt-1.5 space-y-1">
+                        <div
+                          v-for="fragment in message.pending_info_fragments.slice(0, 3)"
+                          :key="`${fragment.kind}-${fragment.title}`"
+                          class="flex min-w-0 items-center gap-1.5 text-[11.5px] text-zinc-500"
+                        >
+                          <span class="shrink-0 rounded bg-zinc-100 px-1 py-0.5 text-[10.5px] text-zinc-500">{{ fragment.kind_label }}</span>
+                          <span class="truncate">{{ fragment.title }}</span>
+                        </div>
+                        <p v-if="message.pending_info_fragments.length > 3" class="text-[11px] text-zinc-400">等 {{ message.pending_info_fragments.length }} 条</p>
+                      </div>
+                    </div>
                     <button type="button" class="h-8 rounded-md px-3 text-xs md:text-[13px] font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-50" :disabled="decisionLoadingId === message.id" @click="emit('reject', message)">取消</button>
-                    <Button type="button" size="sm" class="h-8 bg-zinc-900 px-4 text-xs md:text-[13px] font-medium text-white hover:bg-zinc-800" :disabled="decisionLoadingId === message.id" @click="emit('review', message)">
+                    <Button
+                      type="button"
+                      size="sm"
+                      class="h-8 bg-zinc-900 px-4 text-xs md:text-[13px] font-medium text-white hover:bg-zinc-800"
+                      :disabled="decisionLoadingId === message.id"
+                      @click="message.optimized_resume_data ? emit('review', message) : emit('confirm', message)"
+                    >
                       <LoaderCircle v-if="decisionLoadingId === message.id" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                      去审阅
+                      {{ pendingActionLabel(message) }}
                     </Button>
                   </template>
                   <span v-else class="text-xs md:text-[13px] font-medium text-zinc-400">已有更新版本的修改待处理</span>
                 </div>
                 <div v-else-if="message.role === 'assistant' && actionStatus(message) === 'applied'" class="mt-4 flex items-center gap-2 border-t border-zinc-100 pt-3 text-xs md:text-[13px] font-medium text-emerald-600">
-                  <CheckCircle2 class="h-4 w-4" /> 修改已生效
+                  <CheckCircle2 class="h-4 w-4" /> {{ resultText(message) }}
                 </div>
                 <div v-else-if="message.role === 'assistant' && actionStatus(message) === 'rejected'" class="mt-4 flex items-center gap-2 border-t border-zinc-100 pt-3 text-xs md:text-[13px] font-medium text-zinc-400">
-                  <X class="h-4 w-4" /> 修改已取消
+                  <X class="h-4 w-4" /> {{ message.optimized_resume_data ? "修改已取消" : "已忽略" }}
                 </div>
                 <div v-if="message.attachments?.length" class="mt-3 flex flex-wrap gap-2">
                   <button v-for="item in message.attachments" :key="item.url" type="button" class="block h-20 w-20 sm:h-24 sm:w-24 shrink-0 cursor-zoom-in overflow-hidden rounded-lg border border-zinc-200/70 bg-white transition-colors hover:border-zinc-300 active:scale-95" @click="openPreview(item.url)">

@@ -114,6 +114,18 @@ export function toolStepLabel(toolName: string, args: unknown): string {
       const questions = Array.isArray(raw.questions) ? raw.questions : [];
       return questions.length ? `向你收集补充信息（${questions.length} 项）` : "向你收集补充信息";
     }
+    case "search_info_fragments": {
+      const query = clamp(String(raw.query ?? ""), 16);
+      return query ? `检索信息库「${query}」` : "检索信息库";
+    }
+    case "import_info_fragments": {
+      const ids = Array.isArray(raw.fragment_ids) ? raw.fragment_ids : [];
+      return ids.length ? `从信息库导入 ${ids.length} 条信息` : "从信息库导入信息";
+    }
+    case "propose_info_fragments": {
+      const items = Array.isArray(raw.fragments) ? raw.fragments : [];
+      return items.length ? `整理 ${items.length} 条信息到信息库` : "整理信息到信息库";
+    }
     default:
       return toolName;
   }
@@ -162,6 +174,18 @@ export function toolStepEnd(toolName: string, result: unknown, isError: boolean)
   if (toolName === "update_basics_field" || toolName === "update_section" || toolName === "propose_change") {
     const suggestions = Array.isArray(details.suggestions) ? (details.suggestions as string[]) : [];
     return { ok: true, detail: clampText(suggestions[0] ?? "已生成待确认修改，确认后写入", 48) };
+  }
+  if (toolName === "search_info_fragments") {
+    const items = Array.isArray(details.items) ? details.items : [];
+    return { ok: true, detail: items.length ? `找到 ${items.length} 条相关信息` : "没有匹配的信息" };
+  }
+  if (toolName === "import_info_fragments") {
+    const suggestions = Array.isArray(details.suggestions) ? (details.suggestions as string[]) : [];
+    return { ok: true, detail: clampText(suggestions[0] ?? "已生成待确认修改，确认后写入", 48) };
+  }
+  if (toolName === "propose_info_fragments") {
+    const pending = Array.isArray(details.pending_info_fragments) ? details.pending_info_fragments : [];
+    return { ok: true, detail: pending.length ? `整理出 ${pending.length} 条待确认信息` : "没有可保存的信息" };
   }
   return { ok: true };
 }

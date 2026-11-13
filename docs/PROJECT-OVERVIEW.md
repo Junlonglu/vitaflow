@@ -63,27 +63,28 @@ vitaflow/
 ├── CONTEXT.md             # 领域术语表
 ├── README.md              # 总入口
 ├── docker-compose.yml
-├── backend/               # FastAPI，约 12.6k 行 Python
+├── backend/               # FastAPI，约 13k 行 Python
 │   ├── app/
-│   │   ├── api/           # 12 个路由模块，只做参数解析与编排
-│   │   ├── services/      # 22 个业务服务
-│   │   ├── models/        # 8 个 SQLAlchemy 模块
-│   │   ├── schemas/       # 10 个 Pydantic 模块
-│   │   ├── core/          # config / security / response / exceptions / database
+│   │   ├── api/           # 13 个路由模块，只做参数解析与编排
+│   │   ├── services/      # 24 个业务服务
+│   │   ├── models/        # 10 个 SQLAlchemy 模块
+│   │   ├── schemas/       # 11 个 Pydantic 模块
+│   │   ├── core/          # config / security / response / exceptions / database / resume_schema（简历 JSON 契约）
 │   │   ├── templates/resume/  # 12 套 Jinja2 简历模板
 │   │   └── main.py
-│   ├── alembic/versions/  # 35 个迁移
-│   └── tests/             # 21 个测试文件
-├── frontend/              # Vue 3，约 16k 行
+│   ├── alembic/versions/  # 39 个迁移
+│   └── tests/             # 25 个测试文件
+├── frontend/              # Vue 3，约 17k 行
 │   └── src/{views,components,stores,api,router,types,utils}/
 ├── ai-service/            # Node 旁路服务
 │   ├── src/{server,agent,prompt,commands,taskPrompts,catalog,billing,usage,config,real,faux}.ts
-│   ├── src/tools/         # 6 个 Agent 工具
+│   ├── src/tools/         # 工具定义（basics / sections / questions / search / fragments）+ http 客户端 + 步骤文案
 │   └── .pi-agent/models.json   # 模型目录（能力清单 + API Key 引用）
 └── docs/
     ├── adr/               # 架构决策记录 0001~0003
     ├── agents/            # issue tracker 与 domain doc 约定
     ├── pi-agent重构设计.md
+    ├── resume-schema.md   # 简历 JSON 契约与原子信息模型
     └── ai-call-flows.md   # 端到端链路，标注到行号
 ```
 
@@ -123,7 +124,12 @@ vitaflow/
 - 会话搜索（跨简历，命中标题或任意消息内容）：`GET /ai/resume-chat/sessions/search?q=&limit=`，结果带 `resume_title`
 - 变更决策：`POST /ai/resume-chat/{resume_id}/messages/{message_id}/decision`（apply / reject）、`DELETE /ai/resume-chat/{resume_id}/messages?session_id=`
 - 历史：`GET /ai/resume-chat/{resume_id}/messages?session_id=`（省略 session_id 时落在该简历最近一次会话，兼容旧前端）
-- **服务间回调（供 ai-service 调用）**：`POST /ai/service/tool/update-basics-field`、`POST /ai/service/tool/update-section`、`POST /ai/service/tool/propose-change`、`GET /ai/service/tool/get-resume-context`、`POST /ai/service/tool/search-evidence`、`POST /ai/service/usage`
+- **服务间回调（供 ai-service 调用）**：`POST /ai/service/tool/update-basics-field`、`POST /ai/service/tool/update-section`、`POST /ai/service/tool/propose-change`、`GET /ai/service/tool/get-resume-context`、`POST /ai/service/tool/search-evidence`、`GET /ai/service/tool/info-fragments/search`（按关键词/分类检索用户信息库）、`POST /ai/service/tool/info-fragments/import`（生成待确认的简历修改，不落库）、`POST /ai/service/tool/info-fragments/propose`（生成待确认的信息条目，不落库）、`POST /ai/service/usage`
+
+**信息库（原子信息）`info_fragments.py`**
+- 列表：`GET /info-fragments`（`kind` / `q` 关键词 / `tag` / `page` / `page_size`，返回 `items` + `total` + 各分类 `counts`）、`GET /info-fragments/meta`（分类定义、字段表、上限）
+- 写入：`POST /info-fragments`（指纹重复时合并）、`POST /info-fragments/bulk`（单次 30 条）、`PUT|DELETE /info-fragments/{id}`
+- 流转：`POST /info-fragments/extract`（从指定简历提取，已存在跳过）、`POST /info-fragments/apply`（把若干条导入简历，返回最新 `resume_data` 与新增条目名，重复导入返回 400）
 
 **用户自带模型与技能 `user_ai.py`**（Ticket 17 / 18）
 - **多模型配置**：`GET|POST /user-ai/models`、`PUT|DELETE /user-ai/models/{id}`、`POST /user-ai/models/{id}/default`（设为默认）、`POST /user-ai/models/{id}/test` 与 `POST /user-ai/models/test`（未保存配置探活）。每用户最多 10 条，任意时刻恰好一条默认项；删除/停用默认项会自动补位。对话请求可带 `user_model_id`（正数指定某条自带模型、`0` 明确使用平台模型、省略则按服务端默认解析），在编辑器模型选择器里与平台模型同列展示。
@@ -155,6 +161,8 @@ vitaflow/
 | `word_export_service.py` | python-docx 生成 Word，需与 HTML 模板保持内容一致 |
 | `resume_import_service.py` | 上传 docx/pdf → 抽取文本 → 交给 AI 解析成结构化简历 |
 | `resume_normalization.py` / `resume_locale.py` | 简历 JSON 规范化（补默认字段、修类型）与多语言字段处理 |
+| `info_fragment_service.py` | 信息库（原子信息）：增删改查、指纹去重、从简历提取、合并导入简历、Agent 检索与提案校验 |
+| `core/resume_schema.py` | 简历 JSON 的声明式契约：字段表、schema 版本、`normalize_resume_document`、Agent 写入契约、原子信息分类 |
 | `rich_text_service.py` | 富文本清理，AI 输出进入 HTML 前必经 |
 | `storage/` | 统一存储抽象：MinIO / 阿里云 OSS / 本地，三种实现 |
 | `search_evidence_service.py` | 支撑 `web_search` 工具的证据落库与引用 |
@@ -181,7 +189,8 @@ vitaflow/
 | 表 | 说明 |
 |---|---|
 | `ai_chat_sessions` | 会话（按 user + resume 组织，一份简历可有多条对话），`is_pinned` 置顶标记，含滚动摘要 `context_summary` 与其覆盖到的 `summary_message_id` |
-| `ai_chat_messages` | 消息；assistant 消息可带 `optimized_resume_data`(待确认变更)、`suggestions`(变更摘要)、`action_status`(pending/applied/rejected)、usage 字段 |
+| `ai_chat_messages` | 消息；assistant 消息可带 `optimized_resume_data`(待确认的简历变更)、`pending_info_fragments`(待确认入库的信息条目)、`suggestions`(变更摘要)、`action_status`(pending/applied/rejected)、usage 字段 |
+| `info_fragments` | **信息库（原子信息）**：用户级的一条事实。`kind`(15 类，决定落到简历哪个模块)、`title`、`summary`、`payload`(JSON，复用简历条目字段)、`tags`(JSON)、`search_text`(扁平检索列)、`fingerprint`(sha1 去重)、`source`(manual/resume/ai)、`enabled`、`usage_count`、`last_used_time`；每用户上限 500 条 |
 | `ai_tasks` | 一次性任务记录（类型、输入、输出、状态、错误、耗时、token） |
 | `ai_model_configs` | **业务策略**：`model_ref` 指向模型目录中的 provider/model；含 `name`、`context_messages`、`is_chat_selectable`、`sort_order`、`is_active`，以及三种费率 `chat_points_per_call` / `chat_points_per_million_input_tokens` / `chat_points_per_million_output_tokens` |
 | `flow_point_rules` | 各功能（生成/对话/导出…）的积分单价 |
@@ -200,8 +209,11 @@ vitaflow/
 
 这是全项目最重要的数据结构，前端表单、AI 工具、渲染模板、导出服务都以它为契约。
 
+**声明式契约**：字段表、类型、必填与长度上限全部定义在 `backend/app/core/resume_schema.py`（`SECTIONS` / `FRAGMENT_KINDS`），并由 `normalize_resume_document()` 在**所有落库路径**（前端保存、AI 写回、信息库导入）收口；`schema_prompt()` 把同一份字段表注入 Agent 系统提示词。字段级说明见 [`docs/resume-schema.md`](./resume-schema.md)，此处只列结构。
+
 ```jsonc
 {
+  "schema_version": "1.1",        // 字段表版本，写入时由后端补齐
   "basics": {
     "name": "", "title": "", "status": "", "phone": "", "email": "",
     "location": "", "expected_salary": "", "highest_degree": "",
@@ -215,12 +227,12 @@ vitaflow/
   "education": [{ "id": "edu_1", "school": "", "major": "", "degree": "",
                   "start_date": "2022.09", "end_date": "2026.06", "description": "" }],
   "skills":    [{ "id": "skill_1", "name": "", "keywords": [], "description": "" }],
-  "work":      [{ "id": "work_1", "company": "", "role": "", "start_date": "",
+  "work":      [{ "id": "work_1", "company": "", "position": "", "start_date": "",
                   "end_date": "", "description": "", "highlights": [] }],
   "projects":  [{ "id": "project_1", "name": "", "role": "", "start_date": "",
                   "end_date": "", "tech_stack": "", "description": "", "highlights": [] }],
-  "awards":    [{ "id": "award_1", "title": "", "date": "", "description": "" }],
-  "custom_sections": [{ "id": "", "title": "", "items": [] }],
+  "awards":    [{ "id": "award_1", "name": "", "date": "", "description": "" }],
+  "custom_sections": [{ "id": "custom_1", "title": "", "preset_type": "", "items": [] }],
   "layout": {
     "section_order": ["basics","summary","education","skills","work","projects","awards"],
     "hidden_sections": [],
@@ -232,9 +244,11 @@ vitaflow/
 ```
 
 要点：
-- 列表型 section 的每个条目都有稳定 `id`，AI 的增量更新**按 id 定位**，避免整段覆盖。
-- `layout` 控制顺序、显隐、标题文案，模板只负责视觉，不决定结构。
-- `custom_sections` 支持用户自定义模块，工具与模板需兼容。
+- 列表型 section 的每个条目都有稳定 `id`，AI 的增量更新**按 id 定位**，避免整段覆盖；缺 id / id 重复由规范化补成 `{prefix}_{n}`。
+- 日期一律 `"YYYY.MM"`；`highlights` / `keywords` 是字符串数组（也接受换行/分号文本，规范化时切分去重）。
+- `layout` 控制顺序、显隐、标题文案，模板只负责视觉，不决定结构；Agent 契约明确「不要手改 layout」。
+- `custom_sections` 支持用户自定义模块（证书 / 语言 / 竞赛 / 培训 / 论文 / 志愿 / 实习），用 `preset_type` 标记类型，渲染、导入与信息库都按它匹配。
+- 规范化只做「补齐 + 清洗」，**不删除未知字段**，旧简历的历史字段不会因升级被吞掉。
 
 ---
 
@@ -285,11 +299,12 @@ createAgentSession({ cwd, sessionManager: SessionManager.inMemory(cwd), resource
 ### 7.5 系统提示词与命令
 
 - `prompt.ts`：显式覆盖 pi 的「编码助手」人设，清空 `appendSystemPromptOverride`，关闭 `noContextFiles`/`noSkills`，注入简历上下文、事实边界规则、招聘写作标准。
+- **写入契约**：后端每轮把 `resume_schema.schema_prompt()` 放进 `context.resume_schema`，Node 侧原样拼进系统提示词。字段表只有 Python 一份，Node 不复制、不推断字段名（见 `docs/resume-schema.md`）。
 - `commands.ts`：注册 5 个斜杠命令——`/润色`、`/翻译`、`/JD优化 <岗位描述>`、`/生成 <目标岗位>`、`/开场白`。通过 `promptsOverride` 注入虚拟文件系统。
 - **关键坑**：传了 `resourceLoader` 之后必须 `await loader.reload()`，否则上述命令全部静默失效。代码中已显式调用。
 - `taskPrompts.ts`：三类一次性任务 `generate_resume` / `import_resume` / `chat_summary`，各自 system prompt + 约束（只输出合法 JSON、禁编造事实、禁编造量化指标）。
 
-### 7.6 工具清单（白名单，共 6 个）
+### 7.6 工具清单（白名单，共 9 个）
 
 | 工具 | 作用 | 是否回调 FastAPI |
 |---|---|---|
@@ -299,8 +314,13 @@ createAgentSession({ cwd, sessionManager: SessionManager.inMemory(cwd), resource
 | `get_resume_context` | 读取简历完整内容 | 是 → `/service/tool/get-resume-context`（GET） |
 | `ask_user_questions` | 向用户提问（缺信息时澄清） | 否，仅产出结构化问题 |
 | `web_search` | 联网搜索（公司/岗位/技术事实核查） | 是 → `/service/tool/search-evidence`；仅当配置 `SEARCH_PROVIDER` 时注册 |
+| `search_info_fragments` | 检索用户信息库（关键词/分类） | 是 → `/service/tool/info-fragments/search`（GET），只读 |
+| `import_info_fragments` | 按 id 把信息库条目导入简历 | 是 → `/service/tool/info-fragments/import`；结果进 `pending_change`，等用户确认 |
+| `propose_info_fragments` | 把对话里整理出的新事实存进信息库 | 是 → `/service/tool/info-fragments/propose`；结果进 `pending_info_fragments`，用户确认后才入库 |
 
 **`read` / `bash` / `edit` / `write` 全部禁用**。多用户 Web 场景下 `bash` 是明确的安全风险，这一条不可回退。
+
+工具状态只累积、不落库：`agent.ts` 里的 `toolState.pendingChange`（basics/sections 工具写入）与 `fragmentState`（`fragments.ts` 的 `pendingChange` + `pendingFragments`）在 `result` 事件里一起回传，后端分别写 `optimized_resume_data` 与 `pending_info_fragments`。
 
 ### 7.7 四层防御：AI 为什么不直接改库
 
@@ -308,7 +328,7 @@ createAgentSession({ cwd, sessionManager: SessionManager.inMemory(cwd), resource
 2. **Python 侧加载真实简历**：不信任 Node 传来的现状，避免「模型基于过期快照改」。
 3. **限定合并**：按 item id 合并，不允许新增未提供的条目 id，不允许越界改 section。
 4. **数值防幻觉校验**：`_unverified_numeric_claims()` 比对原文，模型新增的百分比/数量/QPS 等量化结果会被标记或剔除。
-5. **落成 pending**：结果写入 `ai_chat_messages.optimized_resume_data` + `action_status=pending`，用户点「应用」才执行合并写库。
+5. **落成 pending**：结果写入 `ai_chat_messages.optimized_resume_data` + `action_status=pending`，用户点「应用」才执行合并写库；信息库条目的提案另存 `pending_info_fragments`，确认时先入库再写简历。
 
 ### 7.8 模型配置三分
 
@@ -357,6 +377,32 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 - **容错**：BYOK/技能属可选增强，配置表缺失、迁移未跑、DB 抖动时 `_resolve_user_ai` 只记一条 warning 并返回 `(None, [])`，绝不阻断对话。
 - **范围边界**：目前只作用于简历 Agent 对话；`generate-resume` / `import-resume` 等一次性任务仍走平台模型，以保证结构化输出稳定，也避免改动同步结算链路。
 
+### 7.11 信息库（原子信息）与双通道待确认
+
+信息库把「用户会反复用到的事实」从单份简历里抽出来，属于用户而不是简历。字段模型见 `docs/resume-schema.md` §6，这里只说链路。
+
+```
+信息库页面 /workspace/info
+  ├─ 手动新增 / 编辑          → POST|PUT /info-fragments
+  ├─ 从简历提取（已有经历拆条） → POST /info-fragments/extract（指纹判重，已存在跳过）
+  └─ 导入简历（单条 → 简历）    → POST /info-fragments/apply（直接写库，返回最新 resume_data）
+
+对话 /workspace/:id（Flow Agent）
+  ├─ search_info_fragments   → 只读检索，命中带分类与摘要
+  ├─ import_info_fragments   → 工具返回待确认的简历修改 → pending_change
+  │     └─ 用户点「去审阅」→ POST .../decision(apply) → 先确认后的简历合并
+  └─ propose_info_fragments  → 工具返回待确认的信息条目 → pending_info_fragments
+        └─ 用户点「保存到信息库」→ 同一条 decision 接口 → 先入库再（如有）写简历
+```
+
+要点：
+
+- **一条消息可同时承载两种待确认内容**（简历快照 + 信息条目），`action_status=pending` 只要任一存在；`resolve_chat_change` 的 apply 分支先用 `apply_proposals()` 入库并把 `pending_info_fragments` 置空，再合并 `optimized_resume_data`；只有信息提案时不会报「没有可写入的修改」。
+- **工具不直接写库**：`import` / `propose` 两个端点在 Python 侧只做校验与组装，返回 `optimized_resume_data` / `pending_info_fragments`，落库发生在用户确认之后。
+- **幂等**：`fingerprint = sha1(kind + payload)`，重复保存合并标题与标签而不覆盖用户编辑；导入简历按条目内容判重，全部已存在时返回 400 而不是静默造重复条目。
+- **可见性**：`search_info_fragments` 只返回当前用户、`enabled` 的条目；所有端点都带 `user_id` 过滤，跨用户 `fragment_id` 按 404 处理。
+- **前端确认卡**：`ResumeAiChatPanel` 的待确认卡同时看 `optimized_resume_data` 与 `pending_info_fragments`，有简历改动给「去审阅」，只有信息条目给「保存到信息库」；两种状态的结果文案分开（修改已生效 / 信息已保存到信息库）。
+
 ---
 
 ## 8. 前端架构
@@ -372,6 +418,7 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 | `/workspace/:id` | `Workspace.vue` → `ResumeEditor.vue` | **核心页面**，外壳内的编辑器：中栏「Flow Agent 对话 ⇄ 内容编辑」可切换，右栏 A4 预览；中栏默认占工作区 52%（520–1000px 夹取），拖拽分隔条可改并记在 `localStorage` 的 `vitaflow_editor_panel_width` |
 | `/workspace/templates` | `Workspace.vue` → `WorkspaceTemplates.vue` | **工作区内的模板中心**：左侧模板网格（搜索 + 分类筛选），右侧选中模板大图 + 「用此模板创建 / 按岗位起稿 / 导入已有简历」，选好模板后带着 `template_id` 进创建流程；网格最多 3 列（`2xl` 才 4 列），右栏占主区 42%（380–560px），预览、标题、入口同宽成列并在面板内垂直居中 |
 | `/workspace/resumes` | `Workspace.vue` → `WorkspaceResumeLibrary.vue` | **全部简历**面板：卡片网格、复制、删除、响应式分页（桌面 8 / 窄屏 6）、标题搜索（300ms 防抖）与排序（最近更新 / 最近创建 / 按标题）、无结果空态，创建入口复用 `ResumeCreateFlow`；列表分页状态本地维护，避免与侧栏共用的 store 互相顶掉 |
+| `/workspace/info` | `Workspace.vue` → `WorkspaceInfo.vue` | **信息库（原子信息）**：搜索（260ms 防抖）+ 分类 chips（含计数）+ 卡片网格（分类徽标、标题、摘要、标签、使用次数、导入按钮、悬浮编辑/删除）+ 分页；「从简历提取」把已有简历拆成条目，「新增信息」按分类字段表动态建表单，「导入简历」把单条写入指定简历并跳转编辑器 |
 | `/resumes` | — | 重定向到 `/workspace/resumes`，兼容旧链接与历史导航 |
 | `/resumes/:id/edit` | — | 重定向到 `/workspace/:id`，兼容旧链接 |
 | `/templates` | `TemplateGallery.vue` | 仅面向未登录访客的公开模板页（浏览 + 引流到登录）；登录后守卫直接跳到 `/workspace/templates` |
@@ -400,7 +447,7 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 | 预览刷新 | `refreshPreviewLatest` 单飞 + 尾随合并：同时只有一个 `/preview` 请求；预览不可见（移动端非「预览」tab、`document.hidden`）时不发请求，只记 `previewDirty`，切回可见时补一次 |
 | 创建流程 | 侧栏「新建简历 / AI 生成简历」、工作区首页底部三个入口都只调 `useWorkspaceCreate().openCreate(entry)`；`Workspace.vue` 根部挂 `ResumeCreateFlow`（岗位起稿 / 空白模板 / 导入 / AI 生成）消费意图，创建成功 `emit('created')` → 先 `flushSave()` 再 `push('/workspace/:id')`，全程不离开外壳 |
 | 模板中心 | 收编进工作区（`/workspace/templates` → `WorkspaceTemplates.vue`），不再跳全站顶栏的独立页；点「用此模板创建」时 `openCreate('blank', { templateId })` 直接建简历，岗位起稿 / 导入则把该 `template_id` 传给对应接口，不再重复选模板。`/templates` 只保留给未登录访客 |
-| 内容页 | 帮助中心 / 个人中心 / 公告 / Flow Points 统一走 `WorkspacePage.vue`（滚动容器 + 移动端抽屉入口 + 可选浅灰底），路由挂在 `/workspace/*` 下，`Workspace.vue` 用 `panel` 计算属性决定渲染哪一个；四个页面按需异步加载，不进首屏包 |
+| 内容页 | 帮助中心 / 个人中心 / 公告 / Flow Points / 信息库统一走 `WorkspacePage.vue`（滚动容器 + 移动端抽屉入口 + 可选浅灰底），路由挂在 `/workspace/*` 下，`Workspace.vue` 用 `panel` 计算属性决定渲染哪一个；这些页面按需异步加载，不进首屏包 |
 | 公告弹窗 | 挂在工作区根部（`Workspace.vue`），除编辑器外都会弹；空标题不弹。此前只挂在「全部简历」面板上，用户不进那个面板就永远看不到公告 |
 | 全部简历 | 收编进工作区（`/workspace/resumes` → `WorkspaceResumeLibrary.vue`），分页、复制、删除都在面板内完成；侧栏只拉最近 50 份，超出时列表底部出现「查看全部 N 份」入口。面板的列表分页状态独立于 `resume` store，增删后回写一次 store，侧栏不会因为面板把 `page_size` 改成 8 而只剩 8 条 |
 
@@ -479,7 +526,7 @@ docker compose --profile full up -d --build
 5. AI 相关改动必须同时检查：工具校验、合并逻辑、`resume_data` schema、渲染模板、前端类型。
 6. AI 输出进入 HTML 前必须过 `rich_text_service` 清理，防 XSS。
 7. 不硬编码任何 Key / 密码 / 密钥；管理员能力必须后端校验。
-8. 修改简历数据结构时，五处同步：TS 类型、默认数据、表单组件、渲染模板、导出服务。
+8. 修改简历数据结构时，六处同步：`core/resume_schema.py`（字段表 + `SCHEMA_VERSION`）、TS 类型、默认数据、表单组件、渲染模板、导出服务；字段表是唯一事实源，不要在 Node 或前端另抄一份。
 9. 前端改动至少 `npm run build` + `npm test`（vitest，配置 `frontend/vitest.config.ts`）；后端至少 `pytest -q`（`backend/requirements-dev.txt` 提供 pytest）；ai-service 至少 `npm run typecheck && npm test`；涉及预览/导出的要人工验证无空白、无分页错位。
 10. 不自动提交、不自动删文件、不清理用户改动。
 11. 新增用户可控的出站 URL / 密钥 / 提示词内容，必须同时做：加密落库且不回明文（密钥用独立口令，禁止复用 JWT 弱默认）、SSRF 校验、日志与异常脱敏、可查询的使用审计与一键清除、提示词注入边界（追加在系统规则之后 + 长度上限）、以及计费口径（是否消耗平台积分）。
@@ -501,6 +548,8 @@ docker compose --profile full up -d --build
 | 静态共享令牌 | `AI_SERVICE_TOKEN` | ADR 中已列为开放问题。当前「内网 + 无 shell 工具 + Python 侧兜底校验」下风险可控；升级方向是短时签名（时间戳 + HMAC） |
 | BYOK 未覆盖一次性任务 | `api/ai.py`、`api/resumes.py` | 自定义模型目前只作用于 Agent 对话；生成/导入任务仍走平台模型。扩展时需同步改造各处 `precheck_flow_points` / `settle_task_flow_points`，否则会出现「用用户 Key 却扣平台积分」 |
 | `ui/input` 等旧控件 | `components/ui/` | 本轮已把 Input/Textarea 从 12px 收敛到 8px 控件档；`Select` 的 ghost 类、`ConfirmDialog` 里的 `rounded-xl` 按钮等仍有零散发散，遇到即按 §1 圆角阶梯校准 |
+| 原子信息落点靠约定 | `FRAGMENT_KINDS.preset_type` / `info_fragment_service.py` | 落到 `custom_sections` 的分类靠 `preset_type` 字符串匹配模块；新增分类忘配（或写错）preset 时不会报错，只会退化成独立的「自定义」模块。新增分类时按 `docs/resume-schema.md` §6.1 表逐项核对 |
+| 简历字段表与实际表单仍有漂移风险 | `resume_schema.py` ↔ `SectionListForm.vue` | 字段表是契约，但前端条目默认字段是手写的 `Object.assign`。新增字段后若忘了改表单，新字段不会出现在编辑器里（数据仍在）。已有 `ResumeSchemaTest` 守住后端，尚无跨端一致性测试 |
 
 ---
 
@@ -512,6 +561,8 @@ docker compose --profile full up -d --build
 | 模型策略（model config） | MySQL `ai_model_configs` 一行，业务侧「启用哪个模型、多少钱、带几条上下文」 |
 | 模型引用（model_ref） | 策略指向目录中的具体 `provider/model` 的字符串 |
 | 待确认变更（pending change） | AI 产出但未应用的简历修改，挂在 assistant 消息上，需用户确认 |
+| 原子信息（fragment） | 信息库里的一条事实（一段实习、一个项目、一个奖项…），属于用户而非简历，可被检索与导入 |
+| 写入契约（resume schema） | `core/resume_schema.py` 声明的模块/字段表，同时是前端、AI 与导入的规范化依据；`schema_version` 随字段表递增 |
 | 起手式（resume starter） | 按行业预置的简历骨架与示例内容，新建时可选 |
 | 积分（flow points） | 平台内计费单位，AI 调用与部分功能消耗 |
 | 回合（turn） | 一次用户输入到 Agent 结束（`agent_settled`）的完整过程 |

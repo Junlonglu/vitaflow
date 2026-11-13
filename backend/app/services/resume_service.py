@@ -2,6 +2,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppException
+from app.core.resume_schema import normalize_resume_document
 from app.models.ai_chat import AiChatMessage, AiChatSession
 from app.models.resume import Resume, ResumeVersion
 from app.schemas.resume import ResumeCreate, ResumeUpdate, default_template_config
@@ -65,11 +66,14 @@ def get_resume(db: Session, user_id: int, resume_id: int) -> Resume:
 def create_resume(db: Session, user_id: int, payload: ResumeCreate) -> Resume:
     config = payload.template_config or default_template_config(payload.template_id)
     config["template_id"] = payload.template_id
+    language = normalize_resume_language(payload.language)
+    # 统一结构：补 schema 版本、条目 id、字段类型清洗（前端 / 导入 / AI 共用同一入口）
+    resume_data = normalize_resume_document(payload.resume_data, {"language": language})
     resume = Resume(
         user_id=user_id,
         title=payload.title,
-        language=normalize_resume_language(payload.language),
-        resume_data=payload.resume_data,
+        language=language,
+        resume_data=resume_data,
         template_id=payload.template_id,
         template_config=config,
         create_by=user_id,
@@ -89,6 +93,11 @@ def update_resume(db: Session, user_id: int, resume_id: int, payload: ResumeUpda
     if "template_id" in data and data["template_id"]:
         data.setdefault("template_config", resume.template_config or {})
         data["template_config"]["template_id"] = data["template_id"]
+    if isinstance(data.get("resume_data"), dict):
+        # 前端保存与 AI 写回走同一套规范化，避免出现「同一份简历两种形状」。
+        data["resume_data"] = normalize_resume_document(
+            data["resume_data"], {"language": data.get("language") or resume.language}
+        )
     for key, value in data.items():
         setattr(resume, key, value)
     resume.update_by = user_id

@@ -83,6 +83,7 @@ class AiChatMessageOut(BaseModel):
     attachments: list[AiChatAttachment] = Field(default_factory=list)
     suggestions: list[str] = Field(default_factory=list)
     optimized_resume_data: Optional[dict[str, Any]] = None
+    pending_info_fragments: Optional[list[dict[str, Any]]] = None
     tool_trace: Optional[list[dict[str, Any]]] = None
     timing: Optional[dict[str, Any]] = None
     pending_questions: Optional[list[dict[str, Any]]] = None

@@ -1183,6 +1183,9 @@ async function resolveChatDecision(message: any, action: "apply" | "reject", mer
         saveAsTitle.value = `${resumeStore.currentResume?.title || "简历"} · JD优化`
         saveAsDialogOpen.value = true
       }
+    } else if (action === "apply") {
+      // 只入库、不改简历：简历无需刷新，提示用户去信息库查看即可
+      showGlobalToast("已保存到信息库")
     }
   } catch (error: any) {
     message.action_status = previousStatus

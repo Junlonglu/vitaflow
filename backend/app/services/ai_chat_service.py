@@ -15,6 +15,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.exceptions import AppException
+from app.core.resume_schema import normalize_resume_document, schema_prompt
 from app.models.ai_chat import AiChatMessage, AiChatSession
 from app.models.resume import Resume
 from app.models.resume import ResumeVersion
@@ -29,7 +30,8 @@ from app.services.ai_config_service import (
 from app.services.ai_service_client import ai_service_chat_events, ai_service_task_result
 from app.services.ai_task_service import create_ai_task, finish_ai_task
 from app.services.flow_points_service import precheck_flow_points
-from app.services.resume_normalization import localize_ai_text, normalize_resume_data, strip_thinking_text
+from app.services.info_fragment_service import apply_proposals
+from app.services.resume_normalization import localize_ai_text, strip_thinking_text
 from app.services.user_ai_service import audit_chat_use, build_skills_payload, resolve_model_override
 
 logger = logging.getLogger(__name__)
@@ -64,6 +66,8 @@ def _message_out(message: AiChatMessage) -> AiChatMessageOut:
             "attachments": message.attachments or [],
             "suggestions": message.suggestions or [],
             "optimized_resume_data": message.optimized_resume_data,
+            # 单测里常用 SimpleNamespace 造消息桩，缺新字段时按空处理
+            "pending_info_fragments": getattr(message, "pending_info_fragments", None),
             "tool_trace": message.tool_trace,
             "timing": message.timing,
             "pending_questions": message.pending_questions,
@@ -384,6 +388,7 @@ def _save_assistant_message(
     tool_trace: list[dict[str, Any]] | None = None,
     pending_questions: list[dict[str, Any]] | None = None,
     timing: dict[str, Any] | None = None,
+    pending_info_fragments: list[dict[str, Any]] | None = None,
 ) -> AiChatMessageOut:
     reply = strip_thinking_text(localize_ai_text(reply or "")).strip()
     assistant_message = AiChatMessage(
@@ -394,10 +399,11 @@ def _save_assistant_message(
         content=reply,
         suggestions=suggestions,
         optimized_resume_data=optimized_resume_data,
+        pending_info_fragments=pending_info_fragments or None,
         tool_trace=tool_trace or None,
         timing=timing or None,
         pending_questions=pending_questions or None,
-        action_status="pending" if optimized_resume_data else "none",
+        action_status="pending" if (optimized_resume_data or pending_info_fragments) else "none",
     )
     session.update_time = datetime.now()
     db.add(assistant_message)
@@ -463,6 +469,8 @@ def build_ai_service_context(
         },
         "context_summary": summary or "",
         "history": [{"role": item.role, "content": item.content} for item in history[-context_limit:]],
+        # 写入契约由后端单一维护（core/resume_schema.py），每轮注入，Node 侧不复制字段表。
+        "resume_schema": schema_prompt(),
         "pending_change": {
             "exists": pending_change is not None,
             "message_id": pending_change.id if pending_change else None,
@@ -700,6 +708,12 @@ async def _stream_ai_service_reply(
                     if isinstance(raw_timing, dict)
                     else None
                 )
+                pending_fragments = data.get("pending_info_fragments")
+                pending_info_fragments = (
+                    [item for item in pending_fragments if isinstance(item, dict)]
+                    if isinstance(pending_fragments, list)
+                    else None
+                )
                 if isinstance(pending, dict) and pending.get("optimized_resume_data"):
                     assistant = _save_assistant_message(
                         db,
@@ -712,9 +726,22 @@ async def _stream_ai_service_reply(
                         tool_trace,
                         pending_questions=pending_questions,
                         timing=timing,
+                        pending_info_fragments=pending_info_fragments,
                     )
                 else:
-                    assistant = _save_assistant_message(db, session, user, resume, reply, [], None, tool_trace, pending_questions=pending_questions, timing=timing)
+                    assistant = _save_assistant_message(
+                        db,
+                        session,
+                        user,
+                        resume,
+                        reply,
+                        [str(item.get("title") or "信息") for item in (pending_info_fragments or [])],
+                        None,
+                        tool_trace,
+                        pending_questions=pending_questions,
+                        timing=timing,
+                        pending_info_fragments=pending_info_fragments,
+                    )
                 # 窗口外积压够了就在后台压缩成滚动摘要（下轮生效），不阻塞本回合。
                 # 计数失败只丢一次调度，不能把已收完的回复变成 error 事件。
                 try:
@@ -940,7 +967,7 @@ def _normalize_keeping_section_titles(data: dict[str, Any], payload: dict[str, A
     """normalize_resume_data 但保留调用方的模块标题：标题是内容的一部分
     （翻译提案会把标题换成另一语言的默认名，被 locale 重置等于吞掉该变更）。"""
     titles_in = deepcopy((data.get("layout") or {}).get("section_titles"))
-    normalized = normalize_resume_data(data, payload)
+    normalized = normalize_resume_document(data, payload)
     if isinstance(titles_in, dict) and titles_in:
         normalized.setdefault("layout", {})["section_titles"] = {**normalized.get("layout", {}).get("section_titles", {}), **titles_in}
     return normalized
@@ -1492,28 +1519,36 @@ def resolve_chat_change(
 
     resume_data: dict[str, Any] | None = None
     if action == "apply":
-        if not message.optimized_resume_data:
+        # 信息库提案和简历修改可以同时存在（Agent 一轮里既整理信息又改简历）：
+        # 先入库，再写简历；两者都没有才是非法确认。
+        pending_fragments = getattr(message, "pending_info_fragments", None)
+        had_fragments = bool(pending_fragments)
+        if had_fragments:
+            apply_proposals(db, user.id, pending_fragments)
+            message.pending_info_fragments = None
+        if message.optimized_resume_data:
+            # 审阅模式部分采纳：前端把勾选的变更合并到「当前」简历数据后提交；
+            # 缺省走整包快照（整包替换会冲掉提案之后的手动编辑）。
+            # 标题属于内容（翻译/重命名后与简历 language 列无关），规范化后必须原样保留，
+            # 否则已知默认标题（Basic Information 等）会被本地化重置回简历原语言。
+            if merged_resume_data is not None:
+                if not isinstance(merged_resume_data, dict) or not merged_resume_data:
+                    raise AppException("提交的修改数据无效", 400)
+                pending_data = _normalize_keeping_section_titles(deepcopy(merged_resume_data), {"language": resume.language})
+            else:
+                pending_data = message.optimized_resume_data
+            resume_data = _persist_resume_change(
+                db,
+                user,
+                resume,
+                pending_data,
+                "采纳 AI 助手修改",
+            )
+        elif not had_fragments:
             raise AppException("这次对话没有可写入的修改", 400)
-        # 审阅模式部分采纳：前端把勾选的变更合并到「当前」简历数据后提交；
-        # 缺省走整包快照（整包替换会冲掉提案之后的手动编辑）。
-        # 标题属于内容（翻译/重命名后与简历 language 列无关），规范化后必须原样保留，
-        # 否则已知默认标题（Basic Information 等）会被本地化重置回简历原语言。
-        if merged_resume_data is not None:
-            if not isinstance(merged_resume_data, dict) or not merged_resume_data:
-                raise AppException("提交的修改数据无效", 400)
-            pending_data = _normalize_keeping_section_titles(deepcopy(merged_resume_data), {"language": resume.language})
-        else:
-            pending_data = message.optimized_resume_data
-        persisted_data = _persist_resume_change(
-            db,
-            user,
-            resume,
-            pending_data,
-            "采纳 AI 助手修改",
-        )
         message.action_status = "applied"
-        resume_data = persisted_data
     elif action == "reject":
+        message.pending_info_fragments = None
         message.action_status = "rejected"
     else:
         raise AppException("不支持的确认操作", 400)

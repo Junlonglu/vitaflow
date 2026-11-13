@@ -11,6 +11,7 @@ from app.models.ai_config import (
 from app.models.announcement import Announcement, AnnouncementRead
 from app.models.ai_chat import AiChatMessage, AiChatSession
 from app.models.export_record import ExportRecord
+from app.models.info_fragment import InfoFragment
 from app.models.resume import Resume, ResumeStarter, ResumeStarterIndustryTemplate, ResumeVersion, UploadedFile
 from app.models.template import ResumeTemplate
 from app.models.user import User
@@ -29,6 +30,7 @@ __all__ = [
     "FlowPointRedeemRecord",
     "FlowPointRule",
     "FlowPointTransaction",
+    "InfoFragment",
     "Resume",
     "ResumeStarter",
     "ResumeStarterIndustryTemplate",

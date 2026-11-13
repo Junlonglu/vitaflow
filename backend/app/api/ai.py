@@ -30,6 +30,7 @@ from app.schemas.ai_chat import (
     AiChatSessionPinRequest,
     AiChatSessionRenameRequest,
 )
+from app.schemas.info_fragment import ServiceImportFragmentsRequest, ServiceProposeFragmentsRequest
 from app.services.ai.token_usage import build_token_usage, normalize_token_usage
 from app.services.ai_chat_service import (
     chat_session_data,
@@ -66,6 +67,12 @@ from app.services.ai_task_service import (
     finish_ai_task,
 )
 from app.services.app_settings_service import get_setting
+from app.services import info_fragment_service
+from app.services.info_fragment_service import (
+    import_fragments as import_info_fragments,
+    search_for_agent,
+    validate_proposals,
+)
 from app.services.flow_points_service import (
     ACTIVE_AI_FEATURE_TYPES,
     consume_flow_points,
@@ -936,6 +943,89 @@ def service_search_evidence(
         [item.model_dump() for item in payload.results],
     )
     return success({"ok": True, "stored": stored})
+
+
+# ---------------------------------------------------------------------------
+# 原子信息库（Agent 工具回调）
+# ---------------------------------------------------------------------------
+
+
+def _fragment_card(row) -> dict[str, Any]:
+    """给模型的精简卡片：够判断相关性就够了，不塞整份 payload 撑上下文。"""
+    return {
+        "id": row.id,
+        "kind": row.kind,
+        "kind_label": info_fragment_service.fragment_kind_label(row.kind),
+        "title": row.title,
+        "summary": row.summary,
+        "tags": row.tags or [],
+        "payload": row.payload or {},
+        "usage_count": row.usage_count or 0,
+    }
+
+
+@router.get("/service/tool/info-fragments/search")
+def service_search_info_fragments(
+    user_id: int,
+    query: str = "",
+    kinds: str = "",
+    limit: int = 8,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_ai_service_token),
+):
+    """内部工具回调：检索用户的原子信息库（只读）。"""
+    kind_list = [item.strip() for item in str(kinds or "").split(",") if item.strip()]
+    rows = search_for_agent(db, user_id, query, kind_list, limit)
+    return success({"ok": True, "items": [_fragment_card(row) for row in rows], "total": len(rows)})
+
+
+@router.post("/service/tool/info-fragments/import")
+def service_import_info_fragments(
+    payload: ServiceImportFragmentsRequest,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_ai_service_token),
+):
+    """内部工具回调：把选中的信息条目合并成一份待确认的简历修改。
+
+    只生成 pending payload，不落库——真正写入仍由用户在前端点确认后，
+    经 ``/resume-chat/{id}/messages/{message_id}/decision`` 完成。
+    """
+    resume = get_resume(db, payload.user_id, payload.resume_id)
+    merged, added, _rows = import_info_fragments(db, payload.user_id, resume, payload.fragment_ids)
+    return success(
+        {
+            "ok": True,
+            "optimized_resume_data": merged,
+            "suggestions": [f"导入信息库内容：{label}" for label in added],
+            "added": added,
+        }
+    )
+
+
+@router.post("/service/tool/info-fragments/propose")
+def service_propose_info_fragments(
+    payload: ServiceProposeFragmentsRequest,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_ai_service_token),
+):
+    """内部工具回调：校验 Agent 从对话里整理出的信息条目。
+
+    返回待确认列表（新增无 id，更新带 id），由前端确认卡展示；确认后才真正
+    写入信息库。校验失败（分类未知 / 缺必填字段）带上原因，让模型自己修正。
+    """
+    proposals = [item.model_dump() for item in payload.fragments]
+    pending, issues = validate_proposals(db, payload.user_id, proposals)
+    if not pending:
+        reason = "；".join(issues) or "没有可保存的信息"
+        return success({"ok": False, "reason": reason, "category": "validation", "retryable": False})
+    return success(
+        {
+            "ok": True,
+            "pending_info_fragments": pending,
+            "suggestions": [f"{item['kind_label']}：{item['title']}" for item in pending],
+            "issues": issues,
+        }
+    )
 
 
 @router.post("/service/usage")

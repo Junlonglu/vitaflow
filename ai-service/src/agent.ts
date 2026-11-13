@@ -22,6 +22,7 @@ import { buildQuickCommandTemplates } from "./commands.js";
 import type { TaskType } from "./taskPrompts.js";
 import { createUpdateBasicsFieldTool, type BasicsToolState } from "./tools/basics.js";
 import { createSectionTools, type SectionToolsState } from "./tools/sections.js";
+import { createFragmentTools, createFragmentToolsState, type FragmentToolsState } from "./tools/fragments.js";
 import { createAskUserQuestionsTool, createQuestionsState, type QuestionsToolState } from "./tools/questions.js";
 import { createWebSearchTool } from "./tools/search.js";
 import { toolQualitySteps, toolStepEnd, toolStepLabel, type ToolQualityStep, type ToolTraceEntry } from "./tools/labels.js";
@@ -198,6 +199,8 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
   // Both tool families write into the SAME state object, so whichever tool fires
   // this turn is the one whose payload the result event carries.
   const toolState: BasicsToolState & SectionToolsState = { pendingChange: null };
+  // 信息库提案走独立 state：它与简历待确认修改是两种不同的确认卡，可以同时存在。
+  const fragmentState: FragmentToolsState = createFragmentToolsState();
   // Structured questions asked via ask_user_questions this turn; echoed onto the
   // result event so FastAPI persists them and the frontend can render its answer
   // dialog after reload too (same closure pattern as toolState — the model has
@@ -234,6 +237,14 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     state: toolState,
   });
   const questionsTool = createAskUserQuestionsTool(questionsState);
+  const fragmentTools = createFragmentTools({
+    fetch: globalThis.fetch,
+    fastapiBaseUrl: config.fastapiBaseUrl,
+    serviceToken: config.serviceToken,
+    userId,
+    resumeId,
+    state: fragmentState,
+  });
   // 联网搜索：供应商未配置（none / 缺密钥）时工具不注册，Agent 行为与之前完全一致。
   const searchTool = isSearchEnabled(config)
     ? createWebSearchTool({
@@ -294,6 +305,12 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     };
     if (toolState.pendingChange) {
       data.pending_change = toolState.pendingChange;
+    } else if (fragmentState.pendingChange) {
+      // import_info_fragments 生成的是简历待确认修改，和 section 工具同一条通道
+      data.pending_change = fragmentState.pendingChange;
+    }
+    if (fragmentState.pendingFragments?.length) {
+      data.pending_info_fragments = fragmentState.pendingFragments;
     }
     if (questionsState.askedQuestions?.length) {
       data.pending_questions = questionsState.askedQuestions;
@@ -340,8 +357,18 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     // the filesystem, keeping a single validated mutation path. The read-only
     // get_resume_context is exposed too so the agent can inspect a section before
     // changing it (still no filesystem access).
-    tools: ["update_basics_field", "update_section", "propose_change", "get_resume_context", "ask_user_questions", ...(searchTool ? ["web_search" as const] : [])],
-    customTools: [basicsTool, ...sectionTools, questionsTool, ...(searchTool ? [searchTool] : [])],
+    tools: [
+      "update_basics_field",
+      "update_section",
+      "propose_change",
+      "get_resume_context",
+      "ask_user_questions",
+      "search_info_fragments",
+      "import_info_fragments",
+      "propose_info_fragments",
+      ...(searchTool ? ["web_search" as const] : []),
+    ],
+    customTools: [basicsTool, ...sectionTools, questionsTool, ...fragmentTools, ...(searchTool ? [searchTool] : [])],
     // Thinking streams to the UI only for models that actually support reasoning;
     // non-reasoning models (faux included) stay pinned off — a forced level there
     // can produce an empty assistant message.
@@ -411,7 +438,13 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
       // drafting step — advancing the stage there would mislabel the timeline.
       // web_search/get_resume_context are lookups, not drafting either.
       if (event.toolName !== "ask_user_questions") {
-        advanceStage(event.toolName === "get_resume_context" || event.toolName === "web_search" ? "reading" : "drafting");
+        advanceStage(
+          event.toolName === "get_resume_context" ||
+            event.toolName === "web_search" ||
+            event.toolName === "search_info_fragments"
+            ? "reading"
+            : "drafting",
+        );
       }
       const entry: ToolTraceEntry = {
         id: event.toolCallId,

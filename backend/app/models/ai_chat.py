@@ -38,6 +38,8 @@ class AiChatMessage(Base):
     attachments: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(JSON, nullable=True)
     suggestions: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
     optimized_resume_data: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    # Agent 提议写入信息库的条目（用户确认前只挂在这条消息上，不落信息库）
+    pending_info_fragments: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(JSON, nullable=True)
     tool_trace: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(JSON, nullable=True)
     # 回合环节耗时（毫秒）：first_token_ms 首字响应 / tool_ms 工具执行合计 /
     # total_ms 整回合；生成回复 = total - tool，由看板推导。

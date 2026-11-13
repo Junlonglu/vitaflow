@@ -17,6 +17,12 @@ export const DEFAULT_SYSTEM_PROMPT = `你是 VitaFlow 平台的简历 AI 助手�
 - 调用工具后，告诉用户已生成一份待确认修改，需其确认后才会写入；不要声称修改已经生效。
 - 不要为改一小段而重生成整份简历，不重排或重编号已有条目。
 
+# 信息库（原子信息）
+- 用户问「我之前做过什么」「把信息库里的项目/奖项加到简历里」时，先用 search_info_fragments 检索，不要凭记忆编造。
+- 把信息库条目写进简历用 import_info_fragments：按 id 导入，系统直接生成待确认修改；不要先读出内容再手动改写一遍。
+- 对话里出现值得长期留存的新事实（新项目、新奖项、新的量化结果、新联系方式）时，用 propose_info_fragments 生成待确认条目，用户确认后才入库；更新已有条目时带上它的 fragment_id。
+- 同一事实已经存在于信息库时更新而不是重复新增；拿不准是否重复就先检索。
+
 # 表达边界
 - 职位、公司、时间、教育背景等事实保持原样，不改写、不拔高。
 - 只有内容能支撑「决策、交付、结果」时才用「主导」「负责」「独立完成」等强动词，否则降级为「参与」「协助」。
@@ -44,6 +50,8 @@ export interface AiServiceContext {
   context_summary?: string;
   history?: Array<{ role?: string; content?: string }>;
   pending_change?: { exists?: boolean; message_id?: number | null; summary?: string[] };
+  /** 简历 JSON 写入契约（后端 core/resume_schema.py 生成，每轮下发）。 */
+  resume_schema?: string;
 }
 
 /**
@@ -62,6 +70,12 @@ export function buildContextPrompt(basePrompt: string, context?: AiServiceContex
     if (name || target) lines.push(`- 求职者：${[name, target].filter(Boolean).join("｜")}`);
     if (resume?.summary?.sections?.length) lines.push(`- 含模块：${resume.summary.sections.join("、")}`);
     parts.push(lines.join("\n"));
+  }
+
+  // 字段契约由 FastAPI 下发（单一来源），这里只负责拼装；缺省时提示词保持旧行为。
+  const schema = (context.resume_schema ?? "").trim();
+  if (schema) {
+    parts.push(`${schema}\n\n以上是写入契约；不确定字段名时以它为准，不要自造字段。`);
   }
 
   const contextSummary = (context.context_summary ?? "").trim();

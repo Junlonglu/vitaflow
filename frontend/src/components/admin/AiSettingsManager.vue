@@ -338,7 +338,7 @@ async function createCatalogProvider(data: AdminCatalogProviderWrite) {
   }
 }
 
-async function updateCatalogProvider(key: string, data: { name: string; base_url: string; api_key?: string }) {
+async function updateCatalogProvider(key: string, data: { name: string; base_url: string; api_key?: string; access_key_id?: string; secret_access_key?: string }) {
   error.value = ""
   try {
     catalog.value = await updateAdminCatalogProviderApi(key, data)

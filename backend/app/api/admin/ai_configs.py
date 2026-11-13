@@ -42,6 +42,8 @@ class CatalogProviderWrite(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     base_url: str = Field(min_length=1, max_length=500)
     api_key: str = Field(default="", max_length=1000)
+    access_key_id: str = Field(default="", max_length=500)
+    secret_access_key: str = Field(default="", max_length=1000)
 
 
 class CatalogModelWrite(BaseModel):
@@ -243,9 +245,22 @@ def get_catalog_provider_balance(provider_key: str):
     return success(call_catalog("GET", f"/v1/catalog/providers/{provider_key}/balance"))
 
 
+@router.get("/ai-catalog/providers/{provider_key}/plan-usage")
+def get_catalog_provider_plan_usage(provider_key: str):
+    """Vendor plan windows (Coding Plan / Token Plan); needs the account access key pair."""
+    return success(call_catalog("GET", f"/v1/catalog/providers/{provider_key}/plan-usage"))
+
+
 @router.post("/ai-catalog/providers")
 def create_catalog_provider(payload: CatalogProviderWrite):
-    body = {"key": payload.key.strip(), "name": payload.name.strip(), "baseUrl": payload.base_url.strip(), "apiKey": payload.api_key.strip()}
+    body = {
+        "key": payload.key.strip(),
+        "name": payload.name.strip(),
+        "baseUrl": payload.base_url.strip(),
+        "apiKey": payload.api_key.strip(),
+        "access_key_id": payload.access_key_id.strip(),
+        "secret_access_key": payload.secret_access_key.strip(),
+    }
     result = success(call_catalog("POST", "/v1/catalog/providers", body))
     invalidate_catalog_capabilities_cache()
     return result
@@ -253,7 +268,13 @@ def create_catalog_provider(payload: CatalogProviderWrite):
 
 @router.put("/ai-catalog/providers/{provider_key}")
 def update_catalog_provider(provider_key: str, payload: CatalogProviderWrite):
-    body = {"key": provider_key, "name": payload.name.strip(), "baseUrl": payload.base_url.strip()}
+    body = {
+        "key": provider_key,
+        "name": payload.name.strip(),
+        "baseUrl": payload.base_url.strip(),
+        "access_key_id": payload.access_key_id.strip(),
+        "secret_access_key": payload.secret_access_key.strip(),
+    }
     if payload.api_key.strip():
         body["apiKey"] = payload.api_key.strip()
     result = success(call_catalog("PUT", f"/v1/catalog/providers/{provider_key}", body))

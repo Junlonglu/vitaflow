@@ -5,6 +5,7 @@ import Button from "@/components/ui/button/Button.vue"
 import Select from "@/components/ui/select/Select.vue"
 import {
   getAdminCatalogEnvKeysApi,
+  getAdminCatalogPlanUsageApi,
   getAdminCatalogProviderBalanceApi,
   getAdminRemoteModelsApi,
   probeAdminCatalogModelApi,
@@ -12,6 +13,7 @@ import {
   type AdminCatalogProvider,
   type AdminCatalogProviderWrite,
   type AdminCatalogModelWrite,
+  type AdminPlanUsage,
   type AdminProbeResult,
   type AdminRemoteModel,
 } from "@/api/admin"
@@ -26,7 +28,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   refresh: []
   createProvider: [data: AdminCatalogProviderWrite]
-  updateProvider: [key: string, data: { name: string; base_url: string; api_key?: string }]
+  updateProvider: [key: string, data: { name: string; base_url: string; api_key?: string; access_key_id?: string; secret_access_key?: string }]
   deleteProvider: [key: string]
   syncDev: [key: string]
   importModels: [key: string, ids: string[]]
@@ -51,7 +53,7 @@ const PROVIDER_PRESETS = [
 
 const providerDialogOpen = ref(false)
 const providerEditingKey = ref<string | null>(null)
-const providerForm = ref({ key: "", name: "", base_url: "", api_key: "" })
+const providerForm = ref({ key: "", name: "", base_url: "", api_key: "", access_key_id: "", secret_access_key: "" })
 const showProviderKey = ref(false)
 
 // API Key 双模式：引用 AI 服务进程的 *_API_KEY 环境变量（推荐，密钥不落盘）或直接输入明文。
@@ -77,7 +79,7 @@ async function loadEnvKeys() {
 
 function openCreateProvider() {
   providerEditingKey.value = null
-  providerForm.value = { key: "", name: "", base_url: "", api_key: "" }
+  providerForm.value = { key: "", name: "", base_url: "", api_key: "", access_key_id: "", secret_access_key: "" }
   providerErrors.value = { key: "", name: "", base_url: "" }
   void loadEnvKeys().then(() => {
     providerDialogOpen.value = true
@@ -93,12 +95,22 @@ function applyPreset(preset: (typeof PROVIDER_PRESETS)[number]) {
 
 function openEditProvider(provider: AdminCatalogProvider) {
   providerEditingKey.value = provider.key
-  providerForm.value = { key: provider.key, name: provider.name, base_url: provider.base_url, api_key: "" }
+  providerForm.value = { key: provider.key, name: provider.name, base_url: provider.base_url, api_key: "", access_key_id: "", secret_access_key: "" }
   providerErrors.value = { key: "", name: "", base_url: "" }
   void loadEnvKeys().then(() => {
     providerDialogOpen.value = true
   })
 }
+
+// 套餐型厂商的接口地址特征：Coding/Agent Plan 与两家 Token Plan 需要账号钥匙。
+const planVendorHint = computed(() => {
+  const base = providerForm.value.base_url.toLowerCase()
+  const pathed = `${base.replace(/\/+$/, "")}/`
+  if (/ark\.[a-z0-9-]+\.volces\.com/.test(base) && /\/api\/(coding|plan)\//.test(pathed)) return "火山方舟 Coding/Agent Plan"
+  if (base.includes("token-plan.") && base.includes("maas.aliyuncs.com")) return "阿里云百炼 Token Plan"
+  if (base.includes("tencentmaas.com") && base.includes("/plan")) return "腾讯云 Token Plan 企业版"
+  return null
+})
 
 function formatContextWindow(value?: number | null) {
   if (!value) return ""
@@ -132,11 +144,20 @@ function submitProvider() {
   providerErrors.value = errors
   if (errors.key || errors.name || errors.base_url) return
   if (providerEditingKey.value) {
-    const data: { name: string; base_url: string; api_key?: string } = { name: form.name.trim(), base_url: form.base_url.trim() }
+    const data: { name: string; base_url: string; api_key?: string; access_key_id?: string; secret_access_key?: string } = { name: form.name.trim(), base_url: form.base_url.trim() }
     if (form.api_key.trim()) data.api_key = form.api_key.trim()
+    if (form.access_key_id.trim()) data.access_key_id = form.access_key_id.trim()
+    if (form.secret_access_key.trim()) data.secret_access_key = form.secret_access_key.trim()
     emit("updateProvider", providerEditingKey.value, data)
   } else {
-    emit("createProvider", { key: form.key.trim(), name: form.name.trim(), base_url: form.base_url.trim(), api_key: form.api_key.trim() })
+    emit("createProvider", {
+      key: form.key.trim(),
+      name: form.name.trim(),
+      base_url: form.base_url.trim(),
+      api_key: form.api_key.trim(),
+      ...(form.access_key_id.trim() ? { access_key_id: form.access_key_id.trim() } : {}),
+      ...(form.secret_access_key.trim() ? { secret_access_key: form.secret_access_key.trim() } : {}),
+    })
   }
   providerDialogOpen.value = false
 }
@@ -294,10 +315,47 @@ function balanceOf(key: string): AdminBalanceSnapshot | null {
   return value && value !== "loading" ? value : null
 }
 
+// ---- 套餐用量（Coding Plan / Token Plan）：仅对识别出套餐的卡片拉取。
+const planUsages = ref<Record<string, AdminPlanUsage | "loading">>({})
+
+function planUsageOf(key: string): AdminPlanUsage | null {
+  const value = planUsages.value[key]
+  return value && value !== "loading" ? value : null
+}
+
+async function loadPlanUsages(providers: AdminCatalogProvider[]) {
+  for (const provider of providers) {
+    if (!provider.editable || !provider.plan_vendor || planUsages.value[provider.key]) continue
+    planUsages.value[provider.key] = "loading"
+    try {
+      planUsages.value[provider.key] = await getAdminCatalogPlanUsageApi(provider.key)
+    } catch (err: any) {
+      planUsages.value[provider.key] = {
+        vendor: provider.plan_vendor,
+        plan: provider.plan_label || "",
+        region: "",
+        needs_access_key: false,
+        plans: [],
+        as_of: new Date().toISOString(),
+        stale: false,
+        error: err.message || "套餐用量查询失败",
+      }
+    }
+  }
+}
+
+function formatReset(value: string | null) {
+  if (!value) return ""
+  return new Date(value).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })
+}
+
 watch(
-  () => props.providers.map((provider) => provider.key).join(","),
+  () => props.providers.map((provider) => `${provider.key}:${provider.plan_vendor ?? ""}`).join(","),
   () => {
-    if (props.providerMode === "real" && props.providers.length) void loadBalances(props.providers)
+    if (props.providerMode === "real" && props.providers.length) {
+      void loadBalances(props.providers)
+      void loadPlanUsages(props.providers)
+    }
   },
   { immediate: true },
 )
@@ -338,6 +396,30 @@ watch(
           <button class="rounded-full p-1.5 text-zinc-400 transition-all hover:bg-zinc-100 hover:text-zinc-700 active:scale-95" title="编辑服务商" @click="openEditProvider(provider)"><Pencil class="h-3.5 w-3.5" /></button>
           <button class="rounded-full p-1.5 text-zinc-400 transition-all hover:bg-red-50 hover:text-red-600 active:scale-95" title="删除服务商" @click="emit('deleteProvider', provider.key)"><Trash2 class="h-3.5 w-3.5" /></button>
         </div>
+      </div>
+      <div v-if="provider.plan_vendor && !fauxProvider" class="border-b border-zinc-100 bg-zinc-50/60 px-4 py-3">
+        <p v-if="planUsages[provider.key] === 'loading'" class="text-xs text-zinc-400">套餐用量查询中…</p>
+        <template v-else-if="planUsageOf(provider.key)">
+          <div v-if="planUsageOf(provider.key)!.needs_access_key" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            {{ planUsageOf(provider.key)!.plan }}（{{ planUsageOf(provider.key)!.region }}）的用量需要账号级访问密钥：编辑服务商，填写 {{ planUsageOf(provider.key)!.vendor === 'tencent' ? 'SecretId 与 SecretKey' : 'AccessKey ID 与 Secret' }}
+          </div>
+          <div v-else-if="planUsageOf(provider.key)!.error" class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700" :title="planUsageOf(provider.key)!.error ?? ''">{{ planUsageOf(provider.key)!.error }}</div>
+          <div v-else class="space-y-2.5">
+            <div v-for="entry in planUsageOf(provider.key)!.plans" :key="entry.name ?? 'plan'" class="space-y-1.5">
+              <p class="text-xs font-medium text-zinc-700">{{ provider.plan_label }}<span v-if="entry.name && planUsageOf(provider.key)!.plans.length > 1" class="text-zinc-400"> · {{ entry.name }}</span><span v-if="entry.status_note" class="ml-1 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700">{{ entry.status_note }}</span></p>
+              <p v-if="entry.error" class="text-xs text-red-600">{{ entry.error }}</p>
+              <div v-for="win in entry.windows" :key="win.name" class="space-y-1">
+                <div class="flex items-center justify-between gap-2 text-[11px] text-zinc-600">
+                  <span>{{ win.name }} 已用 <span class="font-semibold text-zinc-900">{{ win.used_percent.toFixed(0) }}%</span><span v-if="win.amount != null && win.limit != null">（{{ win.amount.toLocaleString() }} / {{ win.limit.toLocaleString() }} {{ win.unit }}）</span></span>
+                  <span class="text-zinc-400">{{ formatReset(win.resets_at) }} 重置</span>
+                </div>
+                <div class="h-1.5 w-full overflow-hidden rounded-full bg-zinc-200">
+                  <div class="h-full rounded-full transition-all" :class="win.used_percent > 90 ? 'bg-red-500' : win.used_percent > 70 ? 'bg-amber-500' : 'bg-emerald-500'" :style="`width: ${Math.min(100, win.used_percent)}%`"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
       </div>
       <div class="space-y-2 p-4">
         <div v-for="model in provider.models" :key="model.ref" class="flex items-center justify-between gap-3 rounded-xl border border-zinc-100 bg-zinc-50/60 px-3 py-2.5">
@@ -393,6 +475,16 @@ watch(
               <button type="button" class="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-zinc-400 hover:text-zinc-700" @click="showProviderKey = !showProviderKey"><Eye v-if="!showProviderKey" class="h-4 w-4" /><EyeOff v-else class="h-4 w-4" /></button>
             </div>
             <span class="block text-xs font-normal text-zinc-400">{{ keyMode === "env" ? "引用 AI 服务进程的环境变量（$VAR），密钥不落盘" : "明文将写入模型目录文件，建议仅在调试时使用" }}</span>
+          </div>
+          <div class="space-y-1.5 text-sm font-medium text-zinc-700">
+            <span class="block">账号钥匙<span class="ml-1 text-xs font-normal text-zinc-400">可选，仅套餐型厂商需要</span></span>
+            <p v-if="planVendorHint" class="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-normal text-amber-700">当前地址属于 {{ planVendorHint }}：套餐用量只能用云账号钥匙查询，推理 key 查不到</p>
+            <input v-model="providerForm.access_key_id" type="text" autocomplete="off" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" :placeholder="providerEditingKey ? 'AccessKey ID / SecretId，留空保持不变' : 'AccessKey ID / SecretId（可选）'" />
+            <div class="relative">
+              <input v-model="providerForm.secret_access_key" :type="showProviderKey ? 'text' : 'password'" autocomplete="off" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white pl-3 pr-10 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" :placeholder="providerEditingKey ? 'Secret / SecretKey，留空保持不变' : 'Secret / SecretKey（可选）'" />
+              <button type="button" class="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-zinc-400 hover:text-zinc-700" @click="showProviderKey = !showProviderKey"><Eye v-if="!showProviderKey" class="h-4 w-4" /><EyeOff v-else class="h-4 w-4" /></button>
+            </div>
+            <span class="block text-xs font-normal text-zinc-400">仅用于查询套餐用量（火山方舟 Coding/Agent Plan、阿里/腾讯 Token Plan），不会随推理请求发送</span>
           </div>
         </div>
         <div class="mt-5 flex justify-end gap-2">

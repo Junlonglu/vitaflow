@@ -34,6 +34,7 @@ import { createFauxRuntime } from "./faux.js";
 import { enrichProviderFromModelsDev, fetchModelsDev } from "./modelsdev.js";
 import { appendSkillsToPrompt, buildContextPrompt, DEFAULT_SYSTEM_PROMPT, parseSkills, type AiServiceContext } from "./prompt.js";
 import { fetchRemoteModels, probeCatalogModel } from "./probe.js";
+import { queryPlanUsage } from "./planusage.js";
 import { createRealRuntime, parseByokOverride, registerByokModel, type ThinkingLevelSetting } from "./real.js";
 import { appendSkillPrompt, extractSkillCommand, skillPromptBlock } from "./skills.js";
 import { buildTaskPrompts, isTaskType } from "./taskPrompts.js";
@@ -170,10 +171,17 @@ app.post("/v1/catalog/providers", async (req, res) => {
   if (rejectMutations(res)) return;
   try {
     const key = validateProviderKey(req.body?.key);
-    const { name, baseUrl, apiKey } = validateProviderBody(req.body ?? {});
+    const { name, baseUrl, apiKey, accessKeyId, secretAccessKey } = validateProviderBody(req.body ?? {});
     await mutateCatalog(AGENT_DIR, (catalog) => {
       if (catalog.providers[key]) throw new CatalogError(`服务商 ${key} 已存在`);
-      catalog.providers[key] = { name, baseUrl, apiKey: apiKey || undefined, api: "openai-completions", models: [] };
+      catalog.providers[key] = {
+        name,
+        baseUrl,
+        apiKey: apiKey || undefined,
+        ...(accessKeyId || secretAccessKey ? { access_key_id: accessKeyId || undefined, secret_access_key: secretAccessKey || undefined } : {}),
+        api: "openai-completions",
+        models: [],
+      };
     });
     await rebuildRuntime();
     await catalogResponse(res);
@@ -187,12 +195,14 @@ app.put("/v1/catalog/providers/:key", async (req, res) => {
   if (rejectMutations(res)) return;
   try {
     const key = validateProviderKey(req.params.key);
-    const { name, baseUrl, apiKey } = validateProviderBody(req.body ?? {});
+    const { name, baseUrl, apiKey, accessKeyId, secretAccessKey } = validateProviderBody(req.body ?? {});
     await mutateCatalog(AGENT_DIR, (catalog) => {
       const provider = requireEditableProvider(catalog, key);
       provider.name = name;
       provider.baseUrl = baseUrl;
       if (apiKey) provider.apiKey = apiKey;
+      if (accessKeyId) provider.access_key_id = accessKeyId;
+      if (secretAccessKey) provider.secret_access_key = secretAccessKey;
     });
     await rebuildRuntime();
     await catalogResponse(res);
@@ -386,6 +396,24 @@ app.get("/v1/catalog/providers/:key/balance", async (req, res) => {
     if (err instanceof CatalogError) return handleCatalogError(res, err);
     console.error("[vitaflow-ai] balance query failed:", err);
     res.status(502).json({ type: "error", message: (err as Error).message || "余额查询失败" });
+  }
+});
+
+// Plan-usage (subscription-style vendor plans): needs an account access key
+// pair on top of the inference key. Cached like the balance, stale fallback too.
+app.get("/v1/catalog/providers/:key/plan-usage", async (req, res) => {
+  if (!authorize(req)) return void res.status(401).json({ type: "error", message: "未授权：需要有效的服务令牌" });
+  if (config.provider === "faux") return void res.status(400).json({ type: "error", message: "faux 模式下无套餐用量" });
+  try {
+    const key = validateProviderKey(req.params.key);
+    const catalog = await readCatalog(AGENT_DIR);
+    const provider = requireEditableProvider(catalog, key);
+    const result = await queryPlanUsage(key, provider);
+    res.json(result);
+  } catch (err) {
+    if (err instanceof CatalogError) return handleCatalogError(res, err);
+    console.error("[vitaflow-ai] plan usage query failed:", err);
+    res.status(502).json({ type: "error", message: (err as Error).message || "套餐用量查询失败" });
   }
 });
 

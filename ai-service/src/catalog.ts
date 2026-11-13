@@ -13,6 +13,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { detectPlan } from "./planusage.js";
 
 export interface CatalogModelCost {
   /** $ per million tokens, models.dev convention. */
@@ -51,6 +52,9 @@ export interface CatalogProvider {
   baseUrl: string;
   apiKey?: string;
   api?: string;
+  /** Vendor account access key pair for plan-usage queries (see planusage.ts). */
+  access_key_id?: string;
+  secret_access_key?: string;
   balance?: CatalogBalanceConfig;
   models: CatalogModel[];
 }
@@ -67,6 +71,10 @@ export interface CatalogProviderView {
   api: string;
   api_key_masked: string | null;
   editable: boolean;
+  /** Vendor plan detected from the endpoint URL, if any (see planusage.ts). */
+  plan_vendor: string | null;
+  plan_label: string | null;
+  has_access_key: boolean;
   models: Array<{
     id: string;
     name: string;
@@ -101,6 +109,9 @@ export function fauxCatalog(): CatalogProviderView[] {
       api: "faux",
       api_key_masked: null,
       editable: false,
+      plan_vendor: null,
+      plan_label: null,
+      has_access_key: false,
       models: [
         {
           id: "demo",
@@ -185,27 +196,33 @@ export function listApiKeyEnvNames(env: NodeJS.ProcessEnv = process.env): string
 }
 
 export function renderProviders(catalog: CatalogFile): CatalogProviderView[] {
-  return Object.entries(catalog.providers || {}).map(([key, provider]) => ({
-    key,
-    name: provider.name || key,
-    base_url: provider.baseUrl || "",
-    api: provider.api || "openai-completions",
-    api_key_masked: maskApiKey(provider.apiKey),
-    editable: true,
-    models: (provider.models || []).map((model) => ({
-      id: model.id,
-      name: model.name || model.id,
-      ref: `${key}/${model.id}`,
-      input: Array.isArray(model.input) ? model.input : ["text"],
-      context_window: typeof model.contextWindow === "number" ? model.contextWindow : null,
-      max_tokens: typeof model.maxTokens === "number" ? model.maxTokens : null,
-      price_input: typeof model.cost?.input === "number" ? model.cost.input : null,
-      price_output: typeof model.cost?.output === "number" ? model.cost.output : null,
-      dev_provider: model.meta?.models_dev?.provider ?? null,
-      dev_updated_at: model.meta?.models_dev?.updated_at ?? null,
-      dev_synced_at: model.meta?.models_dev?.synced_at ?? null,
-    })),
-  }));
+  return Object.entries(catalog.providers || {}).map(([key, provider]) => {
+    const plan = detectPlan(provider);
+    return {
+      key,
+      name: provider.name || key,
+      base_url: provider.baseUrl || "",
+      api: provider.api || "openai-completions",
+      api_key_masked: maskApiKey(provider.apiKey),
+      editable: true,
+      plan_vendor: plan?.vendor ?? null,
+      plan_label: plan?.plan ?? null,
+      has_access_key: Boolean(provider.access_key_id && provider.secret_access_key),
+      models: (provider.models || []).map((model) => ({
+        id: model.id,
+        name: model.name || model.id,
+        ref: `${key}/${model.id}`,
+        input: Array.isArray(model.input) ? model.input : ["text"],
+        context_window: typeof model.contextWindow === "number" ? model.contextWindow : null,
+        max_tokens: typeof model.maxTokens === "number" ? model.maxTokens : null,
+        price_input: typeof model.cost?.input === "number" ? model.cost.input : null,
+        price_output: typeof model.cost?.output === "number" ? model.cost.output : null,
+        dev_provider: model.meta?.models_dev?.provider ?? null,
+        dev_updated_at: model.meta?.models_dev?.updated_at ?? null,
+        dev_synced_at: model.meta?.models_dev?.synced_at ?? null,
+      })),
+    };
+  });
 }
 
 export function requireEditableProvider(catalog: CatalogFile, providerKey: string): CatalogProvider {
@@ -222,13 +239,21 @@ export function validateProviderKey(key: unknown): string {
   return trimmed;
 }
 
-export function validateProviderBody(body: Record<string, unknown>): { name: string; baseUrl: string; apiKey: string } {
+export function validateProviderBody(body: Record<string, unknown>): {
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+} {
   const name = String(body.name ?? "").trim();
   const baseUrl = String(body.baseUrl ?? "").trim();
   const apiKey = String(body.apiKey ?? "").trim();
+  const accessKeyId = String(body.access_key_id ?? "").trim();
+  const secretAccessKey = String(body.secret_access_key ?? "").trim();
   if (!name) throw new CatalogError("服务商名称不能为空");
   if (!baseUrl || !/^https?:\/\//i.test(baseUrl)) throw new CatalogError("BaseURL 必须以 http(s):// 开头");
-  return { name, baseUrl, apiKey };
+  return { name, baseUrl, apiKey, accessKeyId, secretAccessKey };
 }
 
 export function validateModelId(id: unknown): string {

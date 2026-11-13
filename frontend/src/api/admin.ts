@@ -220,6 +220,10 @@ export interface AdminCatalogProvider {
   api: string
   api_key_masked: string | null
   editable: boolean
+  /** Vendor plan detected from the endpoint URL (null = pay-as-you-go / unknown). */
+  plan_vendor: "volcengine" | "alibaba" | "tencent" | null
+  plan_label: string | null
+  has_access_key: boolean
   models: AdminCatalogModel[]
 }
 
@@ -235,6 +239,9 @@ export interface AdminCatalogProviderWrite {
   name: string
   base_url: string
   api_key?: string
+  /** Account access key pair, only for plan-type vendors (Ark/Token Plan). */
+  access_key_id?: string
+  secret_access_key?: string
 }
 
 export interface AdminCatalogModelWrite {
@@ -404,6 +411,29 @@ export interface AdminBalanceSnapshot {
 export const getAdminCatalogProviderBalanceApi = (key: string) =>
   request.get<AdminBalanceSnapshot, AdminBalanceSnapshot>(
     `/admin/ai-catalog/providers/${encodeURIComponent(key)}/balance`,
+  )
+export interface AdminPlanWindow {
+  name: string
+  span_hours: number
+  used_percent: number
+  amount?: number
+  limit?: number
+  unit?: string
+  resets_at: string | null
+}
+export interface AdminPlanUsage {
+  vendor: "volcengine" | "alibaba" | "tencent"
+  plan: string
+  region: string
+  needs_access_key: boolean
+  plans: Array<{ name: string | null; status_note: string | null; windows: AdminPlanWindow[]; error: string | null }>
+  as_of: string
+  stale: boolean
+  error: string | null
+}
+export const getAdminCatalogPlanUsageApi = (key: string) =>
+  request.get<AdminPlanUsage, AdminPlanUsage>(
+    `/admin/ai-catalog/providers/${encodeURIComponent(key)}/plan-usage`,
   )
 export const getAdminPointRulesApi = () => request.get<AdminPointRule[], AdminPointRule[]>("/admin/point-rules")
 export const updateAdminPointRuleApi = (

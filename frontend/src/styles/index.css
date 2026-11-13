@@ -136,3 +136,15 @@ a { color: inherit; text-decoration: none; }
   .aspect-\[210\/297\] { min-height: 594px; }
   .aspect-\[4\/3\] { min-height: 220px; }
 }
+
+/* 触屏设备没有 hover。仅 hover 才出现的行内操作（复制/删除/重新生成/使用模板）
+   在手机与平板上必须常显，否则用户既看不见也点不到。用 (hover: none) 而不是
+   宽度断点，才能覆盖有宽屏但没有鼠标的设备。 */
+@media (hover: none) {
+  .touch-always-visible {
+    opacity: 1 !important;
+    transform: none !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+  }
+}

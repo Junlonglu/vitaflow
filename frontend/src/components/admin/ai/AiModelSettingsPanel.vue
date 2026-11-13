@@ -74,7 +74,7 @@ const catalogModelOptions = computed(() => [
             </div>
             <div class="flex shrink-0 items-center gap-1">
               <div v-if="!item.is_active" class="flex w-7 shrink-0 items-center justify-center">
-                <button class="rounded-full p-1.5 text-zinc-400 opacity-0 transition-all hover:bg-red-50 hover:text-red-600 focus:opacity-100 active:scale-95 group-hover:opacity-100" title="删除策略" @click.stop="$emit('delete', item)"><Trash2 class="h-3.5 w-3.5" /></button>
+                <button class="touch-always-visible rounded-full p-1.5 text-zinc-400 opacity-0 transition-all hover:bg-red-50 hover:text-red-600 focus:opacity-100 active:scale-95 group-hover:opacity-100" title="删除策略" @click.stop="$emit('delete', item)"><Trash2 class="h-3.5 w-3.5" /></button>
               </div>
               <span v-if="item.is_active" class="flex w-[90px] items-center justify-center gap-1.5 whitespace-nowrap rounded-full border border-emerald-200/60 bg-emerald-50 py-1 text-xs font-medium text-emerald-700"><span class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500"></span>使用中</span>
               <button v-else class="flex w-[90px] items-center justify-center gap-1 whitespace-nowrap rounded-full border border-zinc-200/60 bg-zinc-100 py-1 text-xs font-medium text-zinc-600 transition-all hover:border-zinc-900 hover:bg-zinc-900 hover:text-white active:scale-95" @click.stop="$emit('activate', item)"><Zap class="h-3 w-3" />设为启用</button>

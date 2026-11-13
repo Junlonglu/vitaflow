@@ -214,7 +214,7 @@ function startFromTemplate(entry: "starter" | "import" | "blank") {
             </div>
             <button
               type="button"
-              class="h-6 shrink-0 rounded-md bg-zinc-900 px-2 text-[11px] font-medium text-white transition-opacity hover:bg-zinc-800 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+              class="touch-always-visible h-6 shrink-0 rounded-md bg-zinc-900 px-2 text-[11px] font-medium text-white transition-opacity hover:bg-zinc-800 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
               @click.stop="useTemplate(item)"
             >
               使用

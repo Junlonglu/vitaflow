@@ -45,7 +45,7 @@ function formatUpdateTime(timeStr?: string) {
     class="group relative flex cursor-pointer flex-col overflow-hidden rounded-xl bg-white ring-1 ring-zinc-200/70 transition-colors duration-200 hover:ring-zinc-300"
     @click="$emit('edit', item.id)"
   >
-    <div class="absolute right-3 top-3 z-10 flex translate-y-0.5 items-center gap-1.5 opacity-0 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
+    <div class="touch-always-visible absolute right-3 top-3 z-10 flex translate-y-0.5 items-center gap-1.5 opacity-0 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
       <button class="rounded-md border border-zinc-200/70 bg-white/95 p-1 text-zinc-500 backdrop-blur transition-colors hover:text-zinc-900 active:scale-95 sm:p-1.5" title="复制" @click.stop="$emit('duplicate', item.id)">
         <Copy class="h-3.5 w-3.5" />
       </button>

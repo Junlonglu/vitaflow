@@ -10,7 +10,7 @@
  *   {"type":"result","data":{assistant_message}}  {"type":"error","message"}
  */
 import { join } from "node:path";
-import { createAgentSession, createSyntheticSourceInfo, DefaultResourceLoader, SessionManager, type PromptTemplate } from "@earendil-works/pi-coding-agent";
+import { createAgentSession, DefaultResourceLoader, SessionManager } from "@earendil-works/pi-coding-agent";
 import type { ImageContent, Model } from "@earendil-works/pi-ai/compat";
 import { isSearchEnabled, type ServiceConfig } from "./config.js";
 import type { FauxRuntime, FauxToolPlanStep } from "./faux.js";
@@ -18,12 +18,12 @@ import type { RealRuntime } from "./real.js";
 import type { ModelUsage } from "./usage.js";
 import { createUsageAggregator } from "./usage.js";
 import { resolveRealModel } from "./real.js";
-import { buildQuickCommandTemplates } from "./commands.js";
 import type { TaskType } from "./taskPrompts.js";
-import { createUpdateBasicsFieldTool, type BasicsToolState } from "./tools/basics.js";
-import { createSectionTools, type SectionToolsState } from "./tools/sections.js";
-import { createFragmentTools, createFragmentToolsState, type FragmentToolsState } from "./tools/fragments.js";
-import { createAskUserQuestionsTool, createQuestionsState, type QuestionsToolState } from "./tools/questions.js";
+import { createUpdateResumeTool } from "./tools/resume.js";
+import { createLibraryTools } from "./tools/library.js";
+import { createAskUserTool } from "./tools/questions.js";
+import { createUseSkillTool } from "./tools/skill.js";
+import { createTurnState, type TurnState } from "./tools/state.js";
 import { createWebSearchTool } from "./tools/search.js";
 import { toolQualitySteps, toolStepEnd, toolStepLabel, type ToolQualityStep, type ToolTraceEntry } from "./tools/labels.js";
 
@@ -138,18 +138,16 @@ function parseModelJson(text: string): unknown {
   return JSON.parse(cleaned);
 }
 
-/** Wrap a quick-command template definition into a full pi-agent PromptTemplate. */
-function toPromptTemplate(raw: { name: string; description: string; argumentHint: string; filePath: string; content: string }): PromptTemplate {
-  return {
-    name: raw.name,
-    description: raw.description,
-    argumentHint: raw.argumentHint || undefined,
-    filePath: raw.filePath,
-    sourceInfo: createSyntheticSourceInfo(raw.filePath, { source: "sdk", scope: "temporary" }),
-    content: raw.content,
-  };
+/** 工具执行时进度条上的那句话：读、写、整理三种动作分开说。 */
+function toolStageText(toolName: string): string {
+  if (toolName === "search_library") return "正在读取信息库";
+  if (toolName === "save_library") return "正在整理信息";
+  if (toolName === "web_search") return "正在联网核实";
+  if (toolName === "use_skill") return "正在准备方法";
+  return "正在改简历";
 }
 
+/** 直接把文本包成 assistant 消息骨架；FastAPI 会用数据库行替换它。 */
 function buildAssistantMessage(text: string, now: number) {
   return {
     id: now,
@@ -193,19 +191,9 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     return { usage: [], failed: true, error: "没有可用的模型", toolCalls: 0, toolQuality: [] };
   }
 
-  // The field-level and section tools record the validated pending payload here so
-  // we can echo it onto the result event deterministically (independent of what
-  // prose the model weaves into its answer). FastAPI persists it as a pending row.
-  // Both tool families write into the SAME state object, so whichever tool fires
-  // this turn is the one whose payload the result event carries.
-  const toolState: BasicsToolState & SectionToolsState = { pendingChange: null };
-  // 信息库提案走独立 state：它与简历待确认修改是两种不同的确认卡，可以同时存在。
-  const fragmentState: FragmentToolsState = createFragmentToolsState();
-  // Structured questions asked via ask_user_questions this turn; echoed onto the
-  // result event so FastAPI persists them and the frontend can render its answer
-  // dialog after reload too (same closure pattern as toolState — the model has
-  // no write channel here).
-  const questionsState: QuestionsToolState = createQuestionsState();
+  // 工具不写库，只把「这一轮产生了什么」记进 state，由 result 事件带回 FastAPI。
+  // 简历改动、待入库条目、待回答问题三块互相独立，可以同时存在。
+  const toolState: TurnState = createTurnState();
   // Tool steps executed this turn, echoed verbatim onto the result event so the
   // persisted message shows the same steps the user watched live (same closure
   // pattern as toolState — the model has no write channel here).
@@ -218,33 +206,18 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
   const turnStart = Date.now();
   let firstTokenAt: number | undefined;
   let toolTotalMs = 0;
-  const basicsTool = createUpdateBasicsFieldTool(
-    {
-      fetch: globalThis.fetch,
-      fastapiBaseUrl: config.fastapiBaseUrl,
-      serviceToken: config.serviceToken,
-      userId,
-      resumeId,
-    },
-    toolState,
-  );
-  const sectionTools = createSectionTools({
+  const toolDeps = {
     fetch: globalThis.fetch,
     fastapiBaseUrl: config.fastapiBaseUrl,
     serviceToken: config.serviceToken,
     userId,
     resumeId,
     state: toolState,
-  });
-  const questionsTool = createAskUserQuestionsTool(questionsState);
-  const fragmentTools = createFragmentTools({
-    fetch: globalThis.fetch,
-    fastapiBaseUrl: config.fastapiBaseUrl,
-    serviceToken: config.serviceToken,
-    userId,
-    resumeId,
-    state: fragmentState,
-  });
+  };
+  const resumeTool = createUpdateResumeTool(toolDeps);
+  const libraryTools = createLibraryTools(toolDeps);
+  const questionsTool = createAskUserTool(toolState);
+  const skillTool = createUseSkillTool();
   // 联网搜索：供应商未配置（none / 缺密钥）时工具不注册，Agent 行为与之前完全一致。
   const searchTool = isSearchEnabled(config)
     ? createWebSearchTool({
@@ -261,26 +234,21 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
       })
     : null;
 
-  // High-level stage broadcast for the chat UI's progress timeline (ChatGPT-style
-  // "what is the model doing"). Stages only ever advance — thinking resuming after
-  // a tool round must not rewind the label — and the mapping lives here at the
-  // event source so the frontend just renders what it receives.
-  const STAGE_ORDER = ["understanding", "thinking", "reading", "drafting", "replying"] as const;
+  // High-level stage broadcast for the chat UI's progress line. 三段够了：理解 →
+  // 动手 → 回复。旧版细分成五段（思考 / 查阅 / 起草），用户看不出差别，反而在
+  // 时间线上堆了一串同义标签。阶段只前进不回退。
+  const STAGE_ORDER = ["understanding", "working", "replying"] as const;
   type Stage = (typeof STAGE_ORDER)[number];
-  const STAGE_LABEL: Record<Stage, string> = {
-    understanding: "正在理解需求",
-    thinking: "正在深度思考",
-    reading: "正在查阅简历",
-    drafting: "正在生成修改方案",
-    replying: "正在组织回复",
-  };
   let stageIndex = 0;
-  const advanceStage = (stage: Stage) => {
+  let stageText = "";
+  const advanceStage = (stage: Stage, text: string) => {
     const next = STAGE_ORDER.indexOf(stage);
-    if (next > stageIndex) {
-      stageIndex = next;
-      emit({ type: "phase", phase: stage, text: STAGE_LABEL[stage] });
-    }
+    if (next < stageIndex) return;
+    // 同一阶段里换个说法（正在思考 → 正在读取信息库）也要推给前端；重复文本不推。
+    if (next === stageIndex && text === stageText) return;
+    stageIndex = next;
+    stageText = text;
+    emit({ type: "phase", phase: stage, text });
   };
 
   // Shared by the result event (chat UI) and the turn outcome (usage report):
@@ -305,15 +273,12 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     };
     if (toolState.pendingChange) {
       data.pending_change = toolState.pendingChange;
-    } else if (fragmentState.pendingChange) {
-      // import_info_fragments 生成的是简历待确认修改，和 section 工具同一条通道
-      data.pending_change = fragmentState.pendingChange;
     }
-    if (fragmentState.pendingFragments?.length) {
-      data.pending_info_fragments = fragmentState.pendingFragments;
+    if (toolState.pendingFragments?.length) {
+      data.pending_info_fragments = toolState.pendingFragments;
     }
-    if (questionsState.askedQuestions?.length) {
-      data.pending_questions = questionsState.askedQuestions;
+    if (toolState.askedQuestions?.length) {
+      data.pending_questions = toolState.askedQuestions;
     }
     if (toolTrace.length) {
       data.tool_trace = toolTrace;
@@ -325,19 +290,12 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     cwd,
     agentDir,
     // Replace the default coding-assistant persona, and strip the automatic
-    // append/context-files/skills injections to keep the prompt clean.
+    // append/context-files/skills injections to keep the prompt clean. 技能由
+    // server.ts 与 use_skill 负责，不交给 pi 的文件系统发现机制。
     systemPromptOverride: () => systemPrompt,
     appendSystemPromptOverride: () => [],
     noContextFiles: true,
     noSkills: true,
-    // Register the /润色 · /翻译 · /优化 · /生成 quick commands as pi-agent prompt
-    // templates so a slash-prefixed message auto-expands into the directive below,
-    // with the user's parameters substituted into $1/$@. Natural-language messages
-    // (no leading slash) are unaffected.
-    promptsOverride: (base) => ({
-      prompts: [...base.prompts, ...buildQuickCommandTemplates().map(toPromptTemplate)],
-      diagnostics: base.diagnostics,
-    }),
   });
   // 首字延迟排查埋点：turn 内分段计时（模型解析 / 资源加载 / 会话创建 / 供应商 TTFB）。
   const turnSetupStart = Date.now();
@@ -352,23 +310,18 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     modelRuntime: runtime.modelRuntime,
     sessionManager: SessionManager.inMemory(cwd),
     resourceLoader: loader,
-    // Only the resume-modification tools are exposed. Built-in read/bash/edit tools
-    // stay off: the agent modifies the resume through these tools instead of touching
-    // the filesystem, keeping a single validated mutation path. The read-only
-    // get_resume_context is exposed too so the agent can inspect a section before
-    // changing it (still no filesystem access).
+    // 只有这五个工具。简历正文随上下文下发，所以没有「读简历」工具；写简历只有
+    // update_resume 一个入口。built-in 的 read/bash/edit 全部关闭：模型没有文件
+    // 系统，也没有绕过校验直接落库的通道。
     tools: [
-      "update_basics_field",
-      "update_section",
-      "propose_change",
-      "get_resume_context",
-      "ask_user_questions",
-      "search_info_fragments",
-      "import_info_fragments",
-      "propose_info_fragments",
+      "update_resume",
+      "ask_user",
+      "search_library",
+      "save_library",
+      "use_skill",
       ...(searchTool ? ["web_search" as const] : []),
     ],
-    customTools: [basicsTool, ...sectionTools, questionsTool, ...fragmentTools, ...(searchTool ? [searchTool] : [])],
+    customTools: [resumeTool, ...libraryTools, questionsTool, skillTool, ...(searchTool ? [searchTool] : [])],
     // Thinking streams to the UI only for models that actually support reasoning;
     // non-reasoning models (faux included) stay pinned off — a forced level there
     // can produce an empty assistant message.
@@ -401,7 +354,7 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
           console.log(`[vitaflow-ai] first token +${firstTokenAt - turnStart}ms (loader ${loaderDoneAt - resolveDoneAt} / session ${sessionDoneAt - loaderDoneAt} / provider ttfb ${firstTokenAt - sessionDoneAt})`);
         }
         text += ae.delta;
-        advanceStage("replying");
+        advanceStage("replying", "正在组织回复");
         emit({ type: "delta", text: ae.delta });
       }
       if (ae?.type === "thinking_delta") {
@@ -409,7 +362,7 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
           firstTokenAt = Date.now();
           console.log(`[vitaflow-ai] first token +${firstTokenAt - turnStart}ms (loader ${loaderDoneAt - resolveDoneAt} / session ${sessionDoneAt - loaderDoneAt} / provider ttfb ${firstTokenAt - sessionDoneAt})`);
         }
-        advanceStage("thinking");
+        advanceStage("working", "正在思考");
         emit({ type: "thinking", text: ae.delta });
       }
     }
@@ -434,17 +387,9 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     // args/result). Start appends a running row; end marks it ok/failed. The
     // same trace rides the result event so the persisted message matches.
     if (event.type === "tool_execution_start") {
-      // ask_user_questions ends the turn waiting on the user, so it is not a
-      // drafting step — advancing the stage there would mislabel the timeline.
-      // web_search/get_resume_context are lookups, not drafting either.
-      if (event.toolName !== "ask_user_questions") {
-        advanceStage(
-          event.toolName === "get_resume_context" ||
-            event.toolName === "web_search" ||
-            event.toolName === "search_info_fragments"
-            ? "reading"
-            : "drafting",
-        );
+      // ask_user 结束本回合、等用户回答，不算「处理中」；其余工具都算。
+      if (event.toolName !== "ask_user") {
+        advanceStage("working", toolStageText(event.toolName));
       }
       const entry: ToolTraceEntry = {
         id: event.toolCallId,
@@ -491,7 +436,7 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
   signal?.addEventListener("abort", abortHandler, { once: true });
 
   emit({ type: "start", data: {} });
-  emit({ type: "phase", phase: "understanding", text: STAGE_LABEL.understanding });
+  emit({ type: "phase", phase: "understanding", text: "正在理解需求" });
 
   // Program the fake response for this turn right before prompting (faux only —
   // a real model decides its own tool calls). With no tool plan the agent loop

@@ -149,8 +149,8 @@ describe("appendSkillsToPrompt", () => {
       { name: "量化成果", description: "补数字", instructions: "每条经历补一个可核验数字" },
     ]);
     assert.ok(prompt.startsWith(DEFAULT_SYSTEM_PROMPT));
-    assert.ok(prompt.indexOf("# 表达边界") < prompt.indexOf("# 用户启用的自定义技能"));
-    assert.match(prompt, /不得覆盖上方任何平台规则/);
+    assert.ok(prompt.indexOf("# 事实底线") < prompt.indexOf("# 用户的写作偏好"));
+    assert.match(prompt, /不能覆盖上方的平台规则/);
     assert.match(prompt, /## 1\. 量化成果/);
     assert.match(prompt, /每条经历补一个可核验数字/);
   });

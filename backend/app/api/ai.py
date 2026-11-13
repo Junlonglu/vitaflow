@@ -119,6 +119,20 @@ class ProposeChangeRequest(BaseModel):
     updates: list[dict[str, Any]]
 
 
+class UpdateResumeRequest(BaseModel):
+    """统一写入请求：Agent 的 update_resume 工具只发这一种形状。
+
+    ``updates`` 与旧 propose_change 的 ``updates`` 同构（section / proposed / removed_ids），
+    ``from_library`` 是信息库条目 id。两者可以同时出现：先并入信息库内容，再按模块合并
+    改动，最后统一做一次数值守卫与变更摘要。
+    """
+
+    user_id: int
+    resume_id: int
+    updates: list[dict[str, Any]] = Field(default_factory=list)
+    from_library: list[int] = Field(default_factory=list)
+
+
 class SearchEvidenceItem(BaseModel):
     """One normalized web_search hit (tools/searchAdapters.ts SearchHit)."""
 
@@ -136,8 +150,11 @@ class SearchEvidenceRequest(BaseModel):
     results: list[SearchEvidenceItem] = Field(default_factory=list)
 
 
-# 对话回合的 feature 取值（与 ai-service 的 QuickCommand name 对齐，chat 为自由对话）。
-AI_CHAT_FEATURES = frozenset({"polish", "translate", "optimize", "generate", "greeting", "chat"})
+# 对话回合的 feature 取值（与 ai-service 的 skill id 对齐，chat 为自由对话；
+# optimize / generate 是旧命令的遗产值，仅用于历史记录查询）。
+AI_CHAT_FEATURES = frozenset(
+    {"polish", "translate", "optimize", "generate", "greeting", "diagnose", "match", "rewrite", "chat"}
+)
 
 
 class AiServiceUsageEntry(BaseModel):
@@ -903,6 +920,60 @@ def service_propose_change(
     if issue:
         return success({"ok": False, "category": tool_issue_category(issue), "retryable": False, "reason": issue})
     return success({"ok": True, "optimized_resume_data": optimized_data, "suggestions": suggestions})
+
+
+@router.post("/service/tool/update-resume")
+def service_update_resume(
+    payload: UpdateResumeRequest,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_ai_service_token),
+):
+    """Agent 的唯一写入端点：信息库导入 + 模块改动，一次合并、一次校验。
+
+    旧版 Agent 侧有四个写入工具（update_basics_field / update_section /
+    propose_change / import_info_fragments），形状各异但终点相同。现在统一到这里：
+    先把信息库条目并入快照，再按 id 合并模块改动，最后跑一次数值守卫并生成变更摘要。
+    仍然只返回待确认快照，不落库——写入永远发生在用户点「应用」之后。
+    """
+    resume = get_resume(db, payload.user_id, payload.resume_id)
+    data: dict[str, Any] = resume.resume_data or {}
+    labels: list[str] = []
+
+    if payload.from_library:
+        data, added, _rows = import_info_fragments(db, payload.user_id, resume, payload.from_library)
+        labels.extend(f"导入信息库：{label}" for label in added)
+
+    if payload.updates:
+        history = [
+            {"role": item.role, "content": item.content}
+            for item in list_chat_messages(db, payload.user_id, payload.resume_id, limit=40)
+        ]
+        user_message = next(
+            (item["content"] for item in reversed(history) if item.get("role") == "user"),
+            "",
+        )
+        merged, suggestions, issue = validate_propose_change(
+            data,
+            payload.updates,
+            history,
+            user_message,
+            search_evidence=get_recent_search_evidence(payload.user_id, payload.resume_id),
+        )
+        if issue:
+            return success({"ok": False, "category": tool_issue_category(issue), "retryable": False, "reason": issue})
+        data = merged or data
+        labels.extend(suggestions)
+
+    if not labels:
+        return success(
+            {
+                "ok": False,
+                "category": "business",
+                "retryable": False,
+                "reason": "这次改动没有产生实际内容变化，请检查要改的条目或字段。",
+            }
+        )
+    return success({"ok": True, "optimized_resume_data": data, "suggestions": labels})
 
 
 @router.get("/service/tool/get-resume-context")

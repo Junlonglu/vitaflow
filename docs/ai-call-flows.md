@@ -61,7 +61,7 @@ backend (FastAPI, :8000)                      ai-service (Express+pi-agent, :830
    - system prompt：请求自带 `system_prompt`，否则 `buildContextPrompt(DEFAULT_SYSTEM_PROMPT, context)`（src/prompt.ts）
    - pi-agent 单轮推理，流式产出事件（`emit` 回调 → server.ts `sendEvent` 写 NDJSON 行）
    - 返回按模型聚合的 `ModelUsage[]`
-3. **工具回调**：pi-agent 的 `update_basics_field` / `update_section` / `propose_change` 工具（src/tools/basics.ts、sections.ts）不直接改数据，而是回调 backend 校验端点（`PI_FASTAPI_BASE_URL` + `/api/ai/service/tool/*`，ai.py:606/641/678）。backend 侧的校验合并逻辑在 ai_chat_service.py：`validate_basics_field_update`（:587，含 `_numeric_claims` 数字口径校验防幻觉改数值）、`merge_section_update`（:704）、`validate_propose_change`（:788）。
+3. **工具回调**：唯一的写工具 `update_resume`（src/tools/resume.ts）不直接改数据，而是把 `changes[]` / `from_library[]` 归一成 backend 的 `updates` 形状，回调 `/api/ai/service/tool/update-resume`（`PI_FASTAPI_BASE_URL`）。该端点先做信息库导入，再按 id 合并模块，最后跑一次数值守卫（`validate_propose_change`），只回待确认快照不落库。另有只读的 `search_library`（`/info-fragments/search`）、写信息库提案的 `save_library`（`/info-fragments/propose`），以及本地的 `ask_user` / `use_skill`。
 4. **回合结束计费**：`/v1/chat` 里 `runChat` 返回后，过滤 faux usage，`reportUsage`（src/billing.ts:22）带服务令牌 POST backend `/api/ai/service/usage`（server.ts:305-316，fire-and-forget，不影响用户已收到的回复）。
 
 ### 2.4 异步计费入账（ai.py:729-806）

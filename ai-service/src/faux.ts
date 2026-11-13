@@ -14,7 +14,6 @@
 import { registerFauxProvider, fauxAssistantMessage, fauxToolCall, getApiProvider } from "@earendil-works/pi-ai/compat";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { ImageContent, Model } from "@earendil-works/pi-ai/compat";
-import { commandToolPlan, detectQuickCommand } from "./commands.js";
 import type { TaskType } from "./taskPrompts.js";
 
 /** A canned tool call the deterministic faux model should make this turn. */
@@ -105,19 +104,11 @@ function toolAdviceFactory() {
 /**
  * Heuristic used only by the Faux demo to decide whether to exercise a tool with a
  * real model absent. A real model emits the tool call on its own; this maps common
- * phrasings (and the four quick commands) to tools so the deterministic provider can
- * drive the same code path.
+ * phrasings to the same tools so the deterministic provider drives the same code path.
+ * 技能轮的默认请求（如「帮我诊断这份简历」）不写数据，因此这里不给计划，走纯文本回复。
  */
 function detectToolPlan(message: string, images?: ImageContent[]): FauxToolPlanStep | null {
-  // A quick command (/润色 · /翻译 · /优化 · /生成) maps to a deterministic tool
-  // sequence, so the demo exercises the same command → tool → validation chain.
-  const command = detectQuickCommand(message);
-  if (command) {
-    const plan = commandToolPlan(command);
-    return plan.length ? plan : null;
-  }
-
-  // "把X改成Y" → a field-level basics change.
+  // "把X改成Y" → basics 字段级修改（对象模块用 fields）。
   const basicsMatch = message.match(/把([^，。！？\s]+)改成([^，。！？\s]+)/);
   if (basicsMatch) {
     const subject = basicsMatch[1];
@@ -130,44 +121,37 @@ function detectToolPlan(message: string, images?: ImageContent[]): FauxToolPlanS
     else if (subject.includes("姓名") || subject === "名字") field = "name";
     else if (subject.includes("职位") || subject.includes("方向") || subject.includes("岗位")) field = "title";
     else if (subject.includes("学历")) field = "highest_degree";
-    if (field) return { name: "update_basics_field", args: { basics: { [field]: value } } };
+    if (field) {
+      return { name: "update_resume", args: { changes: [{ section: "basics", fields: { [field]: value } }] } };
+    }
   }
 
-  // "把...经历改成实习" → a section-level change (list item by id).
-  const sectionMatch = message.match(/(?:经历|项目|简历中|公司|项目经历)[^。！？]*(改成|改为)实习/);
-  if (sectionMatch) {
+  // "把...经历改成实习" → 列表模块按 id 改一条。
+  if (/(?:经历|项目|简历中|公司|项目经历)[^。！？]*(改成|改为)实习/.test(message)) {
     return {
-      name: "update_section",
-      args: { section: "work", proposed: [{ id: "work_1", role: "实习" }] },
+      name: "update_resume",
+      args: { changes: [{ section: "work", items: [{ id: "work_1", position: "实习生" }] }] },
     };
   }
 
-  // "读取一下工作经历" → on-demand section read.
-  if (message.includes("读取") && (message.includes("经历") || message.includes("项目"))) {
-    const section = message.includes("项目") ? "projects" : "work";
-    return { name: "get_resume_context", args: { sections: [section] } };
+  // 提到信息库 → 检索（只读）。
+  if (message.includes("信息库") || message.includes("以前做过")) {
+    return { name: "search_library", args: { query: "" } };
   }
 
-  // An uploaded image with no more-specific gesture: the vision model would read
-  // the picture and propose a change. The deterministic stand-in reads the resume
-  // context first, then stages a change — the SAME tool chain a typed request uses,
-  // so the picture path is not a separate pipeline (ticket 06). (command already
-  // returned above, so an image never outvotes a typed /quick-command or gesture.)
-  if (images?.length) {
-    return imageChangePlan();
-  }
+  // 图片附件：真实模型会读图后提交改动，这里用同一个工具做确定性替身。
+  if (images?.length) return imageChangePlan();
 
   return null;
 }
 
-/** The deterministic two-step plan an image attachment drives: read, then propose. */
+/** The deterministic plan an image attachment drives. */
 function imageChangePlan(): FauxToolPlan[] {
   return [
-    { name: "get_resume_context", args: { sections: ["work", "projects", "summary", "skills"] } },
     {
-      name: "propose_change",
+      name: "update_resume",
       args: {
-        updates: [{ section: "work", proposed: [{ id: "work_1", description: "<p>【依据图片内容的工作描述】</p>" }] }],
+        changes: [{ section: "work", items: [{ id: "work_1", description: "<p>【依据图片内容的工作描述】</p>" }] }],
       },
     },
   ];

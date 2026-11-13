@@ -76,19 +76,33 @@ resume_data (JSON) ◀───┼─ AI 写回 resolve_chat_change(apply)
 
 ## 5. 给 Agent 的写入契约
 
-`_build_chat_context()` 每轮把 `schema_prompt()` 塞进 `AiServiceContext.resume_schema`，`prompt.ts` 原样注入系统提示词，并追加一句「以上是写入契约；不确定字段名时以它为准，不要自造字段」。契约正文（`schema_prompt()`）包含：
+Agent 每轮拿到两样东西，都不需要它自己推断字段：
 
-- 每个模块的 key、类型（对象/数组）、字段名 + 中文标签 + 类型 + 是否必填；
-- 五条硬规则：
-  1. 日期统一 `"YYYY.MM"`，未知留空；
-  2. `highlights` / `keywords` 是字符串数组，一条一个要点，不要塞进 `description`；
-  3. 改已有条目必须带原 id，新增条目不要自带 id（系统生成）；
-  4. 只用列出的字段，自造字段会被校验拦截；
-  5. `basics` 走 `update_basics_field`，其余模块走 `update_section` / `propose_change`。
+- `resume.data`：简历全文 JSON，模型照现有形状改；
+- `resume_fields`：`schema_compact()` 把字段表压成「一行一模块」——
+
+```
+basics: name, title, phone, email, location, …
+work: id, company, position, start_date, end_date, description, highlights
+projects: id, name, role, …
+layout: section_order, hidden_sections, section_titles, field_labels
+```
+
+`prompt.ts` 把它拼成 `# 字段结构` 一节，并说明「列表模块的条目必须带原 id，新增条目不要自带 id」。
+
+规则由 `schema_prompt()` 维护（同一份字段表的人读版本，也用于文档与调试）：
+
+1. 日期统一 `"YYYY.MM"`，未知留空；
+2. `highlights` / `keywords` 是字符串数组，一条一个要点，不要塞进 `description`；
+3. 改已有条目必须带原 id，新增条目不要自带 id（系统生成）；
+4. 只用列出的字段，自造字段会被校验拦截；
+5. **所有写入都走 `update_resume`**（`changes[]` 声明模块，`from_library[]` 导入信息库），不再有按模块区分的多个写工具。
 
 `schema_json()` 是同一份数据的机器可读版本（含 `fragment_kinds`），供调试与后续编辑器校验使用。
 
-> Node 侧不再复制字段表：ai-service 只负责「把模型意图翻译成工具调用」，字段合法性由 Python 的工具端点判定。
+> 为什么从整份契约改成一行一模块：契约正文约 1500 tokens，每轮都付；而简历 JSON 本身已经给出了字段的真实形状。压缩成字段清单后，模型仍然不会自造字段，但每轮省下的上下文可以用在历史与简历内容上。
+
+> Node 侧不复制字段表：ai-service 只负责「把模型意图翻译成工具调用」，字段合法性由 `/api/ai/service/tool/update-resume` 判定。
 
 ## 6. 原子信息（信息库）
 
@@ -142,7 +156,7 @@ resume_data (JSON) ◀───┼─ AI 写回 resolve_chat_change(apply)
 | 通道 | 入口 | 是否直接落库 |
 |---|---|---|
 | 信息库页面 | `POST /info-fragments/apply`（点「导入简历」） | 直接写入简历并返回最新 `resume_data` |
-| 对话 | 工具 `import_info_fragments` → `pending_change`；工具 `propose_info_fragments` → `pending_info_fragments` | 否，等用户点「应用到简历 / 保存到信息库」 |
+| 对话 | 工具 `update_resume` 的 `from_library[]` → `pending_change`；工具 `save_library` → `pending_info_fragments` | 否，等用户点「应用 / 保存到信息库」 |
 
 ## 7. 改动指引
 

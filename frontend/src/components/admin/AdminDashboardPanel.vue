@@ -50,8 +50,11 @@ function taskTypeText(value: string) {
     // 对话回合（ai_chat 行）按 feature 拆分后的聚合键
     polish: "对话 · 润色",
     translate: "对话 · 翻译",
-    optimize: "对话 · JD优化",
-    generate: "对话 · 生成",
+    diagnose: "对话 · 简历诊断",
+    match: "对话 · JD匹配",
+    rewrite: "对话 · 重写经历",
+    optimize: "对话 · JD优化", // 旧命令值，仅历史行
+    generate: "对话 · 生成", // 旧命令值，仅历史行
     greeting: "对话 · 开场白",
     chat: "对话 · 自由交流",
     chat_summary: "对话 · 上下文摘要",

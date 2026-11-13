@@ -22,9 +22,9 @@ function startCreate(entry: CreateEntry) {
 
 const scenarios = [
   { key: "job", label: "求职简历", seed: "帮我写一份面向「」岗位的简历，我的经历是：" },
-  { key: "jd", label: "JD 优化", seed: "/JD优化 下面是我要投的岗位描述：" },
-  { key: "review", label: "简历诊断", seed: "帮我诊断这份简历，指出最影响通过率的三处问题。" },
-  { key: "i18n", label: "中英双语", seed: "/翻译 把这份简历转成英文版，保持结构不变。" },
+  { key: "jd", label: "JD 匹配", seed: "/JD匹配 下面是我要投的岗位描述：" },
+  { key: "review", label: "简历诊断", seed: "/诊断" },
+  { key: "i18n", label: "中英双语", seed: "/翻译 英文" },
 ]
 
 const suggestions = [

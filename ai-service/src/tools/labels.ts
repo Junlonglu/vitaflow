@@ -7,8 +7,7 @@
  * fragments (section keys, field names) are mapped through the canonical label
  * tables and clamped before display.
  */
-import { BASICS_FIELD_LABELS } from "./basics.js";
-import { SECTION_LABELS, normalizeSectionsArg } from "./sections.js";
+import { SECTION_LABELS } from "./resume.js";
 
 /** One persisted/executed tool step; `status:"start"` rows carry no ok yet. */
 export interface ToolTraceEntry {
@@ -72,59 +71,54 @@ function sectionLabel(key: string): string {
   return SECTION_LABELS[key] ?? clamp(key);
 }
 
-/** "work,projects" (or an array / JSON-encoded array) → 「实习/工作经历、项目经历」, capped at 3 items. */
-function sectionList(raw: unknown, max = 3): string {
-  const keys = normalizeSectionsArg(raw)
-    .split(",")
-    .filter(Boolean);
-  const labels = keys.slice(0, max).map(sectionLabel);
-  if (keys.length > max) labels.push("…");
-  return labels.join("、");
+/** 「工作经历、项目经历」——按 changes 里出现的模块，最多 3 个。 */
+function changeLabels(raw: unknown, max = 3): { labels: string[]; items: number } {
+  const changes = Array.isArray(raw) ? raw : [];
+  const labels: string[] = [];
+  let items = 0;
+  for (const change of changes) {
+    const section = String((change as Record<string, unknown> | undefined)?.section ?? "");
+    const list = (change as Record<string, unknown> | undefined)?.items;
+    if (Array.isArray(list)) items += list.length;
+    const label = section ? sectionLabel(section) : "";
+    if (label && !labels.includes(label)) labels.push(label);
+  }
+  const shown = labels.slice(0, max);
+  if (labels.length > max) shown.push("…");
+  return { labels: shown, items };
 }
 
 /** Map a tool call to the step label the chat UI renders; unknown tools fall back to their name. */
 export function toolStepLabel(toolName: string, args: unknown): string {
   const raw = (args ?? {}) as Record<string, unknown>;
   switch (toolName) {
-    case "get_resume_context":
-      return `查阅简历「${sectionList(raw.sections)}」`;
-    case "web_search": {
-      const query = clamp(String(raw.query ?? ""), 20);
-      return query ? `联网搜索「${query}」` : "联网搜索";
+    case "update_resume": {
+      const library = Array.isArray(raw.from_library) ? raw.from_library.length : 0;
+      if (library && !Array.isArray(raw.changes)) return `从信息库导入 ${library} 条`;
+      const { labels, items } = changeLabels(raw.changes);
+      if (!labels.length) return "修改简历";
+      const scope = labels.join("、");
+      return items ? `修改${scope}（${items} 条）` : `修改${scope}`;
     }
-    case "update_basics_field": {
-      const basics = (raw.basics ?? {}) as Record<string, unknown>;
-      const keys = Object.keys(basics).slice(0, 3);
-      const names = keys.map((key) => BASICS_FIELD_LABELS[key] ?? clamp(key));
-      if (Object.keys(basics).length > 3) names.push("…");
-      return names.length ? `修改基本信息（${names.join("、")}）` : "修改基本信息";
+    case "ask_user": {
+      const questions = Array.isArray(raw.questions) ? raw.questions.length : 0;
+      return questions ? `向你确认 ${questions} 件事` : "向你确认信息";
     }
-    case "update_section":
-      return `修改「${sectionLabel(String(raw.section ?? ""))}」模块`;
-    case "propose_change": {
-      const updates = Array.isArray(raw.updates) ? raw.updates : [];
-      const names = updates
-        .slice(0, 3)
-        .map((update) => sectionLabel(String((update as Record<string, unknown> | undefined)?.section ?? "")))
-        .filter(Boolean);
-      if (updates.length > 3) names.push("…");
-      return names.length ? `生成修改提案（${names.join("、")}）` : "生成修改提案";
-    }
-    case "ask_user_questions": {
-      const questions = Array.isArray(raw.questions) ? raw.questions : [];
-      return questions.length ? `向你收集补充信息（${questions.length} 项）` : "向你收集补充信息";
-    }
-    case "search_info_fragments": {
+    case "search_library": {
       const query = clamp(String(raw.query ?? ""), 16);
       return query ? `检索信息库「${query}」` : "检索信息库";
     }
-    case "import_info_fragments": {
-      const ids = Array.isArray(raw.fragment_ids) ? raw.fragment_ids : [];
-      return ids.length ? `从信息库导入 ${ids.length} 条信息` : "从信息库导入信息";
+    case "save_library": {
+      const items = Array.isArray(raw.items) ? raw.items.length : 0;
+      return items ? `整理 ${items} 条信息到信息库` : "整理信息到信息库";
     }
-    case "propose_info_fragments": {
-      const items = Array.isArray(raw.fragments) ? raw.fragments : [];
-      return items.length ? `整理 ${items.length} 条信息到信息库` : "整理信息到信息库";
+    case "use_skill": {
+      const name = clamp(String(raw.name ?? ""), 20);
+      return name ? `使用技能「${name}」` : "加载技能";
+    }
+    case "web_search": {
+      const query = clamp(String(raw.query ?? ""), 20);
+      return query ? `联网搜索「${query}」` : "联网搜索";
     }
     default:
       return toolName;
@@ -158,34 +152,25 @@ export function toolStepEnd(toolName: string, result: unknown, isError: boolean)
     const category = typeof details.category === "string" ? details.category : undefined;
     return { ok: false, detail: clampText(reason) || "校验未通过", ...(category ? { category } : {}) };
   }
-  if (toolName === "get_resume_context") {
-    const sections = (details.sections ?? {}) as Record<string, unknown>;
-    const count = Object.keys(sections).length;
-    return { ok: true, detail: count ? `已读取 ${count} 个模块` : "该模块暂无内容" };
+  if (toolName === "update_resume") {
+    const suggestions = Array.isArray(details.suggestions) ? (details.suggestions as string[]) : [];
+    return { ok: true, detail: clampText(suggestions[0] ?? "已生成待确认修改", 48) };
+  }
+  if (toolName === "ask_user") {
+    const questions = Array.isArray(details.questions) ? details.questions : [];
+    return { ok: true, detail: questions.length ? `已提出 ${questions.length} 个问题` : "等待用户回答" };
+  }
+  if (toolName === "search_library") {
+    const items = Array.isArray(details.items) ? details.items : [];
+    return { ok: true, detail: items.length ? `找到 ${items.length} 条相关信息` : "没有匹配的信息" };
+  }
+  if (toolName === "save_library") {
+    const pending = Array.isArray(details.pending_info_fragments) ? details.pending_info_fragments : [];
+    return { ok: true, detail: pending.length ? `整理出 ${pending.length} 条待确认信息` : "没有可保存的信息" };
   }
   if (toolName === "web_search") {
     const count = typeof details.count === "number" ? details.count : 0;
     return { ok: true, detail: count ? `已检索到 ${count} 条结果` : "未检索到相关结果" };
-  }
-  if (toolName === "ask_user_questions") {
-    const questions = Array.isArray(details.questions) ? details.questions : [];
-    return { ok: true, detail: questions.length ? `已提出 ${questions.length} 个问题，等待用户回答` : "等待用户回答" };
-  }
-  if (toolName === "update_basics_field" || toolName === "update_section" || toolName === "propose_change") {
-    const suggestions = Array.isArray(details.suggestions) ? (details.suggestions as string[]) : [];
-    return { ok: true, detail: clampText(suggestions[0] ?? "已生成待确认修改，确认后写入", 48) };
-  }
-  if (toolName === "search_info_fragments") {
-    const items = Array.isArray(details.items) ? details.items : [];
-    return { ok: true, detail: items.length ? `找到 ${items.length} 条相关信息` : "没有匹配的信息" };
-  }
-  if (toolName === "import_info_fragments") {
-    const suggestions = Array.isArray(details.suggestions) ? (details.suggestions as string[]) : [];
-    return { ok: true, detail: clampText(suggestions[0] ?? "已生成待确认修改，确认后写入", 48) };
-  }
-  if (toolName === "propose_info_fragments") {
-    const pending = Array.isArray(details.pending_info_fragments) ? details.pending_info_fragments : [];
-    return { ok: true, detail: pending.length ? `整理出 ${pending.length} 条待确认信息` : "没有可保存的信息" };
   }
   return { ok: true };
 }

@@ -26,13 +26,13 @@ import {
   validateProviderBody,
   validateProviderKey,
 } from "./catalog.js";
-import { detectQuickCommand } from "./commands.js";
 import { runChat, runTask, type ChatRuntime, type ChatStreamEvent } from "./agent.js";
 import { reportUsage } from "./billing.js";
 import { loadConfig } from "./config.js";
 import { createFauxRuntime } from "./faux.js";
 import { appendSkillsToPrompt, buildContextPrompt, DEFAULT_SYSTEM_PROMPT, parseSkills, type AiServiceContext } from "./prompt.js";
 import { createRealRuntime, parseByokOverride, registerByokModel, type ThinkingLevelSetting } from "./real.js";
+import { appendSkillPrompt, extractSkillCommand } from "./skills.js";
 import { buildTaskPrompts, isTaskType } from "./taskPrompts.js";
 
 const config = loadConfig();
@@ -308,9 +308,17 @@ app.post("/v1/chat", async (req, res) => {
     typeof req.body?.context === "object" && req.body.context !== null ? req.body.context : null;
   const userId = Number.isInteger(req.body?.user_id) ? req.body.user_id : 0;
   const resumeId = Number.isInteger(req.body?.resume_id) ? req.body.resume_id : 0;
+  // 技能：用户点了技能卡或输入 /名称 时，直接在这一轮把方法注入系统提示词，
+  // 用户消息换成参数（无参数则用技能自带的默认请求）。没有技能前缀时按自然语言处理，
+  // 模型仍可自己调用 use_skill 取用。
+  const skillCommand = extractSkillCommand(message);
+  const userMessage = skillCommand ? skillCommand.args || skillCommand.skill.ask : message;
   const basePrompt = typeof req.body?.system_prompt === "string" && req.body.system_prompt.trim()
     ? req.body.system_prompt
-    : buildContextPrompt(DEFAULT_SYSTEM_PROMPT, context);
+    : buildContextPrompt(
+        skillCommand ? appendSkillPrompt(DEFAULT_SYSTEM_PROMPT, skillCommand.skill) : DEFAULT_SYSTEM_PROMPT,
+        context,
+      );
   // Only enabled skills reach here; they are appended after all platform rules.
   const systemPrompt = appendSkillsToPrompt(basePrompt, parseSkills(req.body?.skills));
 
@@ -324,14 +332,13 @@ app.post("/v1/chat", async (req, res) => {
   res.on("close", () => controller.abort());
 
   const outcome = await runChat(
-    { message, systemPrompt, config, runtime, modelRef, userId, resumeId, images, thinkingLevel },
+    { message: userMessage, systemPrompt, config, runtime, modelRef, userId, resumeId, images, thinkingLevel },
     (event) => sendEvent(res, event),
     controller.signal,
   );
   res.end();
-  // Feature breakdown (admin dashboard): a leading slash command is detected on
-  // the raw message; everything else counts as free-form chat.
-  const feature = detectQuickCommand(message)?.name ?? "chat";
+  // Feature breakdown (admin dashboard): 技能轮次按技能 id 记账，其余算自由对话。
+  const feature = skillCommand?.skill.id ?? "chat";
   // End-of-request billing (ticket 07): hand the aggregated per-model usage to
   // FastAPI, which settles Flow Points with the same rules as the legacy path.
   // Faux turns are a local demo — they carry no real provider's usage and must

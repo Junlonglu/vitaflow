@@ -1,6 +1,6 @@
 # section 级工具 + 回调 Python 校验
 
-status: accepted
+status: accepted（工具粒度已被 [resume-agent.md](../resume-agent.md) 收敛为单一 update_resume，结论「工具做增量、Python 做校验」仍然有效）
 date: 2026-09-01
 
 旧链路让模型整份重发 `optimized_resume_data`（≈10KB JSON），延迟由输出 token 决定（实测 30~50s）。新架构用 Agent 工具做增量修改：Agent 调用 `update_section` 类工具（section 粒度；`basics` 细化到字段级）提交修改，工具回调 FastAPI 执行校验并落库——数值防幻觉（`_unverified_numeric_claims` 语义）与待确认变更（pending_change）机制保留在回调链路中，快照保护与分级合并因工具化的增量性自然简化。

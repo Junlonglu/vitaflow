@@ -21,6 +21,7 @@ from app.core.database import Base, get_db
 from app.core.exceptions import register_exception_handlers
 from app.core.resume_schema import (
     SCHEMA_VERSION,
+    guess_fragment_kind,
     normalize_fragment_payload,
     normalize_resume_document,
     schema_json,
@@ -454,3 +455,43 @@ class PendingFragmentDecisionTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FragmentKindGuessTest(unittest.TestCase):
+    """分类由字段决定：模型只写内容，不再需要记住 15 个分类名与各自字段。"""
+
+    def test_guesses_from_shape(self):
+        cases = [
+            ({"school": "某大学", "major": "计算机", "degree": "本科"}, "education"),
+            ({"company": "A 公司", "position": "后端"}, "work"),
+            ({"company": "A 公司", "position": "后端实习生"}, "internship"),
+            ({"name": "VitaFlow", "tech_stack": "Vue"}, "project"),
+            ({"name": "VitaFlow", "role": "负责人"}, "project"),
+            ({"keywords": ["Python", "FastAPI"]}, "skill"),
+            ({"name": "CET-6", "issuer": "教育部"}, "certificate"),
+            ({"organization": "校学生会", "role": "部长"}, "campus"),
+            ({"name": "一等奖", "date": "2024.05"}, "award"),
+            ({"name": "PMP", "institution": "PMI"}, "training"),
+            ({"name": "英语", "level": "CET-6"}, "language"),
+            ({"phone": "13800138000", "email": "a@b.com"}, "basic"),
+            ({"foo": "bar"}, "custom"),
+            ({}, "custom"),
+        ]
+        for payload, expected in cases:
+            with self.subTest(payload=payload):
+                self.assertEqual(guess_fragment_kind(payload), expected)
+
+    def test_proposal_without_kind_is_accepted_and_labelled(self):
+        db = _session()
+        try:
+            pending, issues = svc.validate_proposals(
+                db,
+                1,
+                [{"payload": {"school": "某大学", "major": "计算机", "degree": "本科"}}],
+            )
+            self.assertEqual(issues, [])
+            self.assertEqual(pending[0]["kind"], "education")
+            self.assertEqual(pending[0]["kind_label"], "教育经历")
+            self.assertTrue(pending[0]["title"])
+        finally:
+            db.close()

@@ -57,7 +57,8 @@ class InfoFragmentOut(BaseModel):
 
 class InfoFragmentProposalIn(BaseModel):
     id: Optional[int] = None
-    kind: str = Field(min_length=1, max_length=24)
+    # 省略时由后端按 payload 字段猜分类（guess_fragment_kind），模型不必记住 15 个分类名。
+    kind: str = Field(default="", max_length=24)
     payload: dict[str, Any] = Field(default_factory=dict)
     title: Optional[str] = Field(default=None, max_length=120)
     tags: list[str] = Field(default_factory=list)

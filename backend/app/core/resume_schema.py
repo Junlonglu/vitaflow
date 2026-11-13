@@ -569,8 +569,30 @@ def _field_line(field: FieldSpec) -> str:
 
 
 @lru_cache(maxsize=1)
+def schema_compact() -> str:
+    """一行一个模块的字段清单——注入系统提示词的那份。
+
+    Agent 需要的不是字段的中文标签与长度限制（后端会清洗），而是「这个模块有哪些
+    字段名」。旧的 ``schema_prompt()`` 每轮要发 1500 tokens 的说明，其中大半是模型
+    用不上的展示信息；实际简历 JSON 本身就在上下文里，字段名照着它写即可。
+    """
+    lines: list[str] = []
+    for key in SECTION_ORDER:
+        spec = SECTIONS[key]
+        if key == "custom_sections":
+            keys = ["id", "title", "preset_type", "items"] + [field.key for field in CUSTOM_ITEM_FIELDS]
+        else:
+            keys = [field.key for field in spec.fields]
+            if spec.kind == "list":
+                keys = ["id"] + keys
+        lines.append(f"{key}: " + ", ".join(keys))
+    lines.append("layout: section_order, hidden_sections, section_titles, field_labels")
+    return "\n".join(lines)
+
+
+@lru_cache(maxsize=1)
 def schema_prompt() -> str:
-    """给 Agent 的写入契约（纯文本，注入系统提示词）。"""
+    """给 Agent 的完整写入契约（人读版本，用于文档与调试）。"""
     lines: list[str] = [
         f"# 简历 JSON 结构（schema {SCHEMA_VERSION}）",
         "简历数据是一个 JSON 对象，每个顶层 key 是一个模块；写入时只改目标模块，不要重排或重编号既有条目。",
@@ -600,7 +622,7 @@ def schema_prompt() -> str:
             "2. highlights / keywords 是字符串数组，一条一个要点，不要塞进 description。",
             "3. 修改已有条目必须带原 id；新增条目不要自带 id，由系统生成。",
             "4. 只使用上面列出的字段，自造字段会被校验拦截。",
-            "5. 个人信息（basics）用 update_basics_field；其余模块用 update_section / propose_change。",
+            "5. 所有写入都走 update_resume：改动按模块声明，从信息库导入用 from_library。",
         ]
     )
     return "\n".join(lines)
@@ -657,6 +679,51 @@ def schema_json() -> dict[str, Any]:
 
 def fragment_kind(kind: str) -> FragmentKindSpec | None:
     return FRAGMENT_KINDS.get(str(kind or "").strip().lower())
+
+
+def guess_fragment_kind(payload: Any) -> str:
+    """按字段判断一条信息属于哪一类，判不出来就是 custom。
+
+    以前分类由模型给出，它得同时记住 15 个分类名与各自的字段，错一个整条被拒。
+    字段本身已经说明了它是什么（有 school 的是教育，有 company 的是工作），
+    所以在后端兜底判断，模型只需要把内容写对。
+    """
+    if not isinstance(payload, dict):
+        return "custom"
+    keys = {str(key) for key, value in payload.items() if str(value or "").strip()}
+    if not keys:
+        return "custom"
+
+    def has(*names: str) -> bool:
+        return any(name in keys for name in names)
+
+    # 顺序即优先级：越具体的分类越先判断。
+    if has("school", "major", "degree"):
+        return "education"
+    if has("company"):
+        text = " ".join(str(value) for value in payload.values())
+        return "internship" if "实习" in text else "work"
+    if has("tech_stack") or (has("name") and has("role")):
+        return "project"
+    if has("keywords"):
+        return "skill"
+    if has("issuer", "credential_id"):
+        return "certificate"
+    if has("publisher", "research_area"):
+        return "publication"
+    if has("organization"):
+        return "campus"
+    if has("institution"):
+        return "training"
+    if has("award"):
+        return "competition"
+    if has("level", "score"):
+        return "language"
+    if has("phone", "email", "location", "expected_salary", "highest_degree", "github"):
+        return "basic"
+    if has("name", "title"):
+        return "award"
+    return "custom"
 
 
 def normalize_fragment_payload(kind: str, payload: Any) -> tuple[dict[str, Any], str]:

@@ -15,7 +15,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.exceptions import AppException
-from app.core.resume_schema import normalize_resume_document, schema_prompt
+from app.core.resume_schema import normalize_resume_document, schema_compact
 from app.models.ai_chat import AiChatMessage, AiChatSession
 from app.models.resume import Resume
 from app.models.resume import ResumeVersion
@@ -80,24 +80,6 @@ def _message_out(message: AiChatMessage) -> AiChatMessageOut:
 def _clip_text(value: Any, limit: int = 600) -> str:
     text = re.sub(r"\s+", " ", str(value or "")).strip()
     return text if len(text) <= limit else text[:limit] + "..."
-
-
-def _resume_intent_summary(resume_data: dict[str, Any] | None) -> dict[str, Any]:
-    data = resume_data or {}
-    basics = data.get("basics") if isinstance(data.get("basics"), dict) else {}
-    sections: list[str] = []
-    for key in ("summary", "education", "skills", "work", "projects", "awards", "custom_sections"):
-        value = data.get(key)
-        if isinstance(value, list) and value:
-            sections.append(key)
-        elif isinstance(value, dict) and any(str(item or "").strip() for item in value.values()):
-            sections.append(key)
-    return {
-        "name": basics.get("name", ""),
-        "target_position": basics.get("title", ""),
-        "sections": sections,
-        "layout_order": (data.get("layout") or {}).get("section_order", []) if isinstance(data.get("layout"), dict) else [],
-    }
 
 
 
@@ -459,18 +441,18 @@ def build_ai_service_context(
         .order_by(AiChatMessage.id.desc())
     )
     resume_data = resume.resume_data or {}
-    basics = resume_data.get("basics") if isinstance(resume_data.get("basics"), dict) else {}
     return {
         "resume": {
             "id": resume.id,
             "title": resume.title,
-            "target_position": basics.get("title", ""),
-            "summary": _resume_intent_summary(resume.resume_data),
+            # 简历全文随上下文下发：Agent 要改内容时不必再单独读一次，
+            # 字段名也能照着现有 JSON 写，省掉一轮工具往返。
+            "data": resume_data,
         },
         "context_summary": summary or "",
         "history": [{"role": item.role, "content": item.content} for item in history[-context_limit:]],
-        # 写入契约由后端单一维护（core/resume_schema.py），每轮注入，Node 侧不复制字段表。
-        "resume_schema": schema_prompt(),
+        # 字段清单（一行一个模块）由 core/resume_schema.py 单一维护，比整份契约省一个数量级。
+        "resume_fields": schema_compact(),
         "pending_change": {
             "exists": pending_change is not None,
             "message_id": pending_change.id if pending_change else None,

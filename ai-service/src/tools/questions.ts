@@ -1,61 +1,38 @@
 /**
- * Structured gap-question tool for the /JD优化 flow (and any future
- * information-collection turn): when the model finds resume-vs-JD gaps it cannot
- * fill from evidence, it submits its questions here instead of free-text asking.
+ * ask_user — 把「简历里没有、又必须问清楚」的信息整理成结构化问题。
  *
- * The questions ride the result event (pending_questions) so the backend persists
- * them on the assistant message and the frontend renders its step-by-step
- * answer dialog — chat text alone cannot be turned into a form reliably.
+ * 为什么不是直接在回复里提问：前端弹出的补充信息框可以逐条回答并原样回传，
+ * 模型拿到的是干净的事实，而不是一段自由文本。
+ *
+ * 限制在 3 个以内：多数简历缺口一次问不完就不该一次问完，先补最关键的那几个。
  */
 import { Type } from "typebox";
 import { defineTool } from "@earendil-works/pi-coding-agent";
+import type { AskedQuestion } from "./state.js";
+import type { TurnState } from "./state.js";
 
-/** One curated question shown in the frontend's answer dialog. */
-export interface AskedQuestion {
-  question: string;
-  hint?: string;
-}
+/** Hard cap — 问题越多，用户越可能直接跳过这一轮。 */
+export const MAX_ASKED_QUESTIONS = 3;
 
-/** Per-turn state so agent.ts can echo the questions onto the result event. */
-export interface QuestionsToolState {
-  askedQuestions: AskedQuestion[] | null;
-}
-
-export function createQuestionsState(): QuestionsToolState {
-  return { askedQuestions: null };
-}
-
-/** Hard cap shared with the /JD优化 template guidance — keep the dialog finishable. */
-export const MAX_ASKED_QUESTIONS = 5;
-
-export function createAskUserQuestionsTool(state: QuestionsToolState) {
+export function createAskUserTool(state: TurnState) {
   return defineTool({
-    name: "ask_user_questions",
-    label: "收集补充信息",
+    name: "ask_user",
+    label: "补充信息",
     description:
-      "当简历与岗位/需求差距较大、缺少可写入的证据时，把需要向用户核实的问题整理成结构化清单一次性提交。" +
-      "用户会在弹出的补充信息框里逐条回答后回传。只在确有信息缺口时使用；没有缺口不要调用。",
-    promptSnippet: "ask_user_questions(questions) — 向用户收集补充信息",
-    promptGuidelines: [
-      "问题必须与已发现的证据缺口一一对应，一次不超过 5 个。",
-      "hint 是给用户的填写示例或说明，帮助其理解要提供什么；没有合适的就不传。",
-      "调用后立即结束回合等待用户回答，不要在同一回合继续生成修改方案。",
-    ],
+      "简历里缺少关键事实（结果数字、职责范围、时间、奖项等级）导致无法下笔时，把要核实的问题一次性提交，" +
+      "用户会在补充信息框里逐条回答。没有问题就不要调用。",
     parameters: Type.Object({
       questions: Type.Array(
         Type.Object({
-          question: Type.String({ description: "要向用户核实的问题" }),
-          hint: Type.Optional(Type.String({ description: "给用户的填写示例或说明" })),
+          question: Type.String({ description: "要核实的问题，越具体越好" }),
+          hint: Type.Optional(Type.String({ description: "填写示例或说明，帮助用户理解要答什么" })),
         }),
-        { description: "问题清单" },
+        { description: `问题清单，最多 ${MAX_ASKED_QUESTIONS} 个` },
       ),
     }),
     execute: async (
       _toolCallId,
       params: { questions?: Array<{ question?: string; hint?: string }> },
-      _signal,
-      _onUpdate,
-      _ctx,
     ): Promise<{ content: Array<{ type: "text"; text: string }>; details: { ok: boolean; questions?: AskedQuestion[] } }> => {
       const raw = Array.isArray(params?.questions) ? params.questions : [];
       const questions: AskedQuestion[] = raw
@@ -68,13 +45,13 @@ export function createAskUserQuestionsTool(state: QuestionsToolState) {
         .slice(0, MAX_ASKED_QUESTIONS);
       if (!questions.length) {
         return {
-          content: [{ type: "text", text: "没有有效的问题。请给出具体要向用户核实的问题。" }],
+          content: [{ type: "text", text: "没有有效的问题。请给出具体要核实的事实。" }],
           details: { ok: false },
         };
       }
       state.askedQuestions = questions;
       return {
-        content: [{ type: "text", text: `已向用户展示 ${questions.length} 个补充问题。请结束回合，等待用户作答后再继续。` }],
+        content: [{ type: "text", text: `已向用户提出 ${questions.length} 个问题。请结束回合，等用户回答后再继续。` }],
         details: { ok: true, questions },
       };
     },

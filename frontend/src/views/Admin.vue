@@ -286,6 +286,9 @@ function featureText(value?: string | null) {
   return ({
     polish: "对话 · 润色",
     translate: "对话 · 翻译",
+    diagnose: "对话 · 简历诊断",
+    match: "对话 · JD匹配",
+    rewrite: "对话 · 重写经历",
     optimize: "对话 · JD优化",
     generate: "对话 · 生成",
     greeting: "对话 · 开场白",

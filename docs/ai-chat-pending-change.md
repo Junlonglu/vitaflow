@@ -17,9 +17,9 @@ ai-service POST /v1/chat (server.ts:268)
   │  runChat (agent.ts:132)：选模型 → pi-agent 流式推理
   │
   │  ┌─ 工具回调（模型要改简历时）────────────────┐
-  │  │ update_basics_field / update_section /    │ ──POST──▶ backend /service/tool/*
-  │  │ propose_change（basics.ts / sections.ts） │ ◀──响应── 校验结果（不落库）
-  │  │ 校验后 payload 存入 toolState.pendingChange│
+  │  │ update_resume（tools/resume.ts）           │ ──POST──▶ backend /service/tool/
+  │  │   changes[] + from_library[]               │ ◀──响应── 校验结果（不落库）
+  │  │ 校验后 payload 存入 state.pendingChange    │
   │  └───────────────────────────────────────────┘
   ▼
 result 事件（回合终点，sendResult agent.ts:181）
@@ -50,8 +50,9 @@ backend resolve_chat_change (:939)
 | `model` | `modelRef` | `resolveRealModel` 选模型，推理前用掉（:142） | ❌ |
 | `user_id`/`resume_id` | `userId`/`resumeId` | 工具 deps，回调 backend 时带回（:161-178） | ❌ |
 
-`context` 生命周期在 server.ts 就结束：`buildContextPrompt` 只渲染元信息
-（姓名/求职方向/模块名列表 + history + pending 摘要），**简历正文不进 prompt**。
+`context` 生命周期在 server.ts 就结束：`buildContextPrompt` 把它渲染成系统提示词
+（简历全文 JSON + 字段清单一行的模块表 + history + pending 摘要）。**简历正文进 prompt**，
+因此模型改简历前不需要再读一遍；`get_resume_context` 已从工具白名单移除。
 
 ## 3. NDJSON 流与 emit
 
@@ -93,21 +94,19 @@ result 事件 ────────────── data.pending_change = t
 - 关键保证：落库的 JSON 与校验通过的那份**逐字节相同**，模型无法二次加工
   （模型输出只能变成 text 展示内容，没有写 toolState 的通道）
 
-## 6. get_resume_context 为什么存在
+## 6. 简历正文为什么直接进 prompt
 
-system prompt 里只有简历**元信息**（姓名、方向、模块名列表），没有正文。
-模型要看内容，唯一途径是回调 `GET /service/tool/get-resume-context`（sections.ts:217）。
+早期版本只给模型简历**元信息**（姓名、方向、模块名列表），要看内容必须回调
+`get_resume_context`。代价是每轮多一次工具往返、多一份 JSON 输入，模型还常忘记先读。
 
-```
-prompt 快照（元信息，省 token）        get_resume_context（按需读模块）
-┌──────────────────────┐            ┌───────────────────────────┐
-│ 求职者：张三｜后端     │   改前先读  │ 返回指定模块完整内容+条目id │
-│ 含模块：工作、项目…    │ ─────────▶ │ （work_1 等，id-bounded    │
-└──────────────────────┘            │  合并必需，避免臆测）        │
-                                    └───────────────────────────┘
-```
+现在 `build_ai_service_context()` 直接下发 `resume.data`（全文）与 `resume_fields`
+（一行一模块的字段清单），于是：
 
-## 7. backend 校验流水线（三个工具端点共用）
+- 省掉一次工具往返，也省掉「模型读了旧快照再改」的时序问题；
+- 字段名仍然只有 Python 一份（`schema_compact()` 从 `SECTIONS` 生成），模型不自造字段；
+- 代价是每轮多带一份简历 JSON——比起原始的整份 `schema_prompt()`（约 1500 tokens）仍然更省。
+
+## 7. backend 校验流水线（update-resume 端点）
 
 ```
 提案 {section, proposed}
@@ -162,10 +161,10 @@ resolve_chat_change (:939)
 
 | 函数 | 位置 | 职责 |
 |---|---|---|
-| `merge_section_update` | :703 | 提案→完整快照（section/propose 路径，id-bounded） |
-| `_merge_confirmed_resume_data` | :441 | 提案→完整快照（basics 路径，字段级保守合并，防丢 avatar 等配置） |
+| `merge_section_update` | :703 | 提案→完整快照（id-bounded；旧端点 `/update-section` 保留，Agent 已不走） |
+| `_merge_confirmed_resume_data` | :441 | 提案→完整快照（basics 路径，字段级保守合并，防丢 avatar 等配置；旧端点 `/update-basics-field` 保留） |
 | `_unwrap_resume_data` | :479 | 剥掉模型可能包的外壳（resume_data/data/result/…） |
 | `_numeric_claims` | :528 | 从简历 JSON 抽取全部数字 token（含变体归一化） |
 | `_unverified_numeric_claims` | :550 | 方案数字 − 证据数字（集合差），非空即幻觉 |
 | `_actual_change_suggestions` | :856 | 新旧 diff → 人读变更摘要（存 suggestions，三处消费：工具转述/确认卡片/下轮上下文） |
-| `build_ai_service_context` | :151 | 拼元信息快照 + history + pending 摘要（简历正文不进 prompt） |
+| `build_ai_service_context` | :151 | 简历全文 + `schema_compact()` 字段清单 + history + pending 摘要 |

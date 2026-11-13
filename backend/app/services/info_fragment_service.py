@@ -27,6 +27,7 @@ from app.core.resume_schema import (
     SECTIONS,
     fragment_kind,
     fragment_summary,
+    guess_fragment_kind,
     fragment_title,
     normalize_fragment_payload,
     normalize_resume_document,
@@ -639,7 +640,7 @@ def validate_proposals(db: Session, user_id: int, proposals: list[Any]) -> tuple
         if not isinstance(item, dict):
             issues.append(f"第 {index} 条不是有效的信息对象")
             continue
-        kind = str(item.get("kind") or "").strip().lower()
+        kind = str(item.get("kind") or "").strip().lower() or guess_fragment_kind(item.get("payload"))
         spec = fragment_kind(kind)
         if spec is None:
             issues.append(f"第 {index} 条的信息分类不支持：{kind or '空'}")

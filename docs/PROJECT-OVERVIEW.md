@@ -77,13 +77,14 @@ vitaflow/
 ├── frontend/              # Vue 3，约 17k 行
 │   └── src/{views,components,stores,api,router,types,utils}/
 ├── ai-service/            # Node 旁路服务
-│   ├── src/{server,agent,prompt,commands,taskPrompts,catalog,billing,usage,config,real,faux}.ts
-│   ├── src/tools/         # 工具定义（basics / sections / questions / search / fragments）+ http 客户端 + 步骤文案
+│   ├── src/{server,agent,prompt,skills,taskPrompts,catalog,billing,usage,config,real,faux}.ts
+│   ├── src/tools/         # 工具定义（resume / library / skill / questions / search）+ state + http 客户端 + 步骤文案
 │   └── .pi-agent/models.json   # 模型目录（能力清单 + API Key 引用）
 └── docs/
     ├── adr/               # 架构决策记录 0001~0003
     ├── agents/            # issue tracker 与 domain doc 约定
     ├── pi-agent重构设计.md
+    ├── resume-agent.md    # 提示词分层 / 内置技能 / 工具契约 / 交互
     ├── resume-schema.md   # 简历 JSON 契约与原子信息模型
     └── ai-call-flows.md   # 端到端链路，标注到行号
 ```
@@ -209,7 +210,7 @@ vitaflow/
 
 这是全项目最重要的数据结构，前端表单、AI 工具、渲染模板、导出服务都以它为契约。
 
-**声明式契约**：字段表、类型、必填与长度上限全部定义在 `backend/app/core/resume_schema.py`（`SECTIONS` / `FRAGMENT_KINDS`），并由 `normalize_resume_document()` 在**所有落库路径**（前端保存、AI 写回、信息库导入）收口；`schema_prompt()` 把同一份字段表注入 Agent 系统提示词。字段级说明见 [`docs/resume-schema.md`](./resume-schema.md)，此处只列结构。
+**声明式契约**：字段表、类型、必填与长度上限全部定义在 `backend/app/core/resume_schema.py`（`SECTIONS` / `FRAGMENT_KINDS`），并由 `normalize_resume_document()` 在**所有落库路径**（前端保存、AI 写回、信息库导入）收口；`schema_compact()` 把同一份字段表压成「一行一模块」随上下文下发给 Agent（`schema_prompt()` 保留给文档与调试）。字段级说明见 [`docs/resume-schema.md`](./resume-schema.md)，此处只列结构。
 
 ```jsonc
 {
@@ -282,7 +283,8 @@ createAgentSession({ cwd, sessionManager: SessionManager.inMemory(cwd), resource
 
 - 不写本地 JSONL 会话，多用户共享同一进程也互不污染，可水平扩容。
 - 代价：上下文必须每轮由 FastAPI 注入。`build_ai_service_context()` 下发：
-  - `resume`：id、title、目标岗位、简历意图摘要
+  - `resume`：`id` / `title` / `data`（简历全文，模型直接看，不再需要「先读一遍」）
+  - `resume_fields`：`schema_compact()` 的一行一模块字段清单
   - `context_summary`：滚动压缩摘要（超出窗口的旧消息）
   - `history`：最近 N 条消息（N 取模型策略 `context_messages`，夹在 1..40）
   - `pending_change`：是否存在待确认变更及其摘要
@@ -296,31 +298,39 @@ createAgentSession({ cwd, sessionManager: SessionManager.inMemory(cwd), resource
 - 结束信号用 `agent_settled`（不是 `agent_end`），并在 `finally` 里二次兜底 `sendResult`，避免压缩/重试流程未完成就判结束。
 - 前端 `api/ai.ts` 用原生 `fetch` + `ReadableStream` 逐行解析，**绕开 axios**（axios 无法增量读流）；普通接口仍走 axios 拦截器。
 
-### 7.5 系统提示词与命令
+### 7.5 系统提示词与技能
 
-- `prompt.ts`：显式覆盖 pi 的「编码助手」人设，清空 `appendSystemPromptOverride`，关闭 `noContextFiles`/`noSkills`，注入简历上下文、事实边界规则、招聘写作标准。
-- **写入契约**：后端每轮把 `resume_schema.schema_prompt()` 放进 `context.resume_schema`，Node 侧原样拼进系统提示词。字段表只有 Python 一份，Node 不复制、不推断字段名（见 `docs/resume-schema.md`）。
-- `commands.ts`：注册 5 个斜杠命令——`/润色`、`/翻译`、`/JD优化 <岗位描述>`、`/生成 <目标岗位>`、`/开场白`。通过 `promptsOverride` 注入虚拟文件系统。
-- **关键坑**：传了 `resourceLoader` 之后必须 `await loader.reload()`，否则上述命令全部静默失效。代码中已显式调用。
+提示词分三层，越靠下注入得越晚、越窄（细节见 [`docs/resume-agent.md`](./resume-agent.md)）：
+
+| 层 | 内容 | 量级 |
+|---|---|---|
+| 常驻 | `DEFAULT_SYSTEM_PROMPT`（`src/prompt.ts`）：唯一写入入口 `update_resume`、事实底线、信息库用法、回复风格，外加一行技能目录 | 约 600 字 |
+| 每轮 | `buildContextPrompt()`：当前简历 JSON（代码块）+ `resume_fields` 字段清单（一行一模块）+ 更早对话摘要 + 最近对话 + 待确认修改 | 随简历变化 |
+| 按需 | 内置技能正文（`src/skills.ts`）、用户自建技能（`appendSkillsToPrompt()`） | 只在本轮用到时 |
+
+- **写入契约**：`schema_compact()` 把每个模块压成一行（`work: id, company, position, …`），简历全文随上下文下发，模型照现有 JSON 的形状写字段。字段表只有 Python 一份（`core/resume_schema.py`），Node 不复制、不推断字段名；合法性由唯一的工具端点判定。
+- **内置技能（6 个）**：诊断 / JD匹配 / 重写经历 / 润色 / 翻译 / 开场白。前端点技能卡或输入 `/名称`，`extractSkillCommand()` 在服务端解析，用户消息被替换成技能自带的 `ask`，技能正文注入这一轮的系统提示词；用户用自然语言提需求时，模型按技能目录自行 `use_skill(name)` 取用。
+- **为什么要技能而不是长提示词**：技能只写「做法」（步骤、判断标准、输出形状），不重复身份与事实底线；目录常驻、正文按需，避免每轮背着 6 份 SOP。
+- **用户自建技能**（`user_skills`）追加在平台规则之后，章节名 `# 用户的写作偏好`，并声明「不能覆盖上方的平台规则」，防止用户文本伪造系统级章节。
+- `prompt.ts` 仍显式覆盖 pi 的「编码助手」人设，关闭 `noContextFiles` / `noSkills`，并在传了 `resourceLoader` 后 `await loader.reload()`。
 - `taskPrompts.ts`：三类一次性任务 `generate_resume` / `import_resume` / `chat_summary`，各自 system prompt + 约束（只输出合法 JSON、禁编造事实、禁编造量化指标）。
 
-### 7.6 工具清单（白名单，共 9 个）
+### 7.6 工具清单（白名单，共 5 个）
 
 | 工具 | 作用 | 是否回调 FastAPI |
 |---|---|---|
-| `update_basics_field` | 改 basics 单字段 | 是 → `/service/tool/update-basics-field` |
-| `update_section` | 按 item id 增量更新某 section | 是 → `/service/tool/update-section` |
-| `propose_change` | 提出整份简历变更方案 | 是 → `/service/tool/propose-change` |
-| `get_resume_context` | 读取简历完整内容 | 是 → `/service/tool/get-resume-context`（GET） |
-| `ask_user_questions` | 向用户提问（缺信息时澄清） | 否，仅产出结构化问题 |
-| `web_search` | 联网搜索（公司/岗位/技术事实核查） | 是 → `/service/tool/search-evidence`；仅当配置 `SEARCH_PROVIDER` 时注册 |
-| `search_info_fragments` | 检索用户信息库（关键词/分类） | 是 → `/service/tool/info-fragments/search`（GET），只读 |
-| `import_info_fragments` | 按 id 把信息库条目导入简历 | 是 → `/service/tool/info-fragments/import`；结果进 `pending_change`，等用户确认 |
-| `propose_info_fragments` | 把对话里整理出的新事实存进信息库 | 是 → `/service/tool/info-fragments/propose`；结果进 `pending_info_fragments`，用户确认后才入库 |
+| `update_resume` | **唯一写入口**：一组 `changes[]`（`section` + `items` / `fields` / `removed_ids`）与 `from_library[]`，一次提交多模块改动或信息库导入 | 是 → `/service/tool/update-resume`；结果进 `pending_change` |
+| `ask_user` | 向用户提问（缺信息时澄清，最多 3 个） | 否，仅产出结构化问题 |
+| `search_library` | 检索用户信息库（关键词 + 分类，最多 20 条） | 是 → `/service/tool/info-fragments/search`（GET），只读 |
+| `save_library` | 把对话里整理出的新事实存进信息库 | 是 → `/service/tool/info-fragments/propose`；结果进 `pending_fragments`，用户确认后才入库 |
+| `use_skill` | 按名称取用内置技能正文 | 否，读 `src/skills.ts` |
+| `web_search` | 联网搜索（公司/岗位/技术事实核查） | 是 → `/service/tool/search-evidence`；仅当配置 `SEARCH_PROVIDER` 时注册（可选第 6 个） |
 
 **`read` / `bash` / `edit` / `write` 全部禁用**。多用户 Web 场景下 `bash` 是明确的安全风险，这一条不可回退。
 
-工具状态只累积、不落库：`agent.ts` 里的 `toolState.pendingChange`（basics/sections 工具写入）与 `fragmentState`（`fragments.ts` 的 `pendingChange` + `pendingFragments`）在 `result` 事件里一起回传，后端分别写 `optimized_resume_data` 与 `pending_info_fragments`。
+为什么只有一个写工具：旧版四个入口（`update_basics_field` / `update_section` / `propose_change` / `import_info_fragments`）终点相同、形状不同，模型要在四者间选，经常选错或重复提交，前端步骤标签也跟着抖。现在 `basics` 只是一个普通模块，导入是 `from_library`，参数形状收敛为一组 change。
+
+工具状态只累积、不落库：`src/tools/state.ts` 的 `TurnState` 三个字段 `pendingChange` / `pendingFragments` / `askedQuestions` 互相独立、可并存，由 `result` 事件一起回传；后端分别写 `optimized_resume_data` 与 `pending_info_fragments`。
 
 ### 7.7 四层防御：AI 为什么不直接改库
 
@@ -388,20 +398,20 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
   └─ 导入简历（单条 → 简历）    → POST /info-fragments/apply（直接写库，返回最新 resume_data）
 
 对话 /workspace/:id（Flow Agent）
-  ├─ search_info_fragments   → 只读检索，命中带分类与摘要
-  ├─ import_info_fragments   → 工具返回待确认的简历修改 → pending_change
-  │     └─ 用户点「去审阅」→ POST .../decision(apply) → 先确认后的简历合并
-  └─ propose_info_fragments  → 工具返回待确认的信息条目 → pending_info_fragments
+  ├─ search_library   → 只读检索，命中带分类与摘要
+  ├─ update_resume     → changes[] / from_library[] 一次提交 → pending_change
+  │     └─ 用户点「应用」→ POST .../decision(apply) → 合并后的简历写库
+  └─ save_library      → 工具返回待确认的信息条目 → pending_info_fragments
         └─ 用户点「保存到信息库」→ 同一条 decision 接口 → 先入库再（如有）写简历
 ```
 
 要点：
 
 - **一条消息可同时承载两种待确认内容**（简历快照 + 信息条目），`action_status=pending` 只要任一存在；`resolve_chat_change` 的 apply 分支先用 `apply_proposals()` 入库并把 `pending_info_fragments` 置空，再合并 `optimized_resume_data`；只有信息提案时不会报「没有可写入的修改」。
-- **工具不直接写库**：`import` / `propose` 两个端点在 Python 侧只做校验与组装，返回 `optimized_resume_data` / `pending_info_fragments`，落库发生在用户确认之后。
+- **工具不直接写库**：`update-resume`（含 `from_library`）与 `info-fragments/propose` 在 Python 侧只做校验与组装，返回 `optimized_resume_data` / `pending_info_fragments`，落库发生在用户确认之后。
 - **幂等**：`fingerprint = sha1(kind + payload)`，重复保存合并标题与标签而不覆盖用户编辑；导入简历按条目内容判重，全部已存在时返回 400 而不是静默造重复条目。
-- **可见性**：`search_info_fragments` 只返回当前用户、`enabled` 的条目；所有端点都带 `user_id` 过滤，跨用户 `fragment_id` 按 404 处理。
-- **前端确认卡**：`ResumeAiChatPanel` 的待确认卡同时看 `optimized_resume_data` 与 `pending_info_fragments`，有简历改动给「去审阅」，只有信息条目给「保存到信息库」；两种状态的结果文案分开（修改已生效 / 信息已保存到信息库）。
+- **可见性**：`search_library` 只返回当前用户、`enabled` 的条目；所有端点都带 `user_id` 过滤，跨用户 `fragment_id` 按 404 处理。
+- **前端确认卡**：`ResumeAiChatPanel` 的待确认卡同时看 `optimized_resume_data` 与 `pending_info_fragments`：主按钮是「应用」（只有信息条目时叫「保存到信息库」），有简历改动时多一个次要的「逐条审阅」，另有「放弃」；两种状态的结果文案分开（修改已生效 / 信息已保存到信息库）。
 
 ---
 
@@ -582,4 +592,4 @@ docker compose --profile full up -d --build
 | 0004 | 为什么用 section 级工具 + 回调 Python 校验（替代整份重发） |
 | 0005 | 为什么模型配置事实源迁到 AI 服务的模型目录 |
 
-详细端到端链路（含行号）见 `docs/ai-call-flows.md`；重构动机与取舍见 `docs/pi-agent重构设计.md`。
+详细端到端链路（含行号）见 `docs/ai-call-flows.md`；提示词分层、内置技能与工具契约见 `docs/resume-agent.md`；重构动机与取舍见 `docs/pi-agent重构设计.md`。

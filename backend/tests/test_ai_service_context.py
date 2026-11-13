@@ -53,13 +53,14 @@ class AiServiceContextBuildTest(unittest.TestCase):
         ) as mock_list:
             context = build_ai_service_context(_DbStub(pending=None), SimpleNamespace(id=1), resume)
 
-        # Resume snapshot
+        # 简历全文随上下文下发（Agent 不必再读一次），字段清单单独给一行一模块
         self.assertEqual(context["resume"]["id"], 7)
         self.assertEqual(context["resume"]["title"], "后端工程师简历")
-        self.assertEqual(context["resume"]["target_position"], "后端工程师")
-        self.assertEqual(context["resume"]["summary"]["name"], "张三")
-        self.assertIn("skills", context["resume"]["summary"]["sections"])
-        self.assertIn("work", context["resume"]["summary"]["sections"])
+        self.assertEqual(context["resume"]["data"]["basics"]["name"], "张三")
+        self.assertIn("work", context["resume"]["data"])
+        self.assertIn("work:", context["resume_fields"])
+        self.assertIn("highlights", context["resume_fields"])
+        self.assertNotIn("resume_schema", context)
         # Recent history, clipped to the configured limit
         self.assertEqual(
             context["history"],

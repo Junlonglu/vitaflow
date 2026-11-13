@@ -57,7 +57,7 @@ describe("ResumeAiChatPanel 双通道待确认卡", () => {
     expect(wrapper.emitted("review")).toBeUndefined()
   })
 
-  it("同时有简历修改时优先引导去审阅，并触发 review", async () => {
+  it("同时有简历修改时主按钮是应用，逐条审阅是次要入口", async () => {
     const wrapper = mountPanel([
       {
         id: 2,
@@ -72,9 +72,16 @@ describe("ResumeAiChatPanel 双通道待确认卡", () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain("AI 准备了简历修改，并整理了 2 条信息")
-    const action = wrapper.findAll("button").find((button) => button.text() === "去审阅")
-    expect(action).toBeTruthy()
-    await action!.trigger("click")
+
+    // 主路径是一键应用；想逐条看再点「逐条审阅」（去编辑器 diff）。
+    const apply = wrapper.findAll("button").find((button) => button.text() === "应用")
+    expect(apply).toBeTruthy()
+    const review = wrapper.findAll("button").find((button) => button.text() === "逐条审阅")
+    expect(review).toBeTruthy()
+
+    await apply!.trigger("click")
+    expect(wrapper.emitted("confirm")?.[0]?.[0]).toMatchObject({ id: 2 })
+    await review!.trigger("click")
     expect(wrapper.emitted("review")?.[0]?.[0]).toMatchObject({ id: 2 })
   })
 

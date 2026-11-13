@@ -50,10 +50,18 @@ def configure_logging() -> None:
         }
         root_handlers.append("file")
 
+    # 每个 handler 都挂脱敏 filter：即使某个 logger 设置了 propagate=False，
+    # 也不会有未经过滤的输出路径。
+    for handler in handlers.values():
+        handler["filters"] = ["secret_redact"]
+
     logging.config.dictConfig(
         {
             "version": 1,
             "disable_existing_loggers": False,
+            "filters": {
+                "secret_redact": {"()": "app.core.redact.SecretRedactingFilter"},
+            },
             "formatters": {
                 "standard": {
                     "format": LOG_FORMAT,

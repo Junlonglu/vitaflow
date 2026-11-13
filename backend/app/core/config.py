@@ -5,6 +5,9 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+DEFAULT_JWT_SECRET_KEY = "please_change_this_secret_key"
+
+
 class Settings(BaseSettings):
     app_name: str = "VitaFlow"
     app_cn_name: str = "简历流"
@@ -35,10 +38,16 @@ class Settings(BaseSettings):
     redis_socket_timeout: int = Field(default=3, gt=0)
     announcement_cache_ttl_seconds: int = Field(default=600, gt=0)
 
-    jwt_secret_key: str = "please_change_this_secret_key"
+    jwt_secret_key: str = DEFAULT_JWT_SECRET_KEY
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 1440
     admin_emails: str = ""
+
+    # BYOK 密钥的加密口令，独立于 JWT：逗号分隔的 ``kid=secret`` 列表，
+    # 第一项用于写入，其余仅用于解密历史密文（轮换时把新 key 放到最前）。
+    # 例：BYOK_ENCRYPTION_KEYS=v2=新口令,v1=旧口令
+    # 未配置时回退到 JWT_SECRET_KEY 派生的旧密钥，保证存量密文可读。
+    byok_encryption_keys: str = ""
 
     smtp_host: str = ""
     smtp_port: int = 465

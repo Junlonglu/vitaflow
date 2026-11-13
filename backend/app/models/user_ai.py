@@ -44,6 +44,26 @@ class UserAiCredential(Base):
     update_time: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
+class UserAiAuditLog(Base):
+    """BYOK 密钥的使用与变更审计。
+
+    只存动作、配置名与脱敏后的说明，绝不存在明文或完整密文；配置删除后
+    记录仍保留（credential_id 成为历史引用），让用户能核对「谁在何时用了
+    哪条配置」。同一用户之外不可见。
+    """
+
+    __tablename__ = "user_ai_audit_logs"
+    __table_args__ = (Index("ix_user_ai_audit_user_id", "user_id", "id"),)
+
+    id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger)
+    action: Mapped[str] = mapped_column(String(40))
+    credential_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    label: Mapped[str] = mapped_column(String(120), default="")
+    detail: Mapped[str] = mapped_column(String(255), default="")
+    create_time: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, index=True)
+
+
 class UserSkill(Base):
     """用户上传的自定义技能。
 

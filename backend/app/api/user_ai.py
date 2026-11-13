@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, File, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.crypto import decrypt_secret
+from app.core.crypto import decrypt_secret, encryption_status
 from app.core.database import get_db
 from app.core.exceptions import AppException
 from app.core.response import success
@@ -77,7 +77,38 @@ def _skill_dict(skill: Any) -> dict[str, Any]:
     }
 
 
-async def _run_probe(db: Session, user_id: int, payload: UserAiCredentialTestIn, credential_id: int | None = None):
+def _audit(
+    db: Session,
+    user_id: int,
+    action: str,
+    credential: Any = None,
+    detail: str = "",
+) -> None:
+    svc.record_audit(
+        db,
+        user_id,
+        action,
+        credential_id=getattr(credential, "id", None),
+        label=str(getattr(credential, "provider_label", "") or ""),
+        detail=detail,
+    )
+
+
+def _audit_dict(row: Any) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "action": row.action,
+        "action_label": svc.AUDIT_ACTION_LABELS.get(row.action, row.action),
+        "credential_id": row.credential_id,
+        "label": row.label,
+        "detail": row.detail,
+        "create_time": row.create_time,
+    }
+
+
+async def _run_probe(
+    db: Session, user_id: int, payload: UserAiCredentialTestIn, credential_id: int | None = None
+):
     api_key = (payload.api_key or "").strip()
     stored = svc.get_credential(db, user_id, credential_id)
     if not api_key:
@@ -93,7 +124,53 @@ async def _run_probe(db: Session, user_id: int, payload: UserAiCredentialTestIn,
     )
     if ok and stored and stored.base_url == payload.base_url.rstrip("/") and stored.model == payload.model:
         svc.mark_verified(db, stored)
+    _audit(db, user_id, "credential.test", stored, detail=f"ok={ok}; {detail}")
     return success({"ok": ok, "detail": detail, "models": models})
+
+
+# ---------------------------------------------------------------------------
+# 密钥存储说明、使用审计与一键清除
+# ---------------------------------------------------------------------------
+
+
+@router.get("/security")
+def security_info(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """让设置页展示「当前部署实际怎么存密钥」，而不是一句空泛的承诺。"""
+    status = encryption_status()
+    return success(
+        {
+            **status,
+            "storage": "服务端数据库，Fernet 密文",
+            "visibility": "所有页面与接口只返回掩码，明文不会回传浏览器",
+            "rotation": "部署方轮换加密口令后，打开设置页会自动升级历史密文",
+            "clearable": True,
+            "audited": True,
+        }
+    )
+
+
+@router.get("/audit-logs")
+def list_audit_logs(
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    items = [_audit_dict(row) for row in svc.list_audit_logs(db, current_user.id, limit)]
+    return success({"items": items, "total": len(items)})
+
+
+@router.delete("/keys")
+def clear_all_keys(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """彻底删除该用户全部模型配置与已存密钥，不可恢复。"""
+    removed = svc.clear_all_credentials(db, current_user.id)
+    _audit(db, current_user.id, "keys.clear_all", detail=f"removed={removed}")
+    return success({"removed": removed}, f"已清除 {removed} 条模型配置及密钥")
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +183,10 @@ def list_models(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    # 加密口令轮换后的透明升级：旧密文在此重写为当前 kid。
+    rotated = svc.rotate_legacy_ciphertexts(db, current_user.id)
+    if rotated:
+        _audit(db, current_user.id, "keys.rotate", detail=f"upgraded={rotated}")
     return success(_model_list(db, current_user.id))
 
 
@@ -116,6 +197,7 @@ def add_model(
     current_user: User = Depends(get_current_user),
 ):
     credential = svc.create_credential(db, current_user.id, payload)
+    _audit(db, current_user.id, "credential.create", credential, detail=f"model={credential.model}")
     return success(_credential_dict(credential), "模型配置已添加")
 
 
@@ -127,6 +209,7 @@ def put_model(
     current_user: User = Depends(get_current_user),
 ):
     credential = svc.update_credential(db, current_user.id, credential_id, payload)
+    _audit(db, current_user.id, "credential.update", credential, detail=f"model={credential.model}")
     return success(_credential_dict(credential), "模型配置已保存")
 
 
@@ -136,7 +219,9 @@ def remove_model(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    credential = svc.require_credential(db, current_user.id, credential_id)
     svc.delete_credential(db, current_user.id, credential_id)
+    _audit(db, current_user.id, "credential.delete", None, detail=f"id={credential_id}; label={credential.provider_label}")
     return success(None, "模型配置已删除")
 
 
@@ -146,7 +231,8 @@ def make_model_default(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    svc.set_default_credential(db, current_user.id, credential_id)
+    credential = svc.set_default_credential(db, current_user.id, credential_id)
+    _audit(db, current_user.id, "credential.default", credential)
     return success(_model_list(db, current_user.id), "已设为默认模型")
 
 
@@ -190,6 +276,7 @@ def put_credential(
     current_user: User = Depends(get_current_user),
 ):
     credential = svc.upsert_credential(db, current_user.id, payload)
+    _audit(db, current_user.id, "credential.upsert", credential, detail=f"model={credential.model}")
     return success(_credential_dict(credential), "模型接入已保存")
 
 
@@ -200,6 +287,7 @@ def remove_credential(
 ):
     if not svc.delete_credential(db, current_user.id):
         raise AppException("尚未配置模型接入", 404)
+    _audit(db, current_user.id, "credential.delete", detail="legacy endpoint")
     return success(None, "已移除自定义模型，后续对话将使用平台模型")
 
 

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
-import type { UserAiCredential, UserSkill } from "@/api/userAi"
+import type { UserAiAuditLog, UserAiCredential, UserAiSecurityInfo, UserSkill } from "@/api/userAi"
 
 const EFFORT_OPTIONS = [
   { value: "auto", label: "跟随模型默认", hint: "不下发推理参数" },
@@ -27,6 +27,9 @@ const api = vi.hoisted(() => ({
   deleteUserSkillApi: vi.fn(),
   importUserSkillApi: vi.fn(),
   importUserSkillPackageApi: vi.fn(),
+  getUserAiSecurityApi: vi.fn(),
+  listUserAiAuditLogsApi: vi.fn(),
+  clearUserAiKeysApi: vi.fn(),
 }))
 const toast = vi.hoisted(() => ({ showGlobalToast: vi.fn() }))
 
@@ -63,11 +66,38 @@ const skill: UserSkill = {
   update_time: null,
 }
 
+const auditLog: UserAiAuditLog = {
+  id: 21,
+  action: "chat.use",
+  action_label: "对话使用该模型",
+  credential_id: 3,
+  label: "DeepSeek",
+  detail: "model=deepseek-chat",
+  create_time: "2026-11-13T10:20:00",
+}
+
+const securityInfo: UserAiSecurityInfo = {
+  mode: "dedicated",
+  active_kid: "v1",
+  rotation_keys: 1,
+  legacy_decrypt_enabled: true,
+  weak_default: false,
+  storage: "服务端数据库，Fernet 密文",
+  visibility: "所有页面与接口只返回掩码",
+  rotation: "轮换后自动升级历史密文",
+  clearable: true,
+  audited: true,
+}
+
 function stubs() {
   return {
     WorkspacePage: { template: "<div><slot /></div>" },
     AppDialog: { props: ["open"], template: '<div v-if="open"><slot /><slot name="footer" /></div>' },
-    ConfirmDialog: { props: ["open"], template: '<div v-if="open" class="confirm-stub" />' },
+    ConfirmDialog: {
+      props: ["open", "title"],
+      emits: ["update:open", "confirm"],
+      template: '<div v-if="open" class="confirm-stub"><span class="confirm-title">{{ title }}</span><button class="confirm-ok" @click="$emit(\'confirm\')">确定</button></div>',
+    },
     Button: { template: "<button><slot /></button>" },
     Switch: {
       props: ["modelValue"],
@@ -81,10 +111,16 @@ function modelList(items: UserAiCredential[] = [credential]) {
   return { items, total: items.length, active: items.filter((item) => item.enabled).length, default_id: items.find((item) => item.is_default)?.id ?? null }
 }
 
-async function mountPage(models: UserAiCredential[] = [credential], skills: UserSkill[] = [skill]) {
+async function mountPage(
+  models: UserAiCredential[] = [credential],
+  skills: UserSkill[] = [skill],
+  options: { security?: UserAiSecurityInfo; logs?: UserAiAuditLog[] } = {},
+) {
   api.REASONING_EFFORT_OPTIONS = EFFORT_OPTIONS as never
   api.listUserAiModelsApi.mockResolvedValue(modelList(models))
   api.listUserSkillsApi.mockResolvedValue({ items: skills, total: skills.length, active: skills.filter((s) => s.enabled).length })
+  api.getUserAiSecurityApi.mockResolvedValue(options.security ?? securityInfo)
+  api.listUserAiAuditLogsApi.mockResolvedValue({ items: options.logs ?? [], total: (options.logs ?? []).length })
   const wrapper = mount(WorkspaceSettings, { global: { stubs: stubs() } })
   await flushPromises()
   return wrapper
@@ -215,5 +251,39 @@ describe("WorkspaceSettings · 技能", () => {
     await input.trigger("change")
     await flushPromises()
     expect(api.importUserSkillPackageApi).toHaveBeenCalledWith(undefined, files)
+  })
+})
+
+describe("WorkspaceSettings · 密钥与隐私", () => {
+  it("展示真实存储状态、使用记录，且从不展示明文密钥", async () => {
+    const wrapper = await mountPage([credential], [skill], { logs: [auditLog] })
+    expect(wrapper.text()).toContain("密钥与隐私")
+    expect(wrapper.text()).toContain("独立密钥 · v1")
+    expect(wrapper.text()).toContain("如何彻底删除")
+    expect(wrapper.text()).toContain("对话使用该模型")
+    expect(wrapper.text()).not.toContain("sk-secret")
+    expect(api.getUserAiSecurityApi).toHaveBeenCalled()
+  })
+
+  it("清除全部密钥需二次确认，确认后调用接口并刷新记录", async () => {
+    api.clearUserAiKeysApi.mockResolvedValue({ removed: 1 })
+    const wrapper = await mountPage()
+    await buttonByText(wrapper, "清除全部密钥")?.trigger("click")
+    expect(wrapper.text()).toContain("清除全部模型配置与密钥")
+    expect(api.clearUserAiKeysApi).not.toHaveBeenCalled()
+
+    await wrapper.find(".confirm-ok").trigger("click")
+    await flushPromises()
+    expect(api.clearUserAiKeysApi).toHaveBeenCalledOnce()
+    expect(api.listUserAiAuditLogsApi).toHaveBeenCalled()
+    expect(toast.showGlobalToast).toHaveBeenCalledWith("已清除 1 条模型配置及密钥")
+  })
+
+  it("开发回退模式会明确提示部署方配置独立口令", async () => {
+    const wrapper = await mountPage([credential], [skill], {
+      security: { ...securityInfo, mode: "legacy", active_kid: "legacy" },
+    })
+    expect(wrapper.text()).toContain("开发回退密钥")
+    expect(wrapper.text()).toContain("尚未配置独立的 BYOK_ENCRYPTION_KEYS")
   })
 })

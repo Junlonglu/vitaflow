@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import admin, ai, announcements, auth, exports, feedback, files, resume_starters, resumes, shares, templates, user_ai
 from app.core.config import settings
+from app.core.crypto import ByokKeyError, validate_encryption_config
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.response import success
@@ -17,10 +18,19 @@ configure_logging()
 logger = logging.getLogger(__name__)
 access_logger = logging.getLogger("vitaflow.access")
 
+_PRODUCTION_ENVS = {"production", "prod", "staging"}
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     logger.info("Starting %s backend env=%s debug=%s", settings.app_name, settings.app_env, settings.app_debug)
+    try:
+        warning = validate_encryption_config(strict=settings.app_env.strip().lower() in _PRODUCTION_ENVS)
+        if warning:
+            logger.warning("BYOK 加密配置：%s", warning)
+    except ByokKeyError as exc:
+        logger.error("BYOK 加密配置校验失败，拒绝启动：%s", exc)
+        raise
     yield
     logger.info("Stopping %s backend", settings.app_name)
 

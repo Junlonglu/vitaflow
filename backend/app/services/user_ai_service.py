@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import io
+import logging
 import re
 import zipfile
 from dataclasses import dataclass
@@ -19,10 +20,16 @@ import httpx
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.crypto import decrypt_secret, encrypt_secret, mask_secret
+from app.core.crypto import (
+    decrypt_secret,
+    encrypt_secret,
+    mask_secret,
+    needs_rotation,
+)
 from app.core.exceptions import AppException
+from app.core.redact import redact
 from app.core.url_guard import literal_public_url, probe_public_url
-from app.models.user_ai import UserAiCredential, UserSkill
+from app.models.user_ai import UserAiAuditLog, UserAiCredential, UserSkill
 from app.schemas.user_ai import (
     MAX_MODELS_PER_USER,
     MAX_SKILL_INSTRUCTIONS,
@@ -42,6 +49,21 @@ MAX_PACKAGE_SINGLE_FILE_BYTES = 128 * 1024
 MAX_PACKAGE_ENTRIES = 200
 MAX_PACKAGE_SKILLS = 20
 TEXT_SUFFIXES = {".md", ".markdown", ".txt"}
+
+logger = logging.getLogger(__name__)
+
+# 审计动作 → 设置页展示文案。只记录动作与配置名，绝不记录密钥本身。
+AUDIT_ACTION_LABELS = {
+    "credential.create": "添加模型配置",
+    "credential.update": "修改模型配置",
+    "credential.delete": "删除模型配置",
+    "credential.default": "切换默认模型",
+    "credential.test": "测试模型连接",
+    "credential.upsert": "保存模型接入",
+    "chat.use": "对话使用该模型",
+    "keys.rotate": "密钥加密版本升级",
+    "keys.clear_all": "清除全部密钥",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -241,13 +263,18 @@ async def probe_credential(
             if chat.status_code in (401, 403):
                 return False, "API Key 被拒绝，请检查是否填写正确或是否已过期", []
             if chat.status_code >= 400:
-                detail = chat.text[:160].strip() or f"HTTP {chat.status_code}"
+                # 厂商错误体可能回显请求头；先脱敏再回给前端。
+                detail = redact(chat.text[:160].strip(), secrets=[api_key]) or f"HTTP {chat.status_code}"
                 return False, f"模型调用失败：{detail}", []
             return True, "接入可用（已通过对话请求验证）", []
     except httpx.TimeoutException:
         return False, "连接超时，请检查接入地址网络是否可达", []
     except httpx.HTTPError as exc:
-        return False, f"连接失败：{exc}", []
+        return False, f"连接失败：{redact(str(exc), secrets=[api_key])}", []
+    except Exception as exc:
+        # 任何未预期异常都只上报脱敏后的摘要，避免把请求上下文回显出去。
+        logger.warning("BYOK 探活出现未预期异常", exc_info=True)
+        return False, f"连接失败：{redact(str(exc), secrets=[api_key])}", []
 
 
 def resolve_model_override(
@@ -586,3 +613,105 @@ def parse_skill_package(files: list[SkillPackageFile]) -> tuple[list[UserSkillIn
                 parsed.instructions = f"{parsed.instructions}\n\n## 参考资料\n\n" + "\n\n".join(blocks)
         skills.append(parsed)
     return skills, warnings
+
+
+# ---------------------------------------------------------------------------
+# 审计、密文轮换与一键清除
+# ---------------------------------------------------------------------------
+
+
+def record_audit(
+    db: Session,
+    user_id: int,
+    action: str,
+    *,
+    credential_id: int | None = None,
+    label: str = "",
+    detail: str = "",
+) -> None:
+    """Best-effort 审计：表未迁移或写失败都只告警，绝不影响主流程。
+
+    调用方必须已经 commit 完业务改动——失败时会 rollback 清理 session，
+    避免把业务事务一起带进失败状态。
+    """
+    try:
+        db.add(
+            UserAiAuditLog(
+                user_id=user_id,
+                action=action[:40],
+                credential_id=credential_id,
+                label=(label or "")[:120],
+                detail=redact(detail or "")[:255],
+            )
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.warning("写入 BYOK 审计日志失败", exc_info=True)
+
+
+def list_audit_logs(db: Session, user_id: int, limit: int = 20) -> list[UserAiAuditLog]:
+    safe_limit = max(1, min(int(limit or 20), 50))
+    return list(
+        db.scalars(
+            select(UserAiAuditLog)
+            .where(UserAiAuditLog.user_id == user_id)
+            .order_by(UserAiAuditLog.id.desc())
+            .limit(safe_limit)
+        )
+    )
+
+
+def clear_all_credentials(db: Session, user_id: int) -> int:
+    """彻底删除该用户全部模型配置与密钥；技能不受影响。"""
+    rows = list_credentials(db, user_id)
+    count = len(rows)
+    for row in rows:
+        db.delete(row)
+    db.commit()
+    return count
+
+
+def rotate_legacy_ciphertexts(db: Session, user_id: int) -> int:
+    """把旧格式 / 旧 kid 的密文透明重写为当前 kid。
+
+    管理员轮换 BYOK_ENCRYPTION_KEYS 后，用户只要打开一次设置页，历史密文
+    就会升级；之后即可安全移除旧口令。解不开的坏数据保持原样，不覆盖。
+    """
+    changed = 0
+    try:
+        for row in list_credentials(db, user_id):
+            if not needs_rotation(row.api_key_encrypted):
+                continue
+            plain = decrypt_secret(row.api_key_encrypted)
+            if not plain:
+                continue
+            row.api_key_encrypted = encrypt_secret(plain)
+            changed += 1
+        if changed:
+            db.commit()
+    except Exception:
+        db.rollback()
+        logger.warning("BYOK 密文轮换失败", exc_info=True)
+        return 0
+    return changed
+
+
+def audit_chat_use(user_id: int, override: dict[str, Any] | None) -> None:
+    """对话链路的使用审计走独立 session，不碰当前流式请求的事务。"""
+    if not override or not override.get("credential_id"):
+        return
+    try:
+        from app.core.database import SessionLocal
+
+        with SessionLocal() as db:
+            record_audit(
+                db,
+                user_id,
+                "chat.use",
+                credential_id=override.get("credential_id"),
+                label=str(override.get("name") or "")[:120],
+                detail=f"model={override.get('model') or ''}",
+            )
+    except Exception:
+        logger.warning("记录 BYOK 对话使用审计失败", exc_info=True)

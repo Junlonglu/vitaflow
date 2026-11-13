@@ -51,7 +51,7 @@ Node ai-service :8300  ── pi-agent 运行时，无数据库权限
 
 三种端口布局：开发态 `5173 / 8000 / 8300`；全栈态 `8080(Nginx) / 8000 / 8300`，Nginx 把 `/api` 反代到 backend。
 
-**关键设计约束**：前端**不直连** ai-service；ai-service **不连数据库**；平台模型 API Key 只存在于 ai-service 进程。用户自带（BYOK）密钥是唯一例外：由 FastAPI 用 Fernet 加密存入 MySQL，明文只在「服务间 /v1/chat 请求」与 ai-service 当次进程内存中出现，浏览器永远只拿到掩码。
+**关键设计约束**：前端**不直连** ai-service；ai-service **不连数据库**；平台模型 API Key 只存在于 ai-service 进程。用户自带（BYOK）密钥是唯一例外：由 FastAPI 用**独立于 JWT 的** Fernet 口令加密存入 MySQL（`fernet:<kid>:<token>`，支持多版本轮换），明文只在「服务间 /v1/chat 请求」与 ai-service 当次进程内存中出现，浏览器永远只拿到掩码；所有日志与错误回显统一脱敏。
 
 ---
 
@@ -129,6 +129,7 @@ vitaflow/
 - **多模型配置**：`GET|POST /user-ai/models`、`PUT|DELETE /user-ai/models/{id}`、`POST /user-ai/models/{id}/default`（设为默认）、`POST /user-ai/models/{id}/test` 与 `POST /user-ai/models/test`（未保存配置探活）。每用户最多 10 条，任意时刻恰好一条默认项；删除/停用默认项会自动补位。对话请求可带 `user_model_id`（正数指定某条自带模型、`0` 明确使用平台模型、省略则按服务端默认解析），在编辑器模型选择器里与平台模型同列展示。
 - **推理强度**：每条配置存 `reasoning_effort`（`auto/off/minimal/low/medium/high/xhigh`）；非 auto 档透传到 ai-service，注册模型时置 `reasoning=true` + `compat.supportsReasoningEffort`，并把 thinkingLevel 交给 `createAgentSession`，最终映射为 OpenAI 兼容端点的 `reasoning_effort`。
 - **技能**：`GET|POST /user-ai/skills`、`PATCH|DELETE /user-ai/skills/{id}`（含启用开关）、`POST /user-ai/skills/import`（单个 .md/.txt/.zip）、`POST /user-ai/skills/import-package`（ZIP 或 `webkitdirectory` 文件夹，多文件按 `SKILL.md` 分组，附属文本拼为「参考资料」）。
+- **密钥与隐私**：`GET /user-ai/security`（部署加密状态与存储说明）、`GET /user-ai/audit-logs?limit=20`（当前用户使用记录，上限 50）、`DELETE /user-ai/keys`（删除全部模型配置与密钥，不可恢复）。CRUD、设为默认、测试连接、对话使用、密文轮换都会写审计。
 - 旧接口 `GET|PUT|DELETE /user-ai/credential`、`POST /user-ai/credential/test` 保留兼容，语义落在「默认配置」上。读接口只回掩码；所有查询带 `user_id`，跨用户访问返回 404。
 
 **其余**
@@ -187,8 +188,9 @@ vitaflow/
 | `flow_point_transactions` | 积分流水（增减、原因、关联对象） |
 | `flow_point_redeem_codes` / `flow_point_redeem_records` | 兑换码与核销记录 |
 | `app_settings` | 站点级开关（注册开关、公告、AI 默认模型等） |
-| `user_ai_credentials` | **BYOK 多配置**：每用户最多 10 条，`(user_id)` 不再唯一，改由 `is_default` 标出默认项；`api_key_encrypted`（Fernet，密钥由 `JWT_SECRET_KEY` 派生）+ `api_key_masked`、`base_url`、`model`、`reasoning_effort`、`enabled`、`supports_image`、上下文/输出上限；明文永不落库、永不回前端 |
+| `user_ai_credentials` | **BYOK 多配置**：每用户最多 10 条，`(user_id)` 不再唯一，改由 `is_default` 标出默认项；`api_key_encrypted`（`fernet:<kid>:<token>`，密钥由独立 `BYOK_ENCRYPTION_KEYS` 派生）+ `api_key_masked`、`base_url`、`model`、`reasoning_effort`、`enabled`、`supports_image`、上下文/输出上限；明文永不落库、永不回前端 |
 | `user_skills` | 用户手写 / 单文件 / 技能包导入的技能：`slug`（同用户内唯一）、`name`、`description`、`instructions`、`enabled`、`source`（`manual`/`upload`/`package`）；启用中的才拼进系统提示词 |
+| `user_ai_audit_logs` | BYOK 密钥变更与使用审计：`user_id`、`action`、`credential_id`（删除后仍留作历史引用）、`label`、脱敏后的 `detail`、`create_time`；**不存明文、掩码或密文**，按用户隔离，最多回最近 50 条 |
 
 > 约定：**MySQL 表不使用物理外键**，关联靠业务字段 + 应用层校验。所有结构变更必须新增 Alembic 迁移，不改旧迁移。
 
@@ -331,9 +333,9 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 一条完整链路，跨越三层，任何一层失败都自动回落到平台默认：
 
 ```
-设置页 /workspace/settings（多配置列表 + 内联编辑区 + 推理强度 + 技能包导入）
-  → FastAPI /api/user-ai/*（Fernet 加密落库、只回掩码、SSRF 校验）
-  → 对话时 _resolve_user_ai(db, user_id, user_model_id) 解析 override + 启用技能
+设置页 /workspace/settings（多配置列表 + 内联编辑区 + 推理强度 + 技能包导入 + 密钥与隐私卡）
+  → FastAPI /api/user-ai/*（Fernet 密文落库、只回掩码、SSRF 两级校验、日志脱敏、审计）
+  → 对话时 _resolve_user_ai(db, user_id, user_model_id) 解析 override + 启用技能 + 独立 session 写使用审计
   → ai_service_client 在 /v1/chat payload 附带 model_override（含 reasoning_effort）/ skills
   → ai-service registerByokModel() 动态注册临时 provider（id = owner + 配置哈希 + 推理强度）
   → createAgentSession(thinkingLevel=...) → 兼容端点收到 reasoning_effort
@@ -343,7 +345,9 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 
 关键设计：
 
-- **密钥**：`JWT_SECRET_KEY` 派生 Fernet 密钥；轮换 JWT 密钥会使旧密文解不开（有意的轮换语义），此时 `resolve_model_override` 返回 `None`，对话静默回退平台模型。改模型名/地址时 `api_key` 可留空沿用已存密钥。**密钥不在浏览器、不在 localStorage**：设置页表单里的明文只随 HTTPS 请求到服务端，读回来永远是掩码。
+- **独立密钥与轮换**：`core/crypto.py` 用 `BYOK_ENCRYPTION_KEYS`（逗号分隔的 `kid=secret`）派生 Fernet 密钥，密文格式 `fernet:<kid>:<token>`；第一项用于写入，其余仅解密历史密文。旧版 `fernet:<token>`（`JWT_SECRET_KEY` 派生）仍可读，`GET /user-ai/models` 会把它透明重写为当前 kid，之后即可安全移除旧口令。未配置独立口令时回退 JWT 派生以兼容旧部署；但 `app_env=production/prod/staging` 且 JWT 仍是弱默认值时，**启动直接失败**（`main.py` lifespan 调 `validate_encryption_config(strict=True)`）。轮换登录密钥不再影响已存 API Key；解不开的密文按「未配置」处理，对话静默回退平台模型。改模型名/地址时 `api_key` 可留空沿用已存密钥。**密钥不在浏览器、不在 localStorage**：明文只随 HTTPS 请求到服务端，读回来永远是掩码。
+- **日志与错误脱敏**：`core/redact.py` 的 filter 挂在所有 logging handler 上，先把 `msg % args` 合并成最终文本再脱敏（直接改模板会吃掉 `%s`），并预生成脱敏后的 `exc_text` 覆盖异常栈；`probe_credential` 对厂商错误体、httpx 异常与未预期异常一律 `redact()` 后才回前端。
+- **可验证的控制权**：`user_ai_audit_logs` 记录谁在何时添加 / 修改 / 测试 / 使用 / 清除了哪条配置（不存任何密钥材料，配置删除后记录仍在）；`GET /user-ai/security` 返回真实部署状态（独立密钥 / 开发回退），`GET /user-ai/audit-logs` 只返回当前用户记录，`DELETE /user-ai/keys` 一键删除全部模型配置与密钥。设置页「密钥与隐私」卡如实写明「服务端代理 ⇒ 服务端必须能解密」，不承诺零知识，并给出存储位置、可见范围、彻底删除方式与轮换策略。
 - **多模型**：默认项由 `is_default` 唯一确定；前端模型选择器用 `p:<平台模型id>` / `u:<自带模型id>` 作值，选平台模型时下发 `user_model_id=0` 明确关闭 BYOK，选自带模型时下发对应 id，不改默认项。
 - **推理强度**：`auto` 不下发任何推理参数（兼容所有接入点），`off` 关闭，其余档位映射到 pi-agent thinkingLevel。强度参与 provider id 哈希，切换时不会与在途请求串配置。
 - **SSRF**：`core/url_guard.py` 分两级——schema 校验只查字面量（不联网，每轮对话也用得上），点「测试连接」才做 DNS 解析后校验；默认拒绝回环/私网/链路本地/云元数据地址。部署方可设 `BYOK_ALLOW_PRIVATE_NETWORK=true` 放开本机 Ollama，自行承担风险。
@@ -375,7 +379,7 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 | `/workspace/profile` | `Workspace.vue` → `Profile.vue` | 个人资料、修改密码、意见反馈（`?tab=feedback` 直达反馈页），浅灰底衬托白卡 |
 | `/workspace/announcements` | `Workspace.vue` → `AnnouncementHistory.vue` | 公告历史与详情弹窗 |
 | `/workspace/ai-records` | `Workspace.vue` → `AiRecords.vue` | Flow Points 余额、兑换、调用记录与消费明细 |
-| `/workspace/settings` | `Workspace.vue` → `WorkspaceSettings.vue` | **模型与技能**：多模型配置列表（上限 10、默认项、启停、编辑、删除、探活）+ 内联编辑区（含推理强度选择）+ 技能列表（单文件 / ZIP 包 / 文件夹导入、新建、编辑、启停、删除）；入口在左下用户菜单，按需异步加载 |
+| `/workspace/settings` | `Workspace.vue` → `WorkspaceSettings.vue` | **模型与技能**：多模型配置列表（上限 10、默认项、启停、编辑、删除、探活）+ 内联编辑区（含推理强度选择）+ 技能列表（单文件 / ZIP 包 / 文件夹导入、新建、编辑、启停、删除）+ 密钥与隐私卡（真实加密状态、存储说明、一键清除全部密钥、最近使用记录）；入口在左下用户菜单，按需异步加载 |
 | `/help`、`/profile`、`/announcements`、`/ai-records` | — | 旧链接，重定向到对应 `/workspace/*`（`/profile` 保留 query） |
 | `/share/:token` | `SharedResume.vue` | 公开分享页，无鉴权 |
 | `/workspace/admin` | `Workspace.vue` → `Admin.vue` | 管理后台，`meta.requiresAdmin`；套 `WorkspacePage` 后留在工作区外壳内，内容区按需异步加载 |
@@ -478,7 +482,7 @@ docker compose --profile full up -d --build
 8. 修改简历数据结构时，五处同步：TS 类型、默认数据、表单组件、渲染模板、导出服务。
 9. 前端改动至少 `npm run build` + `npm test`（vitest，配置 `frontend/vitest.config.ts`）；后端至少 `pytest -q`（`backend/requirements-dev.txt` 提供 pytest）；ai-service 至少 `npm run typecheck && npm test`；涉及预览/导出的要人工验证无空白、无分页错位。
 10. 不自动提交、不自动删文件、不清理用户改动。
-11. 新增用户可控的出站 URL / 密钥 / 提示词内容，必须同时做：加密落库且不回明文、SSRF 校验、提示词注入边界（追加在系统规则之后 + 长度上限）、以及计费口径（是否消耗平台积分）。
+11. 新增用户可控的出站 URL / 密钥 / 提示词内容，必须同时做：加密落库且不回明文（密钥用独立口令，禁止复用 JWT 弱默认）、SSRF 校验、日志与异常脱敏、可查询的使用审计与一键清除、提示词注入边界（追加在系统规则之后 + 长度上限）、以及计费口径（是否消耗平台积分）。
 
 ---
 

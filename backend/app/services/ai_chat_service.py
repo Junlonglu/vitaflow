@@ -30,7 +30,7 @@ from app.services.ai_service_client import ai_service_chat_events, ai_service_ta
 from app.services.ai_task_service import create_ai_task, finish_ai_task
 from app.services.flow_points_service import precheck_flow_points
 from app.services.resume_normalization import localize_ai_text, normalize_resume_data, strip_thinking_text
-from app.services.user_ai_service import build_skills_payload, resolve_model_override
+from app.services.user_ai_service import audit_chat_use, build_skills_payload, resolve_model_override
 
 logger = logging.getLogger(__name__)
 
@@ -580,7 +580,12 @@ def _resolve_user_ai(
     模型选择器下发，用于在不改默认项的前提下临时切换自带模型。
     """
     try:
-        return resolve_model_override(db, user_id, credential_id), build_skills_payload(db, user_id)
+        override = resolve_model_override(db, user_id, credential_id)
+        skills = build_skills_payload(db, user_id)
+        if override:
+            # 审计走独立 session，不碰本轮流式请求的事务；失败只告警。
+            audit_chat_use(user_id, override)
+        return override, skills
     except Exception:
         logger.warning("读取用户自定义模型/技能失败，本轮回退平台默认", exc_info=True)
         return None, []

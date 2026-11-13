@@ -14,7 +14,7 @@ from app.models.export_record import ExportRecord
 from app.models.resume import Resume, ResumeStarter, ResumeStarterIndustryTemplate, ResumeVersion, UploadedFile
 from app.models.template import ResumeTemplate
 from app.models.user import User
-from app.models.user_ai import UserAiCredential, UserSkill
+from app.models.user_ai import UserAiAuditLog, UserAiCredential, UserSkill
 
 __all__ = [
     "AiChatMessage",
@@ -36,6 +36,7 @@ __all__ = [
     "ResumeVersion",
     "UploadedFile",
     "User",
+    "UserAiAuditLog",
     "UserAiCredential",
     "UserFeedback",
     "UserSkill",

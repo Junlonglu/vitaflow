@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue"
-import { Check, FileUp, KeyRound, LoaderCircle, Pencil, Plus, Sparkles, Star, Trash2, Upload, FolderUp, X } from "lucide-vue-next"
+import { Check, FileUp, FolderUp, History, KeyRound, LoaderCircle, Pencil, Plus, ShieldCheck, Sparkles, Star, Trash2, Upload, X } from "lucide-vue-next"
 import WorkspacePage from "@/components/workspace/WorkspacePage.vue"
 import AppDialog from "@/components/ui/dialog/AppDialog.vue"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
@@ -8,12 +8,15 @@ import Button from "@/components/ui/button/Button.vue"
 import Switch from "@/components/ui/switch/Switch.vue"
 import {
   REASONING_EFFORT_OPTIONS,
+  clearUserAiKeysApi,
   createUserSkillApi,
   createUserAiModelApi,
   deleteUserAiModelApi,
   deleteUserSkillApi,
+  getUserAiSecurityApi,
   importUserSkillApi,
   importUserSkillPackageApi,
+  listUserAiAuditLogsApi,
   listUserAiModelsApi,
   listUserSkillsApi,
   setDefaultUserAiModelApi,
@@ -24,8 +27,10 @@ import {
   type CredentialTestResult,
   type ReasoningEffort,
   type SkillPackageResult,
+  type UserAiAuditLog,
   type UserAiCredential,
   type UserAiCredentialInput,
+  type UserAiSecurityInfo,
   type UserSkill,
   type UserSkillInput,
 } from "@/api/userAi"
@@ -74,8 +79,47 @@ const importing = ref(false)
 
 const activeSkillCount = computed(() => skills.value.filter((item) => item.enabled).length)
 
+// 密钥信任面板：状态来自服务端真实配置，不是静态承诺。
+const securityInfo = ref<UserAiSecurityInfo | null>(null)
+const auditLogs = ref<UserAiAuditLog[]>([])
+const clearKeysOpen = ref(false)
+const clearingKeys = ref(false)
+
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
+}
+
+function formatAuditTime(value: string | null) {
+  if (!value) return "—"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "—"
+  return date.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+}
+
+async function loadTrustPanel() {
+  try {
+    const [info, logs] = await Promise.all([getUserAiSecurityApi(), listUserAiAuditLogsApi()])
+    securityInfo.value = info
+    auditLogs.value = logs.items
+  } catch {
+    // 隐私面板是增强信息：旧后端或网络异常都不该阻断设置页主流程。
+  }
+}
+
+async function clearAllKeys() {
+  clearingKeys.value = true
+  try {
+    const result = await clearUserAiKeysApi()
+    applyModelList(await listUserAiModelsApi())
+    closeModelEditor()
+    await loadTrustPanel()
+    showGlobalToast(`已清除 ${result.removed} 条模型配置及密钥`)
+  } catch (error) {
+    showGlobalToast(errorMessage(error, "清除失败"), "error")
+  } finally {
+    clearingKeys.value = false
+    clearKeysOpen.value = false
+  }
 }
 
 function applyModelList(payload: { items: UserAiCredential[]; default_id: number | null }) {
@@ -94,6 +138,7 @@ async function load() {
   } finally {
     loading.value = false
   }
+  void loadTrustPanel()
 }
 
 onMounted(load)
@@ -177,6 +222,7 @@ async function saveModel() {
     }
     applyModelList(await listUserAiModelsApi())
     closeModelEditor()
+    void loadTrustPanel()
     showGlobalToast(isEdit ? "模型配置已保存" : "模型配置已添加")
   } catch (error) {
     showGlobalToast(errorMessage(error, "保存失败"), "error")
@@ -196,6 +242,7 @@ async function testModel() {
       ? await testUserAiModelApi(editingModel.value.id, probe)
       : await testUnsavedModelApi(probe)
     showGlobalToast(testResult.value.detail, testResult.value.ok ? "success" : "error")
+    void loadTrustPanel()
   } catch (error) {
     showGlobalToast(errorMessage(error, "测试连接失败"), "error")
   } finally {
@@ -211,6 +258,7 @@ async function removeModel() {
     applyModelList(await listUserAiModelsApi())
     if (editingModel.value?.id === target.id) closeModelEditor()
     showGlobalToast("模型配置已删除")
+    void loadTrustPanel()
   } catch (error) {
     showGlobalToast(errorMessage(error, "删除失败"), "error")
   } finally {
@@ -222,6 +270,7 @@ async function setDefault(model: UserAiCredential) {
   try {
     applyModelList(await setDefaultUserAiModelApi(model.id))
     showGlobalToast(`已将「${model.provider_label}」设为默认`)
+    void loadTrustPanel()
   } catch (error) {
     showGlobalToast(errorMessage(error, "设置失败"), "error")
   }
@@ -555,8 +604,69 @@ async function handleSkillFolder(event: Event) {
           </ul>
         </section>
 
+        <!-- 密钥与隐私：说明真实存储方式、给出可验证的清除与审计 -->
+        <section class="mt-4 rounded-xl border border-zinc-200 bg-white p-5 sm:p-6">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <ShieldCheck class="h-4 w-4 shrink-0 text-zinc-400" />
+                <h2 class="text-[15px] font-medium text-zinc-900">密钥与隐私</h2>
+                <span
+                  v-if="securityInfo"
+                  class="shrink-0 rounded-md px-1.5 py-0.5 text-[10.5px]"
+                  :class="securityInfo.mode === 'dedicated' ? 'bg-zinc-100 text-zinc-600' : 'bg-amber-50 text-amber-700'"
+                >
+                  {{ securityInfo.mode === "dedicated" ? `独立密钥 · ${securityInfo.active_kid}` : "开发回退密钥" }}
+                </span>
+              </div>
+              <p class="mt-1.5 text-[12.5px] leading-relaxed text-zinc-500">
+                模型调用由服务端代理，因此服务端必须能解密你的 API Key。密钥以 Fernet 密文存库，页面与接口只返回掩码；日志、异常栈与厂商错误回显都会自动脱敏。
+              </p>
+            </div>
+            <Button size="sm" variant="outline" :disabled="clearingKeys || !models.length" @click="clearKeysOpen = true">
+              <Trash2 class="h-3.5 w-3.5" />
+              清除全部密钥
+            </Button>
+          </div>
+
+          <dl class="mt-4 grid grid-cols-1 gap-x-6 gap-y-3 border-t border-zinc-100 pt-4 text-[12px] leading-relaxed sm:grid-cols-2">
+            <div>
+              <dt class="text-zinc-400">存哪里</dt>
+              <dd class="mt-0.5 text-zinc-600">{{ securityInfo?.storage || "服务端数据库，Fernet 密文" }}</dd>
+            </div>
+            <div>
+              <dt class="text-zinc-400">谁能看到</dt>
+              <dd class="mt-0.5 text-zinc-600">页面只显示掩码；明文仅出现在服务端发往模型厂商的那一次请求中</dd>
+            </div>
+            <div>
+              <dt class="text-zinc-400">如何彻底删除</dt>
+              <dd class="mt-0.5 text-zinc-600">点「清除全部密钥」删除全部模型配置与密钥，不可恢复；技能不受影响</dd>
+            </div>
+            <div>
+              <dt class="text-zinc-400">密钥轮换</dt>
+              <dd class="mt-0.5 text-zinc-600">加密口令与登录密钥相互独立；部署方轮换后打开本页会自动升级历史密文</dd>
+            </div>
+          </dl>
+
+          <div class="mt-4 border-t border-zinc-100 pt-4">
+            <div class="flex flex-wrap items-center gap-2 text-[12.5px] font-medium text-zinc-700">
+              <History class="h-3.5 w-3.5 text-zinc-400" />
+              最近使用记录
+              <span class="font-normal text-zinc-400">仅你自己可见</span>
+            </div>
+            <p v-if="!auditLogs.length" class="mt-2 text-[12px] text-zinc-400">暂无记录。添加、修改、测试或调用自定义模型后会出现在这里。</p>
+            <ul v-else class="mt-2 divide-y divide-zinc-100">
+              <li v-for="item in auditLogs.slice(0, 8)" :key="item.id" class="flex items-baseline gap-3 py-2 text-[12px]">
+                <span class="shrink-0 font-mono text-[11px] text-zinc-400">{{ formatAuditTime(item.create_time) }}</span>
+                <span class="shrink-0 text-zinc-700">{{ item.action_label }}</span>
+                <span class="truncate text-zinc-400">{{ item.label || item.detail }}</span>
+              </li>
+            </ul>
+          </div>
+        </section>
+
         <p class="mt-4 px-1 text-[12px] leading-relaxed text-zinc-400">
-          密钥以 Fernet 密文存于服务端数据库，任何页面都只展示掩码；换掉部署密钥会使已存的密文失效，需要重新填写。
+          {{ securityInfo?.mode === "legacy" ? "当前部署尚未配置独立的 BYOK_ENCRYPTION_KEYS，仍回退到登录密钥派生；生产环境请以独立随机口令启动。" : "加密口令与登录密钥相互独立，轮换登录密钥不会影响已存的 API Key。" }}
           出于安全考虑默认只允许公网接入点，本机 / 内网网关需由部署方显式放开。
           自定义模型与技能作用于简历 Agent 对话；简历生成、导入等一次性任务仍使用平台模型，以保证结构化输出的稳定性。
         </p>
@@ -608,6 +718,14 @@ async function handleSkillFolder(event: Event) {
       confirm-text="删除"
       @update:open="(value) => { if (!value) deleteSkillTarget = null }"
       @confirm="removeSkill"
+    />
+    <ConfirmDialog
+      :open="clearKeysOpen"
+      title="清除全部模型配置与密钥？"
+      :description="`将删除 ${models.length} 条模型配置及已保存的 API Key，此操作不可撤销。自定义技能不受影响。`"
+      confirm-text="全部清除"
+      @update:open="(value) => { if (!value) clearKeysOpen = false }"
+      @confirm="clearAllKeys"
     />
   </WorkspacePage>
 </template>

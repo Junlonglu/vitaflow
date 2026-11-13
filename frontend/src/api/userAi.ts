@@ -88,6 +88,35 @@ export interface SkillPackageResult {
   warnings: string[]
 }
 
+/** 当前部署的密钥存储状态；不含任何口令或密文。 */
+export interface UserAiSecurityInfo {
+  mode: "dedicated" | "legacy"
+  active_kid: string
+  rotation_keys: number
+  legacy_decrypt_enabled: boolean
+  weak_default: boolean
+  storage: string
+  visibility: string
+  rotation: string
+  clearable: boolean
+  audited: boolean
+}
+
+export interface UserAiAuditLog {
+  id: number
+  action: string
+  action_label: string
+  credential_id: number | null
+  label: string
+  detail: string
+  create_time: string | null
+}
+
+export interface UserAiAuditLogList {
+  items: UserAiAuditLog[]
+  total: number
+}
+
 // ---- 模型配置（支持多条） ----
 
 export const listUserAiModelsApi = () =>
@@ -151,3 +180,15 @@ export const importUserSkillPackageApi = (file?: File, files?: File[]) => {
   }
   return request.post<SkillPackageResult, SkillPackageResult>("/user-ai/skills/import-package", form)
 }
+
+// ---- 密钥存储说明、使用审计与一键清除 ----
+
+export const getUserAiSecurityApi = () =>
+  request.get<UserAiSecurityInfo, UserAiSecurityInfo>("/user-ai/security")
+
+export const listUserAiAuditLogsApi = (limit = 12) =>
+  request.get<UserAiAuditLogList, UserAiAuditLogList>("/user-ai/audit-logs", { params: { limit } })
+
+/** 彻底删除当前用户全部模型配置与已存密钥。 */
+export const clearUserAiKeysApi = () =>
+  request.delete<{ removed: number }, { removed: number }>("/user-ai/keys")

@@ -5,12 +5,16 @@ service 层跑真实 SQLite 内存库；路由层用 TestClient 断言「密钥�
 """
 from __future__ import annotations
 
+import base64
+import hashlib
 import io
+import logging
 import unittest
 import zipfile
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+from cryptography.fernet import Fernet
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -18,12 +22,15 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.api.user_ai import router as user_ai_router
+from app.core import crypto
+from app.core.config import DEFAULT_JWT_SECRET_KEY
 from app.core.crypto import decrypt_secret, encrypt_secret, mask_secret
 from app.core.database import Base, get_db
 from app.core.exceptions import register_exception_handlers
+from app.core.redact import SecretRedactingFilter, redact
 from app.core.security import get_current_user
 from app.core.url_guard import literal_public_url
-from app.models.user_ai import UserAiCredential, UserSkill
+from app.models.user_ai import UserAiAuditLog, UserAiCredential, UserSkill
 from app.schemas.user_ai import UserAiCredentialIn, UserSkillIn, UserSkillUpdateIn
 from app.services import user_ai_service as svc
 
@@ -36,8 +43,24 @@ def _session():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    Base.metadata.create_all(engine, tables=[UserAiCredential.__table__, UserSkill.__table__])
+    Base.metadata.create_all(
+        engine,
+        tables=[UserAiCredential.__table__, UserSkill.__table__, UserAiAuditLog.__table__],
+    )
     return sessionmaker(bind=engine, autoflush=False, autocommit=False)()
+
+
+def _fernet_for(secret: str) -> Fernet:
+    return Fernet(base64.urlsafe_b64encode(hashlib.sha256(secret.encode("utf-8")).digest()))
+
+
+def _jwt_legacy_token(jwt_secret: str, plain: str) -> str:
+    """旧版 0036/0037 的密文：fernet:<token>，密钥由 JWT_SECRET_KEY 派生。"""
+    return "fernet:" + _fernet_for(f"vitaflow-byok::{jwt_secret}").encrypt(plain.encode()).decode()
+
+
+def _kid_token(kid: str, secret: str, plain: str) -> str:
+    return f"fernet:{kid}:" + _fernet_for(f"vitaflow-byok::{kid}::{secret}").encrypt(plain.encode()).decode()
 
 
 def _credential(**kwargs):
@@ -76,6 +99,86 @@ class CryptoTest(unittest.TestCase):
 
     def test_ciphertext_never_contains_plaintext(self):
         self.assertNotIn("sk-test-abcdefgh-1234", encrypt_secret("sk-test-abcdefgh-1234"))
+
+
+class CryptoRotationTest(unittest.TestCase):
+    """独立密钥、多版本轮换、旧密文兼容与弱默认拒绝。"""
+
+    def test_dedicated_key_writes_kid_and_reads_old_versions(self):
+        with patch.object(crypto, "settings") as fake:
+            fake.byok_encryption_keys = "v2=new-secret-aaaa,v1=old-secret-bbbb"
+            fake.jwt_secret_key = "jwt-x"
+            self.assertEqual(crypto.active_kid(), "v2")
+            self.assertEqual(crypto.encryption_status()["mode"], "dedicated")
+            self.assertEqual(crypto.validate_encryption_config(strict=True), "")
+
+            token = crypto.encrypt_secret("sk-new-12345678")
+            self.assertTrue(token.startswith("fernet:v2:"))
+            self.assertEqual(crypto.decrypt_secret(token), "sk-new-12345678")
+            self.assertFalse(crypto.needs_rotation(token))
+
+            # 上一把口令、以及由 JWT 派生的旧格式，都还能解。
+            self.assertEqual(
+                crypto.decrypt_secret(_kid_token("v1", "old-secret-bbbb", "sk-old-87654321")),
+                "sk-old-87654321",
+            )
+            self.assertEqual(
+                crypto.decrypt_secret(_jwt_legacy_token("jwt-x", "sk-legacy-1111")),
+                "sk-legacy-1111",
+            )
+            self.assertTrue(crypto.needs_rotation(_jwt_legacy_token("jwt-x", "x")))
+            self.assertEqual(crypto.decrypt_secret("fernet:v9:garbage"), "")
+
+    def test_weak_default_is_rejected_in_production(self):
+        with patch.object(crypto, "settings") as fake:
+            fake.byok_encryption_keys = ""
+            fake.jwt_secret_key = DEFAULT_JWT_SECRET_KEY
+            self.assertTrue(crypto.encryption_status()["weak_default"])
+            with self.assertRaises(crypto.ByokKeyError):
+                crypto.validate_encryption_config(strict=True)
+            self.assertIn("BYOK_ENCRYPTION_KEYS", crypto.validate_encryption_config(strict=False))
+
+    def test_non_default_jwt_is_warned_but_allowed(self):
+        with patch.object(crypto, "settings") as fake:
+            fake.byok_encryption_keys = ""
+            fake.jwt_secret_key = "a-real-random-secret"
+            self.assertIn("建议配置", crypto.validate_encryption_config(strict=True))
+
+    def test_malformed_keyring_is_rejected(self):
+        for value in ("no-equals", "legacy=x", "v1=x,v1=y", "=secret", "bad kid!=x"):
+            with patch.object(crypto, "settings") as fake:
+                fake.byok_encryption_keys = value
+                fake.jwt_secret_key = "x"
+                with self.assertRaises(crypto.ByokKeyError, msg=value):
+                    crypto.active_kid()
+
+
+class RedactTest(unittest.TestCase):
+    def test_redacts_headers_json_and_query_params(self):
+        key = "sk-abcdefghijklmnop"
+        text = f'Authorization: Bearer {key} | {{"api_key": "{key}"}} | https://x/v1?key={key}'
+        cleaned = redact(text)
+        self.assertNotIn(key, cleaned)
+        self.assertIn("[REDACTED]", cleaned)
+        self.assertIn("https://x/v1", cleaned)
+
+    def test_known_plaintext_is_removed_even_without_key_name(self):
+        self.assertNotIn("hunter2-long-secret", redact("boom hunter2-long-secret", ["hunter2-long-secret"]))
+
+    def test_logging_filter_scrubs_message_and_args(self):
+        record = logging.LogRecord("t", logging.ERROR, "", 0, "api_key=%s", ("sk-abcdefghijkl",), None)
+        self.assertTrue(SecretRedactingFilter().filter(record))
+        self.assertNotIn("sk-abcdefghijkl", record.getMessage())
+
+    def test_logging_filter_scrubs_exception_traceback(self):
+        import sys
+
+        try:
+            raise RuntimeError("Bearer sk-traceback-abcdefgh")
+        except RuntimeError:
+            record = logging.LogRecord("t", logging.ERROR, "", 0, "failed", (), sys.exc_info())
+        self.assertTrue(SecretRedactingFilter().filter(record))
+        self.assertNotIn("sk-traceback-abcdefgh", record.exc_text or "")
 
 
 class UrlGuardTest(unittest.TestCase):
@@ -374,6 +477,37 @@ class ProbeCredentialTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(ok)
         self.assertIn("对话请求", detail)
 
+    async def test_error_body_never_echoes_api_key(self):
+        import httpx
+
+        key = "sk-probe-secret-abcdefgh"
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            if req.url.path.endswith("/models"):
+                return httpx.Response(404)
+            return httpx.Response(400, text=f"bad request api_key={key} Authorization: Bearer {key}")
+
+        with patch("app.services.user_ai_service.probe_public_url", return_value=(True, "")):
+            ok, detail, _ = await svc.probe_credential(BASE_URL, key, "m", transport=httpx.MockTransport(handler))
+        self.assertFalse(ok)
+        self.assertNotIn(key, detail)
+
+    async def test_unexpected_exception_is_sanitized(self):
+        import httpx
+
+        key = "sk-probe-secret-abcdefgh"
+
+        def handler(_req: httpx.Request) -> httpx.Response:
+            raise ValueError(f"leaked {key}")
+
+        with (
+            patch("app.services.user_ai_service.probe_public_url", return_value=(True, "")),
+            patch("app.services.user_ai_service.logger"),
+        ):
+            ok, detail, _ = await svc.probe_credential(BASE_URL, key, "m", transport=httpx.MockTransport(handler))
+        self.assertFalse(ok)
+        self.assertNotIn(key, detail)
+
 
 def _client(db, user_id: int = 1):
     app = FastAPI()
@@ -547,6 +681,81 @@ class UserAiEndpointTest(unittest.TestCase):
         self.assertEqual(_client(self.db).delete("/api/user-ai/models/999").json()["code"], 404)
         created = _client(self.db).post("/api/user-ai/models", json=_credential().model_dump()).json()["data"]
         self.assertEqual(_client(self.db, user_id=2).delete(f"/api/user-ai/models/{created['id']}").json()["code"], 404)
+
+
+class AuditAndClearTest(unittest.TestCase):
+    def setUp(self):
+        self.db = _session()
+
+    def tearDown(self):
+        self.db.close()
+
+    def test_audit_is_user_scoped_and_never_stores_key(self):
+        svc.record_audit(
+            self.db, 1, "credential.create", credential_id=7,
+            label="我的模型", detail="api_key=sk-abcdefghijklmnop",
+        )
+        svc.record_audit(self.db, 2, "chat.use", label="别人的模型")
+        rows = svc.list_audit_logs(self.db, 1)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].action, "credential.create")
+        self.assertNotIn("sk-abcdefghijklmnop", rows[0].detail)
+        self.assertEqual(svc.AUDIT_ACTION_LABELS["chat.use"], "对话使用该模型")
+
+    def test_rotation_upgrades_legacy_ciphertext(self):
+        with patch.object(crypto, "settings") as fake:
+            fake.byok_encryption_keys = "v2=rotated-secret"
+            fake.jwt_secret_key = "jwt-legacy"
+            row = svc.create_credential(self.db, 1, _credential())
+            row.api_key_encrypted = _jwt_legacy_token("jwt-legacy", "sk-abcdefgh-1234")
+            self.db.commit()
+            self.assertEqual(svc.rotate_legacy_ciphertexts(self.db, 1), 1)
+            self.assertTrue(row.api_key_encrypted.startswith("fernet:v2:"))
+            self.assertEqual(crypto.decrypt_secret(row.api_key_encrypted), "sk-abcdefgh-1234")
+            self.assertEqual(svc.resolve_model_override(self.db, 1)["api_key"], "sk-abcdefgh-1234")
+
+    def test_clear_all_only_removes_current_users_configs(self):
+        svc.create_credential(self.db, 1, _credential())
+        svc.create_credential(self.db, 1, _credential(model="second"))
+        svc.create_credential(self.db, 2, _credential())
+        self.assertEqual(svc.clear_all_credentials(self.db, 1), 2)
+        self.assertEqual(len(svc.list_credentials(self.db, 1)), 0)
+        self.assertEqual(len(svc.list_credentials(self.db, 2)), 1)
+
+
+class SecurityEndpointTest(unittest.TestCase):
+    def setUp(self):
+        self.db = _session()
+
+    def tearDown(self):
+        self.db.close()
+
+    def test_security_status_never_leaks_secrets(self):
+        data = _client(self.db).get("/api/user-ai/security").json()["data"]
+        self.assertIn(data["mode"], ("dedicated", "legacy"))
+        self.assertTrue(data["clearable"])
+        self.assertTrue(data["audited"])
+        self.assertNotIn("rotated-secret", str(data))
+        self.assertNotIn(DEFAULT_JWT_SECRET_KEY, str(data))
+
+    def test_crud_is_audited_and_clear_removes_everything(self):
+        client = _client(self.db)
+        client.post("/api/user-ai/models", json=_credential().model_dump())
+        logs = client.get("/api/user-ai/audit-logs").json()["data"]
+        self.assertIn("credential.create", [item["action"] for item in logs["items"]])
+        self.assertEqual(logs["items"][0]["action_label"], "添加模型配置")
+        self.assertNotIn("sk-test-abcdefgh-1234", str(logs))
+
+        cleared = client.delete("/api/user-ai/keys").json()["data"]
+        self.assertEqual(cleared["removed"], 1)
+        self.assertEqual(client.get("/api/user-ai/models").json()["data"]["total"], 0)
+        actions = [item["action"] for item in client.get("/api/user-ai/audit-logs").json()["data"]["items"]]
+        self.assertIn("keys.clear_all", actions)
+
+    def test_audit_logs_are_not_visible_across_users(self):
+        client = _client(self.db)
+        client.post("/api/user-ai/models", json=_credential().model_dump())
+        self.assertEqual(_client(self.db, user_id=2).get("/api/user-ai/audit-logs").json()["data"]["total"], 0)
 
 
 if __name__ == "__main__":

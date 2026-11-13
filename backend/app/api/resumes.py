@@ -36,7 +36,7 @@ from app.services.resume_service import (
     list_resumes,
     update_resume,
 )
-from app.services.resume_starter_service import create_resume_from_starter
+from app.services.resume_starter_render import create_resume_from_starter
 from app.services.resume_share_service import (
     generate_share_token,
     normalize_custom_share_token,

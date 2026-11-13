@@ -54,6 +54,32 @@ POST {PI_FASTAPI_BASE_URL}/api/ai/service/usage     # 头：x-ai-service-token
 
 FastAPI 侧按 `pi_model_ref` 反查 `AiModelConfig` 取该模型的 chat 计费率（`billing_override`），走与旧 LangChain 链路**同一条** task + `settle_task_flow_points` 账本路径入账（对账口径一致）；未映射的 ref 按默认 ai_chat 规则兜底计费，不丢 charge。
 
+## 模型目录管理台（参考 magpie）
+
+`.pi-agent/models.json` 仍是唯一事实来源；管理台（AI 设置 → 模型目录）通过 FastAPI 代理维护它，能力对标 magpie 的供应商卡片：
+
+| 功能 | 端点 | 说明 |
+|------|------|------|
+| 获取上游模型 | `GET /v1/catalog/providers/:key/remote-models` + `POST .../import-models` | 拉上游 `/v1/models`，勾选导入（只追加，不覆盖已导入项） |
+| 补全模型资料 | `POST /v1/catalog/providers/:key/sync-dev` | 从 models.dev 填充上下文窗口/最大输出/多模态/价格（**只填空白，不覆盖手填值**）；服务商标识用 models.dev 官方 id（如 `deepseek`）即可匹配 |
+| 测试连通性 | `POST /v1/catalog/providers/:key/probe` | 16-token 最小请求，返回时延或错误 |
+| 查余额 | `GET /v1/catalog/providers/:key/balance` | DeepSeek/Moonshot/OpenRouter/智谱/硕方/阶跃等内置适配（60s 缓存，失败回落上次读数） |
+| 查套餐用量 | `GET /v1/catalog/providers/:key/plan-usage` | 套餐型厂商（火山方舟 Coding/Agent Plan、阿里/腾讯 Token Plan）按窗口展示已用百分比；需要账号级 AK/SK（在服务商表单里填，不随推理请求发送） |
+
+套餐识别来自接口地址特征（`ark.*.volces.com/api/coding|plan`、`token-plan.*.maas.aliyuncs.com`、`tencentmaas.com/plan`），无需额外开关。三家签名实现（火山 V4、阿里 ACS3、腾讯 TC3）有 magpie 同源的固定测试向量兜底。
+
+## 路由组（选型期静默 failover）
+
+多个目录模型可以绑成一个 `group/<id>` 引用（管理台「路由组」板块维护，落在 models.json 的 `routing_groups`）。模型策略绑定组引用后：
+
+- **选型期 failover**：每次对话开始前从组内挑一个可用成员；失败过的成员进入 5 分钟冷却，后续轮次自动跳过。刻意不做回合中途换上游——流式事件已发出，重试会重复可见内容。
+- **会话粘性**：同一会话 30 分钟内固定用同一个成员，避免切换上游浪费厂商的提示词缓存。
+- **策略**：`order`（按列表顺序）、`rotate`（不同会话轮换）、`usage`（优先用得最少的）。
+- **计费**：成员模型在后台没有单独映射时，按组引用对应的模型策略结算，组内扣费规则保持一致。
+- **能力**：组的多模态 = 成员交集（任一成员不支持图片即不支持）；上下文窗口取成员最小值。
+
+组被模型策略引用时禁止删除（409）；成员模型被删除后需回编辑组剔除。
+
 ## 运行
 
 ```bash

@@ -18,14 +18,17 @@ configure_logging()
 logger = logging.getLogger(__name__)
 access_logger = logging.getLogger("vitaflow.access")
 
-_PRODUCTION_ENVS = {"production", "prod", "staging"}
-
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    logger.info("Starting %s backend env=%s debug=%s", settings.app_name, settings.app_env, settings.app_debug)
+    logger.info(
+        "Starting %s backend env=%s debug=%s",
+        settings.app_name,
+        settings.app_env,
+        settings.debug_enabled,
+    )
     try:
-        warning = validate_encryption_config(strict=settings.app_env.strip().lower() in _PRODUCTION_ENVS)
+        warning = validate_encryption_config(strict=settings.is_production)
         if warning:
             logger.warning("BYOK 加密配置：%s", warning)
     except ByokKeyError as exc:
@@ -35,7 +38,7 @@ async def lifespan(_: FastAPI):
     logger.info("Stopping %s backend", settings.app_name)
 
 
-app = FastAPI(title=settings.app_name, debug=settings.app_debug, lifespan=lifespan)
+app = FastAPI(title=settings.app_name, debug=settings.debug_enabled, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

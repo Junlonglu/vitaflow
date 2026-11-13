@@ -7,6 +7,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_JWT_SECRET_KEY = "please_change_this_secret_key"
 
+# 非开发环境（生产/预发）集合：这些环境下不回显异常原文，也不允许打开调试模式。
+PRODUCTION_ENVS = frozenset({"production", "prod", "staging"})
+
 
 class Settings(BaseSettings):
     app_name: str = "VitaFlow"
@@ -14,7 +17,10 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8000
-    app_debug: bool = True
+    # 默认关闭。打开后 Starlette 会把 traceback 直接回给前端（连异常处理器都不
+    # 经过），所以本地开发需在 .env 里显式写 APP_DEBUG=true；生产/预发即使写
+    # 成 true 也不生效，见 debug_enabled。
+    app_debug: bool = False
 
     log_level: str = "INFO"
     uvicorn_log_level: str = "INFO"
@@ -111,6 +117,21 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:5173"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env.strip().lower() in PRODUCTION_ENVS
+
+    @property
+    def debug_enabled(self) -> bool:
+        """调试模式的实际开关：生产/预发一律关闭。
+
+        ``APP_DEBUG`` 只是「是否允许开」的配置项，真正能否打开由环境决定。
+        原因是 FastAPI 的 ``debug=True`` 会挂在 Starlette 的 ServerErrorMiddleware
+        上，未捕获异常直接返回 traceback HTML，``@app.exception_handler(Exception)``
+        根本不会被调用——等于把调用栈和源码片段发给前端。
+        """
+        return self.app_debug and not self.is_production
 
     @property
     def database_url(self) -> str:

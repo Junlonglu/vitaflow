@@ -10,10 +10,6 @@ from app.core.response import error_response
 
 logger = logging.getLogger(__name__)
 
-# 与 main.py 的生产环境判定保持一致：即使误开了 APP_DEBUG，生产/预发也不回显
-# 异常原文，避免 SQL、路径、驱动错误泄漏到前端。
-_PRODUCTION_ENVS = {"production", "prod", "staging"}
-
 FIELD_NAMES = {
     "email": "邮箱",
     "password": "密码",
@@ -74,9 +70,9 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(Exception)
     async def generic_exception_handler(request: Request, exc: Exception):
         # 细节只进日志：`str(exc)` 里可能是 SQL 语句、文件路径、驱动返回码，
-        # 直接回给前端等于把内部结构送出去。调试环境保留原文，方便本地定位。
+        # 直接回给前端等于把内部结构送出去。调试环境保留原文，方便本地定位；
+        # settings.debug_enabled 已在生产/预发上强制为 False。
         logger.exception("Unhandled exception while processing %s %s", request.method, request.url.path)
-        is_production = settings.app_env.strip().lower() in _PRODUCTION_ENVS
-        if settings.app_debug and not is_production:
+        if settings.debug_enabled:
             return error_response(str(exc) or exc.__class__.__name__, 500, 500)
         return error_response("服务器开小差了，请稍后重试", 500, 500)

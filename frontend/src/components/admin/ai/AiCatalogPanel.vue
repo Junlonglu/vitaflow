@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { Check, DatabaseZap, Download, Eye, EyeOff, KeyRound, Pencil, Plus, Server, Trash2, Zap } from "lucide-vue-next"
-import { computed, ref } from "vue"
+import { Check, DatabaseZap, Download, Eye, EyeOff, KeyRound, Pencil, Plus, Server, Trash2, Wallet, Zap } from "lucide-vue-next"
+import { computed, ref, watch } from "vue"
 import Button from "@/components/ui/button/Button.vue"
 import Select from "@/components/ui/select/Select.vue"
 import {
   getAdminCatalogEnvKeysApi,
+  getAdminCatalogProviderBalanceApi,
   getAdminRemoteModelsApi,
   probeAdminCatalogModelApi,
+  type AdminBalanceSnapshot,
   type AdminCatalogProvider,
   type AdminCatalogProviderWrite,
   type AdminCatalogModelWrite,
@@ -262,11 +264,43 @@ async function probeModel(providerKey: string, modelId: string) {
   }
 }
 
+// ---- 余额展示：每张可编辑卡片拉一次（AI 服务侧 60s 缓存），失败静默。
+const balances = ref<Record<string, AdminBalanceSnapshot | "loading">>({})
+const balancesLoaded = ref(false)
+
+async function loadBalances(providers: AdminCatalogProvider[]) {
+  for (const provider of providers) {
+    if (!provider.editable || balances.value[provider.key]) continue
+    balances.value[provider.key] = "loading"
+    try {
+      balances.value[provider.key] = await getAdminCatalogProviderBalanceApi(provider.key)
+    } catch {
+      delete balances.value[provider.key]
+    }
+  }
+  balancesLoaded.value = true
+}
+
 function onRefresh() {
+  balancesLoaded.value = false
+  balances.value = {}
   envKeysLoaded.value = false
   void loadEnvKeys()
   emit("refresh")
 }
+
+function balanceOf(key: string): AdminBalanceSnapshot | null {
+  const value = balances.value[key]
+  return value && value !== "loading" ? value : null
+}
+
+watch(
+  () => props.providers.map((provider) => provider.key).join(","),
+  () => {
+    if (props.providerMode === "real" && props.providers.length) void loadBalances(props.providers)
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -294,6 +328,9 @@ function onRefresh() {
           </div>
           <p class="mt-1 truncate text-xs text-zinc-400" :title="provider.base_url">{{ provider.base_url }}</p>
           <p v-if="provider.api_key_masked" class="mt-0.5 flex items-center gap-1 text-xs text-zinc-400"><KeyRound class="h-3 w-3 shrink-0" />Key {{ provider.api_key_masked }}</p>
+          <p v-if="balances[provider.key] === 'loading'" class="mt-0.5 text-xs text-zinc-300">余额查询中…</p>
+          <p v-else-if="balanceOf(provider.key)?.ok" class="mt-0.5 flex items-center gap-1 text-xs font-medium text-zinc-600" :title="`${balanceOf(provider.key)!.error ?? '余额读数'} · 读取于 ${balanceOf(provider.key)!.as_of.slice(0, 16).replace('T', ' ')}`"><Wallet class="h-3 w-3 shrink-0 text-zinc-400" />余额 {{ balanceOf(provider.key)!.display }}<span v-if="balanceOf(provider.key)!.stale" class="font-normal text-amber-600">（上次读数）</span></p>
+          <p v-else-if="balanceOf(provider.key)?.error && provider.api_key_masked" class="mt-0.5 flex items-center gap-1 text-xs text-zinc-300" :title="balanceOf(provider.key)!.error ?? ''"><Wallet class="h-3 w-3 shrink-0" />余额未知</p>
         </div>
         <div v-if="provider.editable && !fauxProvider" class="flex shrink-0 items-center gap-1">
           <button class="rounded-full p-1.5 text-zinc-400 transition-all hover:bg-zinc-100 hover:text-zinc-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50" title="从上游拉取模型列表" :disabled="syncingDevKey !== null" @click="openRemoteDialog(provider.key)"><Download class="h-3.5 w-3.5" /></button>

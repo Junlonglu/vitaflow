@@ -38,11 +38,20 @@ export interface CatalogModel {
   meta?: CatalogModelMeta;
 }
 
+/** Per-provider balance query declaration (see balance.ts); file-only config. */
+export interface CatalogBalanceConfig {
+  url?: string;
+  path?: string;
+  method?: "GET" | "POST";
+  currency?: string;
+}
+
 export interface CatalogProvider {
   name?: string;
   baseUrl: string;
   apiKey?: string;
   api?: string;
+  balance?: CatalogBalanceConfig;
   models: CatalogModel[];
 }
 

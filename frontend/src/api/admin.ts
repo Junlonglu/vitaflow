@@ -392,6 +392,19 @@ export const probeAdminCatalogModelApi = (key: string, modelId: string) =>
   request.post<AdminProbeResult, AdminProbeResult>(`/admin/ai-catalog/providers/${encodeURIComponent(key)}/probe`, {
     model_id: modelId,
   })
+export interface AdminBalanceSnapshot {
+  ok: boolean
+  currency: string
+  amount: number | null
+  display: string | null
+  as_of: string
+  stale: boolean
+  error: string | null
+}
+export const getAdminCatalogProviderBalanceApi = (key: string) =>
+  request.get<AdminBalanceSnapshot, AdminBalanceSnapshot>(
+    `/admin/ai-catalog/providers/${encodeURIComponent(key)}/balance`,
+  )
 export const getAdminPointRulesApi = () => request.get<AdminPointRule[], AdminPointRule[]>("/admin/point-rules")
 export const updateAdminPointRuleApi = (
   featureType: string,

@@ -237,6 +237,12 @@ def probe_catalog_model(provider_key: str, payload: CatalogProbe):
     )
 
 
+@router.get("/ai-catalog/providers/{provider_key}/balance")
+def get_catalog_provider_balance(provider_key: str):
+    """Key-level balance (60s cache in the AI service; stale value on refresh failure)."""
+    return success(call_catalog("GET", f"/v1/catalog/providers/{provider_key}/balance"))
+
+
 @router.post("/ai-catalog/providers")
 def create_catalog_provider(payload: CatalogProviderWrite):
     body = {"key": payload.key.strip(), "name": payload.name.strip(), "baseUrl": payload.base_url.strip(), "apiKey": payload.api_key.strip()}

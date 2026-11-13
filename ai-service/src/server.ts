@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { timingSafeEqual } from "node:crypto";
 import express from "express";
 import type { ImageContent } from "@earendil-works/pi-ai/compat";
+import { queryProviderBalance } from "./balance.js";
 import {
   CatalogError,
   fauxCatalog,
@@ -366,6 +367,25 @@ app.post("/v1/catalog/providers/:key/probe", async (req, res) => {
     if (err instanceof CatalogError) return handleCatalogError(res, err);
     console.error("[vitaflow-ai] model probe failed:", err);
     res.status(502).json({ type: "error", message: (err as Error).message || "测试模型失败" });
+  }
+});
+
+// Key-level balance (built-in vendor endpoints or a custom `balance` config in
+// models.json). Read-only and cached server-side, so the admin card can poll
+// without hammering the vendor.
+app.get("/v1/catalog/providers/:key/balance", async (req, res) => {
+  if (!authorize(req)) return void res.status(401).json({ type: "error", message: "未授权：需要有效的服务令牌" });
+  if (config.provider === "faux") return void res.status(400).json({ type: "error", message: "faux 模式下无真实余额" });
+  try {
+    const key = validateProviderKey(req.params.key);
+    const catalog = await readCatalog(AGENT_DIR);
+    const provider = requireEditableProvider(catalog, key);
+    const snapshot = await queryProviderBalance(key, provider);
+    res.json(snapshot);
+  } catch (err) {
+    if (err instanceof CatalogError) return handleCatalogError(res, err);
+    console.error("[vitaflow-ai] balance query failed:", err);
+    res.status(502).json({ type: "error", message: (err as Error).message || "余额查询失败" });
   }
 });
 

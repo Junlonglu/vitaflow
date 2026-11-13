@@ -51,7 +51,7 @@ Node ai-service :8300  ── pi-agent 运行时，无数据库权限
 
 三种端口布局：开发态 `5173 / 8000 / 8300`；全栈态 `8080(Nginx) / 8000 / 8300`，Nginx 把 `/api` 反代到 backend。
 
-**关键设计约束**：前端**不直连** ai-service；ai-service **不连数据库**；模型 API Key 只存在于 ai-service 进程。
+**关键设计约束**：前端**不直连** ai-service；ai-service **不连数据库**；平台模型 API Key 只存在于 ai-service 进程。用户自带（BYOK）密钥是唯一例外：由 FastAPI 用 Fernet 加密存入 MySQL，明文只在「服务间 /v1/chat 请求」与 ai-service 当次进程内存中出现，浏览器永远只拿到掩码。
 
 ---
 
@@ -125,8 +125,11 @@ vitaflow/
 - 历史：`GET /ai/resume-chat/{resume_id}/messages?session_id=`（省略 session_id 时落在该简历最近一次会话，兼容旧前端）
 - **服务间回调（供 ai-service 调用）**：`POST /ai/service/tool/update-basics-field`、`POST /ai/service/tool/update-section`、`POST /ai/service/tool/propose-change`、`GET /ai/service/tool/get-resume-context`、`POST /ai/service/tool/search-evidence`、`POST /ai/service/usage`
 
-**用户自带模型与技能 `user_ai.py`**（Ticket 17）
-`GET|PUT|DELETE /user-ai/credential`（每个用户一条 BYOK 凭证；读接口只回掩码）、`POST /user-ai/credential/test`（探活：优先 `/models`，404 时退回 1-token 对话请求）、`GET|POST /user-ai/skills`、`POST /user-ai/skills/import`（上传 .md/.txt，解析 frontmatter）、`PATCH|DELETE /user-ai/skills/{id}`（含启用开关）。所有查询带 `user_id`，跨用户访问返回 404。
+**用户自带模型与技能 `user_ai.py`**（Ticket 17 / 18）
+- **多模型配置**：`GET|POST /user-ai/models`、`PUT|DELETE /user-ai/models/{id}`、`POST /user-ai/models/{id}/default`（设为默认）、`POST /user-ai/models/{id}/test` 与 `POST /user-ai/models/test`（未保存配置探活）。每用户最多 10 条，任意时刻恰好一条默认项；删除/停用默认项会自动补位。对话请求可带 `user_model_id`（正数指定某条自带模型、`0` 明确使用平台模型、省略则按服务端默认解析），在编辑器模型选择器里与平台模型同列展示。
+- **推理强度**：每条配置存 `reasoning_effort`（`auto/off/minimal/low/medium/high/xhigh`）；非 auto 档透传到 ai-service，注册模型时置 `reasoning=true` + `compat.supportsReasoningEffort`，并把 thinkingLevel 交给 `createAgentSession`，最终映射为 OpenAI 兼容端点的 `reasoning_effort`。
+- **技能**：`GET|POST /user-ai/skills`、`PATCH|DELETE /user-ai/skills/{id}`（含启用开关）、`POST /user-ai/skills/import`（单个 .md/.txt/.zip）、`POST /user-ai/skills/import-package`（ZIP 或 `webkitdirectory` 文件夹，多文件按 `SKILL.md` 分组，附属文本拼为「参考资料」）。
+- 旧接口 `GET|PUT|DELETE /user-ai/credential`、`POST /user-ai/credential/test` 保留兼容，语义落在「默认配置」上。读接口只回掩码；所有查询带 `user_id`，跨用户访问返回 404。
 
 **其余**
 - `shares.py`：`GET /shares/{token}`（公开分享，无需登录）
@@ -184,8 +187,8 @@ vitaflow/
 | `flow_point_transactions` | 积分流水（增减、原因、关联对象） |
 | `flow_point_redeem_codes` / `flow_point_redeem_records` | 兑换码与核销记录 |
 | `app_settings` | 站点级开关（注册开关、公告、AI 默认模型等） |
-| `user_ai_credentials` | **BYOK**：每用户一条，`api_key_encrypted`（Fernet，密钥由 `JWT_SECRET_KEY` 派生）+ `api_key_masked`、`base_url`、`model`、`enabled`、`supports_image`、上下文/输出上限；明文永不落库、永不回前端 |
-| `user_skills` | 用户上传/手写的技能：`slug`（同用户内唯一）、`name`、`description`、`instructions`、`enabled`、`source`；启用中的才拼进系统提示词 |
+| `user_ai_credentials` | **BYOK 多配置**：每用户最多 10 条，`(user_id)` 不再唯一，改由 `is_default` 标出默认项；`api_key_encrypted`（Fernet，密钥由 `JWT_SECRET_KEY` 派生）+ `api_key_masked`、`base_url`、`model`、`reasoning_effort`、`enabled`、`supports_image`、上下文/输出上限；明文永不落库、永不回前端 |
+| `user_skills` | 用户手写 / 单文件 / 技能包导入的技能：`slug`（同用户内唯一）、`name`、`description`、`instructions`、`enabled`、`source`（`manual`/`upload`/`package`）；启用中的才拼进系统提示词 |
 
 > 约定：**MySQL 表不使用物理外键**，关联靠业务字段 + 应用层校验。所有结构变更必须新增 Alembic 迁移，不改旧迁移。
 
@@ -328,20 +331,24 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 一条完整链路，跨越三层，任何一层失败都自动回落到平台默认：
 
 ```
-设置页 /workspace/settings
+设置页 /workspace/settings（多配置列表 + 内联编辑区 + 推理强度 + 技能包导入）
   → FastAPI /api/user-ai/*（Fernet 加密落库、只回掩码、SSRF 校验）
-  → 对话时 _resolve_user_ai(db, user_id) 解析 override + 启用技能
-  → ai_service_client 在 /v1/chat payload 附带 model_override / skills
-  → ai-service registerByokModel() 动态注册临时 provider（id = owner + 配置哈希）
+  → 对话时 _resolve_user_ai(db, user_id, user_model_id) 解析 override + 启用技能
+  → ai_service_client 在 /v1/chat payload 附带 model_override（含 reasoning_effort）/ skills
+  → ai-service registerByokModel() 动态注册临时 provider（id = owner + 配置哈希 + 推理强度）
+  → createAgentSession(thinkingLevel=...) → 兼容端点收到 reasoning_effort
   → appendSkillsToPrompt() 把技能追加到系统提示词末尾
   → usage 回调按 provider 前缀识别 byok 并跳过结算
 ```
 
 关键设计：
 
-- **密钥**：`JWT_SECRET_KEY` 派生 Fernet 密钥；轮换 JWT 密钥会使旧密文解不开（有意的轮换语义），此时 `resolve_model_override` 返回 `None`，对话静默回退平台模型。改模型名/地址时 `api_key` 可留空沿用已存密钥。
+- **密钥**：`JWT_SECRET_KEY` 派生 Fernet 密钥；轮换 JWT 密钥会使旧密文解不开（有意的轮换语义），此时 `resolve_model_override` 返回 `None`，对话静默回退平台模型。改模型名/地址时 `api_key` 可留空沿用已存密钥。**密钥不在浏览器、不在 localStorage**：设置页表单里的明文只随 HTTPS 请求到服务端，读回来永远是掩码。
+- **多模型**：默认项由 `is_default` 唯一确定；前端模型选择器用 `p:<平台模型id>` / `u:<自带模型id>` 作值，选平台模型时下发 `user_model_id=0` 明确关闭 BYOK，选自带模型时下发对应 id，不改默认项。
+- **推理强度**：`auto` 不下发任何推理参数（兼容所有接入点），`off` 关闭，其余档位映射到 pi-agent thinkingLevel。强度参与 provider id 哈希，切换时不会与在途请求串配置。
 - **SSRF**：`core/url_guard.py` 分两级——schema 校验只查字面量（不联网，每轮对话也用得上），点「测试连接」才做 DNS 解析后校验；默认拒绝回环/私网/链路本地/云元数据地址。部署方可设 `BYOK_ALLOW_PRIVATE_NETWORK=true` 放开本机 Ollama，自行承担风险。
-- **多用户隔离**：ai-service 用 `owner + sha256(base_url|model|key)` 作 providerId，改配置注册新 id 而不是覆盖旧 id，避免并发请求串 Key；注册上限 200 个，LRU 淘汰。
+- **多用户隔离**：ai-service 用 `owner + sha256(base_url|model|key|effort)` 作 providerId，改配置注册新 id 而不是覆盖旧 id，避免并发请求串 Key；注册上限 200 个，LRU 淘汰。
+- **技能包**：只读取 `.md/.markdown/.txt` 文本，ZIP 与文件夹都做路径穿越、符号链接、文件数（200）、压缩后总量（2 MB）、单文件（128 KB）、技能数（20）限制；按每个目录下的 `SKILL.md` 拆成独立技能，附属资料拼进正文，不执行任何脚本。
 - **技能注入**：只带启用中的技能，总量上限 8000 字（Node 侧再截一次）；追加在平台规则**之后**并声明「不得覆盖上方规则」，标题换行被清洗，防止用户文本伪造系统级章节。
 - **容错**：BYOK/技能属可选增强，配置表缺失、迁移未跑、DB 抖动时 `_resolve_user_ai` 只记一条 warning 并返回 `(None, [])`，绝不阻断对话。
 - **范围边界**：目前只作用于简历 Agent 对话；`generate-resume` / `import-resume` 等一次性任务仍走平台模型，以保证结构化输出稳定，也避免改动同步结算链路。
@@ -368,7 +375,7 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 | `/workspace/profile` | `Workspace.vue` → `Profile.vue` | 个人资料、修改密码、意见反馈（`?tab=feedback` 直达反馈页），浅灰底衬托白卡 |
 | `/workspace/announcements` | `Workspace.vue` → `AnnouncementHistory.vue` | 公告历史与详情弹窗 |
 | `/workspace/ai-records` | `Workspace.vue` → `AiRecords.vue` | Flow Points 余额、兑换、调用记录与消费明细 |
-| `/workspace/settings` | `Workspace.vue` → `WorkspaceSettings.vue` | **模型与技能**：BYOK 凭证表单（保存/探活/移除）+ 自定义技能列表（上传 SKILL.md、新建、编辑、启停、删除）；入口在左下用户菜单，按需异步加载 |
+| `/workspace/settings` | `Workspace.vue` → `WorkspaceSettings.vue` | **模型与技能**：多模型配置列表（上限 10、默认项、启停、编辑、删除、探活）+ 内联编辑区（含推理强度选择）+ 技能列表（单文件 / ZIP 包 / 文件夹导入、新建、编辑、启停、删除）；入口在左下用户菜单，按需异步加载 |
 | `/help`、`/profile`、`/announcements`、`/ai-records` | — | 旧链接，重定向到对应 `/workspace/*`（`/profile` 保留 query） |
 | `/share/:token` | `SharedResume.vue` | 公开分享页，无鉴权 |
 | `/workspace/admin` | `Workspace.vue` → `Admin.vue` | 管理后台，`meta.requiresAdmin`；套 `WorkspacePage` 后留在工作区外壳内，内容区按需异步加载 |

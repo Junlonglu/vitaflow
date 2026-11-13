@@ -1,5 +1,18 @@
 import request from "./request"
 
+/** 推理强度：auto 跟随模型默认、off 不下发参数，其余映射为 reasoning_effort。 */
+export type ReasoningEffort = "auto" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh"
+
+export const REASONING_EFFORT_OPTIONS: { value: ReasoningEffort; label: string; hint: string }[] = [
+  { value: "auto", label: "跟随模型默认", hint: "不下发推理参数，兼容所有接入点" },
+  { value: "off", label: "关闭推理", hint: "不下发 reasoning_effort" },
+  { value: "minimal", label: "极简", hint: "最快，几乎不额外思考" },
+  { value: "low", label: "轻度", hint: "简单改写、快速问答" },
+  { value: "medium", label: "均衡", hint: "日常简历优化（推荐）" },
+  { value: "high", label: "深度", hint: "复杂经历重构、JD 匹配" },
+  { value: "xhigh", label: "最强", hint: "最长思考，消耗也最高" },
+]
+
 /** 用户自带模型（BYOK）。接口永远只回掩码，明文密钥只写入库。 */
 export interface UserAiCredential {
   id: number
@@ -11,6 +24,8 @@ export interface UserAiCredential {
   context_window: number
   max_tokens: number
   supports_image: boolean
+  reasoning_effort: ReasoningEffort
+  is_default: boolean
   enabled: boolean
   last_verified_time: string | null
   update_time: string | null
@@ -24,7 +39,16 @@ export interface UserAiCredentialInput {
   context_window: number
   max_tokens: number
   supports_image: boolean
+  reasoning_effort: ReasoningEffort
+  is_default: boolean
   enabled: boolean
+}
+
+export interface UserAiModelList {
+  items: UserAiCredential[]
+  total: number
+  active: number
+  default_id: number | null
 }
 
 export interface CredentialTestResult {
@@ -57,6 +81,37 @@ export interface UserSkillList {
   active: number
 }
 
+export interface SkillPackageResult {
+  items: UserSkill[]
+  total: number
+  skipped: string[]
+  warnings: string[]
+}
+
+// ---- 模型配置（支持多条） ----
+
+export const listUserAiModelsApi = () =>
+  request.get<UserAiModelList, UserAiModelList>("/user-ai/models")
+
+export const createUserAiModelApi = (data: UserAiCredentialInput) =>
+  request.post<UserAiCredential, UserAiCredential>("/user-ai/models", data)
+
+export const updateUserAiModelApi = (id: number, data: UserAiCredentialInput) =>
+  request.put<UserAiCredential, UserAiCredential>(`/user-ai/models/${id}`, data)
+
+export const deleteUserAiModelApi = (id: number) => request.delete(`/user-ai/models/${id}`)
+
+export const setDefaultUserAiModelApi = (id: number) =>
+  request.post<UserAiModelList, UserAiModelList>(`/user-ai/models/${id}/default`)
+
+export const testUserAiModelApi = (id: number, data: { base_url: string; model: string; api_key?: string }) =>
+  request.post<CredentialTestResult, CredentialTestResult>(`/user-ai/models/${id}/test`, data)
+
+export const testUnsavedModelApi = (data: { base_url: string; model: string; api_key?: string }) =>
+  request.post<CredentialTestResult, CredentialTestResult>("/user-ai/models/test", data)
+
+// ---- 旧单配置接口（保留兼容） ----
+
 export const getUserAiCredentialApi = () =>
   request.get<UserAiCredential | null, UserAiCredential | null>("/user-ai/credential")
 
@@ -67,6 +122,8 @@ export const deleteUserAiCredentialApi = () => request.delete("/user-ai/credenti
 
 export const testUserAiCredentialApi = (data: { base_url: string; model: string; api_key?: string }) =>
   request.post<CredentialTestResult, CredentialTestResult>("/user-ai/credential/test", data)
+
+// ---- 技能 ----
 
 export const listUserSkillsApi = () => request.get<UserSkillList, UserSkillList>("/user-ai/skills")
 
@@ -82,4 +139,15 @@ export const importUserSkillApi = (file: File) => {
   const form = new FormData()
   form.append("file", file)
   return request.post<UserSkill, UserSkill>("/user-ai/skills/import", form)
+}
+
+/** ZIP 包或整个文件夹；文件夹用 webkitRelativePath 保留相对路径。 */
+export const importUserSkillPackageApi = (file?: File, files?: File[]) => {
+  const form = new FormData()
+  if (file) form.append("file", file)
+  for (const item of files || []) {
+    const relative = (item as File & { webkitRelativePath?: string }).webkitRelativePath || item.name
+    form.append("files", item, relative)
+  }
+  return request.post<SkillPackageResult, SkillPackageResult>("/user-ai/skills/import-package", form)
 }

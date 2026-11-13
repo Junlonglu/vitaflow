@@ -241,6 +241,8 @@ type ChatTurnPayload = {
   content?: string
   attachments?: AiChatAttachment[]
   model_config_id?: number | null
+  /** 用户自带模型 id；0 明确使用平台模型，留空由服务端按默认解析。 */
+  user_model_id?: number | null
   session_id?: number | null
 }
 

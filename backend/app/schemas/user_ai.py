@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -10,6 +10,14 @@ from app.core.url_guard import literal_public_url
 MAX_CONTEXT_WINDOW = 2_000_000
 MAX_OUTPUT_TOKENS = 65_536
 MAX_SKILL_INSTRUCTIONS = 20_000
+MAX_MODELS_PER_USER = 10
+
+# auto = 不下发任何推理参数（跟随模型默认，兼容所有接入点）；
+# off  = 明确关闭；其余映射为 pi-agent thinkingLevel / reasoning_effort。
+ReasoningEffort = Literal["auto", "off", "minimal", "low", "medium", "high", "xhigh"]
+REASONING_EFFORTS: tuple[str, ...] = ("auto", "off", "minimal", "low", "medium", "high", "xhigh")
+# 需要真正给模型下发 reasoning_effort 的档位。
+REASONING_LEVELS: frozenset[str] = frozenset({"minimal", "low", "medium", "high", "xhigh"})
 
 
 def _normalize_base_url(value: str) -> str:
@@ -33,6 +41,8 @@ class UserAiCredentialIn(BaseModel):
     context_window: int = Field(default=32_000, ge=1_024, le=MAX_CONTEXT_WINDOW)
     max_tokens: int = Field(default=4_096, ge=256, le=MAX_OUTPUT_TOKENS)
     supports_image: bool = False
+    reasoning_effort: ReasoningEffort = "auto"
+    is_default: bool = False
     enabled: bool = True
 
     @field_validator("base_url")
@@ -64,11 +74,20 @@ class UserAiCredentialOut(BaseModel):
     context_window: int
     max_tokens: int
     supports_image: bool
+    reasoning_effort: ReasoningEffort
+    is_default: bool
     enabled: bool
     last_verified_time: Optional[datetime] = None
     update_time: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserAiModelListOut(BaseModel):
+    items: list[UserAiCredentialOut]
+    total: int
+    active: int
+    default_id: Optional[int] = None
 
 
 class UserAiCredentialTestResult(BaseModel):
@@ -139,3 +158,12 @@ class UserSkillOut(BaseModel):
     update_time: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserSkillPackageResult(BaseModel):
+    """技能包导入结果：一次可能生成多个技能，被跳过的文件单独说明原因。"""
+
+    items: list[UserSkillOut]
+    total: int
+    skipped: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)

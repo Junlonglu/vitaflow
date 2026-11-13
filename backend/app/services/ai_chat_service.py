@@ -570,14 +570,17 @@ def _resolve_turn_model_config(db: Session, user: User, model_config_id: int | N
         return None
 
 
-def _resolve_user_ai(db: Session, user_id: int) -> tuple[dict[str, Any] | None, list[dict[str, str]]]:
+def _resolve_user_ai(
+    db: Session, user_id: int, credential_id: int | None = None
+) -> tuple[dict[str, Any] | None, list[dict[str, str]]]:
     """BYOK 与自定义技能是可选增强：读不到就静默回退平台默认。
 
     迁移未执行、配置表异常、密钥轮换后解不开等都不该让整轮对话失败；
-    这里统一兜底并留一条 warning 供运维排查。
+    这里统一兜底并留一条 warning 供运维排查。``credential_id`` 由前端的
+    模型选择器下发，用于在不改默认项的前提下临时切换自带模型。
     """
     try:
-        return resolve_model_override(db, user_id), build_skills_payload(db, user_id)
+        return resolve_model_override(db, user_id, credential_id), build_skills_payload(db, user_id)
     except Exception:
         logger.warning("读取用户自定义模型/技能失败，本轮回退平台默认", exc_info=True)
         return None, []
@@ -733,6 +736,7 @@ async def stream_ai_service_chat(
     attachments: list[dict[str, Any]] | None = None,
     model_config_id: int | None = None,
     session_id: int | None = None,
+    user_model_id: int | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Stream a chat turn backed by the Node AI service.
 
@@ -753,7 +757,7 @@ async def stream_ai_service_chat(
     model_config = _resolve_turn_model_config(db, user, model_config_id)
     # 用户自带模型（BYOK）与启用中的技能每轮解析一次：关闭或密钥失效时自动
     # 回落到平台默认，不需要前端传任何开关。
-    model_override, skills = _resolve_user_ai(db, user.id)
+    model_override, skills = _resolve_user_ai(db, user.id, user_model_id)
     image_attachments = _turn_image_attachments(attachments)
     supports_images = bool(model_override and model_override.get("supports_image")) or capability_supports_images(
         await get_catalog_capabilities(), model_config.model_ref if model_config else None
@@ -798,6 +802,7 @@ async def stream_ai_service_regenerate(
     override_attachments: list[dict[str, Any]] | None = None,
     model_config_id: int | None = None,
     session_id: int | None = None,
+    user_model_id: int | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Regenerate the reply to a user message via the Node AI service (ticket 09).
 
@@ -835,7 +840,7 @@ async def stream_ai_service_regenerate(
     # 守卫与点数预检必须先于删除：余额不足、图片不被模型支持等失败不能
     # 连带把后面的消息历史丢掉。
     model_config = _resolve_turn_model_config(db, user, model_config_id)
-    model_override, skills = _resolve_user_ai(db, user.id)
+    model_override, skills = _resolve_user_ai(db, user.id, user_model_id)
     effective_attachments = next_attachments if applying_overrides else (user_message.attachments or [])
     supports_images = bool(model_override and model_override.get("supports_image")) or capability_supports_images(
         await get_catalog_capabilities(), model_config.model_ref if model_config else None

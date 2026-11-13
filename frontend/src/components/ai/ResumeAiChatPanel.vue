@@ -29,6 +29,14 @@ type ChatMessage = {
   pending_questions?: PendingQuestion[]
 }
 
+type ModelChoice = {
+  value: string
+  label: string
+  icon?: "image" | "text" | ""
+  price?: string
+  meta?: string
+}
+
 const props = defineProps<{
   messages: ChatMessage[]
   loading?: boolean
@@ -37,7 +45,9 @@ const props = defineProps<{
   active?: boolean
   supportsMultimodal?: boolean
   chatModels?: AiChatModelOption[]
-  selectedModelId?: number | null
+  /** 由编辑器合并「平台模型 + 用户自带模型」后的完整选项；传入时优先使用。 */
+  modelChoices?: ModelChoice[]
+  selectedModelId?: string | number | null
 }>()
 
 const emit = defineEmits<{
@@ -49,7 +59,7 @@ const emit = defineEmits<{
   reject: [message: ChatMessage]
   review: [message: ChatMessage]
   "answer-questions": [message: ChatMessage]
-  "update:selectedModelId": [modelId: number | null]
+  "update:selectedModelId": [modelId: string | number | null]
 }>()
 
 const input = ref("")
@@ -337,8 +347,7 @@ const firstAssistantIndex = computed(() => {
   return -1
 })
 
-const selectedModel = computed(() => (props.chatModels || []).find((item) => item.id === props.selectedModelId) || null)
-const modelOptions = computed(() =>
+const platformModelOptions = computed<ModelChoice[]>(() =>
   (props.chatModels || []).map((model) => {
     const call = model.points_per_call
     const inputRate = model.points_per_million_input_tokens
@@ -353,13 +362,13 @@ const modelOptions = computed(() =>
     }
     return {
       label: model.name,
-      value: model.id,
+      value: `p:${model.id}`,
       icon: model.supports_multimodal ? "image" : "text",
       price: priceText,
     }
   }),
 )
-const modelPriceText = computed(() => "")
+const modelOptions = computed<ModelChoice[]>(() => props.modelChoices ?? platformModelOptions.value)
 
 const previewImageUrl = ref("")
 function openPreview(url: string) { previewImageUrl.value = url }
@@ -505,7 +514,7 @@ watch(
           </button>
 
           <!-- 左：模型选择（图标 + 名称 + 展开箭头，无边框） -->
-          <div v-if="chatModels?.length" class="flex min-w-0 items-center rounded-lg px-1.5 h-8 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900">
+          <div v-if="modelOptions.length" class="flex min-w-0 items-center rounded-lg px-1.5 h-8 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900">
             <Sparkles class="mr-1 h-3.5 w-3.5 shrink-0 text-zinc-400" stroke-width="1.8" />
             <Select
               :model-value="selectedModelId || ''"
@@ -513,7 +522,7 @@ watch(
               :disabled="loading"
               ghost
               class="!h-8 !max-w-[190px] !rounded-none !p-0 !text-[12.5px] !font-medium"
-              @change="(value) => emit('update:selectedModelId', value ? Number(value) : null)"
+              @change="(value) => emit('update:selectedModelId', value || null)"
             />
           </div>
           <span v-else class="px-2 text-[12.5px] text-zinc-400">默认模型</span>

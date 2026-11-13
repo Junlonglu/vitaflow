@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Integer, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, DateTime, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -16,15 +16,16 @@ BIGINT_PK = BigInteger().with_variant(Integer, "sqlite")
 class UserAiCredential(Base):
     """用户自带的大模型接入配置（BYOK）。
 
-    每个用户最多一条：接入点、模型名、加密后的 API Key。开启后对话会走用户
+    一个用户可保存多条：不同服务商 / 不同模型 / 不同推理强度各一条，用
+    ``is_default`` 标出默认项，也可在对话里按 id 临时切换。开启后对话走用户
     自己的额度，不再消耗平台 Flow Points；密钥只以密文落库，接口只回掩码。
     """
 
     __tablename__ = "user_ai_credentials"
-    __table_args__ = (UniqueConstraint("user_id", name="uq_user_ai_credentials_user"),)
+    __table_args__ = (Index("ix_user_ai_credentials_user_id", "user_id"),)
 
     id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    user_id: Mapped[int] = mapped_column(BigInteger)
     provider_label: Mapped[str] = mapped_column(String(60), default="自定义")
     base_url: Mapped[str] = mapped_column(String(255))
     model: Mapped[str] = mapped_column(String(120))
@@ -33,6 +34,10 @@ class UserAiCredential(Base):
     context_window: Mapped[int] = mapped_column(Integer, default=32000)
     max_tokens: Mapped[int] = mapped_column(Integer, default=4096)
     supports_image: Mapped[bool] = mapped_column(Boolean, default=False)
+    # 推理强度：auto 表示不额外下发参数，off 明确关闭，其余映射到 pi-agent
+    # thinkingLevel（最终变成 OpenAI 兼容端的 reasoning_effort）。
+    reasoning_effort: Mapped[str] = mapped_column(String(20), default="auto")
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     last_verified_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     create_time: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

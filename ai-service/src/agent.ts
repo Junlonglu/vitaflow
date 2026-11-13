@@ -73,6 +73,11 @@ export interface AgentInput {
    * "image"), so the conversation survives either way.
    */
   images?: ImageContent[];
+  /**
+   * Optional explicit reasoning strength for this turn (BYOK per-model config).
+   * Values match pi's thinking levels; "off"/undefined keep the runtime default.
+   */
+  thinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 }
 
 type Emit = (event: ChatStreamEvent) => void;
@@ -340,7 +345,7 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     // Thinking streams to the UI only for models that actually support reasoning;
     // non-reasoning models (faux included) stay pinned off — a forced level there
     // can produce an empty assistant message.
-    thinkingLevel: model.reasoning ? "medium" : "off",
+    thinkingLevel: input.thinkingLevel ?? (model.reasoning ? "medium" : "off"),
   });
   const sessionDoneAt = Date.now();
 

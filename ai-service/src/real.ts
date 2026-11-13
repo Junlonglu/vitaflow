@@ -74,10 +74,26 @@ export interface ByokOverride {
   context_window?: number;
   max_tokens?: number;
   supports_image?: boolean;
+  /** Per-model reasoning strength; "auto"/"off" send no reasoning_effort. */
+  reasoning_effort?: ReasoningEffort;
+}
+
+/** Mirrors backend REASONING_EFFORTS. Unknown values are treated as "auto". */
+export type ReasoningEffort = "auto" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+/** Only real thinking levels can be forwarded to createAgentSession. */
+export type ThinkingLevelSetting = Exclude<ReasoningEffort, "auto" | "off">;
+const REASONING_LEVELS: readonly ReasoningEffort[] = ["minimal", "low", "medium", "high", "xhigh"];
+
+export function normalizeReasoningEffort(value: unknown): ReasoningEffort {
+  return typeof value === "string" && (["auto", "off", ...REASONING_LEVELS] as string[]).includes(value)
+    ? (value as ReasoningEffort)
+    : "auto";
 }
 
 export interface ByokResolution {
   modelRef?: string;
+  /** Only set when the provider needs an explicit thinking level this turn. */
+  thinkingLevel?: ThinkingLevelSetting;
   error?: string;
 }
 
@@ -104,6 +120,7 @@ export function parseByokOverride(value: unknown): ByokOverride | undefined {
     context_window: typeof raw.context_window === "number" ? raw.context_window : undefined,
     max_tokens: typeof raw.max_tokens === "number" ? raw.max_tokens : undefined,
     supports_image: raw.supports_image === true,
+    reasoning_effort: normalizeReasoningEffort(raw.reasoning_effort),
   };
 }
 
@@ -128,7 +145,12 @@ export function registerByokModel(runtime: RealRuntime, override: ByokOverride |
   }
 
   const owner = String(override.provider ?? "byok-user").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40) || "byok-user";
-  const signature = `${baseUrl}|${model}|${apiKey}`;
+  const effort = normalizeReasoningEffort(override.reasoning_effort);
+  const reasoning = REASONING_LEVELS.includes(effort);
+  // Effort changes the registered model shape (reasoning flag + compat), so it
+  // belongs in the signature: switching strength never races an in-flight turn
+  // that still uses the previously registered provider id.
+  const signature = `${baseUrl}|${model}|${apiKey}|${effort}`;
   const digest = createHash("sha256").update(signature).digest("hex").slice(0, 10);
   const providerId = `${owner}-${digest}`;
 
@@ -152,11 +174,16 @@ export function registerByokModel(runtime: RealRuntime, override: ByokOverride |
           {
             id: model,
             name: model,
-            reasoning: false,
+            reasoning,
             input: override.supports_image ? ["text", "image"] : ["text"],
             cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
             contextWindow: clampInt(override.context_window, 32_000, 1_024, 2_000_000),
             maxTokens: clampInt(override.max_tokens, 4_096, 256, 65_536),
+            // Explicitly opt in: pi-ai would otherwise auto-detect support from
+            // the base URL and silently drop reasoning_effort for custom hosts.
+            ...(reasoning
+              ? { compat: { supportsReasoningEffort: true, thinkingFormat: "openai" as const } }
+              : {}),
           },
         ],
       });
@@ -166,5 +193,8 @@ export function registerByokModel(runtime: RealRuntime, override: ByokOverride |
     }
   }
 
-  return { modelRef: `${providerId}/${model}` };
+  return {
+    modelRef: `${providerId}/${model}`,
+    ...(reasoning ? { thinkingLevel: effort as ThinkingLevelSetting } : {}),
+  };
 }

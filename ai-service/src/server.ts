@@ -32,7 +32,7 @@ import { reportUsage } from "./billing.js";
 import { loadConfig } from "./config.js";
 import { createFauxRuntime } from "./faux.js";
 import { appendSkillsToPrompt, buildContextPrompt, DEFAULT_SYSTEM_PROMPT, parseSkills, type AiServiceContext } from "./prompt.js";
-import { createRealRuntime, parseByokOverride, registerByokModel } from "./real.js";
+import { createRealRuntime, parseByokOverride, registerByokModel, type ThinkingLevelSetting } from "./real.js";
 import { buildTaskPrompts, isTaskType } from "./taskPrompts.js";
 
 const config = loadConfig();
@@ -292,6 +292,9 @@ app.post("/v1/chat", async (req, res) => {
   // derived from the config hash, so concurrent users never overwrite each
   // other's credentials. Faux/demo mode ignores overrides deliberately.
   const byok = parseByokOverride(req.body?.model_override);
+  // BYOK reasoning strength is resolved into a pi thinkingLevel for this turn;
+  // platform models keep their own default (medium when reasoning is supported).
+  let thinkingLevel: ThinkingLevelSetting | undefined;
   if (byok && runtime.kind === "real") {
     const resolved = registerByokModel(runtime, byok);
     if (resolved.error) {
@@ -299,6 +302,7 @@ app.post("/v1/chat", async (req, res) => {
       return;
     }
     modelRef = resolved.modelRef;
+    thinkingLevel = resolved.thinkingLevel;
   }
   const context: AiServiceContext | null =
     typeof req.body?.context === "object" && req.body.context !== null ? req.body.context : null;
@@ -320,7 +324,7 @@ app.post("/v1/chat", async (req, res) => {
   res.on("close", () => controller.abort());
 
   const outcome = await runChat(
-    { message, systemPrompt, config, runtime, modelRef, userId, resumeId, images },
+    { message, systemPrompt, config, runtime, modelRef, userId, resumeId, images, thinkingLevel },
     (event) => sendEvent(res, event),
     controller.signal,
   );

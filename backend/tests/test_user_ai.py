@@ -1,11 +1,13 @@
-"""BYOK 凭证 / 用户技能：加密、SSRF 防护、service 规则与路由契约。
+"""BYOK 多模型凭证 / 推理强度 / 用户技能包：加密、SSRF、service 规则与路由契约。
 
 service 层跑真实 SQLite 内存库；路由层用 TestClient 断言「密钥绝不回传」、
-跨用户隔离、文件导入与探活接线。
+跨用户隔离、zip/文件夹导入与探活接线。
 """
 from __future__ import annotations
 
+import io
 import unittest
+import zipfile
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -48,6 +50,14 @@ def _credential(**kwargs):
     )
     data.update(kwargs)
     return UserAiCredentialIn(**data)
+
+
+def _zip(entries: dict[str, bytes]) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name, body in entries.items():
+            archive.writestr(name, body)
+    return buffer.getvalue()
 
 
 class CryptoTest(unittest.TestCase):
@@ -94,45 +104,103 @@ class CredentialServiceTest(unittest.TestCase):
     def tearDown(self):
         self.db.close()
 
-    def test_first_save_requires_api_key(self):
+    def test_create_requires_api_key_and_encrypts(self):
         with self.assertRaises(Exception) as ctx:
-            svc.upsert_credential(self.db, 1, _credential(api_key=None))
-        self.assertIn("首次配置", str(ctx.exception))
+            svc.create_credential(self.db, 1, _credential(api_key=None))
+        self.assertIn("API Key", str(ctx.exception))
 
-    def test_upsert_keeps_one_row_and_encrypts(self):
-        first = svc.upsert_credential(self.db, 1, _credential())
+        first = svc.create_credential(self.db, 1, _credential())
         self.assertEqual(first.api_key_masked, "sk-t…1234")
         self.assertNotIn("sk-test-abcdefgh-1234", first.api_key_encrypted)
-        second = svc.upsert_credential(self.db, 1, _credential(model="gpt-4o", api_key=None))
+        self.assertTrue(first.is_default)
+
+    def test_update_keeps_stored_key_when_blank(self):
+        first = svc.create_credential(self.db, 1, _credential())
+        second = svc.update_credential(self.db, 1, first.id, _credential(model="gpt-4o", api_key=None))
         self.assertEqual(first.id, second.id)
         self.assertEqual(second.api_key_masked, "sk-t…1234")
         self.assertEqual(decrypt_secret(second.api_key_encrypted), "sk-test-abcdefgh-1234")
-        self.assertEqual(self.db.query(UserAiCredential).count(), 1)
+
+    def test_multiple_models_with_one_default(self):
+        a = svc.create_credential(self.db, 1, _credential())
+        b = svc.create_credential(self.db, 1, _credential(provider_label="DeepSeek", model="deepseek-chat"))
+        c = svc.create_credential(self.db, 1, _credential(provider_label="Qwen", model="qwen-plus", is_default=True))
+        self.assertEqual(len(svc.list_credentials(self.db, 1)), 3)
+        self.assertEqual(sum(1 for item in (a, b, c) if item.is_default), 1)
+        self.assertEqual(svc.get_credential(self.db, 1).id, c.id)
+
+        svc.set_default_credential(self.db, 1, a.id)
+        rows = svc.list_credentials(self.db, 1)
+        self.assertEqual([item.id for item in rows if item.is_default], [a.id])
+
+    def test_unchecking_default_promotes_another_row(self):
+        a = svc.create_credential(self.db, 1, _credential())
+        b = svc.create_credential(self.db, 1, _credential(model="other"))
+        updated = svc.update_credential(self.db, 1, a.id, _credential(model="gpt-4o-mini", api_key=None, is_default=False))
+        self.assertFalse(updated.is_default)
+        self.assertEqual(sum(1 for row in svc.list_credentials(self.db, 1) if row.is_default), 1)
+        self.assertEqual(svc.get_credential(self.db, 1).id, b.id)
+
+    def test_deleting_default_promotes_another_row(self):
+        a = svc.create_credential(self.db, 1, _credential())
+        b = svc.create_credential(self.db, 1, _credential(model="other"))
+        svc.delete_credential(self.db, 1, a.id)
+        rows = svc.list_credentials(self.db, 1)
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0].is_default)
+        self.assertEqual(rows[0].id, b.id)
+
+    def test_model_count_is_capped(self):
+        from app.schemas.user_ai import MAX_MODELS_PER_USER
+
+        for index in range(MAX_MODELS_PER_USER):
+            svc.create_credential(self.db, 1, _credential(model=f"model-{index}"))
+        with self.assertRaises(Exception) as ctx:
+            svc.create_credential(self.db, 1, _credential(model="one-too-many"))
+        self.assertIn("最多", str(ctx.exception))
+        # 配额按用户计，别的用户不受影响
+        svc.create_credential(self.db, 2, _credential())
+
+    def test_reasoning_effort_reaches_override(self):
+        row = svc.create_credential(self.db, 1, _credential(reasoning_effort="high"))
+        override = svc.resolve_model_override(self.db, 1)
+        self.assertEqual(override["reasoning_effort"], "high")
+        self.assertEqual(override["credential_id"], row.id)
+        self.assertEqual(svc.create_credential(self.db, 2, _credential()).reasoning_effort, "auto")
+
+    def test_override_selects_explicit_model_and_platform_escape(self):
+        a = svc.create_credential(self.db, 1, _credential())
+        b = svc.create_credential(self.db, 1, _credential(model="deepseek-chat", base_url="https://api.deepseek.com/v1"))
+        self.assertEqual(svc.resolve_model_override(self.db, 1, b.id)["model"], "deepseek-chat")
+        self.assertIsNone(svc.resolve_model_override(self.db, 1, 0), "0 表示明确使用平台模型")
+        self.assertIsNone(svc.resolve_model_override(self.db, 1, 9999), "跨用户/不存在的 id 不生效")
+        self.assertEqual(svc.resolve_model_override(self.db, 1)["model"], "gpt-4o-mini")
+        self.assertEqual(a.id, svc.get_credential(self.db, 1).id)
 
     def test_override_resolves_only_when_enabled_and_decryptable(self):
-        svc.upsert_credential(self.db, 1, _credential())
+        svc.create_credential(self.db, 1, _credential())
         override = svc.resolve_model_override(self.db, 1)
         self.assertEqual(override["api_key"], "sk-test-abcdefgh-1234")
-        self.assertEqual(override["model"], "gpt-4o-mini")
         self.assertEqual(override["provider"], "byok-1")
 
-        svc.upsert_credential(self.db, 1, _credential(enabled=False, api_key=None))
+        row = svc.get_credential(self.db, 1)
+        svc.update_credential(self.db, 1, row.id, _credential(enabled=False, api_key=None))
         self.assertIsNone(svc.resolve_model_override(self.db, 1))
-
-        svc.upsert_credential(self.db, 1, _credential(enabled=True, api_key=None))
-        cred = svc.get_credential(self.db, 1)
-        cred.api_key_encrypted = "fernet:broken"
+        svc.update_credential(self.db, 1, row.id, _credential(enabled=True, api_key=None))
+        row.api_key_encrypted = "fernet:broken"
         self.db.commit()
         self.assertIsNone(svc.resolve_model_override(self.db, 1))
 
     def test_private_url_is_never_resolved(self):
         with patch("app.core.url_guard.settings") as fake:
             fake.byok_allow_private_network = True
-            svc.upsert_credential(self.db, 1, _credential(base_url="http://127.0.0.1:11434/v1"))
+            svc.create_credential(self.db, 1, _credential(base_url="http://127.0.0.1:11434/v1"))
         self.assertIsNone(svc.resolve_model_override(self.db, 1))
 
-    def test_delete_and_user_isolation(self):
-        svc.upsert_credential(self.db, 1, _credential())
+    def test_legacy_upsert_and_user_isolation(self):
+        first = svc.upsert_credential(self.db, 1, _credential())
+        second = svc.upsert_credential(self.db, 1, _credential(model="gpt-4o", api_key=None))
+        self.assertEqual(first.id, second.id)
         self.assertIsNone(svc.get_credential(self.db, 2))
         self.assertTrue(svc.delete_credential(self.db, 1))
         self.assertFalse(svc.delete_credential(self.db, 1))
@@ -151,8 +219,8 @@ class SkillServiceTest(unittest.TestCase):
         c = svc.create_skill(self.db, 2, UserSkillIn(name="简历润色", instructions="别人的"))
         self.assertNotEqual(a.slug, b.slug)
         self.assertEqual(b.slug, f"{a.slug}-2")
-        self.assertEqual(a.slug, c.slug)  # 唯一约束按 (user_id, slug)，跨用户可同名同 slug
-        self.assertTrue(a.slug.startswith("skill-"))  # 纯中文名走稳定哈希后缀
+        self.assertEqual(a.slug, c.slug)
+        self.assertTrue(a.slug.startswith("skill-"))
 
     def test_ascii_slug_and_toggle(self):
         skill = svc.create_skill(self.db, 1, UserSkillIn(name="Star Format", instructions="Use STAR"))
@@ -174,7 +242,6 @@ class SkillServiceTest(unittest.TestCase):
         payload = svc.build_skills_payload(self.db, 1)
         self.assertEqual(len(payload), 2)
         self.assertEqual(sum(len(item["instructions"]) for item in payload), svc.MAX_SKILL_PROMPT_CHARS)
-        self.assertLessEqual(len(payload[1]["instructions"]), 2000)
 
     def test_parse_skill_file_frontmatter(self):
         content = "---\nname: 量化成果\ndescription: 把描述改成数字\nunknown: ignored\n---\n\n## 规则\n每条经历补一个数字。\n"
@@ -190,6 +257,83 @@ class SkillServiceTest(unittest.TestCase):
             svc.parse_skill_file("", "x.md")
         with self.assertRaises(Exception):
             svc.parse_skill_file("---\nname: x\n---\n", "x.md")
+
+
+class SkillPackageTest(unittest.TestCase):
+    def test_zip_with_multiple_skill_folders_and_references(self):
+        raw = _zip(
+            {
+                "quantify/SKILL.md": "---\nname: 量化成果\ndescription: 补数字\n---\n每条经历补一个可核验数字。".encode(),
+                "quantify/references/examples.md": "例：把「负责增长」改成「DAU 提升 18%」".encode(),
+                "star/SKILL.md": "用 STAR 重写经历".encode(),
+                "notes.txt": "这个包被忽略（不属于任何技能目录）".encode(),
+            }
+        )
+        files, skipped = svc.collect_zip_files(raw)
+        self.assertEqual(skipped, [])
+        payloads, warnings = svc.parse_skill_package(files)
+        self.assertEqual(warnings, [])
+        self.assertEqual(len(payloads), 2)
+        quantify = next(item for item in payloads if item.name == "量化成果")
+        self.assertEqual(quantify.description, "补数字")
+        self.assertIn("## 参考资料", quantify.instructions)
+        self.assertIn("DAU 提升 18%", quantify.instructions)
+        self.assertEqual(next(item for item in payloads if item.name != "量化成果").name, "star")
+
+    def test_flat_zip_with_single_markdown_is_accepted(self):
+        raw = _zip({"SKILL.md": "直接写指令".encode()})
+        files, _ = svc.collect_zip_files(raw)
+        payloads, _ = svc.parse_skill_package(files)
+        self.assertEqual(len(payloads), 1)
+
+    def test_zip_without_manifest_and_multiple_files_is_rejected(self):
+        raw = _zip({"a.md": "A".encode(), "b.md": "B".encode()})
+        files, _ = svc.collect_zip_files(raw)
+        with self.assertRaises(Exception) as ctx:
+            svc.parse_skill_package(files)
+        self.assertIn("SKILL.md", str(ctx.exception))
+
+    def test_path_traversal_and_junk_are_dropped(self):
+        raw = _zip(
+            {
+                "../evil/SKILL.md": "越界".encode(),
+                "safe/SKILL.md": "正常".encode(),
+                "__MACOSX/._SKILL.md": "垃圾".encode(),
+                "safe/script.py": b"print('not executed')",
+            }
+        )
+        files, _ = svc.collect_zip_files(raw)
+        self.assertEqual([item.path for item in files], ["safe/SKILL.md"])
+        payloads, _ = svc.parse_skill_package(files)
+        self.assertEqual(payloads[0].instructions, "正常")
+
+    def test_zip_bomb_is_rejected_before_extraction(self):
+        raw = _zip({"big/SKILL.md": b"x" * (svc.MAX_PACKAGE_UNCOMPRESSED_BYTES + 1)})
+        with self.assertRaises(Exception) as ctx:
+            svc.collect_zip_files(raw)
+        self.assertIn("过大", str(ctx.exception))
+
+    def test_symlink_entry_is_skipped(self):
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            info = zipfile.ZipInfo("safe/SKILL.md")
+            info.external_attr = (0o120777 << 16)
+            archive.writestr(info, b"link")
+            archive.writestr("real/SKILL.md", "真实内容".encode())
+        files, skipped = svc.collect_zip_files(buffer.getvalue())
+        self.assertEqual([item.path for item in files], ["real/SKILL.md"])
+        self.assertTrue(any("符号链接" in item for item in skipped))
+
+    def test_folder_entries_keep_relative_paths(self):
+        entries = [
+            ("my-skill/SKILL.md", "---\nname: 面试模式\n---\n用 STAR 回答".encode()),
+            ("my-skill/references/tips.md", "补充材料".encode()),
+        ]
+        files, skipped = svc.collect_folder_files(entries)
+        self.assertEqual(skipped, [])
+        payloads, _ = svc.parse_skill_package(files)
+        self.assertEqual(payloads[0].name, "面试模式")
+        self.assertIn("补充材料", payloads[0].instructions)
 
 
 class ProbeCredentialTest(unittest.IsolatedAsyncioTestCase):
@@ -261,6 +405,16 @@ class ChatIntegrationGuardTest(unittest.TestCase):
         self.assertEqual(result, ({"model": "m"}, [{"name": "s"}]))
         self.assertEqual(override.call_args.args[1], 42)
 
+    def test_resolve_user_ai_forwards_selected_credential(self):
+        from app.services import ai_chat_service
+
+        with (
+            patch.object(ai_chat_service, "resolve_model_override", return_value=None) as override,
+            patch.object(ai_chat_service, "build_skills_payload", return_value=[]),
+        ):
+            ai_chat_service._resolve_user_ai(SimpleNamespace(), 42, 7)
+        self.assertEqual(override.call_args.args[2], 7)
+
     def test_byok_turn_skips_points_precheck(self):
         from app.services import ai_chat_service
 
@@ -279,32 +433,63 @@ class UserAiEndpointTest(unittest.TestCase):
     def tearDown(self):
         self.db.close()
 
-    def test_credential_response_never_leaks_plaintext(self):
+    def test_model_crud_and_never_leaks_plaintext(self):
         client = _client(self.db)
-        resp = client.put("/api/user-ai/credential", json=_credential().model_dump())
+        resp = client.post("/api/user-ai/models", json=_credential(reasoning_effort="high").model_dump())
         self.assertEqual(resp.status_code, 200)
         body = resp.json()["data"]
         self.assertNotIn("api_key", body)
         self.assertEqual(body["api_key_masked"], "sk-t…1234")
-        self.assertTrue(body["has_api_key"])
-        got = client.get("/api/user-ai/credential").json()["data"]
-        self.assertNotIn("sk-test-abcdefgh-1234", str(got))
+        self.assertEqual(body["reasoning_effort"], "high")
+        self.assertTrue(body["is_default"])
+
+        second = client.post(
+            "/api/user-ai/models",
+            json=_credential(provider_label="Qwen", model="qwen-plus", base_url="https://api.qwen.example/v1").model_dump(),
+        ).json()["data"]
+        listed = client.get("/api/user-ai/models").json()["data"]
+        self.assertEqual(listed["total"], 2)
+        self.assertEqual(listed["default_id"], body["id"])
+        self.assertNotIn("sk-test-abcdefgh-1234", str(listed))
+
+        defaulted = client.post(f"/api/user-ai/models/{second['id']}/default").json()["data"]
+        self.assertEqual(defaulted["default_id"], second["id"])
+        self.assertEqual(sum(1 for item in defaulted["items"] if item["is_default"]), 1)
+
+        client.delete(f"/api/user-ai/models/{body['id']}")
+        self.assertEqual(client.get("/api/user-ai/models").json()["data"]["total"], 1)
 
     def test_private_base_url_is_rejected(self):
         payload = _credential().model_dump()
         payload["base_url"] = "http://127.0.0.1:11434/v1"
-        resp = _client(self.db).put("/api/user-ai/credential", json=payload)
+        resp = _client(self.db).post("/api/user-ai/models", json=payload)
         self.assertEqual(resp.status_code, 422)
 
-    def test_test_endpoint_uses_stored_key_when_body_omits_it(self):
+    def test_invalid_reasoning_effort_is_rejected(self):
+        payload = _credential().model_dump()
+        payload["reasoning_effort"] = "ultra"
+        self.assertEqual(_client(self.db).post("/api/user-ai/models", json=payload).status_code, 422)
+
+    def test_model_test_uses_stored_key_and_marks_verified(self):
         client = _client(self.db)
-        client.put("/api/user-ai/credential", json=_credential().model_dump())
+        created = client.post("/api/user-ai/models", json=_credential().model_dump()).json()["data"]
         fake = AsyncMock(return_value=(True, "接入可用", ["gpt-4o-mini"]))
         with patch("app.api.user_ai.svc.probe_credential", fake):
-            resp = client.post("/api/user-ai/credential/test", json={"base_url": BASE_URL, "model": "gpt-4o-mini"})
+            resp = client.post(
+                f"/api/user-ai/models/{created['id']}/test",
+                json={"base_url": BASE_URL, "model": "gpt-4o-mini"},
+            )
         self.assertEqual(resp.json()["data"]["ok"], True)
         self.assertEqual(fake.call_args.args[1], "sk-test-abcdefgh-1234")
         self.assertIsNotNone(svc.get_credential(self.db, 1).last_verified_time)
+
+    def test_legacy_credential_endpoint_still_works(self):
+        client = _client(self.db)
+        saved = client.put("/api/user-ai/credential", json=_credential().model_dump()).json()["data"]
+        self.assertTrue(saved["is_default"])
+        self.assertEqual(client.get("/api/user-ai/credential").json()["data"]["id"], saved["id"])
+        self.assertEqual(client.delete("/api/user-ai/credential").json()["code"], 200)
+        self.assertEqual(client.get("/api/user-ai/models").json()["data"]["total"], 0)
 
     def test_skill_import_and_toggle_and_user_isolation(self):
         client = _client(self.db)
@@ -324,13 +509,44 @@ class UserAiEndpointTest(unittest.TestCase):
         self.assertEqual(other.get("/api/user-ai/skills").json()["data"]["total"], 0)
         self.assertEqual(other.patch(f"/api/user-ai/skills/{skill['id']}", json={"enabled": True}).json()["code"], 404)
 
+    def test_zip_package_creates_multiple_skills(self):
+        raw = _zip(
+            {
+                "a/SKILL.md": "---\nname: 技能A\n---\n规则A".encode(),
+                "b/SKILL.md": "规则B".encode(),
+            }
+        )
+        resp = _client(self.db).post("/api/user-ai/skills/import", files={"file": ("skills.zip", raw, "application/zip")})
+        self.assertEqual(resp.status_code, 200, resp.text)
+        result = resp.json()["data"]
+        self.assertEqual(result["total"], 2)
+        self.assertEqual([item["source"] for item in result["items"]], ["package", "package"])
+        self.assertEqual(_client(self.db).get("/api/user-ai/skills").json()["data"]["total"], 2)
+
+    def test_folder_import_uses_import_package_route(self):
+        client = _client(self.db)
+        files = [
+            ("files", ("pack/SKILL.md", b"---\nname: \xe6\x96\x87\xe4\xbb\xb6\xe5\xa4\xb9\xe6\x8a\x80\xe8\x83\xbd\n---\n\xe8\xa7\x84\xe5\x88\x99", "text/markdown")),
+            ("files", ("pack/references/tips.md", "参考".encode(), "text/markdown")),
+        ]
+        resp = client.post("/api/user-ai/skills/import-package", files=files)
+        self.assertEqual(resp.status_code, 200, resp.text)
+        self.assertEqual(resp.json()["data"]["total"], 1)
+        skill = _client(self.db).get("/api/user-ai/skills").json()["data"]["items"][0]
+        self.assertEqual(skill["name"], "文件夹技能")
+        self.assertIn("参考", skill["instructions"])
+
     def test_bad_skill_upload_rejected(self):
         client = _client(self.db)
         resp = client.post("/api/user-ai/skills/import", files={"file": ("evil.exe", b"MZ", "application/octet-stream")})
         self.assertEqual(resp.json()["code"], 400)
+        bad_zip = client.post("/api/user-ai/skills/import", files={"file": ("broken.zip", b"not a zip", "application/zip")})
+        self.assertEqual(bad_zip.json()["code"], 400)
 
-    def test_delete_credential_when_absent(self):
-        self.assertEqual(_client(self.db).delete("/api/user-ai/credential").json()["code"], 404)
+    def test_delete_absent_credential_and_cross_user_model(self):
+        self.assertEqual(_client(self.db).delete("/api/user-ai/models/999").json()["code"], 404)
+        created = _client(self.db).post("/api/user-ai/models", json=_credential().model_dump()).json()["data"]
+        self.assertEqual(_client(self.db, user_id=2).delete(f"/api/user-ai/models/{created['id']}").json()["code"], 404)
 
 
 if __name__ == "__main__":

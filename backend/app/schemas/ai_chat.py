@@ -23,6 +23,8 @@ class AiChatSendRequest(BaseModel):
     content: str = Field(min_length=1, max_length=MAX_CHAT_CONTENT_LENGTH)
     attachments: list[AiChatAttachment] = Field(default_factory=list, max_length=MAX_CHAT_ATTACHMENTS)
     model_config_id: Optional[int] = None
+    # 用户自带模型配置 id；0 表示明确使用平台模型，None 表示按服务端默认解析。
+    user_model_id: Optional[int] = None
     # 目标会话：省略时落到该简历最近一次的会话（兼容旧前端的 1:1 行为）。
     session_id: Optional[int] = None
 
@@ -64,6 +66,7 @@ class AiChatRegenerateRequest(BaseModel):
     content: Optional[str] = Field(default=None, max_length=MAX_CHAT_CONTENT_LENGTH)
     attachments: Optional[list[AiChatAttachment]] = Field(default=None, max_length=MAX_CHAT_ATTACHMENTS)
     model_config_id: Optional[int] = None
+    user_model_id: Optional[int] = None
     session_id: Optional[int] = None
 
 

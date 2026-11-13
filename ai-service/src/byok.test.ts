@@ -9,7 +9,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { appendSkillsToPrompt, DEFAULT_SYSTEM_PROMPT, parseSkills } from "./prompt.js";
-import { parseByokOverride, registerByokModel, type RealRuntime } from "./real.js";
+import { normalizeReasoningEffort, parseByokOverride, registerByokModel, type RealRuntime } from "./real.js";
 
 async function runtime(): Promise<RealRuntime> {
   return { kind: "real", modelRuntime: await ModelRuntime.create({ modelsPath: null, allowModelNetwork: false }) };
@@ -37,6 +37,13 @@ describe("parseByokOverride", () => {
     for (const value of [null, [], "x", {}, { ...override, api_key: "" }, { ...override, base_url: 3 }]) {
       assert.equal(parseByokOverride(value), undefined, JSON.stringify(value));
     }
+  });
+
+  it("normalizes reasoning effort and falls back to auto for junk", () => {
+    assert.equal(parseByokOverride({ ...override, reasoning_effort: "high" })?.reasoning_effort, "high");
+    assert.equal(parseByokOverride({ ...override, reasoning_effort: "unknown" })?.reasoning_effort, "auto");
+    assert.equal(parseByokOverride(override)?.reasoning_effort, "auto");
+    assert.equal(normalizeReasoningEffort(42), "auto");
   });
 });
 
@@ -82,6 +89,35 @@ describe("registerByokModel", () => {
     const result = registerByokModel(rt, { ...override, supports_image: false });
     const [providerId, modelId] = result.modelRef!.split("/");
     assert.deepEqual(rt.modelRuntime.getModel(providerId, modelId)?.input, ["text"]);
+  });
+
+  it("reasoning strength registers a reasoning model and returns a thinking level", async () => {
+    const rt = await runtime();
+    const result = registerByokModel(rt, { ...override, reasoning_effort: "high" });
+    assert.ok(!result.error);
+    assert.equal(result.thinkingLevel, "high");
+    const [providerId, modelId] = result.modelRef!.split("/");
+    const model = rt.modelRuntime.getModel(providerId, modelId);
+    assert.equal(model?.reasoning, true);
+    assert.equal((model?.compat as { supportsReasoningEffort?: boolean } | undefined)?.supportsReasoningEffort, true);
+  });
+
+  it("changing effort isolates the provider registration", async () => {
+    const rt = await runtime();
+    const high = registerByokModel(rt, { ...override, reasoning_effort: "high" });
+    const low = registerByokModel(rt, { ...override, reasoning_effort: "low" });
+    assert.equal(low.thinkingLevel, "low");
+    assert.notEqual(high.modelRef, low.modelRef);
+  });
+
+  it("auto and off never send reasoning_effort", async () => {
+    const rt = await runtime();
+    for (const effort of ["auto", "off"] as const) {
+      const result = registerByokModel(rt, { ...override, reasoning_effort: effort });
+      assert.equal(result.thinkingLevel, undefined);
+      const [providerId, modelId] = result.modelRef!.split("/");
+      assert.equal(rt.modelRuntime.getModel(providerId, modelId)?.reasoning, false);
+    }
   });
 });
 

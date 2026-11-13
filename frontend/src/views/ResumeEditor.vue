@@ -24,6 +24,7 @@ import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
 import ResumeShareDialog from "@/components/resume/ResumeShareDialog.vue"
 import QuestionDialog from "@/components/ai/QuestionDialog.vue"
 import SaveAsResumeDialog from "@/components/ai/SaveAsResumeDialog.vue"
+import { listUserAiModelsApi, type UserAiCredential } from "@/api/userAi"
 import { showGlobalToast } from "@/utils/toast"
 import { createPresetSection } from "@/utils/resumePresets"
 import { buildSelectedResumeData, diffResume, sectionEntriesForReview } from "@/utils/aiDiff"
@@ -148,11 +149,54 @@ const saveAsTitle = ref("")
 const saveAsLoading = ref(false)
 const jdOptimizeArmed = ref(false)
 const jdOptimizedMessageId = ref<number | null>(null)
-const selectedChatModelId = ref<number | null>(Number(localStorage.getItem("vitaflow_chat_model_id") || 0) || null)
+// 模型选择器用 "p:<平台模型id>" / "u:<用户自带模型id>" 作为值；旧版本存的是纯数字。
+function readStoredModelKey(): string | null {
+  const raw = localStorage.getItem("vitaflow_chat_model_id")
+  if (!raw) return null
+  return /^\d+$/.test(raw) ? `p:${raw}` : raw
+}
+const selectedChatModelKey = ref<string | null>(readStoredModelKey())
+const userAiModels = ref<UserAiCredential[]>([])
 const chatModels = computed<AiChatModelOption[]>(() => aiCapability.value?.chat_models || [])
-const selectedChatModel = computed(() => chatModels.value.find((item) => item.id === selectedChatModelId.value) || chatModels.value[0] || null)
-const effectiveChatModelId = computed(() => selectedChatModel.value?.id ?? selectedChatModelId.value ?? null)
-const supportsChatImages = computed(() => Boolean(selectedChatModel.value?.supports_multimodal ?? aiCapability.value?.supports_multimodal))
+const enabledUserModels = computed(() => userAiModels.value.filter((item) => item.enabled))
+const modelChoices = computed(() => [
+  ...chatModels.value.map((model) => ({
+    value: `p:${model.id}`,
+    label: model.name,
+    icon: (model.supports_multimodal ? "image" : "text") as "image" | "text",
+    price: "",
+  })),
+  ...enabledUserModels.value.map((model) => ({
+    value: `u:${model.id}`,
+    label: `${model.provider_label} · ${model.model}`,
+    icon: (model.supports_image ? "image" : "text") as "image" | "text",
+    price: "",
+    meta: "自带",
+  })),
+])
+const effectiveChatModelId = computed(() => {
+  const key = selectedChatModelKey.value
+  return key?.startsWith("p:") ? Number(key.slice(2)) || null : null
+})
+/** undefined = 服务端按默认解析；0 = 明确使用平台模型；正数 = 指定自带模型。 */
+const effectiveUserModelId = computed<number | undefined>(() => {
+  const key = selectedChatModelKey.value
+  if (key?.startsWith("u:")) return Number(key.slice(2)) || undefined
+  if (key?.startsWith("p:")) return 0
+  return undefined
+})
+const supportsChatImages = computed(() => {
+  const key = selectedChatModelKey.value
+  if (key?.startsWith("u:")) {
+    const id = Number(key.slice(2))
+    return Boolean(enabledUserModels.value.find((item) => item.id === id)?.supports_image)
+  }
+  if (key?.startsWith("p:")) {
+    const id = Number(key.slice(2))
+    return Boolean(chatModels.value.find((item) => item.id === id)?.supports_multimodal)
+  }
+  return Boolean(aiCapability.value?.supports_multimodal)
+})
 
 const isMobile = ref(false)
 
@@ -241,16 +285,15 @@ onUnmounted(() => {
 })
 
 watch(sidePanel, (newVal) => {
-  if (newVal === "chat" && !chatLoaded.value) {
-    loadChatMessages()
-  }
-  if (newVal === "chat" && !aiCapabilityLoaded.value) {
-    loadAiCapability()
+  if (newVal === "chat") {
+    if (!chatLoaded.value) loadChatMessages()
+    if (!aiCapabilityLoaded.value) loadAiCapability()
+    else loadUserModels()
   }
 })
 
-watch(selectedChatModelId, (value) => {
-  if (value) localStorage.setItem("vitaflow_chat_model_id", String(value))
+watch(selectedChatModelKey, (value) => {
+  if (value) localStorage.setItem("vitaflow_chat_model_id", value)
   else localStorage.removeItem("vitaflow_chat_model_id")
 })
 
@@ -802,20 +845,38 @@ async function openChatPanel() {
   if (!chatLoaded.value) await loadChatMessages()
 }
 
+async function loadUserModels() {
+  try {
+    userAiModels.value = (await listUserAiModelsApi()).items || []
+  } catch {
+    // 设置接口不可用不影响平台模型对话
+  }
+}
+
 async function loadAiCapability() {
   try {
-    aiCapability.value = await getAiCapabilityApi()
-    const models = aiCapability.value?.chat_models || []
-    if (models.length) {
-      const currentAvailable = selectedChatModelId.value && models.some((item) => item.id === selectedChatModelId.value)
-      if (!currentAvailable) {
-        const defaultId = aiCapability.value?.default_chat_model_id
-        selectedChatModelId.value = defaultId && models.some((item) => item.id === defaultId) ? defaultId : models[0].id
-      } else if (selectedChatModel.value?.id && selectedChatModelId.value !== selectedChatModel.value.id) {
-        selectedChatModelId.value = selectedChatModel.value.id
-      }
-    } else {
-      selectedChatModelId.value = null
+    const [capability, modelList] = await Promise.all([
+      getAiCapabilityApi().catch(() => null),
+      listUserAiModelsApi().catch(() => null),
+    ])
+    aiCapability.value = capability
+    userAiModels.value = modelList?.items || []
+    const models = capability?.chat_models || []
+    const choices = modelChoices.value
+    const currentKey = selectedChatModelKey.value
+    if (!choices.length) {
+      selectedChatModelKey.value = null
+    } else if (!currentKey || !choices.some((item) => item.value === currentKey)) {
+      // 有启用的自带模型时优先用它的默认项，否则回落到平台默认模型。
+      const byokDefault = enabledUserModels.value.find((item) => item.is_default) || enabledUserModels.value[0]
+      const defaultId = capability?.default_chat_model_id
+      selectedChatModelKey.value = byokDefault
+        ? `u:${byokDefault.id}`
+        : defaultId && models.some((item) => item.id === defaultId)
+          ? `p:${defaultId}`
+          : models.length
+            ? `p:${models[0].id}`
+            : null
     }
   } catch {
     aiCapability.value = null
@@ -875,7 +936,7 @@ async function sendChatMessage(content: string, attachments: AiChatAttachment[] 
     if (!editor.saved) await save({ refreshPreview: false })
     const response = (await sendResumeChatMessageStreamApi(
       resumeId.value,
-      { content, attachments, model_config_id: effectiveChatModelId.value, session_id: sessionId },
+      { content, attachments, model_config_id: effectiveChatModelId.value, user_model_id: effectiveUserModelId.value, session_id: sessionId },
       {
         onDelta: (text) => {
           const assistant = chatMessages.value[assistantIndex]
@@ -1004,7 +1065,7 @@ async function regenerateChatMessage(message?: any, overrideContent?: string, ov
     const response = (await regenerateResumeChatMessageStreamApi(
       resumeId.value,
       numericId,
-      { content: content || "请结合我上传的图片分析简历。", attachments, model_config_id: effectiveChatModelId.value, session_id: activeSessionId.value },
+      { content: content || "请结合我上传的图片分析简历。", attachments, model_config_id: effectiveChatModelId.value, user_model_id: effectiveUserModelId.value, session_id: activeSessionId.value },
       {
         onDelta: (text: string) => {
           const assistant = chatMessages.value[assistantIndex]
@@ -1397,7 +1458,7 @@ async function sendInitialPrompt() {
           <!-- AI Workbench Mode -->
           <div v-show="mainMode === 'ai'" class="flex flex-col flex-1 min-h-0 overflow-hidden bg-white">
             <div class="relative min-h-0 flex-1 overflow-hidden p-0 md:p-0">
-                <ResumeAiChatPanel v-if="sidePanel === 'chat'" key="chat" v-model:selected-model-id="selectedChatModelId" :chat-models="chatModels" :messages="chatMessages" :loading="chatLoading" :error="chatError" :decision-loading-id="chatDecisionLoadingId" :active="mainMode === 'ai' && sidePanel === 'chat'" :supports-multimodal="supportsChatImages" @send="sendChatMessage" @regenerate="regenerateChatMessage" @clear="clearChatMessages" @new-session="startNewChatSession" @confirm="resolveChatDecision($event, 'apply')" @reject="resolveChatDecision($event, 'reject')" @answer-questions="handleAnswerQuestions" @review="goToReviewMode" />
+                <ResumeAiChatPanel v-if="sidePanel === 'chat'" key="chat" v-model:selected-model-id="selectedChatModelKey" :chat-models="chatModels" :model-choices="modelChoices" :messages="chatMessages" :loading="chatLoading" :error="chatError" :decision-loading-id="chatDecisionLoadingId" :active="mainMode === 'ai' && sidePanel === 'chat'" :supports-multimodal="supportsChatImages" @send="sendChatMessage" @regenerate="regenerateChatMessage" @clear="clearChatMessages" @new-session="startNewChatSession" @confirm="resolveChatDecision($event, 'apply')" @reject="resolveChatDecision($event, 'reject')" @answer-questions="handleAnswerQuestions" @review="goToReviewMode" />
             </div>
           </div>
         </div>

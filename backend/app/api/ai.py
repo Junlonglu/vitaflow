@@ -333,6 +333,7 @@ def _ai_service_stream_response(
     attachments: list[dict[str, Any]] | None = None,
     model_config_id: int | None = None,
     session_id: int | None = None,
+    user_model_id: int | None = None,
 ) -> StreamingResponse:
     """Proxy a chat turn to the AI service, persisting messages in MySQL.
 
@@ -340,7 +341,9 @@ def _ai_service_stream_response(
     ``result`` event's ``assistant_message`` is the DB-backed row (MySQL is the
     single source of truth for the UI message list).
     """
-    events = stream_ai_service_chat(db, user, resume, content, attachments, model_config_id, session_id)
+    events = stream_ai_service_chat(
+        db, user, resume, content, attachments, model_config_id, session_id, user_model_id
+    )
 
     async def iterator():
         try:
@@ -718,7 +721,8 @@ def resume_chat_send_stream(
         return _ndjson_stream_response(empty_message())
     attachments = [item.model_dump() for item in payload.attachments]
     return _ai_service_stream_response(
-        db, current_user, resume, content, attachments, payload.model_config_id, payload.session_id
+        db, current_user, resume, content, attachments,
+        payload.model_config_id, payload.session_id, payload.user_model_id,
     )
 
 
@@ -742,6 +746,7 @@ def resume_chat_regenerate_stream(
         else None,
         model_config_id=payload.model_config_id if payload else None,
         session_id=payload.session_id if payload else None,
+        user_model_id=payload.user_model_id if payload else None,
     )
 
     async def iterator():

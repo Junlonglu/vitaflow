@@ -30,6 +30,7 @@ from app.services.ai_service_client import ai_service_chat_events, ai_service_ta
 from app.services.ai_task_service import create_ai_task, finish_ai_task
 from app.services.flow_points_service import precheck_flow_points
 from app.services.resume_normalization import localize_ai_text, normalize_resume_data, strip_thinking_text
+from app.services.user_ai_service import build_skills_payload, resolve_model_override
 
 logger = logging.getLogger(__name__)
 
@@ -569,6 +570,19 @@ def _resolve_turn_model_config(db: Session, user: User, model_config_id: int | N
         return None
 
 
+def _resolve_user_ai(db: Session, user_id: int) -> tuple[dict[str, Any] | None, list[dict[str, str]]]:
+    """BYOK 与自定义技能是可选增强：读不到就静默回退平台默认。
+
+    迁移未执行、配置表异常、密钥轮换后解不开等都不该让整轮对话失败；
+    这里统一兜底并留一条 warning 供运维排查。
+    """
+    try:
+        return resolve_model_override(db, user_id), build_skills_payload(db, user_id)
+    except Exception:
+        logger.warning("读取用户自定义模型/技能失败，本轮回退平台默认", exc_info=True)
+        return None, []
+
+
 def _turn_image_attachments(attachments: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
     # Match the proxy's drop predicate (_attachment_image_blocks): only a real
     # image (url + image content_type) counts, so a stray non-image attachment
@@ -592,18 +606,20 @@ def _reject_turn_images(model_config, supports_images: bool, image_attachments: 
     return None
 
 
-def _precheck_turn_points(db: Session, user: User, model_config) -> None:
+def _precheck_turn_points(db: Session, user: User, model_config, *, byok_active: bool = False) -> None:
     # Charge_on_finish parity: precheck the points_per_call floor up front so an
     # empty balance fails the turn before any model call; the exact token-based
     # charge settles later via the /service/usage callback.
-    if model_config:
-        precheck_flow_points(
-            db,
-            user,
-            "ai_chat",
-            input_tokens=0,
-            pricing_override=model_config.chat_billing_override(),
-        )
+    # BYOK turns consume the user's own quota: never gate them on platform points.
+    if byok_active or not model_config:
+        return
+    precheck_flow_points(
+        db,
+        user,
+        "ai_chat",
+        input_tokens=0,
+        pricing_override=model_config.chat_billing_override(),
+    )
 
 
 async def _stream_ai_service_reply(
@@ -613,6 +629,8 @@ async def _stream_ai_service_reply(
     session: AiChatSession,
     user_message: AiChatMessage,
     model_config,
+    model_override: dict[str, Any] | None = None,
+    skills: list[dict[str, str]] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Relay one AI-service turn for an already-persisted user message.
 
@@ -642,6 +660,8 @@ async def _stream_ai_service_reply(
         resume_id=resume.id,
         attachments=user_message.attachments or [],
         model_ref=model_config.model_ref if model_config else None,
+        model_override=model_override,
+        skills=skills,
     )
     try:
         async for event in events:
@@ -731,15 +751,18 @@ async def stream_ai_service_chat(
         return
 
     model_config = _resolve_turn_model_config(db, user, model_config_id)
+    # 用户自带模型（BYOK）与启用中的技能每轮解析一次：关闭或密钥失效时自动
+    # 回落到平台默认，不需要前端传任何开关。
+    model_override, skills = _resolve_user_ai(db, user.id)
     image_attachments = _turn_image_attachments(attachments)
-    supports_images = capability_supports_images(
+    supports_images = bool(model_override and model_override.get("supports_image")) or capability_supports_images(
         await get_catalog_capabilities(), model_config.model_ref if model_config else None
     )
     image_issue = _reject_turn_images(model_config, supports_images, image_attachments)
     if image_issue:
         yield {"type": "error", "message": image_issue}
         return
-    _precheck_turn_points(db, user, model_config)
+    _precheck_turn_points(db, user, model_config, byok_active=bool(model_override))
 
     session = get_or_create_chat_session(db, user.id, resume.id, session_id)
     # 首条消息给未命名会话起标题（必须在插入本条之前判定「有没有历史回合」）。
@@ -760,7 +783,9 @@ async def stream_ai_service_chat(
     db.commit()
     db.refresh(user_message)
 
-    async for event in _stream_ai_service_reply(db, user, resume, session, user_message, model_config):
+    async for event in _stream_ai_service_reply(
+        db, user, resume, session, user_message, model_config, model_override, skills
+    ):
         yield event
 
 
@@ -810,15 +835,16 @@ async def stream_ai_service_regenerate(
     # 守卫与点数预检必须先于删除：余额不足、图片不被模型支持等失败不能
     # 连带把后面的消息历史丢掉。
     model_config = _resolve_turn_model_config(db, user, model_config_id)
+    model_override, skills = _resolve_user_ai(db, user.id)
     effective_attachments = next_attachments if applying_overrides else (user_message.attachments or [])
-    supports_images = capability_supports_images(
+    supports_images = bool(model_override and model_override.get("supports_image")) or capability_supports_images(
         await get_catalog_capabilities(), model_config.model_ref if model_config else None
     )
     image_issue = _reject_turn_images(model_config, supports_images, _turn_image_attachments(effective_attachments))
     if image_issue:
         yield {"type": "error", "message": image_issue}
         return
-    _precheck_turn_points(db, user, model_config)
+    _precheck_turn_points(db, user, model_config, byok_active=bool(model_override))
 
     if applying_overrides:
         user_message.content = next_content or "请结合我上传的图片分析简历。"
@@ -841,7 +867,9 @@ async def stream_ai_service_regenerate(
     db.refresh(user_message)
 
     yield {"type": "start", "data": {"user_message_id": user_message.id}}
-    async for event in _stream_ai_service_reply(db, user, resume, session, user_message, model_config):
+    async for event in _stream_ai_service_reply(
+        db, user, resume, session, user_message, model_config, model_override, skills
+    ):
         yield event
 
 

@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, ai, announcements, auth, exports, feedback, files, resume_starters, resumes, shares, templates
+from app.api import admin, ai, announcements, auth, exports, feedback, files, resume_starters, resumes, shares, templates, user_ai
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging
@@ -74,6 +74,7 @@ app.include_router(exports.router, prefix="/api")
 app.include_router(feedback.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(announcements.router, prefix="/api")
+app.include_router(user_ai.router, prefix="/api")
 
 
 @app.get("/")

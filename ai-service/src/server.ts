@@ -31,8 +31,8 @@ import { runChat, runTask, type ChatRuntime, type ChatStreamEvent } from "./agen
 import { reportUsage } from "./billing.js";
 import { loadConfig } from "./config.js";
 import { createFauxRuntime } from "./faux.js";
-import { buildContextPrompt, DEFAULT_SYSTEM_PROMPT, type AiServiceContext } from "./prompt.js";
-import { createRealRuntime } from "./real.js";
+import { appendSkillsToPrompt, buildContextPrompt, DEFAULT_SYSTEM_PROMPT, parseSkills, type AiServiceContext } from "./prompt.js";
+import { createRealRuntime, parseByokOverride, registerByokModel } from "./real.js";
 import { buildTaskPrompts, isTaskType } from "./taskPrompts.js";
 
 const config = loadConfig();
@@ -287,14 +287,28 @@ app.post("/v1/chat", async (req, res) => {
     return;
   }
   // pi model ref the proxy resolved from AiModelConfig.pi_model_ref (ticket 07).
-  const modelRef = typeof req.body?.model === "string" && req.body.model.trim() ? req.body.model.trim() : undefined;
+  let modelRef = typeof req.body?.model === "string" && req.body.model.trim() ? req.body.model.trim() : undefined;
+  // BYOK: register the user's own endpoint for this turn. The provider id is
+  // derived from the config hash, so concurrent users never overwrite each
+  // other's credentials. Faux/demo mode ignores overrides deliberately.
+  const byok = parseByokOverride(req.body?.model_override);
+  if (byok && runtime.kind === "real") {
+    const resolved = registerByokModel(runtime, byok);
+    if (resolved.error) {
+      res.status(400).json({ type: "error", message: resolved.error });
+      return;
+    }
+    modelRef = resolved.modelRef;
+  }
   const context: AiServiceContext | null =
     typeof req.body?.context === "object" && req.body.context !== null ? req.body.context : null;
   const userId = Number.isInteger(req.body?.user_id) ? req.body.user_id : 0;
   const resumeId = Number.isInteger(req.body?.resume_id) ? req.body.resume_id : 0;
-  const systemPrompt = typeof req.body?.system_prompt === "string" && req.body.system_prompt.trim()
+  const basePrompt = typeof req.body?.system_prompt === "string" && req.body.system_prompt.trim()
     ? req.body.system_prompt
     : buildContextPrompt(DEFAULT_SYSTEM_PROMPT, context);
+  // Only enabled skills reach here; they are appended after all platform rules.
+  const systemPrompt = appendSkillsToPrompt(basePrompt, parseSkills(req.body?.skills));
 
   res.status(200);
   res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");

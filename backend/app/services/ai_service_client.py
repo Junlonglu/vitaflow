@@ -80,6 +80,8 @@ async def ai_service_chat_events(
     transport: httpx.AsyncBaseTransport | None = None,
     attachments: list[dict[str, Any]] | None = None,
     model_ref: str | None = None,
+    model_override: dict[str, Any] | None = None,
+    skills: list[dict[str, str]] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Stream NDJSON chat events from the AI service, yielding event dicts.
 
@@ -115,6 +117,14 @@ async def ai_service_chat_events(
     # service's models.json and keys the per-model usage report for billing.
     if model_ref:
         payload["model"] = model_ref
+    # BYOK: the Node service registers this provider for the turn and skips
+    # platform billing. The plaintext key only exists in this service-to-service
+    # request, never in a browser response or a database row.
+    if model_override:
+        payload["model_override"] = model_override
+    # Enabled user skills are appended to the system prompt by the Node side.
+    if skills:
+        payload["skills"] = skills
 
     url = f"{settings.ai_service_url.rstrip('/')}/v1/chat"
     headers = {"Authorization": f"Bearer {settings.ai_service_token}"}

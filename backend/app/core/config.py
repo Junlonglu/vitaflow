@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     # 由 AI 服务持有（ADR-0005），后端不再保存任何直连模型配置。
     ai_service_url: str = "http://127.0.0.1:8300"
     ai_service_token: str = ""
+    # 用户自带模型（BYOK）默认只允许公网接入点；接本机/内网网关时由部署方显式放开。
+    byok_allow_private_network: bool = False
+    byok_probe_timeout_seconds: float = Field(default=12.0, gt=0, le=60)
     # AI 服务上下文注入上限：从 MySQL 读取最近 N 条历史注入 prompt。
     ai_service_context_messages: int = Field(default=12, ge=1, le=40)
     ai_chat_change_timeout: int = Field(default=180, gt=0)

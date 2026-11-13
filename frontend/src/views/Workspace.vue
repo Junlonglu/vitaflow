@@ -17,6 +17,7 @@ const HelpCenter = defineAsyncComponent(() => import("@/views/HelpCenter.vue"))
 const Profile = defineAsyncComponent(() => import("@/views/Profile.vue"))
 const AnnouncementHistory = defineAsyncComponent(() => import("@/views/AnnouncementHistory.vue"))
 const AiRecords = defineAsyncComponent(() => import("@/views/AiRecords.vue"))
+const WorkspaceSettings = defineAsyncComponent(() => import("@/views/WorkspaceSettings.vue"))
 // 管理后台体积大且只有管理员可见，单独切包
 const Admin = defineAsyncComponent(() => import("@/views/Admin.vue"))
 
@@ -29,7 +30,7 @@ const resumeId = computed(() => {
 })
 
 // 主区面板：模板中心 / 全部简历 / 内容页 / 管理后台 / 编辑器 / 首页，同一时刻只渲染一个
-const panel = computed<"templates" | "library" | "help" | "profile" | "announcements" | "ai-records" | "admin" | "editor" | "home">(() => {
+const panel = computed<"templates" | "library" | "help" | "profile" | "announcements" | "ai-records" | "settings" | "admin" | "editor" | "home">(() => {
   const path = route.path
   if (path === "/workspace/templates") return "templates"
   if (path === "/workspace/resumes") return "library"
@@ -37,6 +38,7 @@ const panel = computed<"templates" | "library" | "help" | "profile" | "announcem
   if (path === "/workspace/profile") return "profile"
   if (path === "/workspace/announcements") return "announcements"
   if (path === "/workspace/ai-records") return "ai-records"
+  if (path === "/workspace/settings") return "settings"
   if (path === "/workspace/admin") return "admin"
   return resumeId.value ? "editor" : "home"
 })
@@ -63,6 +65,7 @@ async function handleCreated(id: number) {
     <Profile v-else-if="panel === 'profile'" />
     <AnnouncementHistory v-else-if="panel === 'announcements'" />
     <AiRecords v-else-if="panel === 'ai-records'" />
+    <WorkspaceSettings v-else-if="panel === 'settings'" />
     <!-- 管理后台自带二级侧栏，外面只补滚动容器和移动端抽屉入口 -->
     <WorkspacePage v-else-if="panel === 'admin'">
       <Admin />

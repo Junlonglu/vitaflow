@@ -110,7 +110,7 @@ vitaflow/
 `GET /user-agreement`、`POST /verification-code`、`POST /password-reset-code`、`POST /register`、`POST /login`、`POST /reset-password`、`GET /me`、`PUT /profile`、`PUT /password`
 
 **简历 `resumes.py`**
-`GET /resumes`、`POST /resumes`、`POST /resumes/from-starter`、`POST /resumes/import-file`（上传 docx/pdf 解析成简历）、`GET|PUT|DELETE /resumes/{id}`、`POST /resumes/{id}/duplicate`、`POST /resumes/{id}/versions`（存版本快照）、`GET|PUT /resumes/{id}/share`（开关与 token）、`GET|POST /resumes/{id}/preview-html`（HTML 预览，POST 支持传入未保存的草稿）、`GET /resumes/{id}/preview-pdf`
+`GET /resumes`（支持 `page` / `page_size` / `keyword` 标题模糊搜索，LIKE 通配符转义 / `sort=updated|created|title`，非法值回落默认）、`POST /resumes`、`POST /resumes/from-starter`、`POST /resumes/import-file`（上传 docx/pdf 解析成简历）、`GET|PUT|DELETE /resumes/{id}`、`POST /resumes/{id}/duplicate`、`POST /resumes/{id}/versions`（存版本快照）、`GET|PUT /resumes/{id}/share`（开关与 token）、`GET|POST /resumes/{id}/preview-html`（HTML 预览，POST 支持传入未保存的草稿）、`GET /resumes/{id}/preview-pdf`
 
 **导出 `exports.py`**
 `POST /exports/{resume_id}/export/pdf`、`POST /exports/{resume_id}/export/word`
@@ -124,6 +124,9 @@ vitaflow/
 - 变更决策：`POST /ai/resume-chat/{resume_id}/messages/{message_id}/decision`（apply / reject）、`DELETE /ai/resume-chat/{resume_id}/messages?session_id=`
 - 历史：`GET /ai/resume-chat/{resume_id}/messages?session_id=`（省略 session_id 时落在该简历最近一次会话，兼容旧前端）
 - **服务间回调（供 ai-service 调用）**：`POST /ai/service/tool/update-basics-field`、`POST /ai/service/tool/update-section`、`POST /ai/service/tool/propose-change`、`GET /ai/service/tool/get-resume-context`、`POST /ai/service/tool/search-evidence`、`POST /ai/service/usage`
+
+**用户自带模型与技能 `user_ai.py`**（Ticket 17）
+`GET|PUT|DELETE /user-ai/credential`（每个用户一条 BYOK 凭证；读接口只回掩码）、`POST /user-ai/credential/test`（探活：优先 `/models`，404 时退回 1-token 对话请求）、`GET|POST /user-ai/skills`、`POST /user-ai/skills/import`（上传 .md/.txt，解析 frontmatter）、`PATCH|DELETE /user-ai/skills/{id}`（含启用开关）。所有查询带 `user_id`，跨用户访问返回 404。
 
 **其余**
 - `shares.py`：`GET /shares/{token}`（公开分享，无需登录）
@@ -181,6 +184,8 @@ vitaflow/
 | `flow_point_transactions` | 积分流水（增减、原因、关联对象） |
 | `flow_point_redeem_codes` / `flow_point_redeem_records` | 兑换码与核销记录 |
 | `app_settings` | 站点级开关（注册开关、公告、AI 默认模型等） |
+| `user_ai_credentials` | **BYOK**：每用户一条，`api_key_encrypted`（Fernet，密钥由 `JWT_SECRET_KEY` 派生）+ `api_key_masked`、`base_url`、`model`、`enabled`、`supports_image`、上下文/输出上限；明文永不落库、永不回前端 |
+| `user_skills` | 用户上传/手写的技能：`slug`（同用户内唯一）、`name`、`description`、`instructions`、`enabled`、`source`；启用中的才拼进系统提示词 |
 
 > 约定：**MySQL 表不使用物理外键**，关联靠业务字段 + 应用层校验。所有结构变更必须新增 Alembic 迁移，不改旧迁移。
 
@@ -315,7 +320,31 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 - 计费单位是「积分（flow points）」，规则存 `flow_point_rules`，按功能类型定价。
 - 对话：流结束后 ai-service 汇总 usage（按 provider/model 聚合，过滤 faux 模式）→ `POST /api/ai/service/usage` → Python 扣减并写流水。
 - 一次性任务：FastAPI 侧同步结算。
+- **BYOK 回合不消耗积分**：对话入口跳过 `precheck_flow_points`，`usage` 回调里 provider 以 `byok-` 开头时仍落一条 `ai_chat` 任务行（供成功率/功能统计），但 `finish_ai_task(settle=False)` 且 `points_used=0`。
 - 两条路径语义不同（异步回调 vs 同步结算），新增任务类型时必须明确走哪一条。
+
+### 7.10 用户自带模型（BYOK）与自定义技能
+
+一条完整链路，跨越三层，任何一层失败都自动回落到平台默认：
+
+```
+设置页 /workspace/settings
+  → FastAPI /api/user-ai/*（Fernet 加密落库、只回掩码、SSRF 校验）
+  → 对话时 _resolve_user_ai(db, user_id) 解析 override + 启用技能
+  → ai_service_client 在 /v1/chat payload 附带 model_override / skills
+  → ai-service registerByokModel() 动态注册临时 provider（id = owner + 配置哈希）
+  → appendSkillsToPrompt() 把技能追加到系统提示词末尾
+  → usage 回调按 provider 前缀识别 byok 并跳过结算
+```
+
+关键设计：
+
+- **密钥**：`JWT_SECRET_KEY` 派生 Fernet 密钥；轮换 JWT 密钥会使旧密文解不开（有意的轮换语义），此时 `resolve_model_override` 返回 `None`，对话静默回退平台模型。改模型名/地址时 `api_key` 可留空沿用已存密钥。
+- **SSRF**：`core/url_guard.py` 分两级——schema 校验只查字面量（不联网，每轮对话也用得上），点「测试连接」才做 DNS 解析后校验；默认拒绝回环/私网/链路本地/云元数据地址。部署方可设 `BYOK_ALLOW_PRIVATE_NETWORK=true` 放开本机 Ollama，自行承担风险。
+- **多用户隔离**：ai-service 用 `owner + sha256(base_url|model|key)` 作 providerId，改配置注册新 id 而不是覆盖旧 id，避免并发请求串 Key；注册上限 200 个，LRU 淘汰。
+- **技能注入**：只带启用中的技能，总量上限 8000 字（Node 侧再截一次）；追加在平台规则**之后**并声明「不得覆盖上方规则」，标题换行被清洗，防止用户文本伪造系统级章节。
+- **容错**：BYOK/技能属可选增强，配置表缺失、迁移未跑、DB 抖动时 `_resolve_user_ai` 只记一条 warning 并返回 `(None, [])`，绝不阻断对话。
+- **范围边界**：目前只作用于简历 Agent 对话；`generate-resume` / `import-resume` 等一次性任务仍走平台模型，以保证结构化输出稳定，也避免改动同步结算链路。
 
 ---
 
@@ -331,7 +360,7 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 | `/workspace` | `Workspace.vue` | **工作区外壳**：左侧栏（简历列表 + 用户区）+ 中间对话首页 + 右侧预览空态 |
 | `/workspace/:id` | `Workspace.vue` → `ResumeEditor.vue` | **核心页面**，外壳内的编辑器：中栏「Flow Agent 对话 ⇄ 内容编辑」可切换，右栏 A4 预览；中栏默认占工作区 52%（520–1000px 夹取），拖拽分隔条可改并记在 `localStorage` 的 `vitaflow_editor_panel_width` |
 | `/workspace/templates` | `Workspace.vue` → `WorkspaceTemplates.vue` | **工作区内的模板中心**：左侧模板网格（搜索 + 分类筛选），右侧选中模板大图 + 「用此模板创建 / 按岗位起稿 / 导入已有简历」，选好模板后带着 `template_id` 进创建流程；网格最多 3 列（`2xl` 才 4 列），右栏占主区 42%（380–560px），预览、标题、入口同宽成列并在面板内垂直居中 |
-| `/workspace/resumes` | `Workspace.vue` → `WorkspaceResumeLibrary.vue` | **全部简历**面板：卡片网格、复制、删除、响应式分页（桌面 8 / 窄屏 6），创建入口复用 `ResumeCreateFlow`；列表分页状态本地维护，避免与侧栏共用的 store 互相顶掉 |
+| `/workspace/resumes` | `Workspace.vue` → `WorkspaceResumeLibrary.vue` | **全部简历**面板：卡片网格、复制、删除、响应式分页（桌面 8 / 窄屏 6）、标题搜索（300ms 防抖）与排序（最近更新 / 最近创建 / 按标题）、无结果空态，创建入口复用 `ResumeCreateFlow`；列表分页状态本地维护，避免与侧栏共用的 store 互相顶掉 |
 | `/resumes` | — | 重定向到 `/workspace/resumes`，兼容旧链接与历史导航 |
 | `/resumes/:id/edit` | — | 重定向到 `/workspace/:id`，兼容旧链接 |
 | `/templates` | `TemplateGallery.vue` | 仅面向未登录访客的公开模板页（浏览 + 引流到登录）；登录后守卫直接跳到 `/workspace/templates` |
@@ -339,6 +368,7 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 | `/workspace/profile` | `Workspace.vue` → `Profile.vue` | 个人资料、修改密码、意见反馈（`?tab=feedback` 直达反馈页），浅灰底衬托白卡 |
 | `/workspace/announcements` | `Workspace.vue` → `AnnouncementHistory.vue` | 公告历史与详情弹窗 |
 | `/workspace/ai-records` | `Workspace.vue` → `AiRecords.vue` | Flow Points 余额、兑换、调用记录与消费明细 |
+| `/workspace/settings` | `Workspace.vue` → `WorkspaceSettings.vue` | **模型与技能**：BYOK 凭证表单（保存/探活/移除）+ 自定义技能列表（上传 SKILL.md、新建、编辑、启停、删除）；入口在左下用户菜单，按需异步加载 |
 | `/help`、`/profile`、`/announcements`、`/ai-records` | — | 旧链接，重定向到对应 `/workspace/*`（`/profile` 保留 query） |
 | `/share/:token` | `SharedResume.vue` | 公开分享页，无鉴权 |
 | `/workspace/admin` | `Workspace.vue` → `Admin.vue` | 管理后台，`meta.requiresAdmin`；套 `WorkspacePage` 后留在工作区外壳内，内容区按需异步加载 |
@@ -439,8 +469,9 @@ docker compose --profile full up -d --build
 6. AI 输出进入 HTML 前必须过 `rich_text_service` 清理，防 XSS。
 7. 不硬编码任何 Key / 密码 / 密钥；管理员能力必须后端校验。
 8. 修改简历数据结构时，五处同步：TS 类型、默认数据、表单组件、渲染模板、导出服务。
-9. 前端改动至少 `npm run build`；后端至少启动级检查；涉及预览/导出的要人工验证无空白、无分页错位。
+9. 前端改动至少 `npm run build` + `npm test`（vitest，配置 `frontend/vitest.config.ts`）；后端至少 `pytest -q`（`backend/requirements-dev.txt` 提供 pytest）；ai-service 至少 `npm run typecheck && npm test`；涉及预览/导出的要人工验证无空白、无分页错位。
 10. 不自动提交、不自动删文件、不清理用户改动。
+11. 新增用户可控的出站 URL / 密钥 / 提示词内容，必须同时做：加密落库且不回明文、SSRF 校验、提示词注入边界（追加在系统规则之后 + 长度上限）、以及计费口径（是否消耗平台积分）。
 
 ---
 
@@ -457,6 +488,8 @@ docker compose --profile full up -d --build
 | 计费收尾仍阻塞 | `server.ts` 在 `res.end()` 后 `await reportUsage` | 注释写 fire-and-forget，实际占住请求收尾；FastAPI 慢时会拖长 Node 连接生命周期 |
 | 文档过时 | `AGENTS.md` 仍写 LangChain/LangGraph | 旧管线已退役，应按 `docs/pi-agent重构设计.md` 理解 |
 | 静态共享令牌 | `AI_SERVICE_TOKEN` | ADR 中已列为开放问题。当前「内网 + 无 shell 工具 + Python 侧兜底校验」下风险可控；升级方向是短时签名（时间戳 + HMAC） |
+| BYOK 未覆盖一次性任务 | `api/ai.py`、`api/resumes.py` | 自定义模型目前只作用于 Agent 对话；生成/导入任务仍走平台模型。扩展时需同步改造各处 `precheck_flow_points` / `settle_task_flow_points`，否则会出现「用用户 Key 却扣平台积分」 |
+| `ui/input` 等旧控件 | `components/ui/` | 本轮已把 Input/Textarea 从 12px 收敛到 8px 控件档；`Select` 的 ghost 类、`ConfirmDialog` 里的 `rounded-xl` 按钮等仍有零散发散，遇到即按 §1 圆角阶梯校准 |
 
 ---
 

@@ -61,6 +61,12 @@ class _DbStub(SimpleNamespace):
     def get(self, _model, _pk):
         return SimpleNamespace(id=7, role="user", flow_points=0)
 
+    def add(self, _entity):
+        return None
+
+    def commit(self):
+        return None
+
 
 def _stub_task():
     return SimpleNamespace(id=101, points_used=0, tokens_used=0, input_data={})
@@ -111,8 +117,8 @@ class AiServiceUsageEndpointTest(unittest.TestCase):
 
         finished: dict = {}
 
-        def fake_finish_ai_task(db, task_arg, status, error_message=None, output_data=None, token_usage=None):
-            finished.update(status=status, output_data=output_data, token_usage=token_usage)
+        def fake_finish_ai_task(db, task_arg, status, error_message=None, output_data=None, token_usage=None, settle=True):
+            finished.update(status=status, output_data=output_data, token_usage=token_usage, settle=settle)
             task_arg.points_used = 1.72
             task_arg.tokens_used = 210
 
@@ -451,6 +457,60 @@ class ToolQualityPersistenceTest(unittest.TestCase):
 
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(created["input_data"]["turn_timing"], {"total_ms": -5, "first_token_ms": 1.5})
+
+
+class ByokUsageBillingTest(unittest.TestCase):
+    """用户自带模型：仍落一条 AI 记录，但不结算平台 Flow Points。"""
+
+    def setUp(self):
+        self.client = _make_client()
+        self._original_token = settings.ai_service_token
+        settings.ai_service_token = "test-token"
+
+    def tearDown(self):
+        settings.ai_service_token = self._original_token
+
+    def test_byok_turn_is_recorded_without_settlement(self):
+        payload = {
+            **_USAGE_PAYLOAD,
+            "usage": [{**_USAGE_PAYLOAD["usage"][0], "provider": "byok-42-a1b2c3", "model": "my-model"}],
+        }
+        task = _stub_task()
+        created: dict = {}
+        finished: dict = {}
+
+        def fake_create(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None):
+            created.update(input_data=input_data, model_name=model_name)
+            return task
+
+        def fake_finish(db, task_arg, status, **kwargs):
+            finished.update(status=status, settle=kwargs.get("settle", True))
+            task_arg.points_used = 0.9  # 模拟结算写入，byok 分支必须覆盖回 0
+
+        with (
+            patch.object(ai_module, "get_ai_config_by_model_ref", return_value=None),
+            patch.object(ai_module, "create_ai_task", side_effect=fake_create),
+            patch.object(ai_module, "finish_ai_task", side_effect=fake_finish),
+        ):
+            resp = self.client.post("/api/ai/service/usage", json=payload, headers={"x-ai-service-token": "test-token"})
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(finished["settle"], False)
+        self.assertEqual(task.points_used, 0)
+        self.assertEqual(created["input_data"]["billing_mode"], "byok")
+        entry = resp.json()["data"]["entries"][0]
+        self.assertFalse(entry["billed"])
+        self.assertEqual(entry["billing_mode"], "byok")
+
+    def test_platform_turn_still_settles(self):
+        finished: dict = {}
+        with (
+            patch.object(ai_module, "get_ai_config_by_model_ref", return_value=None),
+            patch.object(ai_module, "create_ai_task", side_effect=lambda db, user_id, task_type, **kwargs: _stub_task()),
+            patch.object(ai_module, "finish_ai_task", side_effect=lambda db, t, status, **kw: finished.update(settle=kw.get("settle", True))),
+        ):
+            self.client.post("/api/ai/service/usage", json=_USAGE_PAYLOAD, headers={"x-ai-service-token": "test-token"})
+        self.assertEqual(finished["settle"], True)
 
 
 if __name__ == "__main__":

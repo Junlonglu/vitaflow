@@ -27,6 +27,7 @@ const router = createRouter({
     { path: "/workspace/profile", component: Workspace },
     { path: "/workspace/announcements", component: Workspace },
     { path: "/workspace/ai-records", component: Workspace },
+    { path: "/workspace/settings", component: Workspace },
     // 管理后台也挂在工作区外壳里，权限仍由 meta 校验
     { path: "/workspace/admin", component: Workspace, meta: { requiresAdmin: true } },
     { path: "/workspace/:id", component: Workspace },

@@ -989,6 +989,9 @@ def report_ai_service_usage(
     entries: list[dict[str, Any]] = []
     for item in payload.usage:
         ref = f"{item.provider.strip()}/{item.model.strip()}"
+        # 用户自带模型（BYOK）：仍记一条 AI 记录用于成功率/功能统计，但不消耗
+        # 平台 Flow Points —— 预扣已在对话入口跳过，这里也不能再结算。
+        billing_mode = "byok" if item.provider.strip().startswith("byok-") else "platform"
         config = get_ai_config_by_model_ref(db, ref)
         token_usage = build_token_usage(
             item.input_tokens,
@@ -1001,6 +1004,7 @@ def report_ai_service_usage(
             "pi_model_ref": ref,
             "token_usage": token_usage,
             "billing_override": config.chat_billing_override() if config else None,
+            "billing_mode": billing_mode,
         }
         if payload.tool_calls:
             input_data["tool_calls"] = payload.tool_calls
@@ -1018,7 +1022,11 @@ def report_ai_service_usage(
             feature=feature,
         )
         try:
-            finish_ai_task(db, task, "success", output_data={"source": "ai_service_usage"}, token_usage=token_usage)
+            finish_ai_task(db, task, "success", output_data={"source": "ai_service_usage"}, token_usage=token_usage, settle=billing_mode == "platform")
+            if billing_mode == "byok":
+                task.points_used = 0
+                db.add(task)
+                db.commit()
         except AppException as exc:
             # 结算不足（402）等失败：按旧链路口径把任务落成 failed（退还预扣），
             # 不能让已建任务永远悬挂在 pending。
@@ -1044,7 +1052,8 @@ def report_ai_service_usage(
                 "points_used": point_number(task.points_used),
                 "tokens_used": int(task.tokens_used or 0),
                 "requests": item.requests,
-                "billed": True,
+                "billed": billing_mode == "platform",
+                "billing_mode": billing_mode,
             }
         )
     return success({"entries": entries})

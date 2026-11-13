@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue"
 import { RouterLink, useRouter } from "vue-router"
-import { Bell, ChevronUp, CircleHelp, LayoutDashboard, LayoutTemplate, Files, LogOut, UserRound } from "lucide-vue-next"
+import { Bell, ChevronUp, CircleHelp, LayoutDashboard, LayoutTemplate, Files, LogOut, Settings2, UserRound } from "lucide-vue-next"
 import FlowPointIcon from "@/components/ui/FlowPointIcon.vue"
 import { useUserStore } from "@/stores/user"
 import { getFlowPointSummaryApi } from "@/api/ai"
@@ -22,6 +22,7 @@ const menuItems = computed(() => {
     { label: "Flow Points", to: "/workspace/ai-records", icon: FlowPointIcon },
     { label: "公告", to: "/workspace/announcements", icon: Bell },
     { label: "帮助中心", to: "/workspace/help", icon: CircleHelp },
+    { label: "模型与技能", to: "/workspace/settings", icon: Settings2 },
     { label: "个人资料", to: "/workspace/profile", icon: UserRound },
   ]
   if (isAdmin.value) items.push({ label: "管理后台", to: "/workspace/admin", icon: LayoutDashboard })
@@ -72,7 +73,7 @@ function logout() {
 
     <div v-if="open" class="fixed inset-0 z-40" @click="open = false"></div>
     <Transition name="user-menu">
-      <div v-if="open" class="absolute bottom-full left-2 right-2 z-50 mb-1 rounded-xl border border-zinc-200 bg-white p-1 shadow-lg">
+      <div v-if="open" class="thin-scrollbar absolute bottom-full left-2 right-2 z-50 mb-1 max-h-[70vh] overflow-y-auto rounded-xl border border-zinc-200 bg-white p-1 shadow-lg">
         <RouterLink
           v-for="item in menuItems"
           :key="item.to"

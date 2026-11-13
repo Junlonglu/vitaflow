@@ -35,12 +35,20 @@ class AiServiceClientTest(unittest.TestCase):
         context: dict | None = None,
         attachments: list[dict] | None = None,
         model_ref: str | None = None,
+        model_override: dict | None = None,
+        skills: list[dict] | None = None,
     ) -> list[dict]:
         async def run() -> list[dict]:
             return [
                 event
                 async for event in ai_service_chat_events(
-                    message, context=context, transport=transport, attachments=attachments, model_ref=model_ref
+                    message,
+                    context=context,
+                    transport=transport,
+                    attachments=attachments,
+                    model_ref=model_ref,
+                    model_override=model_override,
+                    skills=skills,
                 )
             ]
 
@@ -163,6 +171,38 @@ class AiServiceClientTest(unittest.TestCase):
 
         self._collect(httpx.MockTransport(handler), "这份简历怎么样？")
         self.assertNotIn("model", captured["payload"], "unmapped config → no model key (faux default)")
+
+    def test_forwards_byok_override_and_enabled_skills(self) -> None:
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["payload"] = json.loads(request.content)
+            return _ndjson_response(['{"type":"start","data":{}}'])
+
+        override = {"provider": "byok-7", "model": "my-model", "base_url": "https://api.example.com/v1", "api_key": "sk-secret"}
+        skills = [{"name": "量化成果", "description": "", "instructions": "每条经历补一个数字"}]
+        self._collect(
+            httpx.MockTransport(handler),
+            "帮我优化简历",
+            model_ref="deepseek/deepseek-chat",
+            model_override=override,
+            skills=skills,
+        )
+        self.assertEqual(captured["payload"]["model_override"], override)
+        self.assertEqual(captured["payload"]["skills"], skills)
+        # 平台 model 仍保留，AI 服务用 override 覆盖它，便于回退与日志追踪。
+        self.assertEqual(captured["payload"]["model"], "deepseek/deepseek-chat")
+
+    def test_omits_byok_keys_when_not_configured(self) -> None:
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["payload"] = json.loads(request.content)
+            return _ndjson_response(['{"type":"start","data":{}}'])
+
+        self._collect(httpx.MockTransport(handler), "这份简历怎么样？", model_override=None, skills=[])
+        self.assertNotIn("model_override", captured["payload"])
+        self.assertNotIn("skills", captured["payload"])
 
     def test_non_200_returns_error_with_detail(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:

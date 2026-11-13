@@ -107,7 +107,7 @@ watch(
             <p class="mt-1 truncate text-xs leading-5 text-zinc-500">{{ modalDescription() }}</p>
           </div>
         </div>
-        <button class="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700" @click="emit('close')">
+        <button type="button" class="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700" aria-label="关闭" @click="emit('close')">
           <X class="h-5 w-5" />
         </button>
       </div>

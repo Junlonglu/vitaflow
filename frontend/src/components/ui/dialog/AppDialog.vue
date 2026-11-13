@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref } from "vue"
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { X } from "lucide-vue-next"
+import { createDialogHandle } from "./dialogState"
 
 const props = withDefaults(
   defineProps<{
@@ -31,7 +32,11 @@ const props = withDefaults(
 const emit = defineEmits<{ "update:open": [value: boolean] }>()
 
 const bodyEl = ref<HTMLElement | null>(null)
+const panelEl = ref<HTMLElement | null>(null)
 defineExpose({ bodyEl })
+
+const dialog = createDialogHandle()
+let lastFocused: HTMLElement | null = null
 
 function close() {
   emit("update:open", false)
@@ -40,6 +45,37 @@ function close() {
 function onOverlayClick() {
   if (props.overlayClose) close()
 }
+
+function onKeydown(event: KeyboardEvent) {
+  if (event.key !== "Escape" || !props.open) return
+  // 只有最上层弹窗响应 Esc；一次按下不会连关两层。
+  if (!dialog.isTop()) return
+  event.preventDefault()
+  close()
+}
+
+watch(
+  () => props.open,
+  async (open) => {
+    if (open) {
+      dialog.open()
+      if (lastFocused === null) lastFocused = document.activeElement as HTMLElement | null
+      await nextTick()
+      panelEl.value?.focus({ preventScroll: true })
+    } else {
+      dialog.close()
+      lastFocused?.focus?.({ preventScroll: true })
+      lastFocused = null
+    }
+  },
+  { immediate: true },
+)
+
+onMounted(() => window.addEventListener("keydown", onKeydown))
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onKeydown)
+  dialog.dispose()
+})
 </script>
 
 <template>
@@ -52,8 +88,8 @@ function onOverlayClick() {
       leave-from-class="opacity-100 translate-y-0 sm:scale-100"
       leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
     >
-      <div v-if="open" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-950/40 backdrop-blur-sm" @click.self="onOverlayClick">
-        <div class="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-2xl bg-white shadow-xl transform transition-all" :class="[maxWidthClass, panelClass]">
+      <div v-if="open" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-950/40 backdrop-blur-sm" role="dialog" aria-modal="true" :aria-label="title || undefined" @click.self="onOverlayClick">
+        <div ref="panelEl" tabindex="-1" class="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-2xl bg-white shadow-xl transform transition-all outline-none" :class="[maxWidthClass, panelClass]">
           <slot name="header">
             <div class="flex shrink-0 items-start justify-between gap-4 px-5 py-4" :class="headerClass">
               <div class="flex min-w-0 items-start gap-3">

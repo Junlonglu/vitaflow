@@ -16,10 +16,13 @@ import {
   type AdminPlanUsage,
   type AdminProbeResult,
   type AdminRemoteModel,
+  type AdminRoutingGroup,
+  type AdminRoutingGroupWrite,
 } from "@/api/admin"
 
 const props = defineProps<{
   providers: AdminCatalogProvider[]
+  groups: AdminRoutingGroup[]
   providerMode: "faux" | "real"
   saving: boolean
   syncingDevKey: string | null
@@ -35,6 +38,9 @@ const emit = defineEmits<{
   createModel: [providerKey: string, data: AdminCatalogModelWrite]
   updateModel: [providerKey: string, modelId: string, data: AdminCatalogModelWrite]
   deleteModel: [providerKey: string, modelId: string]
+  createGroup: [data: AdminRoutingGroupWrite]
+  updateGroup: [id: string, data: Omit<AdminRoutingGroupWrite, "id">]
+  deleteGroup: [id: string]
 }>()
 
 const PROVIDER_KEY_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/
@@ -349,6 +355,59 @@ function formatReset(value: string | null) {
   return new Date(value).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })
 }
 
+// ---- 路由组（magpie 的 routing groups）：一个 "group/<id>" 引用背后挂多个目录
+// 模型，上游挂掉时选型静默换人。写入仍然 emit 给父组件统一维护目录状态。
+const STRATEGY_OPTIONS = [
+  { label: "顺序（按列表依次尝试）", value: "order" },
+  { label: "轮询（每个会话轮流用）", value: "rotate" },
+  { label: "均衡（优先用得最少的）", value: "usage" },
+]
+const groupDialogOpen = ref(false)
+const groupEditingId = ref<string | null>(null)
+const groupForm = ref<{ id: string; strategy: AdminRoutingGroupWrite["strategy"]; members: string[] }>({ id: "", strategy: "order", members: [] })
+const groupErrors = ref({ id: "", members: "" })
+
+// 可选成员 = 目录里所有模型的 ref（与后端 assertGroupMembersExist 的校验口径一致）
+const memberOptions = computed(() =>
+  props.providers.flatMap((provider) =>
+    provider.models.map((model) => ({ ref: model.ref, label: `${provider.name} · ${model.name}`, id: model.id })),
+  ),
+)
+
+function toggleGroupMember(ref: string) {
+  const list = groupForm.value.members
+  groupForm.value.members = list.includes(ref) ? list.filter((item) => item !== ref) : [...list, ref]
+}
+
+function openCreateGroup() {
+  groupEditingId.value = null
+  groupForm.value = { id: "", strategy: "order", members: [] }
+  groupErrors.value = { id: "", members: "" }
+  groupDialogOpen.value = true
+}
+
+function openEditGroup(group: AdminRoutingGroup) {
+  groupEditingId.value = group.id
+  groupForm.value = { id: group.id, strategy: group.strategy, members: [...group.members] }
+  groupErrors.value = { id: "", members: "" }
+  groupDialogOpen.value = true
+}
+
+function submitGroup() {
+  const form = groupForm.value
+  const errors = { id: "", members: "" }
+  if (!PROVIDER_KEY_RE.test(form.id.trim())) errors.id = "组标识只能是字母/数字/-/_，且以字母或数字开头"
+  if (!form.members.length) errors.members = "至少选择一个成员模型"
+  groupErrors.value = errors
+  if (errors.id || errors.members) return
+  if (groupEditingId.value) {
+    emit("updateGroup", groupEditingId.value, { strategy: form.strategy, members: form.members })
+  } else {
+    emit("createGroup", { id: form.id.trim(), strategy: form.strategy, members: form.members })
+  }
+  groupDialogOpen.value = false
+}
+
 watch(
   () => props.providers.map((provider) => `${provider.key}:${provider.plan_vendor ?? ""}`).join(","),
   () => {
@@ -445,6 +504,30 @@ watch(
     </div>
 
     <div v-if="!providers.length" class="rounded-2xl border border-dashed border-zinc-200 bg-white py-10 text-center text-sm text-zinc-400">模型目录为空{{ fauxProvider ? "" : "，请先新增服务商" }}</div>
+
+    <!-- 路由组：多个目录模型共用一个引用，上游故障时选型静默换人 -->
+    <div v-if="!fauxProvider" class="rounded-2xl border border-zinc-200 bg-white shadow-sm">
+      <div class="flex items-center justify-between gap-3 border-b border-zinc-100 p-4">
+        <div>
+          <h3 class="font-semibold text-zinc-900">路由组</h3>
+          <p class="mt-0.5 text-xs text-zinc-400">把几个模型绑成一个 "group/标识" 引用：某个服务商挂掉时，对话在选型阶段自动换到组内其他模型；同一会话内保持同一模型，避免浪费厂商的提示词缓存</p>
+        </div>
+        <Button size="sm" @click="openCreateGroup"><Plus class="mr-1.5 h-4 w-4" />新增路由组</Button>
+      </div>
+      <div class="space-y-2 p-4">
+        <div v-for="group in groups" :key="group.id" class="flex items-center justify-between gap-3 rounded-xl border border-zinc-100 bg-zinc-50/60 px-3 py-2.5">
+          <div class="min-w-0">
+            <p class="truncate text-sm font-medium text-zinc-800">group/{{ group.id }}<span class="ml-2 inline-flex items-center whitespace-nowrap rounded-md border border-zinc-200/50 bg-white px-2 py-0.5 text-[10px] font-medium text-zinc-600">{{ STRATEGY_OPTIONS.find((s) => s.value === group.strategy)?.label ?? group.strategy }}</span></p>
+            <p class="mt-0.5 truncate text-xs text-zinc-400" :title="group.members.join(', ')">{{ group.members.join('，') }}</p>
+          </div>
+          <div class="flex shrink-0 items-center gap-1">
+            <button class="rounded-full p-1.5 text-zinc-400 transition-all hover:bg-zinc-100 hover:text-zinc-700 active:scale-95" title="编辑路由组" @click="openEditGroup(group)"><Pencil class="h-3.5 w-3.5" /></button>
+            <button class="rounded-full p-1.5 text-zinc-400 transition-all hover:bg-red-50 hover:text-red-600 active:scale-95" title="删除路由组" @click="emit('deleteGroup', group.id)"><Trash2 class="h-3.5 w-3.5" /></button>
+          </div>
+        </div>
+        <p v-if="!groups.length" class="py-3 text-center text-xs text-zinc-400">暂无路由组；给单个模型配置即可满足大部分场景，多个服务商互为备胎时再建组</p>
+      </div>
+    </div>
   </div>
 
   <Teleport to="body">
@@ -546,6 +629,36 @@ watch(
         <div class="mt-5 flex justify-end gap-2">
           <Button variant="outline" size="sm" @click="modelDialogOpen = false">取消</Button>
           <Button size="sm" :disabled="saving" @click="submitModel"><Check class="mr-1 h-4 w-4" />保存</Button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="groupDialogOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" @click.self="groupDialogOpen = false">
+      <div class="flex max-h-[80vh] w-full max-w-md flex-col rounded-2xl bg-white p-5 shadow-xl">
+        <h4 class="text-lg font-semibold text-zinc-900">{{ groupEditingId ? "编辑路由组" : "新增路由组" }}</h4>
+        <div class="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+          <label class="block space-y-1.5 text-sm font-medium text-zinc-700">组标识<span class="text-red-500">*</span><input v-model="groupForm.id" :disabled="!!groupEditingId" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 disabled:bg-zinc-50 disabled:text-zinc-400" placeholder="例如 main" /><p v-if="groupErrors.id" class="text-xs font-normal text-red-600">{{ groupErrors.id }}</p><span class="block text-xs font-normal text-zinc-400">对话引用将形如 group/{{ groupForm.id || "标识" }}，保存后不可改</span></label>
+          <label class="block space-y-1.5 text-sm font-medium text-zinc-700">选型策略
+            <Select v-model="groupForm.strategy" :options="STRATEGY_OPTIONS" class="!h-10 !rounded-xl text-sm" />
+            <span class="block text-xs font-normal text-zinc-400">顺序：按成员列表从上到下挑第一个可用的；轮询：不同会话轮流用各成员；均衡：优先挑当前用得最少的成员</span>
+          </label>
+          <div class="space-y-1.5 text-sm font-medium text-zinc-700">成员模型<span class="text-red-500">*</span>
+            <div class="space-y-1.5">
+              <label v-for="option in memberOptions" :key="option.ref" class="flex cursor-pointer select-none items-center gap-2.5 rounded-xl border px-3 py-2 text-sm transition-colors" :class="groupForm.members.includes(option.ref) ? 'border-zinc-900 bg-zinc-50' : 'border-zinc-200 bg-white hover:bg-zinc-50'">
+                <div class="relative flex h-4 w-4 shrink-0 items-center justify-center rounded border" :class="groupForm.members.includes(option.ref) ? 'border-zinc-900 bg-zinc-900' : 'border-zinc-300 bg-white'"><Check v-if="groupForm.members.includes(option.ref)" class="h-3 w-3 text-white stroke-[3]" /></div>
+                <input type="checkbox" class="sr-only" :checked="groupForm.members.includes(option.ref)" @change="toggleGroupMember(option.ref)" />
+                <span class="truncate text-zinc-800">{{ option.label }}</span>
+                <span class="ml-auto shrink-0 text-[10px] font-medium text-zinc-400">{{ option.ref }}</span>
+              </label>
+              <p v-if="!memberOptions.length" class="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 py-4 text-center text-xs text-zinc-400">目录里还没有任何模型，请先在上方添加服务商与模型</p>
+            </div>
+            <p v-if="groupErrors.members" class="text-xs font-normal text-red-600">{{ groupErrors.members }}</p>
+            <span class="block text-xs font-normal text-zinc-400">建议至少两个不同服务商的模型，才能真正起到备胎作用；成员被删除后需要回来自动剔除</span>
+          </div>
+        </div>
+        <div class="mt-5 flex justify-end gap-2">
+          <Button variant="outline" size="sm" @click="groupDialogOpen = false">取消</Button>
+          <Button size="sm" :disabled="saving" @click="submitGroup"><Check class="mr-1 h-4 w-4" />保存</Button>
         </div>
       </div>
     </div>

@@ -109,15 +109,22 @@ def _policy_payload(item: AiModelConfig, payload: AiConfigWrite) -> None:
 
 def _validate_model_ref(model_ref: str | None) -> tuple[bool, str]:
     """Degrade-tolerant catalog check (ticket 11): reject unknown refs when the
-    AI service is reachable, warn instead of blocking when it is not."""
+    AI service is reachable, warn instead of blocking when it is not.
+    Routing groups ("group/<id>") are validated against the catalog's group
+    list rather than the provider models."""
     ref = (model_ref or "").strip()
     if not ref:
         return True, "未选择目录模型，保存后该配置不会参与对话"
     try:
-        providers = call_catalog("GET", "/v1/catalog").get("providers") or []
+        catalog = call_catalog("GET", "/v1/catalog")
     except Exception:
         return True, "AI 服务暂不可达，未能校验模型引用；运行时若模型不存在对话会报错"
-    for provider in providers:
+    if ref.startswith("group/"):
+        groups = catalog.get("routing_groups") or []
+        if any(group.get("id") == ref[len("group/"):] for group in groups):
+            return True, ""
+        return False, f"路由组 {ref} 不在 AI 服务目录中，请先在模型目录中创建"
+    for provider in catalog.get("providers") or []:
         for model in provider.get("models") or []:
             if model.get("ref") == ref:
                 return True, ""
@@ -249,6 +256,37 @@ def get_catalog_provider_balance(provider_key: str):
 def get_catalog_provider_plan_usage(provider_key: str):
     """Vendor plan windows (Coding Plan / Token Plan); needs the account access key pair."""
     return success(call_catalog("GET", f"/v1/catalog/providers/{provider_key}/plan-usage"))
+
+
+# Routing groups: one ref that fans out to several catalog models so a dead
+# provider fails over silently (ai-service router.ts). A group referenced by a
+# model config cannot be deleted — that protection lives here, where the DB is.
+@router.post("/ai-catalog/groups")
+def create_catalog_group(payload: dict):
+    result = success(call_catalog("POST", "/v1/catalog/groups", payload))
+    invalidate_catalog_capabilities_cache()
+    return result
+
+
+@router.put("/ai-catalog/groups/{group_id}")
+def update_catalog_group(group_id: str, payload: dict):
+    result = success(call_catalog("PUT", f"/v1/catalog/groups/{group_id}", payload))
+    invalidate_catalog_capabilities_cache()
+    return result
+
+
+@router.delete("/ai-catalog/groups/{group_id}")
+def delete_catalog_group(group_id: str, db: Session = Depends(get_db)):
+    in_use = (
+        db.query(AiModelConfig)
+        .filter(AiModelConfig.model_ref == f"group/{group_id}")
+        .first()
+    )
+    if in_use:
+        raise AppException(f"路由组 group/{group_id} 正被模型配置「{in_use.name}」使用，请先解除绑定", 409)
+    result = success(call_catalog("DELETE", f"/v1/catalog/groups/{group_id}"))
+    invalidate_catalog_capabilities_cache()
+    return result
 
 
 @router.post("/ai-catalog/providers")

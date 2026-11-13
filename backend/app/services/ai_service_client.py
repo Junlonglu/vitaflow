@@ -311,11 +311,16 @@ async def afetch_catalog_providers(*, transport: httpx.AsyncBaseTransport | None
 
     Raises on transport/auth failure so callers can decide their own fallback.
     """
+    body = await afetch_catalog_payload(transport=transport)
+    return body.get("providers") or []
+
+
+async def afetch_catalog_payload(*, transport: httpx.AsyncBaseTransport | None = None) -> dict[str, Any]:
+    """Full catalog body (providers + routing_groups) for capability derivation."""
     async with httpx.AsyncClient(transport=transport, timeout=httpx.Timeout(connect=5, read=30, write=10, pool=5)) as client:
         resp = await client.get(_catalog_url("/v1/catalog"), headers=_catalog_headers())
     if resp.status_code >= 400:
         from app.core.exceptions import AppException
 
         raise AppException(_extract_error(resp.content) or f"模型目录请求失败（{resp.status_code}）")
-    body = resp.json()
-    return body.get("providers") or []
+    return resp.json()

@@ -16,16 +16,19 @@ import type { ImageContent } from "@earendil-works/pi-ai/compat";
 import { queryProviderBalance } from "./balance.js";
 import {
   CatalogError,
+  assertGroupMembersExist,
   fauxCatalog,
   listApiKeyEnvNames,
   mutateCatalog,
   readCatalog,
   renderProviders,
   requireEditableProvider,
+  validateGroupId,
   validateModelBody,
   validateModelId,
   validateProviderBody,
   validateProviderKey,
+  validateRoutingGroupBody,
 } from "./catalog.js";
 import { runChat, runTask, type ChatRuntime, type ChatStreamEvent } from "./agent.js";
 import { reportUsage } from "./billing.js";
@@ -35,6 +38,7 @@ import { enrichProviderFromModelsDev, fetchModelsDev } from "./modelsdev.js";
 import { appendSkillsToPrompt, buildContextPrompt, DEFAULT_SYSTEM_PROMPT, parseSkills, type AiServiceContext } from "./prompt.js";
 import { fetchRemoteModels, probeCatalogModel } from "./probe.js";
 import { queryPlanUsage } from "./planusage.js";
+import { noteRoutingFailure, noteRoutingSuccess, resolveRoutingGroup } from "./router.js";
 import { createRealRuntime, parseByokOverride, registerByokModel, type ThinkingLevelSetting } from "./real.js";
 import { appendSkillPrompt, extractSkillCommand, skillPromptBlock } from "./skills.js";
 import { buildTaskPrompts, isTaskType } from "./taskPrompts.js";
@@ -119,9 +123,32 @@ async function catalogResponse(res: express.Response, extra?: unknown): Promise<
     return;
   }
   const catalog = await readCatalog(AGENT_DIR);
-  const payload: Record<string, unknown> = { ...catalogViews(), providers: renderProviders(catalog) };
+  const payload: Record<string, unknown> = {
+    ...catalogViews(),
+    providers: renderProviders(catalog),
+    routing_groups: catalog.routing_groups ?? [],
+  };
   if (extra !== undefined) payload.extra = extra;
   res.json(payload);
+}
+
+/** Group refs are only meaningful in real mode; faux has a fixed single model. */
+async function resolveGroupRef(
+  res: express.Response,
+  modelRef: string,
+  sessionId?: number,
+): Promise<string | null> {
+  if (runtime.kind !== "real") {
+    res.status(400).json({ type: "error", message: "faux 模式不支持路由组" });
+    return null;
+  }
+  const catalog = await readCatalog(AGENT_DIR);
+  const resolved = resolveRoutingGroup(catalog, runtime, modelRef, sessionId);
+  if (resolved.error || !resolved.ref) {
+    res.status(400).json({ type: "error", message: resolved.error ?? "路由组解析失败" });
+    return null;
+  }
+  return resolved.ref;
 }
 
 function handleCatalogError(res: express.Response, err: unknown): void {
@@ -417,6 +444,70 @@ app.get("/v1/catalog/providers/:key/plan-usage", async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Routing groups: several catalog models behind one "group/<id>" ref so a dead
+// provider fails over silently at model-selection time (see router.ts).
+// Business delete-protection (a group referenced by AiModelConfig) lives in
+// FastAPI; here we only enforce structure and member existence.
+// ---------------------------------------------------------------------------
+app.post("/v1/catalog/groups", async (req, res) => {
+  if (!authorize(req)) return void res.status(401).json({ type: "error", message: "未授权：需要有效的服务令牌" });
+  if (rejectMutations(res)) return;
+  try {
+    const body = validateRoutingGroupBody(req.body ?? {});
+    await mutateCatalog(AGENT_DIR, (catalog) => {
+      catalog.routing_groups = catalog.routing_groups ?? [];
+      if (catalog.routing_groups.some((group) => group.id === body.id)) {
+        throw new CatalogError(`路由组 ${body.id} 已存在`);
+      }
+      assertGroupMembersExist(catalog, body.members);
+      catalog.routing_groups.push({ id: body.id, strategy: body.strategy, members: body.members });
+    });
+    await rebuildRuntime();
+    await catalogResponse(res);
+  } catch (err) {
+    handleCatalogError(res, err);
+  }
+});
+
+app.put("/v1/catalog/groups/:id", async (req, res) => {
+  if (!authorize(req)) return void res.status(401).json({ type: "error", message: "未授权：需要有效的服务令牌" });
+  if (rejectMutations(res)) return;
+  try {
+    const id = validateGroupId(req.params.id);
+    const body = validateRoutingGroupBody({ ...req.body, id });
+    await mutateCatalog(AGENT_DIR, (catalog) => {
+      const group = (catalog.routing_groups ?? []).find((entry) => entry.id === id);
+      if (!group) throw new CatalogError(`路由组 ${id} 不存在`);
+      assertGroupMembersExist(catalog, body.members);
+      group.strategy = body.strategy;
+      group.members = body.members;
+    });
+    await rebuildRuntime();
+    await catalogResponse(res);
+  } catch (err) {
+    handleCatalogError(res, err);
+  }
+});
+
+app.delete("/v1/catalog/groups/:id", async (req, res) => {
+  if (!authorize(req)) return void res.status(401).json({ type: "error", message: "未授权：需要有效的服务令牌" });
+  if (rejectMutations(res)) return;
+  try {
+    const id = validateGroupId(req.params.id);
+    await mutateCatalog(AGENT_DIR, (catalog) => {
+      const groups = catalog.routing_groups ?? [];
+      const next = groups.filter((group) => group.id !== id);
+      if (next.length === groups.length) throw new CatalogError(`路由组 ${id} 不存在`);
+      catalog.routing_groups = next;
+    });
+    await rebuildRuntime();
+    await catalogResponse(res);
+  } catch (err) {
+    handleCatalogError(res, err);
+  }
+});
+
 app.post("/v1/chat", async (req, res) => {
   console.log(`[vitaflow-ai] chat request received`);
   if (!authorize(req)) {
@@ -451,6 +542,17 @@ app.post("/v1/chat", async (req, res) => {
     }
     modelRef = resolved.modelRef;
     thinkingLevel = resolved.thinkingLevel;
+  }
+  // 路由组（magpie 的 routing groups）："group/<id>" 在选型时刻解析成具体成员，
+  // 失败的成员进入冷却、后续轮次静默换人；本轮内不换上游（避免重复流式事件）。
+  // requestedRef 保留原始组引用，供 FastAPI 按组配置结算积分。
+  const sessionId = Number.isInteger(req.body?.session_id) ? (req.body.session_id as number) : null;
+  let requestedRef: string | undefined;
+  if (modelRef?.startsWith("group/")) {
+    const memberRef = await resolveGroupRef(res, modelRef, sessionId ?? undefined);
+    if (!memberRef) return;
+    requestedRef = modelRef;
+    modelRef = memberRef;
   }
   const context: AiServiceContext | null =
     typeof req.body?.context === "object" && req.body.context !== null ? req.body.context : null;
@@ -495,7 +597,7 @@ app.post("/v1/chat", async (req, res) => {
     resume_id: resumeId,
     // 后端转发时带上被回复的用户消息 id 与会话 id，轨迹才能和消息表对上。
     turn_id: Number.isInteger(req.body?.turn_id) ? (req.body.turn_id as number) : null,
-    session_id: Number.isInteger(req.body?.session_id) ? (req.body.session_id as number) : null,
+    session_id: sessionId,
     trigger,
     skill: skillCommand ? { id: skillCommand.skill.id, name: skillCommand.skill.name } : null,
     versions: {
@@ -548,6 +650,11 @@ app.post("/v1/chat", async (req, res) => {
     controller.signal,
   );
   res.end();
+  // 路由记录：失败给成员上冷却，成功清除冷却并刷新会话粘性成员。
+  if (requestedRef) {
+    if (outcome.failed) noteRoutingFailure(modelRef);
+    else noteRoutingSuccess(sessionId ?? undefined, modelRef);
+  }
   // Feature breakdown (admin dashboard): 技能轮次按技能 id 记账，其余算自由对话。
   const feature = skillCommand?.skill.id ?? "chat";
   // End-of-request billing (ticket 07): hand the aggregated per-model usage to
@@ -572,6 +679,7 @@ app.post("/v1/chat", async (req, res) => {
         tool_calls: outcome.toolCalls,
         tool_quality: outcome.toolQuality,
         turn_timing: outcome.timing,
+        requested_ref: requestedRef,
       });
       if (!ok) console.error("[vitaflow-ai] usage report rejected by FastAPI");
     } catch (err) {
@@ -592,6 +700,7 @@ app.post("/v1/chat", async (req, res) => {
         error_message: outcome.error,
         tool_quality: outcome.toolQuality,
         turn_timing: outcome.timing,
+        requested_ref: requestedRef,
       });
       if (!ok) console.error("[vitaflow-ai] failure report rejected by FastAPI");
     } catch (err) {
@@ -621,6 +730,13 @@ app.post("/v1/task", async (req, res) => {
     return;
   }
   const modelRef = typeof req.body?.model === "string" && req.body.model.trim() ? req.body.model.trim() : undefined;
+  // 路由组同样支持一次性任务，但没有会话概念，不做粘性（每次任务独立选型）。
+  let taskModelRef = modelRef;
+  if (taskModelRef?.startsWith("group/")) {
+    const memberRef = await resolveGroupRef(res, taskModelRef);
+    if (!memberRef) return;
+    taskModelRef = memberRef;
+  }
   const { systemPrompt, message } = buildTaskPrompts(task, inputPayload);
 
   res.status(200);
@@ -632,7 +748,7 @@ app.post("/v1/task", async (req, res) => {
   const controller = new AbortController();
   res.on("close", () => controller.abort());
 
-  await runTask({ task, message, systemPrompt, config, runtime, modelRef }, (event) => sendEvent(res, event), controller.signal);
+  await runTask({ task, message, systemPrompt, config, runtime, modelRef: taskModelRef }, (event) => sendEvent(res, event), controller.signal);
   res.end();
 });
 

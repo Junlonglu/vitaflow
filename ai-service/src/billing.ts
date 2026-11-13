@@ -39,6 +39,9 @@ export interface UsageReportPayload {
   /** "failed" records a failed turn without billing (no usage is reported then). */
   status?: "failed";
   error_message?: string;
+  /** The model ref the request asked for before routing — a group ref like
+   * "group/x" survives here so FastAPI can settle against the group's config. */
+  requested_ref?: string;
 }
 
 const MAX_ATTEMPTS = 3;

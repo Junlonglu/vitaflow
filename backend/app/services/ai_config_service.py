@@ -17,7 +17,7 @@ from app.core.database import SessionLocal
 from app.core.exceptions import AppException
 from app.core.redis import redis_client
 from app.models.ai_config import AiModelConfig, FlowPointRule
-from app.services.ai_service_client import afetch_catalog_providers
+from app.services.ai_service_client import afetch_catalog_payload
 
 
 logger = logging.getLogger(__name__)
@@ -218,6 +218,32 @@ def _capabilities_from_providers(providers: list[dict[str, Any]]) -> dict[str, d
     return capabilities
 
 
+def _capabilities_from_groups(
+    capabilities: dict[str, dict[str, Any]],
+    groups: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Derive "group/<id>" capability entries from their members.
+
+    A group is multimodal only if every known member is (an unknown member —
+    e.g. catalog unreachable at cache time — is skipped rather than vetoing);
+    the usable context window is the smallest member's, since any turn may
+    land on the weakest member."""
+    for group in groups:
+        ref = f"group/{group.get('id', '')}".strip()
+        members = [str(m or "").strip() for m in group.get("members") or [] if str(m or "").strip()]
+        member_entries = [capabilities[m] for m in members if m in capabilities]
+        if not member_entries:
+            continue
+        capabilities[ref] = {
+            "multimodal": all(entry.get("multimodal") for entry in member_entries),
+            "context_window": min(
+                (entry.get("context_window") for entry in member_entries if entry.get("context_window")),
+                default=None,
+            ),
+        }
+    return capabilities
+
+
 def _read_capabilities_cache() -> dict[str, dict[str, Any]] | None:
     try:
         cached = redis_client.get(CATALOG_CAPABILITIES_CACHE_KEY)
@@ -240,10 +266,13 @@ async def get_catalog_capabilities() -> dict[str, dict[str, Any]]:
     if cached is not None:
         return cached
     try:
-        providers = await afetch_catalog_providers()
+        payload = await afetch_catalog_payload()
     except Exception:
         return {}
-    capabilities = _capabilities_from_providers(providers)
+    capabilities = _capabilities_from_groups(
+        _capabilities_from_providers(payload.get("providers") or []),
+        payload.get("routing_groups") or [],
+    )
     _cache_capabilities(capabilities)
     return capabilities
 
@@ -258,10 +287,13 @@ def get_catalog_capabilities_sync() -> dict[str, dict[str, Any]]:
 
         with httpx.Client(timeout=httpx.Timeout(connect=5, read=30, write=10, pool=5)) as client:
             resp = client.get(_catalog_url("/v1/catalog"), headers=_catalog_headers())
-        providers = (resp.json().get("providers") or []) if resp.status_code < 400 else []
+        payload = resp.json() if resp.status_code < 400 else {}
     except Exception:
         return {}
-    capabilities = _capabilities_from_providers(providers)
+    capabilities = _capabilities_from_groups(
+        _capabilities_from_providers(payload.get("providers") or []),
+        payload.get("routing_groups") or [],
+    )
     _cache_capabilities(capabilities)
     return capabilities
 

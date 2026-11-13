@@ -4,7 +4,7 @@ import { Check, Plus, Sparkles, Trash2, Zap } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
 import Select from "@/components/ui/select/Select.vue"
 import FieldTip from "@/components/ui/tooltip/FieldTip.vue"
-import type { AdminAiConfig, AdminCatalogModel } from "@/api/admin"
+import type { AdminAiConfig, AdminCatalogModel, AdminRoutingGroup } from "@/api/admin"
 
 interface AiConfigForm {
   id: number
@@ -22,6 +22,7 @@ interface AiConfigForm {
 const props = defineProps<{
   configs: AdminAiConfig[]
   catalogModels: AdminCatalogModel[]
+  catalogGroups: AdminRoutingGroup[]
   saving: boolean
 }>()
 
@@ -40,7 +41,14 @@ function modelById(ref: string | null | undefined): AdminCatalogModel | undefine
 }
 
 function supportsImages(ref: string | null | undefined): boolean {
-  return (modelById(ref)?.input ?? []).includes("image")
+  const value = (ref || "").trim()
+  if (value.startsWith("group/")) {
+    // 组的多模态能力取成员交集：任何一个成员不支持图片，就按不支持处理
+    const group = props.catalogGroups.find((item) => item.id === value.slice("group/".length))
+    if (!group?.members.length) return false
+    return group.members.every((member) => (modelById(member)?.input ?? []).includes("image"))
+  }
+  return (modelById(value)?.input ?? []).includes("image")
 }
 
 const catalogModelOptions = computed(() => [
@@ -48,6 +56,10 @@ const catalogModelOptions = computed(() => [
   ...props.catalogModels.map((model) => ({
     label: `${model.ref}${model.input.includes("image") ? " · 多模态" : ""}`,
     value: model.ref,
+  })),
+  ...props.catalogGroups.map((group) => ({
+    label: `group/${group.id} · 路由组（${group.members.length} 个模型）`,
+    value: `group/${group.id}`,
   })),
 ])
 </script>

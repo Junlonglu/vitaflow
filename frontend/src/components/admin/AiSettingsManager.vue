@@ -9,9 +9,11 @@ import RedeemCodesSettingsPanel from "@/components/admin/ai/RedeemCodesSettingsP
 import { showGlobalToast } from "@/utils/toast"
 import {
   createAdminAiConfigApi,
+  createAdminCatalogGroupApi,
   createAdminCatalogModelApi,
   createAdminCatalogProviderApi,
   deleteAdminAiConfigApi,
+  deleteAdminCatalogGroupApi,
   deleteAdminCatalogModelApi,
   deleteAdminCatalogProviderApi,
   deleteAdminRedeemCodeApi,
@@ -24,6 +26,7 @@ import {
   importAdminCatalogModelsApi,
   importAdminRedeemCodesApi,
   syncAdminCatalogProviderDevApi,
+  updateAdminCatalogGroupApi,
   updateAdminCatalogModelApi,
   updateAdminCatalogProviderApi,
   updateAdminRedeemCodeBatchPriceApi,
@@ -37,6 +40,7 @@ import {
   type AdminCatalogModelWrite,
   type AdminPointRule,
   type AdminRedeemCode,
+  type AdminRoutingGroupWrite,
   type PageData,
 } from "@/api/admin"
 
@@ -123,6 +127,7 @@ const configForm = ref<AiConfigForm>({
 const catalogProviders = computed(() => catalog.value?.providers ?? [])
 const catalogProviderMode = computed<"faux" | "real">(() => catalog.value?.provider_mode ?? "real")
 const catalogModels = computed(() => catalogProviders.value.flatMap((provider) => provider.models))
+const catalogGroups = computed(() => catalog.value?.routing_groups ?? [])
 
 const redeemForm = ref({
   count: 10,
@@ -429,6 +434,40 @@ async function deleteCatalogModel(providerKey: string, modelId: string) {
   }
 }
 
+async function createCatalogGroup(data: AdminRoutingGroupWrite) {
+  error.value = ""
+  try {
+    catalog.value = await createAdminCatalogGroupApi(data)
+    showGlobalToast("路由组已创建")
+  } catch (err: any) {
+    error.value = err.message || "路由组创建失败"
+    showGlobalToast(error.value, "error")
+  }
+}
+
+async function updateCatalogGroup(id: string, data: Omit<AdminRoutingGroupWrite, "id">) {
+  error.value = ""
+  try {
+    catalog.value = await updateAdminCatalogGroupApi(id, data)
+    showGlobalToast("路由组已更新")
+  } catch (err: any) {
+    error.value = err.message || "路由组更新失败"
+    showGlobalToast(error.value, "error")
+  }
+}
+
+async function deleteCatalogGroup(id: string) {
+  if (!window.confirm(`确定删除路由组 group/${id} 吗？若被模型策略引用将无法删除。`)) return
+  error.value = ""
+  try {
+    catalog.value = await deleteAdminCatalogGroupApi(id)
+    showGlobalToast("路由组已删除")
+  } catch (err: any) {
+    error.value = err.message || "路由组删除失败"
+    showGlobalToast(error.value, "error")
+  }
+}
+
 async function saveRules() {
   savingRules.value = true
   error.value = ""
@@ -684,6 +723,7 @@ watch(
     <template v-if="currentTab === 'model'">
       <AiCatalogPanel
         :providers="catalogProviders"
+        :groups="catalogGroups"
         :provider-mode="catalogProviderMode"
         :saving="savingConfig"
         :syncing-dev-key="syncingDevKey"
@@ -696,11 +736,15 @@ watch(
         @create-model="createCatalogModel"
         @update-model="updateCatalogModel"
         @delete-model="deleteCatalogModel"
+        @create-group="createCatalogGroup"
+        @update-group="updateCatalogGroup"
+        @delete-group="deleteCatalogGroup"
       />
       <AiModelSettingsPanel
         v-model:config-form="configForm"
         :configs="configs"
         :catalog-models="catalogModels"
+        :catalog-groups="catalogGroups"
         :saving="savingConfig"
         @reset="resetConfigForm"
         @activate="quickActivateConfig"

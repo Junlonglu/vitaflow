@@ -230,8 +230,21 @@ export interface AdminCatalogProvider {
 export interface AdminCatalog {
   provider_mode: "faux" | "real"
   providers: AdminCatalogProvider[]
+  routing_groups?: AdminRoutingGroup[]
   /** Present on sync-dev / import-models responses only. */
   extra?: { dev_provider?: string | null; matched?: number; filled?: number; added?: number }
+}
+
+export interface AdminRoutingGroup {
+  id: string
+  strategy: "order" | "rotate" | "usage"
+  members: string[]
+}
+
+export interface AdminRoutingGroupWrite {
+  id: string
+  strategy: AdminRoutingGroup["strategy"]
+  members: string[]
 }
 
 export interface AdminCatalogProviderWrite {
@@ -412,6 +425,12 @@ export const getAdminCatalogProviderBalanceApi = (key: string) =>
   request.get<AdminBalanceSnapshot, AdminBalanceSnapshot>(
     `/admin/ai-catalog/providers/${encodeURIComponent(key)}/balance`,
   )
+export const createAdminCatalogGroupApi = (data: AdminRoutingGroupWrite) =>
+  request.post<AdminCatalog, AdminCatalog>("/admin/ai-catalog/groups", data)
+export const updateAdminCatalogGroupApi = (groupId: string, data: Omit<AdminRoutingGroupWrite, "id">) =>
+  request.put<AdminCatalog, AdminCatalog>(`/admin/ai-catalog/groups/${encodeURIComponent(groupId)}`, data)
+export const deleteAdminCatalogGroupApi = (groupId: string) =>
+  request.delete<AdminCatalog, AdminCatalog>(`/admin/ai-catalog/groups/${encodeURIComponent(groupId)}`)
 export interface AdminPlanWindow {
   name: string
   span_hours: number

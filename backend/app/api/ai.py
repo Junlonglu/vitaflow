@@ -235,6 +235,9 @@ class AiServiceUsageRequest(BaseModel):
     usage: list[AiServiceUsageEntry] = Field(default_factory=list)
     tool_quality: list[ToolQualityStep] = Field(default_factory=list)
     turn_timing: TurnTiming | None = None
+    # 路由组场景：usage 里的 provider/model 是解析后的具体成员，结算时若成员
+    # 自身没有映射配置，回退到请求原始引用（group/<id>）对应的配置计费。
+    requested_ref: str | None = None
 
     @field_validator("tool_quality", mode="after")
     @classmethod
@@ -1208,6 +1211,10 @@ def report_ai_service_usage(
         # 平台 Flow Points —— 预扣已在对话入口跳过，这里也不能再结算。
         billing_mode = "byok" if item.provider.strip().startswith("byok-") else "platform"
         config = get_ai_config_by_model_ref(db, ref)
+        # 路由组：成员模型可能没有单独的配置映射，此时按请求原始引用（组）
+        # 的配置结算，保证组内任意成员命中的扣费规则一致。
+        if config is None and payload.requested_ref:
+            config = get_ai_config_by_model_ref(db, payload.requested_ref.strip())
         token_usage = build_token_usage(
             item.input_tokens,
             item.output_tokens,

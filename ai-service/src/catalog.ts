@@ -59,8 +59,17 @@ export interface CatalogProvider {
   models: CatalogModel[];
 }
 
+export type RoutingStrategy = "order" | "rotate" | "usage";
+
+export interface CatalogRoutingGroup {
+  id: string;
+  strategy: RoutingStrategy;
+  members: string[];
+}
+
 export interface CatalogFile {
   providers: Record<string, CatalogProvider>;
+  routing_groups?: CatalogRoutingGroup[];
 }
 
 /** Shape returned to the admin console: keys are masked, never echoed. */
@@ -163,7 +172,15 @@ export async function mutateCatalog(
   const run = writeMutex.then(async () => {
     const catalog = await readCatalog(agentDir);
     mutate(catalog);
-    const serialized = `${JSON.stringify({ providers: catalog.providers }, null, 2)}\n`;
+    // routing_groups may be absent — omit the key so legacy files stay unchanged
+    // on disk instead of growing an empty array.
+    const serialized = `${JSON.stringify(
+      catalog.routing_groups?.length
+        ? { providers: catalog.providers, routing_groups: catalog.routing_groups }
+        : { providers: catalog.providers },
+      null,
+      2,
+    )}\n`;
     await mkdir(agentDir, { recursive: true });
     const tmpPath = `${catalogPath(agentDir)}.${randomUUID()}.tmp`;
     await writeFile(tmpPath, serialized, "utf8");
@@ -254,6 +271,46 @@ export function validateProviderBody(body: Record<string, unknown>): {
   if (!name) throw new CatalogError("服务商名称不能为空");
   if (!baseUrl || !/^https?:\/\//i.test(baseUrl)) throw new CatalogError("BaseURL 必须以 http(s):// 开头");
   return { name, baseUrl, apiKey, accessKeyId, secretAccessKey };
+}
+
+const GROUP_STRATEGIES: RoutingStrategy[] = ["order", "rotate", "usage"];
+
+export function validateGroupId(id: unknown): string {
+  const trimmed = String(id ?? "").trim();
+  if (!PROVIDER_KEY_RE.test(trimmed)) {
+    throw new CatalogError("路由组标识只能是字母/数字/-/_，且以字母或数字开头");
+  }
+  return trimmed;
+}
+
+export interface RoutingGroupBody {
+  id: string;
+  strategy: RoutingStrategy;
+  members: string[];
+}
+
+export function validateRoutingGroupBody(body: Record<string, unknown>): RoutingGroupBody {
+  const id = validateGroupId(body.id);
+  const strategy = String(body.strategy ?? "order").trim() as RoutingStrategy;
+  if (!GROUP_STRATEGIES.includes(strategy)) {
+    throw new CatalogError(`strategy 仅支持 ${GROUP_STRATEGIES.join("/")}`);
+  }
+  const rawMembers = Array.isArray(body.members) ? body.members : [];
+  const members = [...new Set(rawMembers.map((member) => String(member ?? "").trim()).filter(Boolean))];
+  if (members.length < 1) throw new CatalogError("路由组至少需要一个成员模型");
+  return { id, strategy, members };
+}
+
+export function assertGroupMembersExist(catalog: CatalogFile, members: string[]): void {
+  for (const member of members) {
+    const slash = member.indexOf("/");
+    const providerKey = slash > 0 ? member.slice(0, slash) : "";
+    const modelId = slash > 0 ? member.slice(slash + 1) : "";
+    const provider = catalog.providers?.[providerKey];
+    if (!provider || !(provider.models || []).some((model) => model.id === modelId)) {
+      throw new CatalogError(`成员 ${member} 不在模型目录中，请先添加该模型`);
+    }
+  }
 }
 
 export function validateModelId(id: unknown): string {

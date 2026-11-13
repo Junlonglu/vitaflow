@@ -169,7 +169,8 @@ function payloadLength(value: unknown): number {
 }
 
 /** 直接把文本包成 assistant 消息骨架；FastAPI 会用数据库行替换它。 */
-function buildAssistantMessage(text: string, now: number) {  return {
+function buildAssistantMessage(text: string, now: number) {
+  return {
     id: now,
     role: "assistant",
     content: text,

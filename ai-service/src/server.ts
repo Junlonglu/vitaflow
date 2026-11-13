@@ -32,6 +32,7 @@ import { loadConfig } from "./config.js";
 import { createFauxRuntime } from "./faux.js";
 import { enrichProviderFromModelsDev, fetchModelsDev } from "./modelsdev.js";
 import { appendSkillsToPrompt, buildContextPrompt, DEFAULT_SYSTEM_PROMPT, parseSkills, type AiServiceContext } from "./prompt.js";
+import { fetchRemoteModels, probeCatalogModel } from "./probe.js";
 import { createRealRuntime, parseByokOverride, registerByokModel, type ThinkingLevelSetting } from "./real.js";
 import { appendSkillPrompt, extractSkillCommand, skillPromptBlock } from "./skills.js";
 import { buildTaskPrompts, isTaskType } from "./taskPrompts.js";
@@ -110,14 +111,14 @@ function catalogViews(): Record<string, unknown> {
   return { provider_mode: config.provider, providers: config.provider === "faux" ? fauxCatalog() : [] };
 }
 
-async function catalogResponse(res: express.Response, syncSummary?: unknown): Promise<void> {
+async function catalogResponse(res: express.Response, extra?: unknown): Promise<void> {
   if (config.provider === "faux") {
     res.json({ ...catalogViews(), providers: fauxCatalog() });
     return;
   }
   const catalog = await readCatalog(AGENT_DIR);
   const payload: Record<string, unknown> = { ...catalogViews(), providers: renderProviders(catalog) };
-  if (syncSummary !== undefined) payload.sync = syncSummary;
+  if (extra !== undefined) payload.extra = extra;
   res.json(payload);
 }
 
@@ -298,6 +299,73 @@ app.post("/v1/catalog/providers/:key/sync-dev", async (req, res) => {
     if (err instanceof CatalogError) return handleCatalogError(res, err);
     console.error("[vitaflow-ai] models.dev sync failed:", err);
     res.status(502).json({ type: "error", message: (err as Error).message || "同步模型资料失败" });
+  }
+});
+
+// Provider card helpers (magpie-style): list the upstream /models ids without
+// writing anything, import a picked subset into the catalog, and probe one
+// model with a tiny completion. Import keeps existing models and their
+// metadata untouched; only new ids are appended with a bare { id } entry so
+// models.dev sync can fill the rest.
+app.get("/v1/catalog/providers/:key/remote-models", async (req, res) => {
+  if (!authorize(req)) return void res.status(401).json({ type: "error", message: "未授权：需要有效的服务令牌" });
+  if (config.provider === "faux") return void res.status(400).json({ type: "error", message: "faux 模式下不可操作真实服务商" });
+  try {
+    const key = validateProviderKey(req.params.key);
+    const catalog = await readCatalog(AGENT_DIR);
+    const provider = requireEditableProvider(catalog, key);
+    const models = await fetchRemoteModels(provider);
+    res.json({ models });
+  } catch (err) {
+    if (err instanceof CatalogError) return handleCatalogError(res, err);
+    console.error("[vitaflow-ai] remote model list failed:", err);
+    res.status(502).json({ type: "error", message: (err as Error).message || "获取模型列表失败" });
+  }
+});
+
+app.post("/v1/catalog/providers/:key/import-models", async (req, res) => {
+  if (!authorize(req)) return void res.status(401).json({ type: "error", message: "未授权：需要有效的服务令牌" });
+  if (rejectMutations(res)) return;
+  try {
+    const key = validateProviderKey(req.params.key);
+    const ids: unknown[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const cleaned: string[] = [...new Set(ids.map((id: unknown) => validateModelId(id)))];
+    if (!cleaned.length) throw new CatalogError("请至少选择一个要导入的模型");
+    let added = 0;
+    await mutateCatalog(AGENT_DIR, (catalog) => {
+      const provider = requireEditableProvider(catalog, key);
+      provider.models = provider.models || [];
+      const existing = new Set(provider.models.map((model) => model.id));
+      for (const id of cleaned) {
+        if (existing.has(id)) continue;
+        provider.models.push({ id });
+        added += 1;
+      }
+    });
+    await rebuildRuntime();
+    await catalogResponse(res, { added });
+  } catch (err) {
+    handleCatalogError(res, err);
+  }
+});
+
+app.post("/v1/catalog/providers/:key/probe", async (req, res) => {
+  if (!authorize(req)) return void res.status(401).json({ type: "error", message: "未授权：需要有效的服务令牌" });
+  if (config.provider === "faux") return void res.status(400).json({ type: "error", message: "faux 模式下不可测试真实模型" });
+  try {
+    const key = validateProviderKey(req.params.key);
+    const id = validateModelId(req.body?.model_id);
+    const catalog = await readCatalog(AGENT_DIR);
+    const provider = requireEditableProvider(catalog, key);
+    if (!(provider.models || []).some((model) => model.id === id)) {
+      throw new CatalogError(`模型 ${key}/${id} 不存在`);
+    }
+    const result = await probeCatalogModel(provider, id);
+    res.json(result);
+  } catch (err) {
+    if (err instanceof CatalogError) return handleCatalogError(res, err);
+    console.error("[vitaflow-ai] model probe failed:", err);
+    res.status(502).json({ type: "error", message: (err as Error).message || "测试模型失败" });
   }
 });
 

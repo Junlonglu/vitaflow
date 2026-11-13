@@ -205,6 +205,38 @@ def sync_catalog_provider_dev(provider_key: str):
     return result
 
 
+class CatalogImportModels(BaseModel):
+    ids: list[str] = Field(min_length=1)
+
+
+class CatalogProbe(BaseModel):
+    model_id: str = Field(min_length=1, max_length=200)
+
+
+@router.get("/ai-catalog/providers/{provider_key}/remote-models")
+def get_catalog_remote_models(provider_key: str):
+    """Upstream /models listing, read-only: lets the admin pick what to import."""
+    return success(call_catalog("GET", f"/v1/catalog/providers/{provider_key}/remote-models"))
+
+
+@router.post("/ai-catalog/providers/{provider_key}/import-models")
+def import_catalog_models(provider_key: str, payload: CatalogImportModels):
+    """Append picked upstream ids; existing models and their metadata stay untouched."""
+    result = success(
+        call_catalog("POST", f"/v1/catalog/providers/{provider_key}/import-models", {"ids": [i.strip() for i in payload.ids]})
+    )
+    invalidate_catalog_capabilities_cache()
+    return result
+
+
+@router.post("/ai-catalog/providers/{provider_key}/probe")
+def probe_catalog_model(provider_key: str, payload: CatalogProbe):
+    """One tiny completion to verify the model answers; costs a few tokens."""
+    return success(
+        call_catalog("POST", f"/v1/catalog/providers/{provider_key}/probe", {"model_id": payload.model_id.strip()})
+    )
+
+
 @router.post("/ai-catalog/providers")
 def create_catalog_provider(payload: CatalogProviderWrite):
     body = {"key": payload.key.strip(), "name": payload.name.strip(), "baseUrl": payload.base_url.strip(), "apiKey": payload.api_key.strip()}

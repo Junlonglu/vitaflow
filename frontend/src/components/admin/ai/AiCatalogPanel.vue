@@ -1,9 +1,18 @@
 <script setup lang="ts">
-import { Check, DatabaseZap, Eye, EyeOff, KeyRound, Pencil, Plus, Server, Trash2 } from "lucide-vue-next"
+import { Check, DatabaseZap, Download, Eye, EyeOff, KeyRound, Pencil, Plus, Server, Trash2, Zap } from "lucide-vue-next"
 import { computed, ref } from "vue"
 import Button from "@/components/ui/button/Button.vue"
 import Select from "@/components/ui/select/Select.vue"
-import { getAdminCatalogEnvKeysApi, type AdminCatalogProvider, type AdminCatalogProviderWrite, type AdminCatalogModelWrite } from "@/api/admin"
+import {
+  getAdminCatalogEnvKeysApi,
+  getAdminRemoteModelsApi,
+  probeAdminCatalogModelApi,
+  type AdminCatalogProvider,
+  type AdminCatalogProviderWrite,
+  type AdminCatalogModelWrite,
+  type AdminProbeResult,
+  type AdminRemoteModel,
+} from "@/api/admin"
 
 const props = defineProps<{
   providers: AdminCatalogProvider[]
@@ -18,10 +27,25 @@ const emit = defineEmits<{
   updateProvider: [key: string, data: { name: string; base_url: string; api_key?: string }]
   deleteProvider: [key: string]
   syncDev: [key: string]
+  importModels: [key: string, ids: string[]]
   createModel: [providerKey: string, data: AdminCatalogModelWrite]
   updateModel: [providerKey: string, modelId: string, data: AdminCatalogModelWrite]
   deleteModel: [providerKey: string, modelId: string]
 }>()
+
+const PROVIDER_KEY_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/
+
+// 常见厂商预设：key 用 models.dev 的官方 id，这样「补全资料」能直接匹配。
+const PROVIDER_PRESETS = [
+  { key: "deepseek", name: "DeepSeek", base_url: "https://api.deepseek.com" },
+  { key: "zhipuai", name: "智谱 GLM", base_url: "https://open.bigmodel.cn/api/paas/v4" },
+  { key: "moonshotai", name: "Moonshot Kimi", base_url: "https://api.moonshot.cn/v1" },
+  { key: "siliconflow", name: "SiliconFlow 硕方", base_url: "https://api.siliconflow.cn/v1" },
+  { key: "openrouter", name: "OpenRouter", base_url: "https://openrouter.ai/api/v1" },
+  { key: "volcengine", name: "火山方舟", base_url: "https://ark.cn-beijing.volces.com/api/v3" },
+  { key: "alibaba", name: "阿里百炼", base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1" },
+  { key: "minimax", name: "MiniMax", base_url: "https://api.minimax.io/v1" },
+]
 
 const providerDialogOpen = ref(false)
 const providerEditingKey = ref<string | null>(null)
@@ -56,6 +80,13 @@ function openCreateProvider() {
   void loadEnvKeys().then(() => {
     providerDialogOpen.value = true
   })
+}
+
+function applyPreset(preset: (typeof PROVIDER_PRESETS)[number]) {
+  providerForm.value.key = preset.key
+  providerForm.value.name = preset.name
+  providerForm.value.base_url = preset.base_url
+  providerErrors.value = { key: "", name: "", base_url: "" }
 }
 
 function openEditProvider(provider: AdminCatalogProvider) {
@@ -163,6 +194,74 @@ function formatPrice(value: number | null) {
   return `$${value}/M`
 }
 
+// ---- 远端模型获取（magpie 式「获取模型」）：拉上游 /models，勾选导入；
+// 只读接口在这里直接调，写入仍然 emit 给父组件统一维护目录状态。
+const remoteDialogOpen = ref(false)
+const remoteProviderKey = ref<string | null>(null)
+const remoteModels = ref<AdminRemoteModel[]>([])
+const remotePicked = ref<Set<string>>(new Set())
+const remoteLoading = ref(false)
+const remoteError = ref("")
+
+function existingModelIds(providerKey: string): Set<string> {
+  const provider = props.providers.find((item) => item.key === providerKey)
+  return new Set((provider?.models ?? []).map((model) => model.id))
+}
+
+async function openRemoteDialog(providerKey: string) {
+  remoteProviderKey.value = providerKey
+  remoteModels.value = []
+  remotePicked.value = new Set()
+  remoteError.value = ""
+  remoteDialogOpen.value = true
+  remoteLoading.value = true
+  try {
+    const data = await getAdminRemoteModelsApi(providerKey)
+    remoteModels.value = data.models || []
+    const existing = existingModelIds(providerKey)
+    remoteModels.value.forEach((model) => {
+      if (!existing.has(model.id)) remotePicked.value.add(model.id)
+    })
+  } catch (err: any) {
+    remoteError.value = err.message || "获取模型列表失败"
+  } finally {
+    remoteLoading.value = false
+  }
+}
+
+function toggleRemotePick(id: string) {
+  const next = new Set(remotePicked.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  remotePicked.value = next
+}
+
+function submitRemoteImport() {
+  if (!remoteProviderKey.value) return
+  const ids = [...remotePicked.value]
+  if (!ids.length) return
+  emit("importModels", remoteProviderKey.value, ids)
+  remoteDialogOpen.value = false
+}
+
+// ---- 模型连通性测试：一个 16-token 的最小请求，结果只存内存。
+const probeStates = ref<Record<string, { status: "loading" | "ok" | "error"; latency_ms: number | null; error: string | null }>>({})
+
+async function probeModel(providerKey: string, modelId: string) {
+  const stateKey = `${providerKey}/${modelId}`
+  probeStates.value[stateKey] = { status: "loading", latency_ms: null, error: null }
+  try {
+    const result: AdminProbeResult = await probeAdminCatalogModelApi(providerKey, modelId)
+    probeStates.value[stateKey] = {
+      status: result.ok ? "ok" : "error",
+      latency_ms: result.latency_ms,
+      error: result.error,
+    }
+  } catch (err: any) {
+    probeStates.value[stateKey] = { status: "error", latency_ms: null, error: err.message || "测试请求失败" }
+  }
+}
+
 function onRefresh() {
   envKeysLoaded.value = false
   void loadEnvKeys()
@@ -197,6 +296,7 @@ function onRefresh() {
           <p v-if="provider.api_key_masked" class="mt-0.5 flex items-center gap-1 text-xs text-zinc-400"><KeyRound class="h-3 w-3 shrink-0" />Key {{ provider.api_key_masked }}</p>
         </div>
         <div v-if="provider.editable && !fauxProvider" class="flex shrink-0 items-center gap-1">
+          <button class="rounded-full p-1.5 text-zinc-400 transition-all hover:bg-zinc-100 hover:text-zinc-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50" title="从上游拉取模型列表" :disabled="syncingDevKey !== null" @click="openRemoteDialog(provider.key)"><Download class="h-3.5 w-3.5" /></button>
           <button class="rounded-full p-1.5 text-zinc-400 transition-all hover:bg-zinc-100 hover:text-zinc-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50" title="从 models.dev 补全模型资料（仅填空白，不覆盖手填值）" :disabled="syncingDevKey !== null" @click="emit('syncDev', provider.key)"><DatabaseZap class="h-3.5 w-3.5" :class="syncingDevKey === provider.key ? 'animate-pulse' : ''" /></button>
           <button class="rounded-full p-1.5 text-zinc-400 transition-all hover:bg-zinc-100 hover:text-zinc-700 active:scale-95" title="编辑服务商" @click="openEditProvider(provider)"><Pencil class="h-3.5 w-3.5" /></button>
           <button class="rounded-full p-1.5 text-zinc-400 transition-all hover:bg-red-50 hover:text-red-600 active:scale-95" title="删除服务商" @click="emit('deleteProvider', provider.key)"><Trash2 class="h-3.5 w-3.5" /></button>
@@ -213,6 +313,9 @@ function onRefresh() {
             <span v-if="model.context_window" class="inline-flex items-center whitespace-nowrap rounded-md border border-zinc-200/50 bg-white px-2 py-0.5 text-[10px] font-medium text-zinc-600">{{ formatContextWindow(model.context_window) }}</span>
             <span v-if="model.price_input != null || model.price_output != null" class="inline-flex items-center whitespace-nowrap rounded-md border border-emerald-200/60 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700" :title="`输入 ${formatPrice(model.price_input)} / 输出 ${formatPrice(model.price_output)}（美元/百万 tokens）`">{{ formatPrice(model.price_input) }} / {{ formatPrice(model.price_output) }}</span>
             <span v-if="model.dev_synced_at" class="inline-flex items-center whitespace-nowrap rounded-md border border-blue-200/60 bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700" :title="`资料来自 models.dev（${model.dev_provider}），厂商更新 ${model.dev_updated_at ?? '未知'}，同步于 ${model.dev_synced_at.slice(0, 10)}`">models.dev</span>
+            <span v-if="probeStates[`${provider.key}/${model.id}`]?.status === 'ok'" class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-green-200/60 bg-green-50 px-2 py-0.5 text-[10px] font-medium text-green-700">连通 {{ probeStates[`${provider.key}/${model.id}`]?.latency_ms }}ms</span>
+            <span v-else-if="probeStates[`${provider.key}/${model.id}`]?.status === 'error'" class="inline-flex max-w-[220px] items-center truncate whitespace-nowrap rounded-md border border-red-200/60 bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-700" :title="probeStates[`${provider.key}/${model.id}`]?.error ?? ''">测试失败</span>
+            <button v-if="provider.editable && !fauxProvider" class="rounded-full p-1.5 text-zinc-400 transition-all hover:bg-amber-50 hover:text-amber-600 active:scale-95" title="测试连通性（发送一个最小请求）" @click="probeModel(provider.key, model.id)"><Zap class="h-3.5 w-3.5" :class="probeStates[`${provider.key}/${model.id}`]?.status === 'loading' ? 'animate-pulse' : ''" /></button>
             <button v-if="provider.editable && !fauxProvider" class="rounded-full p-1.5 text-zinc-400 transition-all hover:bg-zinc-100 hover:text-zinc-700 active:scale-95" title="编辑模型" @click="openEditModel(provider.key, model)"><Pencil class="h-3.5 w-3.5" /></button>
             <button v-if="provider.editable && !fauxProvider" class="rounded-full p-1.5 text-zinc-400 transition-all hover:bg-red-50 hover:text-red-600 active:scale-95" title="删除模型" @click="emit('deleteModel', provider.key, model.id)"><Trash2 class="h-3.5 w-3.5" /></button>
           </div>
@@ -229,6 +332,12 @@ function onRefresh() {
     <div v-if="providerDialogOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" @click.self="providerDialogOpen = false">
       <div class="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
         <h4 class="text-lg font-semibold text-zinc-900">{{ providerEditingKey ? "编辑服务商" : "新增服务商" }}</h4>
+        <div v-if="!providerEditingKey" class="mt-3">
+          <p class="mb-2 text-xs font-medium text-zinc-500">常用厂商（点击自动填写标识与地址）</p>
+          <div class="flex flex-wrap gap-1.5">
+            <button v-for="preset in PROVIDER_PRESETS" :key="preset.key" type="button" class="rounded-full border px-2.5 py-1 text-xs font-medium transition-colors" :class="providerForm.key === preset.key ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-400 hover:text-zinc-900'" @click="applyPreset(preset)">{{ preset.name }}</button>
+          </div>
+        </div>
         <div class="mt-4 space-y-3">
           <label class="block space-y-1.5 text-sm font-medium text-zinc-700">标识 key<span class="text-red-500">*</span><input v-model="providerForm.key" :disabled="!!providerEditingKey" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 disabled:bg-zinc-50 disabled:text-zinc-400" placeholder="例如 deepseek" /><p v-if="providerErrors.key" class="text-xs font-normal text-red-600">{{ providerErrors.key }}</p></label>
           <label class="block space-y-1.5 text-sm font-medium text-zinc-700">名称<span class="text-red-500">*</span><input v-model="providerForm.name" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="例如 DeepSeek" /><p v-if="providerErrors.name" class="text-xs font-normal text-red-600">{{ providerErrors.name }}</p></label>
@@ -252,6 +361,31 @@ function onRefresh() {
         <div class="mt-5 flex justify-end gap-2">
           <Button variant="outline" size="sm" @click="providerDialogOpen = false">取消</Button>
           <Button size="sm" :disabled="saving" @click="submitProvider"><Check class="mr-1 h-4 w-4" />保存</Button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="remoteDialogOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" @click.self="remoteDialogOpen = false">
+      <div class="flex max-h-[80vh] w-full max-w-md flex-col rounded-2xl bg-white p-5 shadow-xl">
+        <h4 class="text-lg font-semibold text-zinc-900">获取上游模型<span class="ml-2 text-sm font-normal text-zinc-400">{{ remoteProviderKey }}</span></h4>
+        <p class="mt-1 text-xs text-zinc-400">从服务商接口拉取模型列表；已导入的模型不受影响，重新拉取不会覆盖勾选状态</p>
+        <div class="mt-3 min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
+          <p v-if="remoteLoading" class="py-6 text-center text-xs text-zinc-400">正在拉取模型列表…</p>
+          <p v-else-if="remoteError" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{{ remoteError }}</p>
+          <p v-else-if="!remoteModels.length" class="py-6 text-center text-xs text-zinc-400">上游没有返回任何模型</p>
+          <label v-for="model in remoteModels" :key="model.id" class="flex cursor-pointer select-none items-center gap-2.5 rounded-xl border px-3 py-2 text-sm transition-colors" :class="remotePicked.has(model.id) ? 'border-zinc-900 bg-zinc-50' : 'border-zinc-200 bg-white hover:bg-zinc-50'">
+            <div class="relative flex h-4 w-4 shrink-0 items-center justify-center rounded border" :class="remotePicked.has(model.id) ? 'border-zinc-900 bg-zinc-900' : 'border-zinc-300 bg-white'"><Check v-if="remotePicked.has(model.id)" class="h-3 w-3 text-white stroke-[3]" /></div>
+            <input type="checkbox" class="sr-only" :checked="remotePicked.has(model.id)" @change="toggleRemotePick(model.id)" />
+            <span class="truncate text-zinc-800">{{ model.id }}</span>
+            <span v-if="existingModelIds(remoteProviderKey || '').has(model.id)" class="ml-auto shrink-0 rounded-md border border-zinc-200/50 bg-zinc-100/80 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500">已导入</span>
+          </label>
+        </div>
+        <div class="mt-4 flex items-center justify-between">
+          <button class="text-xs font-medium text-zinc-500 hover:text-zinc-900" @click="remotePicked = new Set(remoteModels.map((m) => m.id))">全选</button>
+          <div class="flex gap-2">
+            <Button variant="outline" size="sm" @click="remoteDialogOpen = false">取消</Button>
+            <Button size="sm" :disabled="remoteLoading || !remotePicked.size" @click="submitRemoteImport"><Download class="mr-1 h-4 w-4" />导入 {{ remotePicked.size }} 个</Button>
+          </div>
         </div>
       </div>
     </div>

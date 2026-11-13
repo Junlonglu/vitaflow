@@ -21,6 +21,7 @@ import {
   getAdminAiConfigsApi,
   getAdminPointRulesApi,
   getAdminRedeemCodesApi,
+  importAdminCatalogModelsApi,
   importAdminRedeemCodesApi,
   syncAdminCatalogProviderDevApi,
   updateAdminCatalogModelApi,
@@ -368,7 +369,7 @@ async function syncCatalogProviderDev(key: string) {
   try {
     const data = await syncAdminCatalogProviderDevApi(key)
     catalog.value = data
-    const sync = data.sync
+    const sync = data.extra
     if (!sync || !sync.dev_provider) {
       showGlobalToast("未在 models.dev 匹配到该服务商的资料，请检查服务商标识是否为官方 id（如 deepseek）")
     } else {
@@ -379,6 +380,18 @@ async function syncCatalogProviderDev(key: string) {
     showGlobalToast(error.value, "error")
   } finally {
     syncingDevKey.value = null
+  }
+}
+
+async function importCatalogModels(key: string, ids: string[]) {
+  error.value = ""
+  try {
+    const data = await importAdminCatalogModelsApi(key, ids)
+    catalog.value = data
+    showGlobalToast(`已导入 ${data.extra?.added ?? ids.length} 个模型，稍后可用「补全资料」填充上下文窗口与价格`)
+  } catch (err: any) {
+    error.value = err.message || "导入模型失败"
+    showGlobalToast(error.value, "error")
   }
 }
 
@@ -679,6 +692,7 @@ watch(
         @update-provider="updateCatalogProvider"
         @delete-provider="deleteCatalogProvider"
         @sync-dev="syncCatalogProviderDev"
+        @import-models="importCatalogModels"
         @create-model="createCatalogModel"
         @update-model="updateCatalogModel"
         @delete-model="deleteCatalogModel"

@@ -226,14 +226,8 @@ export interface AdminCatalogProvider {
 export interface AdminCatalog {
   provider_mode: "faux" | "real"
   providers: AdminCatalogProvider[]
-  /** Present on sync-dev responses only. */
-  sync?: AdminCatalogSyncSummary
-}
-
-export interface AdminCatalogSyncSummary {
-  dev_provider: string | null
-  matched: number
-  filled: number
+  /** Present on sync-dev / import-models responses only. */
+  extra?: { dev_provider?: string | null; matched?: number; filled?: number; added?: number }
 }
 
 export interface AdminCatalogProviderWrite {
@@ -379,6 +373,25 @@ export const deleteAdminCatalogModelApi = (providerKey: string, modelId: string)
   request.delete<AdminCatalog, AdminCatalog>(`/admin/ai-catalog/providers/${encodeURIComponent(providerKey)}/models/${encodeURIComponent(modelId)}`)
 export const syncAdminCatalogProviderDevApi = (key: string) =>
   request.post<AdminCatalog, AdminCatalog>(`/admin/ai-catalog/providers/${encodeURIComponent(key)}/sync-dev`)
+export interface AdminRemoteModel {
+  id: string
+  name: string | null
+}
+export const getAdminRemoteModelsApi = (key: string) =>
+  request.get<{ models: AdminRemoteModel[] }, { models: AdminRemoteModel[] }>(
+    `/admin/ai-catalog/providers/${encodeURIComponent(key)}/remote-models`,
+  )
+export const importAdminCatalogModelsApi = (key: string, ids: string[]) =>
+  request.post<AdminCatalog, AdminCatalog>(`/admin/ai-catalog/providers/${encodeURIComponent(key)}/import-models`, { ids })
+export interface AdminProbeResult {
+  ok: boolean
+  latency_ms: number | null
+  error: string | null
+}
+export const probeAdminCatalogModelApi = (key: string, modelId: string) =>
+  request.post<AdminProbeResult, AdminProbeResult>(`/admin/ai-catalog/providers/${encodeURIComponent(key)}/probe`, {
+    model_id: modelId,
+  })
 export const getAdminPointRulesApi = () => request.get<AdminPointRule[], AdminPointRule[]>("/admin/point-rules")
 export const updateAdminPointRuleApi = (
   featureType: string,

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue"
 import { useRouter } from "vue-router"
-import { PanelLeft, Plus, Sparkles } from "lucide-vue-next"
+import { PanelLeft, Plus, Search, Sparkles, X } from "lucide-vue-next"
 import BrandLogo from "@/components/common/BrandLogo.vue"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
 import Button from "@/components/ui/button/Button.vue"
@@ -9,7 +9,8 @@ import ResumeCard from "@/components/resume/ResumeCard.vue"
 import ResumeGridSkeleton from "@/components/resume/ResumeGridSkeleton.vue"
 import ResumeListEmptyState from "@/components/resume/ResumeListEmptyState.vue"
 import ResumeListPagination from "@/components/resume/ResumeListPagination.vue"
-import { deleteResumeApi, duplicateResumeApi, listResumesApi } from "@/api/resume"
+import Select from "@/components/ui/select/Select.vue"
+import { deleteResumeApi, duplicateResumeApi, listResumesApi, type ResumeSortKey } from "@/api/resume"
 import { listTemplatesApi, type TemplateItem } from "@/api/template"
 import type { ResumeItem } from "@/types/resume"
 import { SIDEBAR_PAGE_SIZE, useResumeStore } from "@/stores/resume"
@@ -40,7 +41,19 @@ const showDeleteConfirm = ref(false)
 const resumeToDelete = ref<number | null>(null)
 const isTruncatedMap = ref<Record<string | number, boolean>>({})
 
+/** 搜索与排序：关键字走后端 LIKE，排序默认最近编辑。 */
+const keyword = ref("")
+const appliedKeyword = ref("")
+const sort = ref<ResumeSortKey>("updated")
+const sortOptions = [
+  { label: "最近编辑", value: "updated" },
+  { label: "最近创建", value: "created" },
+  { label: "按标题", value: "title" },
+]
+let keywordTimer: ReturnType<typeof setTimeout> | null = null
+
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
+const hasFilter = computed(() => Boolean(appliedKeyword.value) || sort.value !== "updated")
 
 function getResponsivePageSize() {
   if (typeof window === "undefined") return 8
@@ -50,7 +63,12 @@ function getResponsivePageSize() {
 async function load(nextPage = page.value, size = pageSize.value) {
   loading.value = true
   try {
-    const result = await listResumesApi({ page: nextPage, page_size: size })
+    const result = await listResumesApi({
+      page: nextPage,
+      page_size: size,
+      keyword: appliedKeyword.value || undefined,
+      sort: sort.value,
+    })
     items.value = result.items
     total.value = result.total
     page.value = result.page
@@ -60,6 +78,27 @@ async function load(nextPage = page.value, size = pageSize.value) {
   } finally {
     loading.value = false
   }
+}
+
+/** 输入停顿 300ms 再查，避免每敲一个字打一次接口。 */
+function onKeywordInput() {
+  if (keywordTimer) clearTimeout(keywordTimer)
+  keywordTimer = setTimeout(() => {
+    appliedKeyword.value = keyword.value.trim()
+    void load(1)
+  }, 300)
+}
+
+function clearKeyword() {
+  if (keywordTimer) clearTimeout(keywordTimer)
+  keyword.value = ""
+  appliedKeyword.value = ""
+  void load(1)
+}
+
+function changeSort(value: ResumeSortKey) {
+  sort.value = value
+  void load(1)
 }
 
 /** 侧栏读的是 store 那份列表，增删后要让它跟上，否则切回侧栏还是旧的。 */
@@ -85,6 +124,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener("resize", handleBreakpointChange)
+  if (keywordTimer) clearTimeout(keywordTimer)
 })
 
 function checkTitleTruncation(event: MouseEvent, id: string | number) {
@@ -176,6 +216,39 @@ async function confirmDelete() {
       </div>
     </header>
 
+    <!-- 搜索与排序：只在有简历时出现，空库时不用先学会搜索 -->
+    <div v-if="items.length || hasFilter" class="mt-3 flex items-center gap-2">
+      <div class="relative min-w-0 flex-1 sm:max-w-[280px]">
+        <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" stroke-width="1.8" />
+        <input
+          v-model="keyword"
+          type="search"
+          placeholder="搜索简历标题"
+          aria-label="搜索简历标题"
+          class="h-8 w-full rounded-lg border border-zinc-200 bg-white pl-8 pr-8 text-[12.5px] text-zinc-900 placeholder:text-zinc-400 transition-colors focus:border-zinc-400 focus:outline-none [&::-webkit-search-cancel-button]:hidden"
+          @input="onKeywordInput"
+          @keydown.esc="clearKeyword"
+        />
+        <button
+          v-if="keyword"
+          type="button"
+          class="absolute right-1.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
+          aria-label="清空搜索"
+          @click="clearKeyword"
+        >
+          <X class="h-3 w-3" stroke-width="2.2" />
+        </button>
+      </div>
+      <Select
+        :model-value="sort"
+        :options="sortOptions"
+        class="!h-8 !w-[104px] !rounded-lg !text-[12.5px]"
+        aria-label="简历排序"
+        @change="(value) => changeSort(value as ResumeSortKey)"
+      />
+      <span v-if="hasFilter" class="ml-auto shrink-0 text-[11.5px] tabular-nums text-zinc-400">命中 {{ total }} 份</span>
+    </div>
+
     <ResumeGridSkeleton v-if="loading && !items.length" class="mt-5" />
 
     <div v-else-if="items.length" class="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
@@ -202,7 +275,13 @@ async function confirmDelete() {
       @change="(next: number) => load(next)"
     />
 
-    <ResumeListEmptyState v-if="!loading && !items.length" @create="openCreate('choice')" />
+    <ResumeListEmptyState
+      v-if="!loading && !items.length"
+      :filtered="hasFilter"
+      :keyword="appliedKeyword"
+      @create="openCreate('choice')"
+      @clear="clearKeyword"
+    />
 
 
     <ConfirmDialog

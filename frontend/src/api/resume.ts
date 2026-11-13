@@ -1,9 +1,14 @@
 import request from "./request"
 import type { ResumeItem } from "@/types/resume"
 
+export type ResumeSortKey = "updated" | "created" | "title"
+
 export interface ResumeListParams {
   page?: number
   page_size?: number
+  /** 按标题模糊搜索，后端已做 LIKE 通配符转义。 */
+  keyword?: string
+  sort?: ResumeSortKey
 }
 
 export interface ResumePage {
@@ -11,6 +16,8 @@ export interface ResumePage {
   total: number
   page: number
   page_size: number
+  keyword?: string | null
+  sort?: ResumeSortKey
 }
 
 export interface ResumeShareSettings {

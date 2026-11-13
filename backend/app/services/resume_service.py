@@ -1,4 +1,4 @@
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppException
@@ -8,17 +8,45 @@ from app.schemas.resume import ResumeCreate, ResumeUpdate, default_template_conf
 from app.services.pdf_export_service import delete_cached_pdfs
 from app.services.resume_locale import normalize_resume_language
 
+# 简历库排序：默认按最近编辑，其余给「新建」「标题」两个稳定选项。
+RESUME_SORTS = ("updated", "created", "title")
+DEFAULT_RESUME_SORT = "updated"
 
-def list_resumes(db: Session, user_id: int, page: int = 1, page_size: int = 8) -> tuple[list[Resume], int]:
+
+def _resume_sort_clause(sort: str | None):
+    if sort == "created":
+        return (Resume.create_time.desc(), Resume.id.desc())
+    if sort == "title":
+        return (Resume.title.asc(), Resume.id.asc())
+    return (Resume.update_time.desc(), Resume.id.desc())
+
+
+def _escape_like(keyword: str) -> str:
+    """转义 LIKE 通配符，避免用户输入 % 或 _ 时把全表都匹配出来。"""
+    return keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def list_resumes(
+    db: Session,
+    user_id: int,
+    page: int = 1,
+    page_size: int = 8,
+    keyword: str | None = None,
+    sort: str | None = DEFAULT_RESUME_SORT,
+) -> tuple[list[Resume], int]:
     page = max(page, 1)
     page_size = min(max(page_size, 1), 48)
-    filters = Resume.user_id == user_id
-    total = db.scalar(select(func.count()).select_from(Resume).where(filters)) or 0
+    filters = [Resume.user_id == user_id]
+    text = (keyword or "").strip()
+    if text:
+        filters.append(Resume.title.like(f"%{_escape_like(text)}%", escape="\\"))
+    condition = and_(*filters)
+    total = db.scalar(select(func.count()).select_from(Resume).where(condition)) or 0
     items = list(
         db.scalars(
             select(Resume)
-            .where(filters)
-            .order_by(Resume.update_time.desc())
+            .where(condition)
+            .order_by(*_resume_sort_clause(sort))
             .offset((page - 1) * page_size)
             .limit(page_size)
         )

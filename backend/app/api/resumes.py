@@ -26,6 +26,8 @@ from app.services.pdf_export_service import get_pdf_path
 from app.services.resume_import_service import extract_resume_text_from_uploads
 from app.services.resume_locale import detect_resume_language, normalize_resume_language
 from app.services.resume_service import (
+    DEFAULT_RESUME_SORT,
+    RESUME_SORTS,
     create_resume,
     create_version,
     delete_resume,
@@ -72,16 +74,21 @@ def _mark_import_task_failed(db: Session, task: AiTask | None, message: str) -> 
 def list_my_resumes(
     page: int = Query(1, ge=1),
     page_size: int = Query(8, ge=1, le=48),
+    keyword: str | None = Query(None, max_length=50),
+    sort: str = Query("updated"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    items, total = list_resumes(db, current_user.id, page, page_size)
+    resolved_sort = sort if sort in RESUME_SORTS else DEFAULT_RESUME_SORT
+    items, total = list_resumes(db, current_user.id, page, page_size, keyword=keyword, sort=resolved_sort)
     return success(
         {
             "items": [ResumeOut.model_validate(item).model_dump() for item in items],
             "total": total,
             "page": page,
             "page_size": page_size,
+            "keyword": (keyword or "").strip() or None,
+            "sort": resolved_sort,
         }
     )
 

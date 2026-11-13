@@ -91,8 +91,11 @@ function sendEvent(res: express.Response, event: ChatStreamEvent): void {
   res.write(`${JSON.stringify(event)}\n`);
 }
 
+// 健康检查只说明「进程能接请求」。不要在这里猜模型是否可用：曾经的
+// `ready: provider === "faux"` 让 real 模式永远 false，看起来像模型配错了。
+// 真实模型是否通，只能靠发一轮对话来判断。
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok", provider: config.provider, ready: config.provider === "faux" });
+  res.json({ status: "ok", provider: config.provider, mode: config.provider === "faux" ? "demo" : "live" });
 });
 
 // ---------------------------------------------------------------------------

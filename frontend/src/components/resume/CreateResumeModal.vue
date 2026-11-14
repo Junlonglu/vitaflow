@@ -282,7 +282,7 @@ watch(
                 </div>
 
                 <div class="mb-1 mt-3 flex min-h-[24px] items-center justify-between gap-2 px-2 sm:px-3">
-                  <h2 class="flex-1 truncate text-xs font-medium tracking-tight text-zinc-900 transition-colors group-hover:text-zinc-950 sm:text-sm">{{ item.name }}</h2>
+                  <h2 class="flex-1 truncate text-xs font-medium tracking-tight text-zinc-900 transition-colors group-hover:text-zinc-950 sm:text-sm" :title="item.name">{{ item.name }}</h2>
                   <div class="relative flex shrink-0 items-center">
                     <span class="inline-flex shrink-0 items-center rounded-full bg-zinc-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-zinc-600 transition duration-100 group-hover:scale-95 group-hover:opacity-0 group-hover:pointer-events-none sm:px-2.5 sm:py-1 sm:text-[10px]">
                       {{ item.category }}

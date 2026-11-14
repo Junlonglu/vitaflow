@@ -22,6 +22,8 @@ defineEmits<{
 
 const template = computed(() => props.templates.find((item) => item.template_id === props.item.template_id))
 const templateName = computed(() => props.templateNames[props.item.template_id] || template.value?.name || "自定义模板")
+const updatedLabel = computed(() => formatRelativeTime(props.item.update_time || props.item.create_time, { empty: "最近" }))
+const languageLabel = computed(() => (props.item.language === "en" ? "English" : "简体中文"))
 </script>
 
 <template>
@@ -55,7 +57,7 @@ const templateName = computed(() => props.templateNames[props.item.template_id] 
         </div>
       </div>
       <div class="mt-1.5 flex min-h-[24px] items-center justify-between text-[11px] tracking-wide text-zinc-400/90">
-        <span class="truncate pr-1 sm:pr-2">{{ formatRelativeTime(item.update_time || item.create_time, { empty: "最近" }) }}<span class="hidden sm:inline"> · {{ item.language === "en" ? "English" : "简体中文" }}</span></span>
+        <span class="truncate pr-1 sm:pr-2" :title="`${updatedLabel} · ${languageLabel}`">{{ updatedLabel }}<span class="hidden sm:inline"> · {{ languageLabel }}</span></span>
         <div class="relative flex shrink-0 items-center">
           <span class="inline-flex shrink-0 items-center rounded bg-zinc-100 px-1.5 py-0.5 text-[9.5px] font-medium tracking-wide text-zinc-500 transition-opacity duration-100 group-hover:pointer-events-none group-hover:opacity-0 sm:px-2 sm:py-1 sm:text-[10px]">
             {{ templateName }}

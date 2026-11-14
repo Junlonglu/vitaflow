@@ -172,19 +172,18 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
 <template>
   <template v-if="dashboard">
     <section class="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
-      <article v-for="card in cards" :key="card.label" class="relative flex min-w-0 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-3.5 sm:p-5">
+      <article v-for="card in cards" :key="card.label" class="relative flex min-w-0 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-3.5 sm:p-4">
         <div>
-          <div class="flex items-center justify-between gap-2">
-            <p class="truncate whitespace-nowrap text-xs font-medium text-zinc-500 sm:text-sm">{{ card.label }}</p>
-            <span class="shrink-0 rounded-lg bg-zinc-100 p-1.5 text-zinc-600 sm:p-2"><component :is="card.icon" class="h-3.5 w-3.5 sm:h-4 sm:w-4" /></span>
+          <div class="flex items-center justify-between gap-1.5">
+            <p class="min-w-0 flex-1 truncate text-xs font-medium text-zinc-500 sm:text-[13px]" :title="card.label">{{ card.label }}</p>
+            <span class="shrink-0 rounded-lg bg-zinc-100 p-1.5 text-zinc-600"><component :is="card.icon" class="h-3.5 w-3.5 sm:h-4 sm:w-4" /></span>
           </div>
           <p class="mt-2 truncate text-xl font-semibold tracking-tight text-zinc-950 sm:mt-3 sm:text-2xl" :title="card.label === 'Token 消耗' ? `${formatNumber(card.value)} tokens` : String(formatNumber(card.value))">{{ card.formattedValue || formatNumber(card.value) }}</p>
         </div>
         <p v-if="card.label !== '上线天数' && card.label !== '总收入'" class="mt-2 text-[11px] text-zinc-400 sm:text-xs" :class="card.label === '用户总数' ? 'whitespace-normal leading-relaxed' : 'whitespace-nowrap'">
           <template v-if="card.label === '用户总数'">
-            <span>今日新增 </span><span class="font-medium text-zinc-700">{{ card.formattedToday ?? card.today }}</span>
-            <span class="mx-1.5 text-zinc-300">|</span>
-            <span>活跃 </span><span class="font-medium text-zinc-700">{{ dashboard.today.active_users || 0 }}</span>
+            <span class="whitespace-nowrap">今日新增 <span class="font-medium text-zinc-700">{{ card.formattedToday ?? card.today }}</span></span>
+            <span class="whitespace-nowrap"><span class="mx-1.5 text-zinc-300">|</span>活跃 <span class="font-medium text-zinc-700">{{ dashboard.today.active_users || 0 }}</span></span>
           </template>
           <template v-else>
             <span class="hidden sm:inline">今日新增 </span><span class="sm:hidden">新增 </span><span class="font-medium text-zinc-700">{{ card.formattedToday ?? card.today }}</span>

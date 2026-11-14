@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-vue-next"
 import { formatRelativeTime } from "@/utils/time"
+import { toPlainText } from "@/utils/text"
 import WorkspacePage from "@/components/workspace/WorkspacePage.vue"
 import StateBlock from "@/components/common/StateBlock.vue"
 import AppDialog from "@/components/ui/dialog/AppDialog.vue"
@@ -509,8 +510,8 @@ onUnmounted(() => window.clearTimeout(searchTimer))
               </div>
             </div>
 
-            <h2 class="mt-2 line-clamp-2 text-[14px] font-medium leading-5 text-zinc-900">{{ item.title || "未命名信息" }}</h2>
-            <p v-if="item.summary" class="mt-1.5 line-clamp-2 text-[12.5px] leading-relaxed text-zinc-500">{{ item.summary }}</p>
+            <h2 class="mt-2 line-clamp-2 text-[14px] font-medium leading-5 text-zinc-900" :title="item.title || '未命名信息'">{{ item.title || "未命名信息" }}</h2>
+            <p v-if="item.summary" class="mt-1.5 line-clamp-2 text-[12.5px] leading-relaxed text-zinc-500" :title="toPlainText(item.summary)">{{ toPlainText(item.summary) }}</p>
 
             <div v-if="item.tags?.length" class="mt-2 flex flex-wrap gap-1">
               <span v-for="tag in item.tags.slice(0, 4)" :key="tag" class="rounded bg-zinc-50 px-1.5 py-0.5 text-[11px] text-zinc-500">#{{ tag }}</span>

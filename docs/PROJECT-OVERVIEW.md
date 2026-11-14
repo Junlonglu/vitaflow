@@ -81,12 +81,15 @@ vitaflow/
 │   ├── src/tools/         # 工具定义（resume / library / skill / questions / search）+ state + http 客户端 + 步骤文案
 │   └── .pi-agent/models.json   # 模型目录（能力清单 + API Key 引用）
 └── docs/
-    ├── adr/               # 架构决策记录 0001~0003
-    ├── agents/            # issue tracker 与 domain doc 约定
-    ├── pi-agent重构设计.md
-    ├── resume-agent.md    # 提示词分层 / 内置技能 / 工具契约 / 交互
-    ├── resume-schema.md   # 简历 JSON 契约与原子信息模型
-    └── ai-call-flows.md   # 端到端链路，标注到行号
+    ├── README.md        # 文档索引（唯一入口）
+    ├── PROJECT-OVERVIEW.md        # 架构与功能总览
+    ├── design-system.md           # 设计规范
+    ├── 本地开发环境启动指南.md     # 启动与排障
+    ├── ai/              # AI 专题：resume-agent / ai-call-flows / ai-chat-pending-change / ai-trajectory
+    ├── architecture/    # pi-agent重构设计（含旧链路回滚依据）
+    ├── data/            # resume-schema：简历 JSON 契约与原子信息模型
+    ├── learning/        # 面试与复盘笔记（非现状依据）
+    └── archive/         # 已归档的一次性文档
 ```
 
 ---
@@ -210,7 +213,7 @@ vitaflow/
 
 这是全项目最重要的数据结构，前端表单、AI 工具、渲染模板、导出服务都以它为契约。
 
-**声明式契约**：字段表、类型、必填与长度上限全部定义在 `backend/app/core/resume_schema.py`（`SECTIONS` / `FRAGMENT_KINDS`），并由 `normalize_resume_document()` 在**所有落库路径**（前端保存、AI 写回、信息库导入）收口；`schema_compact()` 把同一份字段表压成「一行一模块」随上下文下发给 Agent（`schema_prompt()` 保留给文档与调试）。字段级说明见 [`docs/resume-schema.md`](./resume-schema.md)，此处只列结构。
+**声明式契约**：字段表、类型、必填与长度上限全部定义在 `backend/app/core/resume_schema.py`（`SECTIONS` / `FRAGMENT_KINDS`），并由 `normalize_resume_document()` 在**所有落库路径**（前端保存、AI 写回、信息库导入）收口；`schema_compact()` 把同一份字段表压成「一行一模块」随上下文下发给 Agent（`schema_prompt()` 保留给文档与调试）。字段级说明见 [`data/resume-schema.md`](./data/resume-schema.md)，此处只列结构。
 
 ```jsonc
 {
@@ -257,7 +260,7 @@ vitaflow/
 
 ### 7.1 为什么有独立进程
 
-pi-agent 是 TypeScript SDK，无法在 Python 进程内运行；把整个后端改写成 Node 也不划算（认证、ORM、导出、存储生态都在 Python）。因此采用 **sidecar 模式**：FastAPI 拥有全部业务与数据权限，Node 只做一个「无状态 Agent 执行器」。决策记录见 `docs/adr/0001`。
+pi-agent 是 TypeScript SDK，无法在 Python 进程内运行；把整个后端改写成 Node 也不划算（认证、ORM、导出、存储生态都在 Python）。因此采用 **sidecar 模式**：FastAPI 拥有全部业务与数据权限，Node 只做一个「无状态 Agent 执行器」。决策依据见 §14。
 
 ### 7.2 HTTP 契约
 
@@ -300,7 +303,7 @@ createAgentSession({ cwd, sessionManager: SessionManager.inMemory(cwd), resource
 
 ### 7.5 系统提示词与技能
 
-提示词分三层，越靠下注入得越晚、越窄（细节见 [`docs/resume-agent.md`](./resume-agent.md)）：
+提示词分三层，越靠下注入得越晚、越窄（细节见 [`ai/resume-agent.md`](./ai/resume-agent.md)）：
 
 | 层 | 内容 | 量级 |
 |---|---|---|
@@ -391,7 +394,7 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 
 ### 7.11 信息库（原子信息）与双通道待确认
 
-信息库把「用户会反复用到的事实」从单份简历里抽出来，属于用户而不是简历。字段模型见 `docs/resume-schema.md` §6，这里只说链路。
+信息库把「用户会反复用到的事实」从单份简历里抽出来，属于用户而不是简历。字段模型见 [`data/resume-schema.md`](./data/resume-schema.md) §6，这里只说链路。
 
 ```
 信息库页面 /workspace/info
@@ -555,10 +558,10 @@ docker compose --profile full up -d --build
 | 工具回调往返 | 每个工具一次跨进程 HTTP | 一轮可能 3 次往返。优化方向：上下文里预置 section 只读快照，让 `get_resume_context` 本地返回 |
 | 超时默认值不一致 | `config.ts` 默认 60000ms，`docker-compose.yml` 传 300000ms | 不走 Docker 直接 `npm run dev` 时，导入整份简历（实测 60s+）会撞默认超时 |
 | 计费收尾仍阻塞 | `server.ts` 在 `res.end()` 后 `await reportUsage` | 注释写 fire-and-forget，实际占住请求收尾；FastAPI 慢时会拖长 Node 连接生命周期 |
-| 静态共享令牌 | `AI_SERVICE_TOKEN` | ADR 中已列为开放问题。当前「内网 + 无 shell 工具 + Python 侧兜底校验」下风险可控；升级方向是短时签名（时间戳 + HMAC） |
+| 静态共享令牌 | `AI_SERVICE_TOKEN` | §14 决策 1 已列为开放问题。当前「内网 + 无 shell 工具 + Python 侧兜底校验」下风险可控；升级方向是短时签名（时间戳 + HMAC） |
 | BYOK 未覆盖一次性任务 | `api/ai.py`、`api/resumes.py` | 自定义模型目前只作用于 Agent 对话；生成/导入任务仍走平台模型。扩展时需同步改造各处 `precheck_flow_points` / `settle_task_flow_points`，否则会出现「用用户 Key 却扣平台积分」 |
 | `ui/input` 等旧控件 | `components/ui/` | 本轮已把 Input/Textarea 从 12px 收敛到 8px 控件档；`Select` 的 ghost 类、`ConfirmDialog` 里的 `rounded-xl` 按钮等仍有零散发散，遇到即按 §1 圆角阶梯校准 |
-| 原子信息落点靠约定 | `FRAGMENT_KINDS.preset_type` / `info_fragment_service.py` | 落到 `custom_sections` 的分类靠 `preset_type` 字符串匹配模块；新增分类忘配（或写错）preset 时不会报错，只会退化成独立的「自定义」模块。新增分类时按 `docs/resume-schema.md` §6.1 表逐项核对 |
+| 原子信息落点靠约定 | `FRAGMENT_KINDS.preset_type` / `info_fragment_service.py` | 落到 `custom_sections` 的分类靠 `preset_type` 字符串匹配模块；新增分类忘配（或写错）preset 时不会报错，只会退化成独立的「自定义」模块。新增分类时按 [`data/resume-schema.md`](./data/resume-schema.md) §6.1 表逐项核对 |
 | 简历字段表与实际表单仍有漂移风险 | `resume_schema.py` ↔ `SectionListForm.vue` | 字段表是契约，但前端条目默认字段是手写的 `Object.assign`。新增字段后若忘了改表单，新字段不会出现在编辑器里（数据仍在）。已有 `ResumeSchemaTest` 守住后端，尚无跨端一致性测试 |
 
 ---
@@ -582,14 +585,22 @@ docker compose --profile full up -d --build
 
 ---
 
-## 14. ADR 索引
+## 14. 关键架构决策
 
-| 编号 | 主题 |
-|---|---|
-| 0001 | 为什么保留 Python 后端、把 AI 拆成 Node sidecar |
-| 0002 | 为什么用统一对话入口替代 9 个独立功能 API（简历评分功能被移除） |
-| 0003 | 为什么 MySQL 是会话事实源、Agent 会话请求级重建 |
-| 0004 | 为什么用 section 级工具 + 回调 Python 校验（替代整份重发） |
-| 0005 | 为什么模型配置事实源迁到 AI 服务的模型目录 |
+AI 子系统改造中的 5 个关键取舍，每条记录「被否决的方案」及原因，便于后续重构时知道前人试过什么。完整动机与迁移路径见 [`architecture/pi-agent重构设计.md`](./architecture/pi-agent重构设计.md)。
 
-详细端到端链路（含行号）见 `docs/ai-call-flows.md`；提示词分层、内置技能与工具契约见 `docs/resume-agent.md`；重构动机与取舍见 `docs/pi-agent重构设计.md`。
+> 代码注释中的 `ADR-000N`（如 `catalog.ts` 的 `ADR-0005`）指向本表第 N 条。原 `docs/adr/` 目录已合并至此，编号保持不变以便与历史提交对应。
+
+| # | 决策 | 被否决的方案与原因 |
+| --- | --- | --- |
+| 1 | **Python 后端保留，AI 能力拆成 Node sidecar** | **全量迁 Node**：会丢掉 Python 生态（Playwright 导出、WeasyPrint、pytesseract），工程量巨大；**混合双栈**（Node 只管对话、其余仍在 Python 进程内调 LLM）：两套 LLM 客户端并存，计费与日志割裂，与「完全重写」目标冲突。sidecar 边界清晰、pi-agent 升级只影响单一服务；代价是双语言部署 + 服务间需要轻量认证 |
+| 2 | **统一对话入口，取代 9 个独立功能 API** | **全部保留并 Agent 化**：单步结构化生成套 Agent 循环是负收益；**仅迁移 resume-chat 试点**：与「一次重写收敛所有入口」的目标不符。改为高频操作封装成对话内快捷指令（`/润色` `/翻译` `/优化` `/生成`），其余靠多模态自然对话触发；简历评分单次耗时 51s、独立价值低，直接移除 |
+| 3 | **MySQL 是会话事实源，Agent 会话按请求重建** | **pi SessionManager 落库 + 与现有表双写**：两份事实源需要同步协议，一致性与调试成本都高。改用 `SessionManager.inMemory()`，简历快照、历史消息、待确认变更由 FastAPI 按 `context_messages` 注入，请求结束即弃——多用户安全、UI 与决策流零改动、AI 服务可水平扩展；代价是每请求重建上下文，但上下文本就来自 DB 查询，与原先同构。pi 的跨请求记忆（compaction、历史压缩）因此不使用，长对话裁剪由 `context_messages` 上限控制 |
+| 4 | **section 级工具 + 回调 Python 校验** | **字段级工具**：粒度最细但轮次多，Agent 循环反而更慢；**纯提案制**（工具只返回提案、不落库）：延迟收益打折，且与现有 pending_change 决策流重复。旧链路让模型整份重发 `optimized_resume_data`（≈10KB JSON），延迟由输出 token 决定（实测 30~50s）；section 级把单次输出降到 KB 级、目标 ~5s，信任边界仍在服务端 |
+| 5 | **模型目录归 ai-service，模型策略留 MySQL** | **目录继续手工编辑文件**：改模型要登服务器改 `models.json`，与「后台全管 AI」的运维预期冲突；**Key 存环境变量**：新增 Key 要改容器环境变量并重启，无法热生效。改为后台通过目录 CRUD 全量管理、Key 明文写入 `models.json`（换 Key 即时生效，不进后端 DB 与 `.env`）；代价是密钥明文落盘，依赖部署环境对 `.pi-agent/` 目录的文件权限保护 |
+
+> 决策 4 的工具粒度后来被 [`ai/resume-agent.md`](./ai/resume-agent.md) 收敛为单一 `update_resume`，但「工具做增量、Python 做校验」的结论不变。
+
+## 15. 相关文档
+
+完整文档索引见 [`README.md`](./README.md)。其中：端到端链路（含行号）见 [`ai/ai-call-flows.md`](./ai/ai-call-flows.md)；提示词分层、内置技能与工具契约见 [`ai/resume-agent.md`](./ai/resume-agent.md)；重构动机与取舍见 [`architecture/pi-agent重构设计.md`](./architecture/pi-agent重构设计.md)。

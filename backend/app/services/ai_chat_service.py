@@ -714,7 +714,7 @@ async def _stream_ai_service_reply(
         model_ref=model_config.model_ref if model_config else None,
         model_override=model_override,
         skills=skills,
-        # 轨迹关联键（docs/ai-trajectory.md）：被回复的用户消息 id + 会话 id，
+        # 轨迹关联键（docs/ai/ai-trajectory.md）：被回复的用户消息 id + 会话 id，
         # 让 ai-service 落盘的回合能和消息表对上；trigger 区分重新生成。
         # 用 getattr 而非直取：轨迹是"锦上添花"的旁路，不能因为一个缺字段的
         # 会话对象把整个回复打挂。

@@ -86,7 +86,7 @@ export interface AgentInput {
    */
   thinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   /**
-   * 轨迹收集器（P0，docs/ai-trajectory.md）。由 server 按本轮元信息创建并注入，
+   * 轨迹收集器（P0，docs/ai/ai-trajectory.md）。由 server 按本轮元信息创建并注入，
    * 这里只负责在工具开始/结束与回合收尾时把决策点记进去。测试可传假实现，
    * 没有它时行为与之前完全一致。
    */

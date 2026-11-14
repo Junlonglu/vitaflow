@@ -247,7 +247,7 @@ class AiServiceUsageRequest(BaseModel):
 
 
 class AiServiceTraceRequest(BaseModel):
-    """Agent 轨迹（L1）上报体，见 docs/ai-trajectory.md。
+    """Agent 轨迹（L1）上报体，见 docs/ai/ai-trajectory.md。
 
     刻意不做严格的事件模型：轨迹 schema 会随分析需求加字段，用 dict 接住
     才不会让一次字段扩展把整条上报顶成 422。长度做上限保护即可 —— 事件数
@@ -1287,7 +1287,7 @@ def report_agent_trace(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    """Persist one agent turn's L1 trajectory (docs/ai-trajectory.md, P0).
+    """Persist one agent turn's L1 trajectory (docs/ai/ai-trajectory.md, P0).
 
     L1 只有结构：工具名、参数结构摘要、成败类别、耗时、token、分段版本 hash。
     没有简历内容、没有用户原话，所以不设外键、不随简历删除 —— 删了简历还能

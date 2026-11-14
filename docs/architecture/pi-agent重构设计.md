@@ -1,7 +1,7 @@
 # VitaFlow AI 模块重构设计：pi-agent 化
 
 > status: accepted · 2026-09-01
-> 决策记录见 `docs/adr/0001~0004`，术语表见 `CONTEXT.md`
+> 决策记录见 [`../PROJECT-OVERVIEW.md`](../PROJECT-OVERVIEW.md) §14（代码注释中的 `ADR-000N` 对应表中第 N 条），术语表见 `CONTEXT.md`
 > 本文是纸面设计的最终产物，编码后置；同时作为旧链路退役后的回滚依据。
 
 ## 1. 背景与动机

@@ -7,7 +7,7 @@
 - VitaFlow 是前后端分离的智能简历平台。
 - 后端位于 `backend/`，使用 FastAPI、SQLAlchemy、Alembic、MySQL、Redis、Jinja2、Playwright/WeasyPrint、python-docx。
 - 前端位于 `frontend/`，使用 Vue 3、TypeScript、Vite、Vue Router、Pinia、Tailwind CSS。
-- AI 服务位于 `ai-service/`，是承载 pi-agent 运行时的 Node 旁路服务（`@earendil-works/pi-coding-agent@0.83.0` 锁版）。FastAPI 通过 HTTP/SSE 代理调用它，认证、数据库、计费仍归 FastAPI。详见 `docs/pi-agent重构设计.md`。
+- AI 服务位于 `ai-service/`，是承载 pi-agent 运行时的 Node 旁路服务（`@earendil-works/pi-coding-agent@0.83.0` 锁版）。FastAPI 通过 HTTP/SSE 代理调用它，认证、数据库、计费仍归 FastAPI。详见 `docs/architecture/pi-agent重构设计.md`。
 - 后端接口统一挂载在 `/api` 下，响应结构应保持 `{ code, message, data }`。
 - 简历预览和 PDF 导出共用后端 HTML 渲染服务，改模板、样式或预览逻辑时要同时考虑浏览器预览与 PDF 的一致性。Word 导出已下线（`/api/resumes/{id}/export/word` 返回 410），`word_export_service` 仅为待恢复而保留，不要把它当成在用功能。
 - 运行分两种模式：手动开发（默认）`docker compose up -d` 只启动 mysql/redis/minio/ai-service，后端 8000 与前端 5173 需在宿主机分别启动；全栈 `docker compose --profile full up -d --build` 额外启动 backend/frontend(Nginx)，入口为 `http://localhost:8080`。排查「页面打不开 / 502 / 接口 500」时，先确认当前模式以及对应进程是否真的在监听。
@@ -130,9 +130,29 @@ npm run typecheck  # TypeScript 类型检查
 
 ## 文档维护
 
-- 根目录 `README.md` 是项目总入口；后端细节写入 `backend/README.md`，前端细节写入 `frontend/README.md`。
+- 根目录 `README.md` 是项目总入口；后端细节写入 `backend/README.md`，前端细节写入 `frontend/README.md`；`docs/` 下文档由 `docs/README.md` 索引管理。
+- 新增、重命名或移动 `docs/` 下的文档时，必须同步更新 `docs/README.md`，并用 `grep -rn "<旧文件名>" --include="*.md" --include="*.py" --include="*.ts" .` 修正全部引用（**代码注释里也有文档路径和 `ADR-000N` 标注**）。
 - 新增环境变量、启动步骤、外部服务、定时任务、导出依赖或管理后台能力时，需要同步文档。
 - 文档示例使用占位值，不写真实凭据。
+
+## 文档导航
+
+改代码前按下表读对应文档；本文件只给约束，不给架构细节。
+
+| 要改什么 | 先读 | 关键约束 |
+| --- | --- | --- |
+| 整体架构、模块边界、API 总表 | `docs/PROJECT-OVERVIEW.md` | 架构与功能的单一事实源；连 §11 开发约束与 §12 技术债一起看 |
+| AI 对话链路、提示词、技能、工具 | `docs/ai/resume-agent.md` → `docs/ai/ai-call-flows.md` | 工具白名单共 5 个，加工具需同时改 ai-service 与 Python 校验端点 |
+| 待确认变更（pending-change） | `docs/ai/ai-chat-pending-change.md` | apply/reject 决策流跨前后端，改动要两端同步 |
+| Agent 轨迹 | `docs/ai/ai-trajectory.md` | P0 已落地，P1/P2 待定 |
+| 简历 JSON 结构、字段表 | `docs/data/resume-schema.md` | 契约在 `backend/app/core/resume_schema.py`，两边必须同步改 |
+| 前端样式、组件规范 | `docs/design-system.md` | 圆角分档、表单控件禁用 `rounded-xl` |
+| 本地起服务、排查启动失败 | `docs/本地开发环境启动指南.md` | 先确认当前是手动开发还是全栈 Docker 模式 |
+| 想知道某个设计为什么这样定 | `docs/PROJECT-OVERVIEW.md` §14 | 代码注释里的 `ADR-000N` 对应 §14 第 N 条 |
+
+- 领域术语以仓库根 `CONTEXT.md` 为准，输出命名不要自造同义词。
+- `docs/learning/` 是历史学习笔记（01～04 写于 LangChain 时代），**不是现状依据**，不要按它实现。
+- 完整索引见 `docs/README.md`。
 
 ## Git 与产物
 
@@ -148,12 +168,3 @@ npm run typecheck  # TypeScript 类型检查
 - 注释只解释不明显的业务规则、迁移原因或安全边界，不写重复代码含义的注释。
 - 优先复用现有工具函数、类型、组件和服务，不新增平行实现。
 
-## Agent skills
-
-### Issue tracker
-
-本仓库的 issue 与 spec 以 markdown 文件形式存放在 `.scratch/<feature>/` 下，一个功能一个目录。详见 `docs/agents/issue-tracker.md`。
-
-### Domain docs
-
-单上下文：仓库根一份 `CONTEXT.md`，ADR 位于 `docs/adr/`。详见 `docs/agents/domain.md`。

@@ -2,7 +2,7 @@
 
 > 逐文件、逐函数、逐行关键代码解读。重点关注 LangChain/LangGraph 的具体用法、设计决策和工程技巧。
 
-> **历史文档（2026-08 撰写，技术已退役）**：本文逐行解读的 `chains.py`、`graph.py`、Agent 工具链等文件**已从仓库删除**，LangChain / LangGraph 依赖也已移除。文中所有代码引用均无法在现有代码库中定位。现行 AI 实现见 `ai-service/src/`（pi-agent 运行时），设计决策见 `docs/adr/`。保留本文仅作技术复盘参考，不可作为代码依据。
+> **历史文档（2026-08 撰写，技术已退役）**：本文逐行解读的 `chains.py`、`graph.py`、Agent 工具链等文件**已从仓库删除**，LangChain / LangGraph 依赖也已移除。文中所有代码引用均无法在现有代码库中定位。现行 AI 实现见 `ai-service/src/`（pi-agent 运行时），设计决策见 `docs/PROJECT-OVERVIEW.md` §14。保留本文仅作技术复盘参考，不可作为代码依据。
 
 ---
 

@@ -1,4 +1,4 @@
-"""Agent 轨迹表（docs/ai-trajectory.md 的 P0 落盘）。
+"""Agent 轨迹表（docs/ai/ai-trajectory.md 的 P0 落盘）。
 
 一次对话回合一行：events 里是 turn_start / tool_call / tool_result / turn_end
 事件流，prompt_versions 里是三段稳定文本的 hash。表不设外键 —— L1 轨迹不含

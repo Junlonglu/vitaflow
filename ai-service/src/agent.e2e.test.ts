@@ -367,7 +367,7 @@ describe("skill activation rides the same activity trace as tool steps", () => {
   });
 });
 
-describe("turn trace (P0, docs/ai-trajectory.md)", () => {
+describe("turn trace (P0, docs/ai/ai-trajectory.md)", () => {
   /** 记录 tracer 的调用顺序，验证 agent 把决策点交给了轨迹而不是丢掉。 */
   function fakeTracer() {
     const calls: Array<Record<string, unknown>> = [];

@@ -24,7 +24,7 @@ VitaFlow 是一个面向求职者的智能简历生成与优化平台，提供�
 - 前端：Vue 3、TypeScript、Vite、Vue Router、Pinia、Tailwind CSS
 - PDF 导出：Playwright、Chromium、WeasyPrint
 - 存储：MinIO、阿里云 OSS
-- AI 服务：Node.js 旁路服务，承载 pi-agent 运行时（`ai-service/`，见 `docs/pi-agent重构设计.md`）
+- AI 服务：Node.js 旁路服务，承载 pi-agent 运行时（`ai-service/`，见 `docs/architecture/pi-agent重构设计.md`）
 
 ## 项目结构
 
@@ -75,10 +75,27 @@ VitaFlow/
 │   ├── components.json              # shadcn-vue 生成器配置
 │   ├── vite.config.ts               # Vite 配置
 │   └── README.md                    # 前端开发说明
+├── docs/                            # 架构、AI 专题、设计规范与决策记录（索引见 docs/README.md）
 ├── AGENTS.md                        # 代码代理与协作约束
 ├── LICENSE                          # PolyForm Noncommercial 许可证
 └── README.md                        # 项目总览
 ```
+
+## 文档导航
+
+`docs/` 下按主题分目录，完整索引见 [`docs/README.md`](docs/README.md)。常看的几篇：
+
+| 我想了解 | 文档 |
+| --- | --- |
+| 架构总览、模块职责、API 与数据模型 | [`docs/PROJECT-OVERVIEW.md`](docs/PROJECT-OVERVIEW.md) |
+| 本地 / 全栈启动与启动故障排查 | [`docs/本地开发环境启动指南.md`](docs/本地开发环境启动指南.md) |
+| 前端设计规范（颜色、字号、圆角、组件） | [`docs/design-system.md`](docs/design-system.md) |
+| AI 子系统的提示词、技能与工具 | [`docs/ai/resume-agent.md`](docs/ai/resume-agent.md) |
+| AI 对话端到端链路 | [`docs/ai/ai-call-flows.md`](docs/ai/ai-call-flows.md) |
+| 简历 JSON 结构与字段表 | [`docs/data/resume-schema.md`](docs/data/resume-schema.md) |
+| 为什么这样设计（关键技术取舍） | [`docs/PROJECT-OVERVIEW.md`](docs/PROJECT-OVERVIEW.md) §14 |
+
+> `docs/learning/` 是开发过程的学习笔记，01～04 写于 LangChain 时代，仅作参考，不代表当前实现。
 
 ## 环境要求
 
@@ -155,27 +172,7 @@ npm run dev
 
 前端默认运行在 `http://localhost:5173`，示例配置中的后端地址为 `http://127.0.0.1:8000/api`。
 
-## 常用命令
-
-### 后端
-
-```bash
-cd backend
-source .venv/bin/activate
-alembic upgrade head
-uvicorn app.main:app --reload
-```
-
-### 前端
-
-```bash
-cd frontend
-npm run dev
-npm run build
-npm run preview
-```
-
-前端构建产物位于 `frontend/dist`。生产环境可由 Nginx 托管静态文件，并将 `/api` 反向代理到 FastAPI。
+其他脚本：`npm run build` 构建到 `frontend/dist`，`npm run preview` 本地预览构建产物。生产环境可由 Nginx 托管 dist 并将 `/api` 反向代理到 FastAPI。
 
 ## 配置说明
 
@@ -278,26 +275,15 @@ ADMIN_EMAILS=admin@example.com
 - `/api/feedback`：用户反馈
 - `/api/admin`：管理后台
 
-前端主要页面：
+前端主要页面（完整路由表含守卫逻辑见 [`docs/PROJECT-OVERVIEW.md`](docs/PROJECT-OVERVIEW.md) §8.1）：
 
-- `/`：首页（已登录自动进入工作区）
-- `/landing`：营销落地页
+- `/`、`/landing`：首页与营销落地页
 - `/login`、`/register`：登录与注册（两个路由共用 `Login.vue`）
 - `/workspace`：工作区首页（左侧栏为简历与会话入口，中间为对话）
 - `/workspace/:id`：工作区内的简历编辑器与预览
-- `/workspace/templates`：工作区内的模板中心（选好模板直接起稿）
-- `/workspace/resumes`：工作区内的全部简历（管理、复制、删除、分页）
-- `/resumes`：旧链接，重定向到 `/workspace/resumes`（保留 `?create=` 参数）
-- `/resumes/:id/edit`：旧编辑链接，重定向到 `/workspace/:id`
-- `/workspace/help`：工作区内的帮助中心
-- `/workspace/profile`：工作区内的个人中心（`?tab=feedback` 直达反馈）
-- `/workspace/announcements`：工作区内的公告历史
-- `/workspace/ai-records`：工作区内的 Flow Points 与调用记录
-- `/templates`：未登录访客的公开模板页（登录后重定向到 `/workspace/templates`）
-- `/share/:token`：公开分享页
-- `/help`、`/profile`、`/announcements`、`/ai-records`：旧链接，重定向到对应 `/workspace/*`
-- `/workspace/admin`：管理后台，同样待在工作区外壳里；菜单按宽度自适应（窄屏横排 tab，≥1536px 才用左侧竖排）
-- `/admin`：旧链接，重定向到 `/workspace/admin`
+- `/workspace/{templates,resumes,help,profile,announcements,ai-records,admin}`：模板中心、全部简历、帮助中心、个人中心、公告历史、Flow Points 与记录、管理后台
+- `/templates`、`/share/:token`：访客公开模板页与公开分享页
+- 旧链接（`/resumes*`、`/help`、`/profile`、`/announcements`、`/ai-records`、`/admin`）保留重定向到对应的 `/workspace/*`
 
 ## 项目说明
 

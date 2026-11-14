@@ -1,5 +1,5 @@
 /**
- * Agent 轨迹采集（docs/ai-trajectory.md 的 P0 落地）。
+ * Agent 轨迹采集（docs/ai/ai-trajectory.md 的 P0 落地）。
  *
  * 一次对话回合在别处只留下"结果"（回复文本、用户看得到的策展步骤行），
  * 而 RSI 要的是"决策过程"：模型调了哪个工具、改了哪些模块、改了几条、

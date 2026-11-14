@@ -579,7 +579,7 @@ app.post("/v1/chat", async (req, res) => {
         skillBody: skillCommand ? skillPromptBlock(skillCommand.skill) : "",
       });
 
-  // ---- 轨迹（P0, docs/ai-trajectory.md）：一段回合只记结构，不记内容。
+  // ---- 轨迹（P0, docs/ai/ai-trajectory.md）：一段回合只记结构，不记内容。
   // 版本 hash 落在三段稳定文本上，而不是 systemPrompt 全文 —— 全文含当前简历，
   // 每轮都变，hash 它等于没有版本概念。
   const resumeChars = context?.resume?.data ? JSON.stringify(context.resume.data).length : 0;

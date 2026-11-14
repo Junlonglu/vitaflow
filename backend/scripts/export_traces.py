@@ -1,4 +1,4 @@
-"""把 ai_agent_traces 摊平成事件流 JSONL（docs/ai-trajectory.md 的 P0 导出）。
+"""把 ai_agent_traces 摊平成事件流 JSONL（docs/ai/ai-trajectory.md 的 P0 导出）。
 
 表里一行是一个回合、events 是一个数组；训练/评估管道要的是一行一个事件。
 这个脚本只做这一件事，不读简历、不读消息表 —— L1 轨迹本身不含 PII。

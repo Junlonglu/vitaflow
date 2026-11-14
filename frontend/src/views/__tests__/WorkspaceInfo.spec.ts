@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
-import type { InfoFragment, InfoFragmentKind } from "@/api/infoFragment"
+import type { InfoFragment, InfoFragmentKind, InfoFragmentMeta } from "@/api/infoFragment"
 
 const kinds: InfoFragmentKind[] = [
   {
@@ -92,7 +92,7 @@ async function mountPage(items: InfoFragment[] = [fragment], metaImpl?: () => Pr
     page_size: 24,
     counts: { project: items.filter((item) => item.kind === "project").length, award: 0 },
   })
-  api.getInfoFragmentMetaApi.mockResolvedValue({ kinds, counts: { project: 1, award: 0 }, limit: 500 })
+  api.getInfoFragmentMetaApi.mockImplementation(metaImpl || (() => Promise.resolve(metaResponse)))
   resumeApi.listResumesApi.mockResolvedValue({
     items: [{ id: 5, title: "张三的简历" }],
     total: 1,
@@ -123,6 +123,58 @@ describe("WorkspaceInfo", () => {
       page: 1,
       page_size: 24,
     })
+  })
+
+  it("waits for kind metadata before cards can be opened", async () => {
+    let resolveMeta: (value: InfoFragmentMeta) => void = () => {}
+    const deferred = new Promise<InfoFragmentMeta>((resolve) => {
+      resolveMeta = resolve
+    })
+    const wrapper = await mountPage([fragment], () => deferred)
+
+    // 列表已返回但字段表还没到：此时不能把卡片放出来，否则点开是空表单。
+    expect(wrapper.text()).not.toContain("VitaFlow 简历系统")
+    resolveMeta(metaResponse)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain("VitaFlow 简历系统")
+    await wrapper.find('[title="编辑"]').trigger("click")
+    await flushPromises()
+    const inputs = wrapper.find(".app-dialog").findAll("input")
+    expect((inputs[1].element as HTMLInputElement).value).toBe("VitaFlow 简历系统")
+  })
+
+  it("keeps payload values when opening a fragment of a different kind", async () => {
+    const award: InfoFragment = {
+      ...fragment,
+      id: 8,
+      kind: "award",
+      kind_label: "荣誉奖项",
+      title: "ACM 金牌",
+      summary: "",
+      payload: { name: "ACM 金牌" },
+    }
+    const wrapper = await mountPage([award])
+    await wrapper.find('[title="编辑"]').trigger("click")
+    await flushPromises()
+
+    const dialog = wrapper.find(".app-dialog")
+    const inputs = dialog.findAll("input")
+    expect((inputs[1].element as HTMLInputElement).value).toBe("ACM 金牌")
+    expect((dialog.find("select").element as HTMLSelectElement).value).toBe("award")
+  })
+
+  it("clears fields only when the user switches kind in the dialog", async () => {
+    const wrapper = await mountPage()
+    await wrapper.find('[title="编辑"]').trigger("click")
+    await flushPromises()
+
+    await wrapper.find(".app-dialog").find("select").setValue("award")
+    await flushPromises()
+    const dialog = wrapper.find(".app-dialog")
+    const inputs = dialog.findAll("input")
+    expect((inputs[1].element as HTMLInputElement).value).toBe("")
+    expect((dialog.find("select").element as HTMLSelectElement).value).toBe("award")
   })
 
   it("filters by kind and reloads with the kind param", async () => {

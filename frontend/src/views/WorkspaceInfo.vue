@@ -58,45 +58,55 @@ watch(keyword, () => {
   window.clearTimeout(searchTimer)
   searchTimer = window.setTimeout(() => {
     page.value = 1
-    void loadList()
+    void reloadList()
   }, 260)
 })
 watch(activeKind, () => {
   page.value = 1
-  void loadList()
+  void reloadList()
 })
 
 async function loadList() {
+  const result = await listInfoFragmentsApi({
+    kind: activeKind.value || undefined,
+    q: keyword.value.trim() || undefined,
+    page: page.value,
+    page_size: PAGE_SIZE,
+  })
+  items.value = result.items
+  total.value = result.total
+  counts.value = result.counts || {}
+}
+
+async function loadMeta() {
+  const meta = await getInfoFragmentMetaApi()
+  kinds.value = meta.kinds
+  counts.value = meta.counts || {}
+}
+
+// 分类字段表来自 /meta；列表先就绪而字段表没到时，编辑弹窗会渲染不出字段，
+// 甚至把空表单保存回去，所以首屏等两者都完成再展示卡片。
+async function refresh() {
   loading.value = true
   try {
-    const result = await listInfoFragmentsApi({
-      kind: activeKind.value || undefined,
-      q: keyword.value.trim() || undefined,
-      page: page.value,
-      page_size: PAGE_SIZE,
-    })
-    items.value = result.items
-    total.value = result.total
-    counts.value = result.counts || {}
-  } catch (error) {
-    showGlobalToast(errorMessage(error, "信息库加载失败"), "error")
+    await Promise.all([
+      loadList().catch((error) => showGlobalToast(errorMessage(error, "信息库加载失败"), "error")),
+      loadMeta().catch((error) => showGlobalToast(errorMessage(error, "分类信息加载失败，可稍后重试"), "error")),
+    ])
   } finally {
     loading.value = false
   }
 }
 
-async function loadMeta() {
+async function reloadList() {
+  loading.value = true
   try {
-    const meta = await getInfoFragmentMetaApi()
-    kinds.value = meta.kinds
-    counts.value = meta.counts || {}
-  } catch {
-    kinds.value = []
+    await loadList()
+  } catch (error) {
+    showGlobalToast(errorMessage(error, "信息库加载失败"), "error")
+  } finally {
+    loading.value = false
   }
-}
-
-async function refresh() {
-  await Promise.all([loadList(), loadMeta()])
 }
 
 function errorMessage(error: unknown, fallback: string) {
@@ -130,7 +140,24 @@ function resetValues(kind: string, payload: Record<string, unknown> = {}) {
   editor.values = next
 }
 
-function openCreate(kind?: string) {
+// /meta 失败或特别慢时再拉一次，宁可晚一点打开弹窗，也不要展示一个空表单。
+async function ensureKinds() {
+  if (kinds.value.length) return true
+  try {
+    await loadMeta()
+  } catch (error) {
+    showGlobalToast(errorMessage(error, "分类信息加载失败，请稍后重试"), "error")
+    return false
+  }
+  if (!kinds.value.length) {
+    showGlobalToast("分类信息暂不可用，请稍后重试", "error")
+    return false
+  }
+  return true
+}
+
+async function openCreate(kind?: string) {
+  if (!(await ensureKinds())) return
   editor.id = null
   editor.kind = kind || (activeKind.value || "project")
   editor.title = ""
@@ -139,7 +166,8 @@ function openCreate(kind?: string) {
   editor.open = true
 }
 
-function openEdit(item: InfoFragment) {
+async function openEdit(item: InfoFragment) {
+  if (!(await ensureKinds())) return
   editor.id = item.id
   editor.kind = item.kind
   editor.title = item.title
@@ -148,13 +176,15 @@ function openEdit(item: InfoFragment) {
   editor.open = true
 }
 
-watch(() => editor.kind, (kind, previous) => {
-  if (previous && kind !== previous && editor.open) resetValues(kind)
-})
+// 只在用户于弹窗内主动切换分类时重置字段；打开弹窗时是代码赋值，
+// 不触发 change 事件，刚从 payload 填好的值不会被清空。
 
 function buildPayload(): Record<string, unknown> | null {
   const spec = editorKind.value
-  if (!spec) return null
+  if (!spec) {
+    showGlobalToast("分类信息未加载，请关闭后重新打开", "error")
+    return null
+  }
   const payload: Record<string, unknown> = {}
   for (const field of spec.fields) {
     const raw = (editor.values[field.key] || "").trim()
@@ -332,7 +362,7 @@ const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)
 function goPage(next: number) {
   if (next < 1 || next > totalPages.value || next === page.value) return
   page.value = next
-  void loadList()
+  void reloadList()
 }
 
 onMounted(refresh)

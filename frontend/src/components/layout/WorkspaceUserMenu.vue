@@ -55,7 +55,7 @@ function logout() {
         <template v-else>{{ initial }}</template>
       </span>
       <span class="min-w-0 flex-1">
-        <span class="block truncate text-[13px] font-medium text-zinc-900">{{ displayName }}</span>
+        <span class="block truncate text-[13.5px] font-medium text-zinc-900">{{ displayName }}</span>
         <span class="flex items-center gap-1 truncate text-[11px] text-zinc-500">
           <FlowPointIcon class="h-3 w-3 shrink-0" />
           <span v-if="balance !== null">{{ balance }} 点</span>
@@ -72,7 +72,7 @@ function logout() {
           v-for="item in menuItems"
           :key="item.to"
           :to="item.to"
-          class="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
+          class="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13.5px] font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
           @click="open = false"
         >
           <component :is="item.icon" class="h-4 w-4 shrink-0 text-zinc-400" />
@@ -81,7 +81,7 @@ function logout() {
         <div class="my-1 h-px bg-zinc-100"></div>
         <button
           type="button"
-          class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-zinc-500 transition-colors hover:bg-red-50 hover:text-red-600"
+          class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13.5px] font-medium text-zinc-500 transition-colors hover:bg-red-50 hover:text-red-600"
           @click="logout"
         >
           <LogOut class="h-4 w-4 shrink-0" />

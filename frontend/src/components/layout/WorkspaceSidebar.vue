@@ -73,9 +73,13 @@ function toggleExpanded(resumeId: number) {
   if (!chatStore.isLoaded(resumeId)) void chatStore.fetchSessions(resumeId).catch(() => undefined)
 }
 
+function isActiveSession(resumeId: number, sessionId: number) {
+  return activeId.value === resumeId && chatStore.activeSessionId(resumeId) === sessionId
+}
+
 /** 子级会话选中时父行只铺极淡底（不跟子行抢视觉），hover 再加深到与子行同档，保证父行始终有可点反馈。 */
 function resumeRowClass(resumeId: number) {
-  if (activeId.value !== resumeId) return "text-zinc-600 hover:bg-zinc-200/40"
+  if (activeId.value !== resumeId) return "text-zinc-700 hover:bg-zinc-200/50"
   if (isExpanded(resumeId) && chatStore.activeSessionId(resumeId)) return "bg-zinc-200/25 text-zinc-900 hover:bg-zinc-200/60"
   return "bg-zinc-200/60 text-zinc-900"
 }
@@ -458,7 +462,7 @@ function formatUpdated(value?: string) {
     <div class="shrink-0 px-3 pt-2">
       <button
         type="button"
-        class="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-[13px] font-medium text-zinc-700 transition-colors hover:bg-zinc-200/50"
+        class="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-[13.5px] font-medium text-zinc-800 transition-colors hover:bg-zinc-200/50"
         @click="startCreate('choice')"
       >
         <Plus class="h-4 w-4 shrink-0 text-zinc-500" />
@@ -466,7 +470,7 @@ function formatUpdated(value?: string) {
       </button>
       <button
         type="button"
-        class="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-[13px] font-medium text-zinc-600 transition-colors hover:bg-zinc-200/50 hover:text-zinc-900"
+        class="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-[13.5px] font-medium text-zinc-700 transition-colors hover:bg-zinc-200/50 hover:text-zinc-900"
         @click="startCreate('ai')"
       >
         <Sparkles class="h-4 w-4 shrink-0 text-zinc-400" />
@@ -476,11 +480,11 @@ function formatUpdated(value?: string) {
         v-for="nav in navItems"
         :key="nav.to"
         :to="nav.to"
-        class="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-[13px] font-medium transition-colors"
+        class="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-[13.5px] transition-colors"
         :class="
           route.path === nav.to
-            ? 'bg-zinc-200/60 text-zinc-900'
-            : 'text-zinc-600 hover:bg-zinc-200/40 hover:text-zinc-900'
+            ? 'bg-zinc-200/60 font-semibold text-zinc-900'
+            : 'font-medium text-zinc-600 hover:bg-zinc-200/40 hover:text-zinc-900'
         "
       >
         <component :is="nav.icon" class="h-4 w-4 shrink-0" :class="route.path === nav.to ? 'text-zinc-700' : 'text-zinc-400'" />
@@ -495,7 +499,7 @@ function formatUpdated(value?: string) {
           v-model="searchQuery"
           type="text"
           placeholder="搜索简历或对话"
-          class="h-8 w-full rounded-lg border-0 bg-white/60 pl-7 pr-7 text-[12px] text-zinc-800 outline-none ring-1 ring-zinc-200/60 transition-colors placeholder:text-zinc-400 focus:bg-white focus:ring-zinc-300"
+          class="h-8 w-full rounded-lg border-0 bg-white/60 pl-7 pr-7 text-[12.5px] text-zinc-800 outline-none ring-1 ring-zinc-200/60 transition-colors placeholder:text-zinc-400 focus:bg-white focus:ring-zinc-300"
           @keydown.esc="searchQuery = ''"
         />
         <button
@@ -510,7 +514,7 @@ function formatUpdated(value?: string) {
       </div>
     </div>
 
-    <div v-if="!isSearching" class="mt-4 flex shrink-0 items-center gap-1.5 px-5 text-[11px] font-medium tracking-wider text-zinc-400">
+    <div v-if="!isSearching" class="mt-4 flex shrink-0 items-center gap-1.5 px-5 text-[11.5px] font-medium tracking-wider text-zinc-400">
       <Files class="h-3 w-3" />
       <span>简历</span>
       <span v-if="store.resumeListTotal" class="text-zinc-300">{{ store.resumeListTotal }}</span>
@@ -521,7 +525,7 @@ function formatUpdated(value?: string) {
         <div v-for="i in 4" :key="i" class="h-8 animate-pulse rounded-md bg-zinc-200/60"></div>
       </div>
 
-      <p v-else-if="!store.resumeList.length" class="px-2 py-6 text-center text-[12px] leading-5 text-zinc-400">
+      <p v-else-if="!store.resumeList.length" class="px-2 py-6 text-center text-[12.5px] leading-5 text-zinc-400">
         还没有简历<br />点击上方「新建简历」开始
       </p>
 
@@ -533,10 +537,10 @@ function formatUpdated(value?: string) {
         >
           <button type="button" class="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5 text-left" @click="openResume(item.id)">
             <span class="min-w-0 flex-1">
-              <span class="block truncate text-[13px] font-medium leading-5">{{ item.title || "无标题简历" }}</span>
+              <span class="block truncate text-[13.5px] font-medium leading-5">{{ item.title || "无标题简历" }}</span>
             </span>
             <span
-              class="shrink-0 text-[11px] tabular-nums transition-opacity"
+              class="shrink-0 text-[11.5px] tabular-nums transition-opacity"
               :class="activeId === item.id ? 'text-zinc-400' : 'text-zinc-400 opacity-0 group-hover:opacity-100'"
             >
               {{ formatUpdated(item.update_time) }}
@@ -552,8 +556,8 @@ function formatUpdated(value?: string) {
           </button>
         </div>
 
-        <!-- 会话列表不缩进容器，只缩进文字：选中底色和父行同宽，整行连通 -->
-        <div v-if="isExpanded(item.id)" class="mt-px pb-1">
+        <!-- 会话列表不缩进容器，只缩进文字：选中底色和父行同宽；行间留空隙，选中块不跟邻居粘成一片 -->
+        <div v-if="isExpanded(item.id)" class="mt-1.5 pb-1">
           <div v-if="chatStore.loadingResumeId === item.id && !chatStore.sessions(item.id).length" class="py-1 pl-[30px]">
             <div class="h-6 w-32 animate-pulse rounded bg-zinc-200/60"></div>
           </div>
@@ -562,8 +566,8 @@ function formatUpdated(value?: string) {
             v-for="session in chatStore.sessions(item.id)"
             :key="session.id"
             data-session-row
-            class="group/session flex w-full cursor-pointer items-center gap-1.5 rounded-md py-1.5 pl-[30px] pr-1 text-left transition-colors"
-            :class="activeId === item.id && chatStore.activeSessionId(item.id) === session.id ? 'bg-zinc-200/60 text-zinc-900' : 'text-zinc-500 hover:bg-zinc-200/40 hover:text-zinc-800'"
+            class="group/session mb-1 flex w-full cursor-pointer items-center gap-1.5 rounded-md py-1.5 pl-[30px] pr-1 text-left transition-colors"
+            :class="isActiveSession(item.id, session.id) ? 'bg-zinc-200/60 text-zinc-900' : 'text-zinc-600 hover:bg-zinc-200/40 hover:text-zinc-900'"
             :title="sessionSnippet(session)"
             @click="openSession(item.id, session.id)"
             @dblclick.stop="startRename(item.id, session.id, session.title)"
@@ -581,9 +585,13 @@ function formatUpdated(value?: string) {
                 @keydown.esc.prevent="editingSessionId = null"
                 @blur="commitRename(item.id, session.id)"
               />
-              <span v-else class="block truncate text-[12.5px] leading-5">{{ session.title || "无标题对话" }}</span>
+              <span
+                v-else
+                class="block truncate text-[13px] leading-5"
+                :class="isActiveSession(item.id, session.id) ? 'font-semibold' : ''"
+              >{{ session.title || "无标题对话" }}</span>
             </span>
-            <span class="shrink-0 text-[10.5px] tabular-nums text-zinc-400 group-hover/session:hidden">{{ formatUpdated(session.update_time) }}</span>
+            <span class="shrink-0 text-[11px] tabular-nums text-zinc-400 group-hover/session:hidden">{{ formatUpdated(session.update_time) }}</span>
             <button
               type="button"
               class="hidden h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-amber-50 hover:text-amber-600 group-hover/session:flex"
@@ -606,7 +614,7 @@ function formatUpdated(value?: string) {
 
           <button
             type="button"
-            class="flex w-full items-center gap-1.5 rounded-md py-1.5 pl-[30px] pr-1 text-left text-[12px] text-zinc-400 transition-colors hover:bg-zinc-200/40 hover:text-zinc-700 disabled:opacity-60"
+            class="flex w-full items-center gap-1.5 rounded-md py-1.5 pl-[30px] pr-1 text-left text-[12.5px] text-zinc-400 transition-colors hover:bg-zinc-200/40 hover:text-zinc-700 disabled:opacity-60"
             :disabled="creatingSessionFor === item.id"
             :title="`新建对话（${modLabel} + Alt + N）`"
             @click="newSession(item.id)"
@@ -621,7 +629,7 @@ function formatUpdated(value?: string) {
       <RouterLink
         v-if="store.resumeListTotal > store.resumeList.length"
         to="/workspace/resumes"
-        class="mt-1 flex h-7 items-center gap-1.5 rounded-md px-2 text-[11.5px] text-zinc-500 transition-colors hover:bg-zinc-200/40 hover:text-zinc-900"
+        class="mt-1 flex h-7 items-center gap-1.5 rounded-md px-2 text-[12px] text-zinc-500 transition-colors hover:bg-zinc-200/40 hover:text-zinc-900"
       >
         <Files class="h-3 w-3 shrink-0" />
         <span>查看全部 {{ store.resumeListTotal }} 份</span>

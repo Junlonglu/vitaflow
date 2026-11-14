@@ -70,7 +70,7 @@
 |---|---|---|
 | 页头/编辑器顶栏 | `z-20` / `z-40` | sticky 导航 |
 | 弹窗遮罩 | `z-[100]` | ConfirmDialog 及所有 modal |
-| 下拉/浮层 | `z-[200]` | Select/Dropdown/Popover content、侧栏右键菜单 |
+| 下拉/浮层 | `z-[200]` | Select content、侧栏右键菜单 |
 | 锚定确认气泡 | `z-[210]` | `ConfirmPopover`，要盖住弹窗与下拉 |
 | 全局 toast | `z-[9999]` | toast.ts |
 | tooltip | `z-[99999]` | 跨组件 tooltip |
@@ -185,10 +185,8 @@
 | 组件 | 关键样式 | 备注 |
 |---|---|---|
 | Card | `ui/card/Card.vue`：`rounded-xl border border-gray-200 bg-white shadow-sm`（gray 待改 zinc） | 卡片外框唯一基准 |
-| Badge | `ui/badge/Badge.vue`：`rounded-full border bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-700`（gray 待改 zinc） | 状态徽标；彩色徽标按语义色 `-50` 底 + `-600/700` 字 |
-| Alert | `ui/alert/Alert.vue` | 提示条 |
-| Avatar | `ui/avatar/Avatar.vue` | 头像 |
-| Tabs | `ui/tabs/`；工作区里的模式切换（内容编辑 / Flow Agent）、模板分类改为扁平 tab：`h-7 rounded-lg px-2.5`，选中 `bg-zinc-100 text-zinc-900`，未选中 `text-zinc-500 hover:bg-zinc-50`，容器无底色只留发丝线 | |
+| 状态徽标 | `rounded-full px-2.5 py-1 text-xs font-medium`；彩色徽标按语义色 `-50` 底 + `-600/700` 字 | 无组件，按规范手写（原 `ui/badge/Badge.vue` 于 2026-11-14 移除） |
+| 模式切换 tab | `h-7 rounded-lg px-2.5`，选中 `bg-zinc-100 text-zinc-900`，未选中 `text-zinc-500 hover:bg-zinc-50`，容器无底色只留发丝线 | 无组件，按规范手写（原 `ui/tabs/Tabs.vue` 于 2026-11-14 移除）；用于工作区内容编辑 / Flow Agent 切换、模板分类 |
 | Pagination | `ui/pagination/PaginationFooter.vue` | 列表分页统一用它 |
 | EmptyState | `common/EmptyState.vue` | 空状态统一入口 |
 | BrandLogo | `common/BrandLogo.vue` | 品牌标识 |

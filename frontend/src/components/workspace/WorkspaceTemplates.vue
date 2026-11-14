@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue"
 import { Briefcase, FileUp, LayoutTemplate, PanelLeft, Plus, Search, X } from "lucide-vue-next"
 import BrandLogo from "@/components/common/BrandLogo.vue"
+import StateBlock from "@/components/common/StateBlock.vue"
 import TemplatePreview from "@/components/templates/TemplatePreview.vue"
 import { listTemplatesApi, type TemplateItem } from "@/api/template"
 import { useWorkspaceCreate } from "@/composables/useWorkspaceCreate"
@@ -164,30 +165,26 @@ function startFromTemplate(entry: "starter" | "import" | "blank") {
         </div>
       </div>
 
-      <div v-else-if="error" class="mt-16 flex flex-col items-center text-center">
-        <LayoutTemplate class="h-6 w-6 text-zinc-300" />
-        <p class="mt-2 text-[13px] font-medium text-zinc-900">{{ error }}</p>
-        <button
-          type="button"
-          class="mt-3 h-8 rounded-lg border border-zinc-200 bg-white px-3 text-[12px] font-medium text-zinc-700 transition-colors hover:border-zinc-300"
-          @click="reload"
-        >
-          重新加载
-        </button>
-      </div>
+      <StateBlock
+        v-else-if="error"
+        class="mt-16"
+        tone="error"
+        :icon="LayoutTemplate"
+        :title="error"
+        description="网络或服务暂时不通，重试不会丢数据。"
+        action-text="重新加载"
+        @action="reload"
+      />
 
-      <div v-else-if="!filteredTemplates.length" class="mt-16 flex flex-col items-center text-center">
-        <LayoutTemplate class="h-6 w-6 text-zinc-300" />
-        <p class="mt-2 text-[13px] font-medium text-zinc-900">没有匹配的模板</p>
-        <p class="mt-1 text-[12px] text-zinc-500">换个关键词，或者看看全部模板。</p>
-        <button
-          type="button"
-          class="mt-3 h-8 rounded-lg border border-zinc-200 bg-white px-3 text-[12px] font-medium text-zinc-700 transition-colors hover:border-zinc-300"
-          @click="resetFilters"
-        >
-          查看全部
-        </button>
-      </div>
+      <StateBlock
+        v-else-if="!filteredTemplates.length"
+        class="mt-16"
+        :icon="LayoutTemplate"
+        title="没有匹配的模板"
+        description="换个关键词，或者看看全部模板。"
+        action-text="查看全部"
+        @action="resetFilters"
+      />
 
       <div v-else class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         <article

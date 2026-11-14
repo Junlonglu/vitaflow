@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue"
 import { useRouter } from "vue-router"
 import {
+  CircleAlert,
   Database,
   FileDown,
   LoaderCircle,
@@ -14,6 +15,7 @@ import {
   X,
 } from "lucide-vue-next"
 import WorkspacePage from "@/components/workspace/WorkspacePage.vue"
+import StateBlock from "@/components/common/StateBlock.vue"
 import AppDialog from "@/components/ui/dialog/AppDialog.vue"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
 import Button from "@/components/ui/button/Button.vue"
@@ -37,6 +39,8 @@ const PAGE_SIZE = 24
 
 const router = useRouter()
 const loading = ref(true)
+/** 列表请求失败时不要把「加载失败」渲染成「信息库还是空的」——那会引导用户重复录入 */
+const listError = ref("")
 const saving = ref(false)
 const items = ref<InfoFragment[]>([])
 const total = ref(0)
@@ -88,9 +92,12 @@ async function loadMeta() {
 // 甚至把空表单保存回去，所以首屏等两者都完成再展示卡片。
 async function refresh() {
   loading.value = true
+  listError.value = ""
   try {
     await Promise.all([
-      loadList().catch((error) => showGlobalToast(errorMessage(error, "信息库加载失败"), "error")),
+      loadList().catch((error) => {
+        listError.value = errorMessage(error, "信息库加载失败")
+      }),
       loadMeta().catch((error) => showGlobalToast(errorMessage(error, "分类信息加载失败，可稍后重试"), "error")),
     ])
   } finally {
@@ -100,17 +107,21 @@ async function refresh() {
 
 async function reloadList() {
   loading.value = true
+  listError.value = ""
   try {
     await loadList()
   } catch (error) {
-    showGlobalToast(errorMessage(error, "信息库加载失败"), "error")
+    listError.value = errorMessage(error, "信息库加载失败")
   } finally {
     loading.value = false
   }
 }
 
 function errorMessage(error: unknown, fallback: string) {
-  return error instanceof Error && error.message ? error.message : fallback
+  const raw = error instanceof Error ? error.message : ""
+  // 接口的中文提示原样透传；axios 的英文传输层报错换成用户能懂的话
+  if (!raw) return fallback
+  return /[\u4e00-\u9fa5]/.test(raw) ? raw : fallback
 }
 
 // ---------------------------------------------------------------------------
@@ -446,23 +457,39 @@ onUnmounted(() => window.clearTimeout(searchTimer))
           <div v-for="i in 4" :key="i" class="h-32 animate-pulse rounded-xl bg-white/70 ring-1 ring-zinc-200/60"></div>
         </div>
 
-        <div v-else-if="!items.length" class="rounded-xl border border-dashed border-zinc-300 bg-white/60 px-6 py-14 text-center">
-          <Sparkles class="mx-auto h-6 w-6 text-zinc-300" stroke-width="1.6" />
-          <p class="mt-3 text-[13.5px] font-medium text-zinc-700">
-            {{ keyword || activeKind ? "没有匹配的信息" : "信息库还是空的" }}
-          </p>
-          <p class="mx-auto mt-1.5 max-w-md text-[12.5px] leading-relaxed text-zinc-500">
-            {{ keyword || activeKind ? "换个关键词或分类试试。" : "可以从现有简历一键提取，也可以手动新增一条；之后在对话里让 AI 直接引用。" }}
-          </p>
-          <div v-if="!keyword && !activeKind" class="mt-4 flex items-center justify-center gap-2">
-            <Button type="button" variant="outline" class="h-9 px-3 text-[13px]" @click="openExtract">
-              <Upload class="mr-1.5 h-4 w-4" />从简历提取
-            </Button>
-            <Button type="button" class="h-9 px-3 text-[13px]" @click="openCreate()">
-              <Plus class="mr-1.5 h-4 w-4" />新增信息
-            </Button>
-          </div>
-        </div>
+        <StateBlock
+          v-else-if="listError"
+          class="rounded-xl border border-dashed border-zinc-300 bg-white/60"
+          tone="error"
+          :icon="CircleAlert"
+          title="信息库没能加载出来"
+          :description="listError"
+          action-text="重试"
+          @action="reloadList"
+        />
+
+        <StateBlock
+          v-else-if="!items.length && !listError"
+          frame
+          :icon="Sparkles"
+          :title="keyword || activeKind ? '没有匹配的信息' : '信息库还是空的'"
+          :description="
+            keyword || activeKind
+              ? '换个关键词或分类试试。'
+              : '可以从现有简历一键提取，也可以手动新增一条；之后在对话里让 AI 直接引用。'
+          "
+        >
+          <template #action>
+            <div v-if="!keyword && !activeKind" class="mt-4 flex items-center justify-center gap-2">
+              <Button type="button" variant="outline" size="sm" @click="openExtract">
+                <Upload class="h-4 w-4" />从简历提取
+              </Button>
+              <Button type="button" size="sm" @click="openCreate()">
+                <Plus class="h-4 w-4" />新增信息
+              </Button>
+            </div>
+          </template>
+        </StateBlock>
 
         <div v-else class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <article

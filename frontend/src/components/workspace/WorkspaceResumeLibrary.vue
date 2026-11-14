@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue"
 import { useRouter } from "vue-router"
-import { PanelLeft, Plus, Search, Sparkles, X } from "lucide-vue-next"
+import { CircleAlert, PanelLeft, Plus, Search, Sparkles, X } from "lucide-vue-next"
 import BrandLogo from "@/components/common/BrandLogo.vue"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
 import Button from "@/components/ui/button/Button.vue"
 import ResumeCard from "@/components/resume/ResumeCard.vue"
 import ResumeGridSkeleton from "@/components/resume/ResumeGridSkeleton.vue"
+import StateBlock from "@/components/common/StateBlock.vue"
 import ResumeListEmptyState from "@/components/resume/ResumeListEmptyState.vue"
 import ResumeListPagination from "@/components/resume/ResumeListPagination.vue"
 import Select from "@/components/ui/select/Select.vue"
@@ -36,6 +37,8 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = ref(8)
 const loading = ref(false)
+/** 首屏/翻页失败时不再伪装成空态：空态会引导用户去「新建简历」，而实际是一次请求失败 */
+const loadError = ref("")
 const templates = ref<TemplateItem[]>([])
 const showDeleteConfirm = ref(false)
 const resumeToDelete = ref<number | null>(null)
@@ -62,6 +65,7 @@ function getResponsivePageSize() {
 
 async function load(nextPage = page.value, size = pageSize.value) {
   loading.value = true
+  loadError.value = ""
   try {
     const result = await listResumesApi({
       page: nextPage,
@@ -73,8 +77,15 @@ async function load(nextPage = page.value, size = pageSize.value) {
     total.value = result.total
     page.value = result.page
     pageSize.value = result.page_size
-  } catch {
-    showGlobalToast("简历列表加载失败，请重试", "error")
+  } catch (error) {
+    // 已有列表时继续展示旧数据，只提示；没有数据时才整块换成错误态。
+    // 文案规则：接口给的中文提示（如「登录已过期」）原样透传；axios 的
+    // "Network Error" / "timeout of 15000ms exceeded" 这类传输层英文不展示给用户。
+    console.error("[resume-library] load failed", error)
+    const raw = error instanceof Error ? error.message : ""
+    const message = /[\u4e00-\u9fa5]/.test(raw) ? raw : "网络或服务暂时不通，检查连接后重试。"
+    if (items.value.length) showGlobalToast(message, "error")
+    else loadError.value = message
   } finally {
     loading.value = false
   }
@@ -251,6 +262,17 @@ async function confirmDelete() {
 
     <ResumeGridSkeleton v-if="loading && !items.length" class="mt-5" />
 
+    <StateBlock
+      v-else-if="loadError"
+      class="mt-10"
+      tone="error"
+      :icon="CircleAlert"
+      title="简历列表没能加载出来"
+      :description="loadError"
+      action-text="重试"
+      @action="load()"
+    />
+
     <div v-else-if="items.length" class="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
       <ResumeCard
         v-for="item in items"
@@ -276,7 +298,7 @@ async function confirmDelete() {
     />
 
     <ResumeListEmptyState
-      v-if="!loading && !items.length"
+      v-if="!loading && !items.length && !loadError"
       :filtered="hasFilter"
       :keyword="appliedKeyword"
       @create="openCreate('choice')"

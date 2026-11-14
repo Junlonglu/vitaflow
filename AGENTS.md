@@ -10,6 +10,7 @@
 - AI 服务位于 `ai-service/`，是承载 pi-agent 运行时的 Node 旁路服务（`@earendil-works/pi-coding-agent@0.83.0` 锁版）。FastAPI 通过 HTTP/SSE 代理调用它，认证、数据库、计费仍归 FastAPI。详见 `docs/pi-agent重构设计.md`。
 - 后端接口统一挂载在 `/api` 下，响应结构应保持 `{ code, message, data }`。
 - 简历预览和 PDF 导出共用后端 HTML 渲染服务，改模板、样式、预览或导出逻辑时要同时考虑浏览器预览、PDF、Word 的一致性。
+- 运行分两种模式：手动开发（默认）`docker compose up -d` 只启动 mysql/redis/minio/ai-service，后端 8000 与前端 5173 需在宿主机分别启动；全栈 `docker compose --profile full up -d --build` 额外启动 backend/frontend(Nginx)，入口为 `http://localhost:8080`。排查「页面打不开 / 502 / 接口 500」时，先确认当前模式以及对应进程是否真的在监听。
 
 ## 协作原则
 
@@ -69,13 +70,20 @@
 
 ## 常用命令
 
-后端：
+基础设施（两种模式共用）：
+
+```bash
+docker compose up -d                          # 手动开发：mysql/redis/minio/ai-service
+docker compose --profile full up -d --build   # 全栈：额外起 backend/frontend，入口 8080
+```
+
+后端（Windows；Linux/macOS 用 `source .venv/bin/activate` 后执行同名命令）：
 
 ```bash
 cd backend
-source .venv/bin/activate
-alembic upgrade head
-uvicorn app.main:app --reload
+.venv/Scripts/alembic.exe upgrade head
+.venv/Scripts/python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+.venv/Scripts/python.exe -m pytest tests -q
 ```
 
 前端：
@@ -112,9 +120,12 @@ npm run typecheck  # TypeScript 类型检查
 ## 验证要求
 
 - 前端改动至少运行 `npm run build`，除非环境缺依赖或用户明确要求跳过。
-- 后端改动至少做一次导入级或启动级检查；涉及数据库时运行 migration 检查。
+- 后端改动至少运行 `python -m pytest tests -q`；涉及数据库时运行 migration 检查。
 - 涉及预览、模板、PDF 或 Word 导出时，除了构建检查，还要人工或脚本验证预览/导出结果没有空白、分页错位或资源缺失。
 - 涉及认证、权限、管理员后台、分享链接或文件访问时，必须检查未登录、普通用户、管理员三个路径的行为。
+- 把大文件按资源域拆成多个模块后，必须验证每个路由函数引用的全局符号都能解析（`backend/tests/` 已有字节码反射检查）；导入成功或启动成功不能替代这一步。
+- 空数据库会掩盖只在非空数据或按钮点击时才执行到的分支。改动列表类接口后，要用有数据的环境把相关 GET 全量请求一遍，不能只测空库。
+- 修改后端 `.py` 或 `ai-service/src/` 后，不要假定运行中的服务已更新：必须对运行端口发一次真实请求确认；`uvicorn --reload` 不保证每次触发，ai-service 容器需 `docker compose up -d --build --no-deps ai-service` 重建。
 - 若验证无法执行，要在最终回复中说明原因和未覆盖的风险。
 
 ## 文档维护

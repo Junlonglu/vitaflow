@@ -44,7 +44,24 @@
 | 全局样式 | 唯一入口 `src/styles/index.css`：body 背景 `#f7f8fb`、文字 `#111827`、字体栈 Inter → system-ui → "Microsoft YaHei"；含 `.thin-scrollbar`、富文本重置、旧浏览器 oklch/color-mix 兜底变量 |
 | 注意 | Tailwind v4 **不使用 JS 配置文件**（原 `tailwind.config.js` 已删除）。没有自定义主题扩展，颜色直接用默认色阶（灰阶用 `zinc-*`）；不要在项目根新增 `tailwind.config.js`，v4 不会读取 |
 
-**字号/字体**：标题 `font-semibold tracking-tight`，正文 `text-sm`（14px），辅助 `text-xs`。代码中大量 `text-[14px]` 任意值与 `text-sm` 等价，新代码一律用阶梯（`text-xs/sm/base`）。
+**字号阶梯**（全站只允许下表这些档位，不再随手写 11/12/13 混排）
+
+| 用途 | 类 | px | 字重 / 颜色 |
+|---|---|---|---|
+| 页面标题 | `text-[20px]` | 20 | `font-semibold` + `tracking-tight` + `zinc-900` |
+| 区块/卡片标题 | `text-sm` | 14 | `font-semibold` + `zinc-900` |
+| 正文（表单值、富文本） | `text-sm` | 14 | 常规 + `zinc-700` |
+| 列表主文本（侧栏导航、简历行） | `text-[13.5px]` | 13.5 | `font-medium` + `zinc-700`（选中 `font-semibold` + `zinc-900`） |
+| 列表次级（会话行、菜单项、二级导航） | `text-[13px]` | 13 | 常规 + `zinc-600`（选中 `font-semibold` + `zinc-900`） |
+| 说明文字 | `text-[12.5px]` | 12.5 | 常规 + `zinc-500` |
+| 分组标签 | `text-[11.5px]` | 11.5 | `font-medium` + `tracking-wider` + `zinc-400` |
+| 元信息（时间戳、计数） | `text-[11px]` | 11 | 常规 + `zinc-400`，配 `tabular-nums` |
+
+规则：
+- **最小 11px**，禁止 `text-[10px]`——中文在这个尺寸下发虚。
+- **中文的 500 是假的**：字体栈是 微软雅黑/思源，只有 Regular 与 Bold 两档，`font-medium` 不产生视觉差异。要表达「选中/强调」必须用 `font-semibold`（600），并且字重变化只给选中态，不要给 hover（hover 只变底色）。
+- 颜色承载层级：`zinc-900` 主 → `zinc-700` 常规 → `zinc-600` 次级 → `zinc-500` 说明 → `zinc-400` 元信息。**需要阅读的正文不许用 `zinc-500` 及更浅**。
+- 标题 `font-semibold tracking-tight`，`text-[14px]` 与 `text-sm` 等价，新代码优先写 `text-sm`。
 
 **圆角阶梯**（四档，按元素尺寸递进；勿随意新造）
 
@@ -197,12 +214,13 @@
 
 | 部位 | 规格 |
 |---|---|
-| 父行 | `h-8 rounded-md`，文字 `pl-2.5`；未选中 `text-zinc-600 hover:bg-zinc-200/40`，独占选中 `bg-zinc-200/60 text-zinc-900` |
+| 父行 | `h-8 rounded-md`，文字 `pl-2.5`；未选中 `text-zinc-700 hover:bg-zinc-200/50`，独占选中 `bg-zinc-200/60 text-zinc-900`；标题固定 `font-medium`（父级不参与"选中加粗"，否则和子行抢重量） |
 | 父行（子项选中时） | `bg-zinc-200/25 text-zinc-900` + `hover:bg-zinc-200/60`：静止态让位给子行，鼠标移上去立刻加深到与子行同档，父行永远有可点反馈 |
-| 子行 | 容器不缩进（`w-full` 与父行等宽），只把内容推进去 `pl-[30px] pr-1`；选中 `bg-zinc-200/60`，未选中 `text-zinc-500 hover:bg-zinc-200/40 hover:text-zinc-800` |
-| 行内元信息 | 时间戳 `text-[10.5px] text-zinc-400`，hover 时整块换成操作图标（置顶 / 删除），不做常显 |
+| 子行 | 容器不缩进（`w-full` 与父行等宽），只把内容推进去 `pl-[30px] pr-1`；选中 `bg-zinc-200/60 text-zinc-900 font-semibold`，未选中 `text-zinc-600 hover:bg-zinc-200/40 hover:text-zinc-900` |
+| 行间距 | 父子之间 `mt-1.5`，兄弟行之间 `mb-1`（4px）——**不留空隙会让相邻两块底色粘成一条**，「新对话」这类行动作也走同一间距 |
+| 行内元信息 | 时间戳 `text-[11px] text-zinc-400`，hover 时整块换成操作图标（置顶 / 删除），不做常显 |
 
-判定口诀：**底色按父行宽度拉满，层级交给 padding**。父子同时可见时，父行静止态必须比子行浅，hover 时必须比子行深（或同档）。
+判定口诀：**底色按父行宽度拉满，层级交给 padding；选中靠加粗 + 底色，hover 只换底色**。
 
 ### 3.5 Toast（轻提示）
 
@@ -281,11 +299,16 @@
 
 ### 4.3 管理后台 — `admin/AdminShell.vue`
 
-- 容器 `max-w-7xl mx-auto flex gap-6 px-4 py-6 sm:px-6 lg:py-10`。
-- 桌面：左侧 `hidden lg:block w-56 shrink-0` 白卡侧边栏（`rounded-2xl border-zinc-200 bg-white p-3 shadow-sm`），选中项 `bg-zinc-900 text-white`，未选中 `text-zinc-600 hover:bg-zinc-100`。
-- 移动端（`lg:hidden`）：侧边栏降级为顶部横向滚动 tab 条。
-- 内容区：每个功能板块一张 `rounded-2xl border-zinc-200 bg-white shadow-sm` 卡片；卡片内部用 tab 或分区标题组织（如 AiSettingsManager 的「模型目录 / 模型策略」内嵌 tab）。
-- 数据表格/列表行 hover `bg-zinc-50`，操作按钮用 Button ghost/outline sm。
+后台挂在工作区外壳内，**不再自建一套视觉**：二级导航与应用侧栏同一套扁平行，选中态也用浅灰底，不用黑底白字（黑底留给主按钮）。
+
+- 容器 `max-w-7xl mx-auto flex gap-8 px-4 py-6 sm:px-6 lg:py-8`。
+- 二级导航：`hidden w-44 shrink-0 lg:block` + `sticky top-6`，**不套白卡**（无 border / shadow / 圆角容器），直接平铺。
+  - 项：`h-8 rounded-md px-2.5 text-[13px]`，选中 `bg-zinc-200/60 font-semibold text-zinc-900`，未选中 `text-zinc-600 hover:bg-zinc-200/40 hover:text-zinc-900`；图标 `h-3.5 w-3.5`。
+  - 分组标题：`text-[11.5px] font-medium tracking-wider text-zinc-400`，右侧 `ChevronDown` 折叠；**默认全展开**（只有 4 组，收起后侧栏会空掉一大片）。
+- 窄屏（<lg）：二级导航降级为横向滚动 chips（`h-8 rounded-lg`），与信息库的分类 chips 同一套。
+- 页头：`text-[20px] font-semibold tracking-tight`（与内容页同档）+ `text-[12.5px] text-zinc-500` 说明；**不要**再加全大写宽字距的英文小标签（如 `VitaFlow Admin`），那是独立站点的装饰，和工作区其它页面并列时显得突兀。
+- 内容卡片：`rounded-xl border border-zinc-200 bg-white p-4 sm:p-5`，**静态卡片不加 `shadow-sm`**（与工作区卡片一致）；弹窗才用 `rounded-2xl shadow-xl`。
+- 元信息最小字号 `text-[11px]`，不要再出现 `text-[10px]`。
 
 ### 4.4 内容页 — `WorkspacePage` 内的长列表页（信息库等）
 
@@ -321,9 +344,10 @@
 | 3 | 手写弹窗外壳：ResumeList 内联 AI 生成壳（AiGenerateDialog 仅表单体）、`AnnouncementModal`、`PointsAdjustModal`、`CreateResumeModal`、`ResumeShareDialog`、`AvatarCropperModal` | 各自手写 Teleport/遮罩/按钮区，z 层（50/80/90/100/120）、圆角、阴影漂移 | 统一迁移到 `AppDialog`（3.2）；`ConfirmDialog` 重建其上 | 已抽取 AppDialog 并逐个迁移，保留业务内容 | 中（需逐个回归） | 已完成 |
 | 4 | `ui/dialog/Dialog.vue` | 空壳（仅 slot，无实现） | 删除（radix-vue Dialog 需要时再按 3.6 生成） | 直接删除 | 低 | 已完成 |
 | 5 | 表单控件高度 | Input `h-10` vs Select `h-9`，同排不齐 | 统一为 `h-10`（Select 默认档提高，ghost 档不变） | 改 Select 触发器高度 + 目检所有同排场景 | 中（视觉回归） | 已完成 |
-| 6 | 任意字号值 | 大量 `text-[14px]`（与 `text-sm` 等价）、`text-[16px]` 等 | 新代码用阶梯；存量遇改即换，不专项清理 | 渐进 | 低 | 渐进中 |
+| 6 | 任意字号值 | 大量 `text-[14px]`（与 `text-sm` 等价）、`text-[16px]` 等 | 已定稿 §1 字号阶梯（20/14/13.5/13/12.5/11.5/11，最小 11px）；存量遇改即换，不专项清理 | 渐进 | 低 | 阶梯已定稿 |
 | 7 | body 背景 `#f7f8fb` | 非 Tailwind 色阶值（zinc-50 是 `#fafafa`） | 保留（首页观感依赖此值），在 index.css 注释说明与 zinc-50 的关系 | 加注释 | 低 | 已完成 |
 | 8 | 工作区外壳（侧栏、对话页、编辑器顶栏、模板中心、简历卡） | 圆角 1.25~2rem、选中态「白底 + 描边 + 阴影」、图标彩色底块、hover 位移与光斑 | 统一扁平：选中态只留浅灰底、图标单色、静态无阴影；圆角按阶梯分层（列表行 6 / 控件 8 / 卡片与浮层 12 / 弹窗 16），不整体压到 6px | 逐组件改类名 + Playwright 截图目检 | 中（纯样式） | 已完成 |
 | 9 | `ResumeAiChatPanel` 的 Markdown 列表 | Tailwind v4 preflight 清掉 `ul/ol` 符号与缩进，AI 回复的要点变成无符号的连续段落 | 在 `index.css` 补 `.chat-markdown` 的 `!important` 列表重置（与富文本区同一套做法） | 全局样式补一段 | 低 | 已完成 |
+| 10 | 管理后台外壳 | 自成一套：白卡侧栏 + 黑底白字选中、`rounded-2xl shadow-sm` 卡片、24/30px 标题、`VitaFlow Admin` 全大写小标签，和外部工作区外壳并排时像两套系统 | 见 §4.3：扁平二级导航 + 浅灰选中、卡片降到 `rounded-xl` 无阴影、标题 20px、删掉英文小标签、元信息最小 11px | 重写 AdminShell + 批量改卡片类名 + 目检 | 中（纯样式） | 已完成 |
 
 > 附带修复（审计 ticket 1~11 新增/重写组件时发现）：`ResumeAiChatPanel` 与 `ResumeList` 各自内造 toast → 统一 `showGlobalToast`；AI 图片灯箱 `z-[9999]` → 弹窗档 `z-[100]`；`PointsAdjustModal` 主按钮 blue-600 → zinc-900（黑主蓝辅）、输入聚焦蓝环 → zinc。

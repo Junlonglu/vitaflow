@@ -14,6 +14,7 @@ import {
   Upload,
   X,
 } from "lucide-vue-next"
+import { formatRelativeTime } from "@/utils/time"
 import WorkspacePage from "@/components/workspace/WorkspacePage.vue"
 import StateBlock from "@/components/common/StateBlock.vue"
 import AppDialog from "@/components/ui/dialog/AppDialog.vue"
@@ -357,17 +358,6 @@ function kindLabel(kind: string) {
   return kindMap.value[kind]?.label || kind
 }
 
-function formatTime(value: string | null) {
-  if (!value) return ""
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ""
-  const diff = Date.now() - date.getTime()
-  if (diff < 60 * 60 * 1000) return "刚刚更新"
-  if (diff < 24 * 60 * 60 * 1000) return `${Math.floor(diff / (60 * 60 * 1000))} 小时前`
-  if (diff < 7 * 24 * 60 * 60 * 1000) return `${Math.floor(diff / (24 * 60 * 60 * 1000))} 天前`
-  return `${date.getMonth() + 1}月${date.getDate()}日`
-}
-
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
 
 function goPage(next: number) {
@@ -528,7 +518,7 @@ onUnmounted(() => window.clearTimeout(searchTimer))
 
             <div class="mt-auto flex items-center justify-between gap-2 pt-3">
               <span class="truncate text-[11.5px] text-zinc-400">
-                {{ item.usage_count ? `已用 ${item.usage_count} 次 · ` : "" }}{{ formatTime(item.update_time) }}
+                {{ item.usage_count ? `已用 ${item.usage_count} 次 · ` : "" }}{{ formatRelativeTime(item.update_time, { suffix: "更新" }) }}
               </span>
               <button
                 type="button"

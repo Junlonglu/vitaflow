@@ -18,6 +18,7 @@ import {
   Trash2,
   X,
 } from "lucide-vue-next"
+import { formatRelativeTime } from "@/utils/time"
 import BrandLogo from "@/components/common/BrandLogo.vue"
 import WorkspaceUserMenu from "@/components/layout/WorkspaceUserMenu.vue"
 import ConfirmPopover from "@/components/ui/dialog/ConfirmPopover.vue"
@@ -422,20 +423,6 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
   if (!session.message_count) return "还没有对话"
   return session.last_message || "查看对话"
 }
-
-function formatUpdated(value?: string) {
-  if (!value) return ""
-  const date = new Date(value.replace(" ", "T"))
-  if (Number.isNaN(date.getTime())) return ""
-  const diff = Date.now() - date.getTime()
-  const day = 24 * 60 * 60 * 1000
-  if (diff < 60 * 1000) return "刚刚"
-  if (diff < 60 * 60 * 1000) return `${Math.floor(diff / (60 * 1000))} 分钟前`
-  if (diff < day) return `${Math.floor(diff / (60 * 60 * 1000))} 小时前`
-  if (diff < day * 2) return "昨天"
-  if (diff < day * 7) return `${Math.floor(diff / day)} 天前`
-  return `${date.getMonth() + 1}月${date.getDate()}日`
-}
 </script>
 
 <template>
@@ -544,7 +531,7 @@ function formatUpdated(value?: string) {
               class="shrink-0 text-[11.5px] tabular-nums transition-opacity"
               :class="activeId === item.id ? 'text-zinc-400' : 'text-zinc-400 opacity-0 group-hover:opacity-100'"
             >
-              {{ formatUpdated(item.update_time) }}
+              {{ formatRelativeTime(item.update_time) }}
             </span>
           </button>
           <button
@@ -592,7 +579,7 @@ function formatUpdated(value?: string) {
                 :class="isActiveSession(item.id, session.id) ? 'font-semibold' : ''"
               >{{ session.title || "无标题对话" }}</span>
             </span>
-            <span class="shrink-0 text-[11px] tabular-nums text-zinc-400 group-hover/session:hidden">{{ formatUpdated(session.update_time) }}</span>
+            <span class="shrink-0 text-[11px] tabular-nums text-zinc-400 group-hover/session:hidden">{{ formatRelativeTime(session.update_time) }}</span>
             <button
               type="button"
               class="hidden h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-amber-50 hover:text-amber-600 group-hover/session:flex"

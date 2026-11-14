@@ -240,7 +240,7 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
                 <span class="min-w-0 flex-1 truncate text-xs font-medium text-zinc-900 sm:text-sm">{{ stageNameText(stage.key) }}</span>
                 <span class="shrink-0 text-[11px] text-zinc-400 sm:text-xs">{{ stage.samples }} 次</span>
                 <span class="shrink-0 text-xs font-semibold text-zinc-900 sm:text-sm">{{ formatMs(stage.avg_ms) }}</span>
-                <span class="w-16 shrink-0 text-right text-[11px] sm:w-20 sm:text-xs" :class="deltaClass(stage.recent_delta_pct)" :title="`近10次平均 ${formatMs(stage.recent_avg_ms)} · 较总体 ${deltaText(stage.recent_delta_pct)}`">近10 {{ deltaText(stage.recent_delta_pct) }}</span>
+                <span class="w-16 shrink-0 text-right text-[11px] sm:w-20 sm:text-xs" :class="deltaClass(stage.recent_delta_pct)" :title="`近 10 次平均 ${formatMs(stage.recent_avg_ms)} · 较总体 ${deltaText(stage.recent_delta_pct)}`">近10 {{ deltaText(stage.recent_delta_pct) }}</span>
                 <span class="w-14 shrink-0 text-right text-[11px] sm:w-16 sm:text-xs" :class="(stageFailureRate(stage) || 0) > 0 ? 'text-red-600' : 'text-zinc-400'">{{ stageFailureRate(stage) === null ? "" : `失败 ${stageFailureRate(stage)}%` }}</span>
                 <ChevronDown class="h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform" :class="openStages.has(stage.key) ? '' : '-rotate-90'" />
               </button>
@@ -251,7 +251,7 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
                   <div><p class="text-zinc-400">P50</p><p class="mt-0.5 font-semibold text-zinc-900">{{ formatMs(stage.p50_ms) }}</p></div>
                   <div><p class="text-zinc-400">P95</p><p class="mt-0.5 font-semibold text-zinc-900">{{ formatMs(stage.p95_ms) }}</p></div>
                   <div><p class="text-zinc-400">最长</p><p class="mt-0.5 font-semibold text-zinc-900">{{ formatMs(stage.max_ms) }}</p></div>
-                  <div><p class="text-zinc-400">近10次平均</p><p class="mt-0.5 font-semibold text-zinc-900">{{ formatMs(stage.recent_avg_ms) }}</p></div>
+                  <div><p class="text-zinc-400">近 10 次平均</p><p class="mt-0.5 font-semibold text-zinc-900">{{ formatMs(stage.recent_avg_ms) }}</p></div>
                 </div>
                 <div v-if="stage.key === 'first_token_ms' && firstTokenSubstages.length" class="space-y-1.5">
                   <p class="text-xs font-medium text-zinc-500">首字延迟细分</p>

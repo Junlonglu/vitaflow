@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue"
 import { Copy, Trash2 } from "lucide-vue-next"
+import { formatRelativeTime } from "@/utils/time"
 import TemplatePreview from "@/components/templates/TemplatePreview.vue"
 import type { TemplateItem } from "@/api/template"
 import type { ResumeItem } from "@/types/resume"
@@ -21,23 +22,6 @@ defineEmits<{
 
 const template = computed(() => props.templates.find((item) => item.template_id === props.item.template_id))
 const templateName = computed(() => props.templateNames[props.item.template_id] || template.value?.name || "自定义模板")
-
-function formatUpdateTime(timeStr?: string) {
-  if (!timeStr) return "最近"
-  try {
-    const date = new Date(timeStr)
-    if (Number.isNaN(date.getTime())) return "最近"
-    const now = new Date()
-    const diff = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 1000))
-    if (diff < 60) return "刚刚"
-    if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`
-    if (diff < 86400) return `${Math.floor(diff / 3600)}小时前`
-    if (diff < 86400 * 30) return `${Math.floor(diff / 86400)}天前`
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
-  } catch {
-    return "最近"
-  }
-}
 </script>
 
 <template>
@@ -71,7 +55,7 @@ function formatUpdateTime(timeStr?: string) {
         </div>
       </div>
       <div class="mt-1.5 flex min-h-[24px] items-center justify-between text-[11px] tracking-wide text-zinc-400/90">
-        <span class="truncate pr-1 sm:pr-2">{{ formatUpdateTime(item.update_time || item.create_time) }}<span class="hidden sm:inline"> · {{ item.language === "en" ? "English" : "简体中文" }}</span></span>
+        <span class="truncate pr-1 sm:pr-2">{{ formatRelativeTime(item.update_time || item.create_time, { empty: "最近" }) }}<span class="hidden sm:inline"> · {{ item.language === "en" ? "English" : "简体中文" }}</span></span>
         <div class="relative flex shrink-0 items-center">
           <span class="inline-flex shrink-0 items-center rounded bg-zinc-100 px-1.5 py-0.5 text-[9.5px] font-medium tracking-wide text-zinc-500 transition-opacity duration-100 group-hover:pointer-events-none group-hover:opacity-0 sm:px-2 sm:py-1 sm:text-[10px]">
             {{ templateName }}

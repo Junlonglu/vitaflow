@@ -103,7 +103,7 @@ function handleSubmit() {
 
       <footer class="flex items-center justify-end gap-3 pt-1">
         <Button type="button" variant="outline" class="h-10 px-5" @click="$emit('close')">取消</Button>
-        <Button type="submit" class="h-10 px-5">确定</Button>
+        <Button type="submit" class="h-10 px-5">保存</Button>
       </footer>
     </form>
   </AppDialog>

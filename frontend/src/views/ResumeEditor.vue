@@ -879,7 +879,7 @@ async function sendInitialPrompt() {
             <span>删除</span>
           </button>
           <button 
-            class="flex items-center justify-center w-full gap-2 px-4 py-2.5 rounded-xl bg-black/90 text-white hover:bg-black/75 transition active:scale-95 text-xs font-medium mt-2"
+            class="flex items-center justify-center w-full gap-2 px-4 py-2.5 rounded-xl bg-wb-primary text-white hover:bg-wb-primary-hover transition active:scale-95 text-xs font-medium mt-2"
             :disabled="!!exportLoading"
             @click="mobileMenuOpen = false; exportPdf()"
           >
@@ -1039,7 +1039,7 @@ async function sendInitialPrompt() {
           <div class="apply-success-ring absolute h-72 w-72 rounded-full border border-blue-400/40"></div>
           <div class="apply-success-ring apply-success-ring--delay absolute h-72 w-72 rounded-full border border-blue-400/30"></div>
           <div class="relative flex items-center gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 shadow-wb-popup">
-            <span class="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white"><CheckCircle2 class="h-5 w-5" /></span>
+            <span class="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-wb-on-solid"><CheckCircle2 class="h-5 w-5" /></span>
             <div><div class="text-sm font-semibold text-zinc-950">修改已写入简历</div><div class="mt-0.5 text-xs text-zinc-500">预览已同步更新</div></div>
           </div>
         </div>
@@ -1098,7 +1098,7 @@ async function sendInitialPrompt() {
     </Teleport>
 
     <Transition name="export-fade">
-      <div v-if="exportLoading" class="fixed inset-0 z-modal flex items-center justify-center bg-zinc-950/45 px-6 backdrop-blur-sm">
+      <div v-if="exportLoading" class="fixed inset-0 z-modal flex items-center justify-center bg-wb-scrim/45 px-6 backdrop-blur-sm">
         <div class="w-full max-w-[320px] rounded-2xl border border-zinc-200 bg-white px-6 py-7 text-center shadow-wb-popup">
           <LoaderCircle class="mx-auto h-10 w-10 animate-spin text-zinc-900" />
           <h3 class="mt-4 text-base font-semibold text-zinc-900">

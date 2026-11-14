@@ -1234,7 +1234,7 @@ onMounted(() => load())
 
                     <button
                       class="inline-flex h-7 items-center justify-center gap-1 rounded px-2.5 text-xs font-medium transition whitespace-nowrap"
-                      :class="item.is_visible ? 'text-zinc-500 hover:bg-zinc-100/80' : 'bg-black/90 text-white hover:bg-black/75'"
+                      :class="item.is_visible ? 'text-zinc-500 hover:bg-zinc-100/80' : 'bg-wb-primary text-white hover:bg-wb-primary-hover'"
                       @click="updateTemplateDisplay(item, { is_visible: !item.is_visible })"
                     >
                       <EyeOff v-if="item.is_visible" class="h-3.5 w-3.5" />
@@ -1335,7 +1335,7 @@ onMounted(() => load())
         leave-from-class="opacity-100 translate-y-0 sm:scale-100"
         leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
       >
-        <div v-if="showUserPointTransactions" class="fixed inset-0 z-overlay flex items-center justify-center bg-zinc-950/40 p-4 backdrop-blur-sm" @click.self="closeUserPointTransactions">
+        <div v-if="showUserPointTransactions" class="fixed inset-0 z-overlay flex items-center justify-center bg-wb-scrim/40 p-4 backdrop-blur-sm" @click.self="closeUserPointTransactions">
           <div class="flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup">
             <div class="flex items-start justify-between gap-4 border-b border-zinc-100 px-6 py-4">
               <div class="min-w-0">
@@ -1402,7 +1402,7 @@ onMounted(() => load())
         leave-from-class="opacity-100 translate-y-0 sm:scale-100"
         leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
       >
-        <div v-if="showStarterEditor" class="fixed inset-0 z-overlay flex items-center justify-center p-4 bg-zinc-950/40 backdrop-blur-sm" @click.self="closeStarterEditor">
+        <div v-if="showStarterEditor" class="fixed inset-0 z-overlay flex items-center justify-center p-4 bg-wb-scrim/40 backdrop-blur-sm" @click.self="closeStarterEditor">
           <div class="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup">
             <div class="flex items-start justify-between gap-4 border-b border-zinc-100 px-6 py-4">
               <div>
@@ -1517,7 +1517,7 @@ onMounted(() => load())
 
             <div class="flex justify-end gap-2 border-t border-zinc-100 bg-zinc-50/60 px-6 py-4">
               <button class="h-10 rounded-xl border border-zinc-200 bg-white px-5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50" @click="closeStarterEditor">取消</button>
-              <button class="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-black/90 px-6 text-sm font-medium text-white transition hover:bg-black/75 disabled:cursor-not-allowed disabled:opacity-60" :disabled="starterSaving" @click="saveStarter">
+              <button class="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-wb-primary px-6 text-sm font-medium text-white transition hover:bg-wb-primary-hover disabled:cursor-not-allowed disabled:opacity-60" :disabled="starterSaving" @click="saveStarter">
                 <RefreshCw v-if="starterSaving" class="h-4 w-4 animate-spin" />
                 保存
               </button>
@@ -1544,7 +1544,7 @@ onMounted(() => load())
         leave-from-class="opacity-100 translate-y-0 sm:scale-100"
         leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
       >
-        <div v-if="showFeedbackReply" class="fixed inset-0 z-overlay flex items-center justify-center p-4 bg-zinc-950/40 backdrop-blur-sm" @click.self="closeFeedbackReply">
+        <div v-if="showFeedbackReply" class="fixed inset-0 z-overlay flex items-center justify-center p-4 bg-wb-scrim/40 backdrop-blur-sm" @click.self="closeFeedbackReply">
           <div class="flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup transform transition">
             <div class="px-6 py-4 flex items-center justify-between border-b border-zinc-100">
               <div>
@@ -1590,7 +1590,7 @@ onMounted(() => load())
                 <RefreshCw v-if="feedbackEmailSending" class="h-4 w-4 animate-spin shrink-0" />
                 保存并发邮件
               </button>
-              <button @click="saveFeedbackReply" :disabled="feedbackReplySaving || feedbackEmailSending" class="inline-flex h-10 items-center justify-center gap-1.5 sm:gap-2 rounded-xl bg-black/90 px-5 sm:px-6 text-sm font-medium text-white transition-colors hover:bg-black/75 disabled:cursor-not-allowed disabled:opacity-60 whitespace-nowrap shrink-0">
+              <button @click="saveFeedbackReply" :disabled="feedbackReplySaving || feedbackEmailSending" class="inline-flex h-10 items-center justify-center gap-1.5 sm:gap-2 rounded-xl bg-wb-primary px-5 sm:px-6 text-sm font-medium text-white transition-colors hover:bg-wb-primary-hover disabled:cursor-not-allowed disabled:opacity-60 whitespace-nowrap shrink-0">
                 <RefreshCw v-if="feedbackReplySaving" class="h-4 w-4 animate-spin shrink-0" />
                 保存处理
               </button>

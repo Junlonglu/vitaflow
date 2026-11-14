@@ -796,7 +796,7 @@ watch(
       @copy-code="copyCode"
     />
 
-    <div v-if="configToDelete" class="fixed inset-0 z-modal flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-sm transition duration-150">
+    <div v-if="configToDelete" class="fixed inset-0 z-modal flex items-center justify-center bg-wb-scrim/50 p-4 backdrop-blur-sm transition duration-150">
       <div class="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-wb-popup">
         <div class="mb-5 flex items-center justify-between">
           <div class="flex items-center gap-2 text-red-600">
@@ -811,7 +811,7 @@ watch(
           </p>
           <div class="flex items-center justify-end gap-3 pt-2">
             <Button variant="outline" size="sm" class="h-10 px-4" @click="configToDelete = null">取消</Button>
-            <Button size="sm" class="h-10 border-red-600 bg-red-600 px-4 text-white hover:bg-red-700" :disabled="loading" @click="confirmDeleteConfig">
+            <Button size="sm" class="h-10 border-red-600 bg-red-600 px-4 text-wb-on-solid hover:bg-red-700" :disabled="loading" @click="confirmDeleteConfig">
               {{ loading ? "删除中..." : "确定删除" }}
             </Button>
           </div>

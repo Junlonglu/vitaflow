@@ -83,7 +83,7 @@ const progress = computed(() => {
 
         <div class="mt-4 flex-1 space-y-2.5">
           <div v-for="(item, index) in stages" :key="item.label" class="analysis-step flex items-center gap-3.5 rounded-2xl px-4 py-2.5 sm:py-3 transition-colors duration-150" :class="index <= activeIndex ? 'bg-zinc-50 ring-1 ring-zinc-100' : 'bg-transparent'">
-            <span class="flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold transition duration-150 shrink-0" :class="index < activeIndex ? 'bg-blue-500 text-white ' : index === activeIndex ? 'bg-zinc-900 text-white ' : 'bg-white text-zinc-400 ring-1 ring-zinc-200'">
+            <span class="flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold transition duration-150 shrink-0" :class="index < activeIndex ? 'bg-blue-500 text-wb-on-solid ' : index === activeIndex ? 'bg-zinc-900 text-white ' : 'bg-white text-zinc-400 ring-1 ring-zinc-200'">
               <CheckCircle2 v-if="index < activeIndex" class="h-4 w-4" />
               <span v-else>{{ index + 1 }}</span>
             </span>

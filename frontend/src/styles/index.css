@@ -23,20 +23,22 @@
   --font-sans: Inter, "PingFang SC", ui-sans-serif, system-ui, -apple-system,
     BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
 
-  /* 中性灰阶：只去色相、明度基本不变（原 zinc 带一点蓝调）。
-     逐档对比度与改动前持平或略高：500 → 5.07:1、600 → 7.4:1、400 → 2.52:1。
-     zinc-200/300 略微提亮，贴近 WorkBuddy 的 #ebebeb / #dedede 描边。 */
-  --color-zinc-50: #fafafa;
-  --color-zinc-100: #f4f4f4;
-  --color-zinc-200: #e8e8e8;
-  --color-zinc-300: #d6d6d6;
-  --color-zinc-400: #a3a3a3;
-  --color-zinc-500: #6e6e6e;
-  --color-zinc-600: #545454;
-  --color-zinc-700: #3d3d3d;
-  --color-zinc-800: #262626;
-  --color-zinc-900: #171717;
-  --color-zinc-950: #0a0a0a;
+  /* 中性灰阶：值在 wb-theme.css 里按主题给（--wb-n-*）。
+     这里只做「类名 → 变量」的接线，所以 zinc-* 类名在全站不用改一个字，
+     切到暗色时整阶一起翻。白色同理：white 在这里代表「纸面」，
+     暗色下 = #17171b，于是 bg-white 是深色卡片、text-white 是压在浅色填充上的墨色。 */
+  --color-white: var(--wb-surface);
+  --color-zinc-50: var(--wb-n-50);
+  --color-zinc-100: var(--wb-n-100);
+  --color-zinc-200: var(--wb-n-200);
+  --color-zinc-300: var(--wb-n-300);
+  --color-zinc-400: var(--wb-n-400);
+  --color-zinc-500: var(--wb-n-500);
+  --color-zinc-600: var(--wb-n-600);
+  --color-zinc-700: var(--wb-n-700);
+  --color-zinc-800: var(--wb-n-800);
+  --color-zinc-900: var(--wb-n-900);
+  --color-zinc-950: var(--wb-n-950);
 }
 
 * { 
@@ -47,8 +49,8 @@ html { overflow-y: scroll; }
 body, html body, html body[style] {
   margin: 0;
   padding-right: 0 !important;
-  color: #0a0a0a; /* 中性近黑（WorkBuddy 文字主色为 #000）；原 #111827 偏蓝 */
-  background: #f7f7f8; /* 中性页面底色；原 #f7f8fb 带蓝调。首页观感依赖此值，改动需同步截图确认 */
+  color: var(--wb-page-ink); /* 中性近黑（WorkBuddy 文字主色为 #000）；暗色下为浅墨 */
+  background: var(--wb-page-bg); /* 页面底色：日间 #f7f7f8，暗色 #0b0b0d。首页观感依赖此值 */
   overflow: visible !important;
   font-family: var(--font-sans);
   /* WorkBuddy 桌面端开启的字体平滑；中文小字号下笔画更细、更接近工具感 */
@@ -56,14 +58,17 @@ body, html body, html body[style] {
   -moz-osx-font-smoothing: grayscale;
 }
 a { color: inherit; text-decoration: none; }
-/* 滚动条对齐 WorkBuddy：8px、半透明黑、无轨道底 */
+/* 滚动条对齐 WorkBuddy：8px、半透明、无轨道底。滑块颜色随主题（深底上黑滑块看不见） */
 .thin-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
 .thin-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .thin-scrollbar::-webkit-scrollbar-thumb {
-  background: rgb(0 0 0 / 20%);
+  background: var(--wb-scrollbar);
   border-radius: 999px;
 }
-.thin-scrollbar::-webkit-scrollbar-thumb:hover { background: rgb(0 0 0 / 32%); }
+.thin-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--wb-scrollbar-hover); }
+/* 全站默认滚动条（不是每个滚动容器都挂了 thin-scrollbar） */
+* { scrollbar-color: var(--wb-scrollbar) transparent; }
+[data-theme="dark"] { color-scheme: dark; }
 
 /* 全局富文本编辑器及展示内容样式重置（绝对强制，抵抗 Tailwind v4 preflight 样式重置） */
 .rich-text-editor ul, .announcement-content ul, .history-announcement-content ul, .ai-records-hint ul {
@@ -126,19 +131,8 @@ a { color: inherit; text-decoration: none; }
    旧 Chromium/Safari 不支持时会导致深色按钮、半透明面板等元素“消失”。 */
 @supports not (color: oklch(0.5 0 0)) {
   :root {
-    --color-white: #ffffff;
-    --color-black: #000000;
-    --color-zinc-50: #fafafa;
-    --color-zinc-100: #f4f4f4;
-    --color-zinc-200: #e8e8e8;
-    --color-zinc-300: #d6d6d6;
-    --color-zinc-400: #a3a3a3;
-    --color-zinc-500: #6e6e6e;
-    --color-zinc-600: #545454;
-    --color-zinc-700: #3d3d3d;
-    --color-zinc-800: #262626;
-    --color-zinc-900: #171717;
-    --color-zinc-950: #0a0a0a;
+    /* 中性阶与纸面不再写死：日/暗两套值都在 wb-theme.css 里，这里只补
+       旧浏览器缺的「默认调色板是 oklch」那部分（蓝/红等强调色）。 */
     --color-blue-50: #eff6ff;
     --color-blue-100: #dbeafe;
     --color-blue-200: #bfdbfe;

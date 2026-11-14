@@ -375,7 +375,7 @@ function addPresetField(preset: (typeof basicInfoPresets)[number]) {
           </label>
 
           <!-- Delete Button (Top Right) -->
-          <button v-if="basics.avatar" class="absolute -right-2 -top-2 z-base flex h-5 w-5 md:h-6 md:w-6 items-center justify-center rounded-full bg-red-100 text-red-600 ring-2 ring-white transition-transform hover:scale-110 hover:bg-red-500 hover:text-white active:scale-95" @click="basics.avatar = ''; $emit('change')" title="删除头像">
+          <button v-if="basics.avatar" class="absolute -right-2 -top-2 z-base flex h-5 w-5 md:h-6 md:w-6 items-center justify-center rounded-full bg-red-100 text-red-600 ring-2 ring-white transition-transform hover:scale-110 hover:bg-red-500 hover:text-wb-on-solid active:scale-95" @click="basics.avatar = ''; $emit('change')" title="删除头像">
             <X class="h-3 w-3 md:h-3.5 md:w-3.5" />
           </button>
         </div>

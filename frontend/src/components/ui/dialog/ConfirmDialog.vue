@@ -54,8 +54,8 @@ function confirm() {
         </button>
         <button
           @click="confirm"
-          class="flex-1 h-10 rounded-xl font-medium text-sm text-white transition-colors"
-          :class="destructive !== false ? 'bg-red-600 hover:bg-red-700' : 'bg-black/90 hover:bg-black/75'"
+          class="flex-1 h-10 rounded-xl font-medium text-sm transition-colors"
+          :class="destructive !== false ? 'bg-red-600 text-wb-on-solid hover:bg-red-700' : 'bg-wb-primary text-wb-primary-fg hover:bg-wb-primary-hover'"
         >
           {{ confirmText || '删除' }}
         </button>

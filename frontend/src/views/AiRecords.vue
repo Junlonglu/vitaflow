@@ -535,7 +535,7 @@ onMounted(() => refresh())
         </div>
       </section>
 
-      <div v-if="selectedHistory" class="fixed inset-0 z-modal flex items-center justify-center bg-zinc-950/35 px-4 py-6 backdrop-blur-sm" @click.self="selectedHistory = null">
+      <div v-if="selectedHistory" class="fixed inset-0 z-modal flex items-center justify-center bg-wb-scrim/35 px-4 py-6 backdrop-blur-sm" @click.self="selectedHistory = null">
         <article class="flex max-h-[86vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup">
           <header class="flex items-start justify-between gap-4 border-b border-zinc-100 px-6 py-5">
             <div>

@@ -119,6 +119,86 @@
   --wb-chat-input-border-to: #2e3036;
 }
 
+/* ------------------------------------------------------------------
+ * 中性阶（zinc + white）：类名不动，值走变量
+ *
+ * 全站 2900+ 处 zinc-* / 370+ 处 bg-white 都是「角色」用法：zinc-200 是描边、
+ * zinc-500 是次要文字、white 是纸面。换肤不需要改这些类名——只要让它们引用
+ * 一层可切换的变量，整阶就会跟着翻。
+ *
+ * 浅色档 = 逐位等于改造前的十六进制值，所以日间像素零变化。
+ * 暗色档不是简单的「明度镜像」：镜像会让 zinc-400（占位、时间戳）掉到
+ * #52525b，在深底上只有 2:1。这里按「浅色对比度」对齐重新取值，
+ * 使得暗色下 zinc-400≈4.1:1、zinc-500≈5.5:1，反而略高于日间。
+ * ------------------------------------------------------------------ */
+:root,
+[data-theme="light"] {
+  --wb-n-50: #fafafa;
+  --wb-n-100: #f4f4f4;
+  --wb-n-200: #e8e8e8;
+  --wb-n-300: #d6d6d6;
+  --wb-n-400: #a3a3a3;
+  --wb-n-500: #6e6e6e;
+  --wb-n-600: #545454;
+  --wb-n-700: #3d3d3d;
+  --wb-n-800: #262626;
+  --wb-n-900: #171717;
+  --wb-n-950: #0a0a0a;
+
+  /* 纸面：bg-white 的底色，也是「反色文字」的去处（见下方 text-white 说明） */
+  --wb-surface: #ffffff;
+
+  /* 页面（body）底色与正文墨色 */
+  --wb-page-bg: #f7f7f8;
+  --wb-page-ink: #0a0a0a;
+
+  /* 半透明叠层：hover 提亮 / active 再深一档 */
+  --wb-layer-hover: rgb(0 0 0 / 5%);
+  --wb-layer-active: rgb(0 0 0 / 10%);
+
+  /* 滚动条滑块 */
+  --wb-scrollbar: rgb(0 0 0 / 20%);
+  --wb-scrollbar-hover: rgb(0 0 0 / 32%);
+
+  /* 浮层投影：日间靠极轻的两段小半径叠层次 */
+  --wb-popup-shadow: 0 6px 24px -4px rgb(0 0 0 / 4%), 0 4px 6px -2px rgb(0 0 0 / 6%);
+}
+
+[data-theme="dark"] {
+  /* 深色档：数值越小越暗（面），越大越亮（字）——与日间同向，读类名时不用倒着理解 */
+  --wb-n-50: #0b0b0d;
+  --wb-n-100: #1f1f24;
+  --wb-n-200: #2a2a31;
+  --wb-n-300: #3d3d45;
+  --wb-n-400: #83838d;
+  --wb-n-500: #8f8f99;
+  --wb-n-600: #a6a6af;
+  --wb-n-700: #c2c2ca;
+  --wb-n-800: #dadade;
+  --wb-n-900: #f0f0f3;
+  --wb-n-950: #fafafa;
+
+  /* 纸面比页面底色亮一档，卡片才「浮」得起来；但比 hover 叠层暗，
+     所以 hover:bg-zinc-100 盖在卡片上仍然是提亮而不是压暗 */
+  --wb-surface: #17171b;
+
+  --wb-page-bg: #0b0b0d;
+  --wb-page-ink: #f0f0f3;
+
+  --wb-layer-hover: rgb(255 255 255 / 6%);
+  --wb-layer-active: rgb(255 255 255 / 10%);
+
+  --wb-scrollbar: rgb(255 255 255 / 22%);
+  --wb-scrollbar-hover: rgb(255 255 255 / 36%);
+
+  /* 深底上 4% 的黑投影等于没画，必须加重才看得出浮层边界 */
+  --wb-popup-shadow: 0 6px 24px -4px rgb(0 0 0 / 45%), 0 4px 6px -2px rgb(0 0 0 / 40%);
+}
+
+/* 让 `dark:` 变体跟随 data-theme，而不是操作系统的 prefers-color-scheme
+   （Tailwind v4 的默认 dark 变体是媒体查询，切不了手动开关）。 */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 /* 让 Tailwind 生成 bg-wb-* / text-wb-* / border-wb-* / rounded-wb-* 等工具类 */
 @theme inline {
   --color-wb-brand: var(--wb-brand-8);
@@ -145,6 +225,12 @@
   --color-wb-warning: var(--wb-warning);
   --color-wb-danger: var(--wb-danger);
   --color-wb-bubble: var(--wb-chat-bubble);
+  /* 中性阶与叠层：供新代码直接写语义类名（bg-wb-surface / text-wb-ink / hover:bg-wb-hover）。
+     存量仍用 zinc-*，两者取值同源，混用不会串色。 */
+  --color-wb-surface: var(--wb-surface);
+  --color-wb-ink: var(--wb-page-ink);
+  --color-wb-on-solid: #ffffff; /* 压在红/蓝等饱和填充上的文字，两种主题都保持白色 */
+  --color-wb-scrim: #000000; /* 遮罩：两种主题都是黑色，靠 /40 这类透明度调节深浅 */
 
   --radius-wb-xs: 2px;
   --radius-wb-sm: 4px;
@@ -179,7 +265,7 @@
      WorkBuddy 的浮层阴影极轻，靠两段小半径叠出层次，不像 Tailwind shadow-xl 那样一整块重投影。
      静态内容（卡片/输入框/列表行/开关滑块）一律无阴影，边界靠 border 或 ring-1 ring-zinc-200/70。
      画布内的纸面（首页 hero、模板预览、composer 输入区）允许就地写 shadow-[…]。 */
-  --shadow-wb-popup: 0 6px 24px -4px rgb(0 0 0 / 4%), 0 4px 6px -2px rgb(0 0 0 / 6%);
+  --shadow-wb-popup: var(--wb-popup-shadow);
 
   --ease-wb-standard: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-wb-decelerate: cubic-bezier(0, 0, 0.2, 1);
@@ -278,4 +364,81 @@
   --sk-shimmer-color: rgb(255 255 255 / 4%);
   --sk-text-placeholder: rgb(255 255 255 / 8%);
   --sk-border-color: rgb(255 255 255 / 8%);
+}
+
+/* ==================================================================
+ * 强调色桥接层（暗色）
+ *
+ * 中性阶靠变量整套翻转，但强调色做不到：同一个 `red-600` 既可能当文字
+ * （危险操作、错误提示），也可能当填充（删除按钮）。所以只能按**用法**
+ * 分别处理：
+ *   - 浅底（bg-*-50/100）：暗色下改成同色相的深底，否则深色卡片上会浮一块浅色补丁
+ *   - 浅色描边（border/ring-*-100/200）：跟着浅底一起压深
+ *   - 彩色文字（text-*-400..700）：提亮到能在深底上读清
+ *   - 实心填充（bg-*-500/600/700）：**不动**，保持饱和；上面的字用 text-wb-on-solid
+ *
+ * 这是给存量代码的过渡层：新代码优先用 wb-* 语义 token，而不是靠这里兜。
+ * 只用了 `[data-theme="dark"] .类名` 的类选择器（0,2,0），能盖住工具类
+ * （0,1,0），但盖不住 `!text-red-600` 这种 important 写法——那种地方要手改。
+ * ================================================================== */
+[data-theme="dark"] {
+  /* 红：危险 / 错误 */
+  --wb-tint-red-50: #2a1416;
+  --wb-tint-red-100: #3a1c1f;
+  --wb-tint-red-200: #4d2226;
+  /* 蓝：链接 / 进行中 */
+  --wb-tint-blue-50: #131f33;
+  --wb-tint-blue-100: #1a2a44;
+  --wb-tint-blue-200: #24406b;
+  /* 绿：成功 / 通过 */
+  --wb-tint-emerald-50: #10241c;
+  --wb-tint-emerald-100: #163328;
+  --wb-tint-emerald-200: #1d4a39;
+  /* 琥珀：待办 / 提示 */
+  --wb-tint-amber-50: #2a1f0f;
+  --wb-tint-amber-100: #382a14;
+  --wb-tint-amber-200: #4d3a1c;
+}
+
+[data-theme="dark"] {
+  /* —— 浅底 —— */
+  .bg-red-50 { background-color: var(--wb-tint-red-50); }
+  .bg-red-100 { background-color: var(--wb-tint-red-100); }
+  .bg-blue-50 { background-color: var(--wb-tint-blue-50); }
+  .bg-blue-100 { background-color: var(--wb-tint-blue-100); }
+  .bg-emerald-50 { background-color: var(--wb-tint-emerald-50); }
+  .bg-emerald-100 { background-color: var(--wb-tint-emerald-100); }
+  .bg-amber-50 { background-color: var(--wb-tint-amber-50); }
+  .bg-amber-100 { background-color: var(--wb-tint-amber-100); }
+  .bg-green-50 { background-color: #14240f; }
+  .bg-rose-50 { background-color: #2a141a; }
+  .bg-violet-50 { background-color: #1d1830; }
+  .bg-indigo-50 { background-color: #1a1a33; }
+
+  /* —— 浅底上的描边 —— */
+  .border-red-100 { border-color: var(--wb-tint-red-100); }
+  .border-red-200 { border-color: var(--wb-tint-red-200); }
+  .border-blue-100 { border-color: var(--wb-tint-blue-100); }
+  .border-blue-200 { border-color: var(--wb-tint-blue-200); }
+  .border-emerald-200 { border-color: var(--wb-tint-emerald-200); }
+  .border-amber-200 { border-color: var(--wb-tint-amber-200); }
+  .ring-red-200 { --tw-ring-color: var(--wb-tint-red-200); }
+  .ring-blue-200 { --tw-ring-color: var(--wb-tint-blue-200); }
+  .ring-emerald-200 { --tw-ring-color: var(--wb-tint-emerald-200); }
+  .ring-amber-200 { --tw-ring-color: var(--wb-tint-amber-200); }
+
+  /* —— 彩色文字：提亮，暗底才读得清（对比度均 ≥ 7:1） —— */
+  .text-red-400 { color: #e88a8a; }
+  .text-red-500 { color: #f19a9a; }
+  .text-red-600 { color: #ffb0b0; }
+  .text-red-700 { color: #ffc4c4; }
+  .text-blue-500 { color: #7ea9f7; }
+  .text-blue-600 { color: #96b9ff; }
+  .text-blue-700 { color: #adc9ff; }
+  .text-emerald-600 { color: #7dd3b0; }
+  .text-emerald-700 { color: #96e0c2; }
+  .text-green-600 { color: #86d99a; }
+  .text-amber-500 { color: #f2b06a; }
+  .text-amber-600 { color: #f7c07f; }
+  .text-amber-700 { color: #f9cf9a; }
 }

@@ -208,7 +208,7 @@ watch(
                     v-for="level in starterLevels"
                     :key="level.id"
                     class="flex-1 rounded-lg px-4 py-1.5 text-[13px] font-medium transition sm:flex-none"
-                    :class="selectedStarterLevelId === level.id ? 'bg-white text-zinc-950 ring-1 ring-black/5' : 'text-zinc-500 hover:bg-zinc-200/50 hover:text-zinc-900'"
+                    :class="selectedStarterLevelId === level.id ? 'bg-white text-zinc-950 ring-1 ring-black/5 dark:ring-[#fff]/10' : 'text-zinc-500 hover:bg-zinc-200/50 hover:text-zinc-900'"
                     @click="emit('update:selectedStarterLevelId', level.id)"
                   >
                     {{ level.short_label }}

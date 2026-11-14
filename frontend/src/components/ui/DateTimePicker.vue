@@ -162,7 +162,7 @@ const quickTimes = [
     <!-- Modal Popover -->
     <Teleport to="body">
       <Transition name="fade-scale">
-        <div v-if="open" class="fixed inset-0 z-overlay flex items-center justify-center bg-zinc-950/40 p-4 backdrop-blur-sm" @click.self="open = false">
+        <div v-if="open" class="fixed inset-0 z-overlay flex items-center justify-center bg-wb-scrim/40 p-4 backdrop-blur-sm" @click.self="open = false">
           <div class="w-full max-w-sm overflow-hidden rounded-2xl border border-zinc-200 bg-white p-5 shadow-wb-popup animate-in zoom-in-95 duration-150">
             <!-- Header Month Nav -->
             <div class="flex items-center justify-between mb-4">

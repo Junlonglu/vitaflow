@@ -567,7 +567,7 @@ watch(
             <button v-if="regenerateSource" type="button" class="flex h-8 items-center justify-center rounded-lg px-2.5 text-[12.5px] font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 active:scale-95" title="取消重新生成" @click="cancelRegenerate">
               取消
             </button>
-            <button type="submit" class="group ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/90 text-white transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 hover:bg-black/75 active:scale-[0.94]" :disabled="loading || (!input.trim() && !attachments.length)" :title="regenerateSource ? '确认重新生成' : '发送'" @click="submit">
+            <button type="submit" class="group ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-wb-primary text-white transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 hover:bg-wb-primary-hover active:scale-[0.94]" :disabled="loading || (!input.trim() && !attachments.length)" :title="regenerateSource ? '确认重新生成' : '发送'" @click="submit">
               <RotateCcw v-if="regenerateSource" class="h-4 w-4 transition-transform duration-100 ease-out group-hover:rotate-[-25deg]" stroke-width="1.8" />
               <LoaderCircle v-else-if="loading" class="h-4 w-4 animate-spin" stroke-width="2" />
               <ArrowUp v-else class="h-4 w-4 transition-transform duration-100 ease-out group-hover:-translate-y-0.5" stroke-width="2.2" />
@@ -589,7 +589,9 @@ watch(
   <Teleport to="body">
     <Transition name="fade">
       <div v-if="previewImageUrl" class="fixed inset-0 z-overlay flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" @click="closePreview">
-        <button type="button" class="absolute top-6 right-6 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white/80 backdrop-blur-md transition hover:bg-white/20 hover:text-white active:scale-95 ring-1 ring-white/20" title="关闭预览" @click.stop="closePreview">
+        <!-- 白字压在深色遮罩+照片上，两种主题都要是白色：这里刻意避开 text-white
+             （white 在暗色下代表「纸面」会翻转），改用字面白。 -->
+        <button type="button" class="absolute top-6 right-6 flex h-11 w-11 items-center justify-center rounded-full bg-[#fff]/10 text-[#fff]/80 backdrop-blur-md transition hover:bg-[#fff]/20 hover:text-[#fff] active:scale-95 ring-1 ring-[#fff]/20" title="关闭预览" @click.stop="closePreview">
           <X class="h-6 w-6" stroke-width="2" />
         </button>
         <img :src="previewImageUrl" alt="大图预览" class="max-h-[90vh] max-w-[90vw] rounded-2xl object-contain shadow-wb-popup transition-transform duration-150 select-none cursor-zoom-out" @click.stop="closePreview" />

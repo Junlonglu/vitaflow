@@ -403,7 +403,7 @@ const navItems = [
         leave-from-class="opacity-100 translate-y-0 sm:scale-100"
         leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
       >
-        <div v-if="feedbackDialog && selectedFeedback" class="fixed inset-0 z-modal flex items-center justify-center bg-zinc-950/40 p-4 backdrop-blur-sm" @click.self="closeFeedbackDialog">
+        <div v-if="feedbackDialog && selectedFeedback" class="fixed inset-0 z-modal flex items-center justify-center bg-wb-scrim/40 p-4 backdrop-blur-sm" @click.self="closeFeedbackDialog">
           <div class="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup">
             <div class="flex items-start justify-between gap-4 border-b border-zinc-100 px-6 py-4">
               <div class="min-w-0">
@@ -434,7 +434,7 @@ const navItems = [
             </div>
 
             <div class="flex justify-end border-t border-zinc-100 bg-zinc-50/50 px-6 py-4">
-              <button class="h-10 rounded-xl bg-black/90 px-6 text-sm font-medium text-white transition hover:bg-black/75" @click="closeFeedbackDialog">关闭</button>
+              <button class="h-10 rounded-xl bg-wb-primary px-6 text-sm font-medium text-white transition hover:bg-wb-primary-hover" @click="closeFeedbackDialog">关闭</button>
             </div>
           </div>
         </div>

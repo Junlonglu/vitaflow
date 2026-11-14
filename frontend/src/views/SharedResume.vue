@@ -162,7 +162,7 @@ onBeforeUnmount(() => {
           <span class="text-sm font-bold tracking-tight text-zinc-900">VitaFlow 简历流</span>
           <p class="mt-1 text-xs text-zinc-500">还在为找工作发愁？使用 VitaFlow 轻松提炼出彩简历。</p>
         </div>
-        <a href="/" target="_blank" class="inline-flex h-10 items-center justify-center rounded-lg bg-black/90 px-5 text-xs font-medium !text-white transition duration-100 hover:bg-black/75 active:scale-95">
+        <a href="/" target="_blank" class="inline-flex h-10 items-center justify-center rounded-lg bg-wb-primary px-5 text-xs font-medium !text-white transition duration-100 hover:bg-wb-primary-hover active:scale-95">
           免费制作同款简历 &rarr;
         </a>
       </div>

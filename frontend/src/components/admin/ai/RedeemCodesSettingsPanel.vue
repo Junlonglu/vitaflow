@@ -163,7 +163,7 @@ defineEmits<{
       />
     </article>
 
-    <div v-if="showGenerateModal" class="fixed inset-0 z-modal flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-sm transition duration-150">
+    <div v-if="showGenerateModal" class="fixed inset-0 z-modal flex items-center justify-center bg-wb-scrim/50 p-4 backdrop-blur-sm transition duration-150">
       <div class="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-6 shadow-wb-popup">
         <div class="mb-5 flex items-center justify-between">
           <h3 class="font-semibold text-zinc-900">生成兑换码</h3>
@@ -190,7 +190,7 @@ defineEmits<{
       </div>
     </div>
 
-    <div v-if="showImportModal" class="fixed inset-0 z-modal flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-sm transition duration-150">
+    <div v-if="showImportModal" class="fixed inset-0 z-modal flex items-center justify-center bg-wb-scrim/50 p-4 backdrop-blur-sm transition duration-150">
       <div class="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-6 shadow-wb-popup">
         <div class="mb-5 flex items-center justify-between">
           <div>
@@ -214,7 +214,7 @@ defineEmits<{
       </div>
     </div>
 
-    <div v-if="showBatchPriceModal" class="fixed inset-0 z-modal flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-sm transition duration-150">
+    <div v-if="showBatchPriceModal" class="fixed inset-0 z-modal flex items-center justify-center bg-wb-scrim/50 p-4 backdrop-blur-sm transition duration-150">
       <div class="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-wb-popup">
         <div class="mb-5 flex items-start justify-between gap-4">
           <div>
@@ -235,7 +235,7 @@ defineEmits<{
       </div>
     </div>
 
-    <div v-if="editingCode" class="fixed inset-0 z-modal flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-sm">
+    <div v-if="editingCode" class="fixed inset-0 z-modal flex items-center justify-center bg-wb-scrim/50 p-4 backdrop-blur-sm">
       <div class="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-6 shadow-wb-popup">
         <div class="mb-5 flex items-start justify-between gap-4">
           <div>
@@ -266,7 +266,7 @@ defineEmits<{
       </div>
     </div>
 
-    <div v-if="codeToDelete" class="fixed inset-0 z-modal flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-sm">
+    <div v-if="codeToDelete" class="fixed inset-0 z-modal flex items-center justify-center bg-wb-scrim/50 p-4 backdrop-blur-sm">
       <div class="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-wb-popup">
         <div class="flex items-start gap-4">
           <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600"><Trash2 class="h-5 w-5" /></div>
@@ -278,7 +278,7 @@ defineEmits<{
         </div>
         <div class="mt-6 flex justify-end gap-3">
           <Button variant="outline" class="h-10 px-5" @click="codeToDelete = null">取消</Button>
-          <Button class="h-10 border-red-600 bg-red-600 px-5 text-white hover:bg-red-700" :disabled="deletingCode" @click="$emit('confirmDeleteCode')">{{ deletingCode ? "删除中..." : "确认删除" }}</Button>
+          <Button class="h-10 border-red-600 bg-red-600 px-5 text-wb-on-solid hover:bg-red-700" :disabled="deletingCode" @click="$emit('confirmDeleteCode')">{{ deletingCode ? "删除中..." : "确认删除" }}</Button>
         </div>
       </div>
     </div>

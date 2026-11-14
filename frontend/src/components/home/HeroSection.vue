@@ -31,7 +31,7 @@ const handleMouseMove = (e: MouseEvent) => {
             用极简的方式打造专业简历。AI 帮你提炼亮点，一键生成清晰优雅的 PDF 排版。
           </p>
           <div class="mt-10 flex gap-4 items-center">
-            <RouterLink to="/workspace" class="inline-flex h-12 items-center justify-center rounded-full bg-black/90 px-8 text-sm font-medium text-white transition-transform duration-100 hover:scale-105 hover:bg-black/75 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-2 !text-white">
+            <RouterLink to="/workspace" class="inline-flex h-12 items-center justify-center rounded-full bg-wb-primary px-8 text-sm font-medium text-white transition-transform duration-100 hover:scale-105 hover:bg-wb-primary-hover focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-2 !text-white">
               开始创建 <ArrowRight class="ml-2 h-4 w-4 text-white" />
             </RouterLink>
             <RouterLink to="/templates" class="inline-flex h-12 items-center justify-center rounded-full border border-zinc-200 bg-white px-8 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-zinc-200 focus:ring-offset-2">

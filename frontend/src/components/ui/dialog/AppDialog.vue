@@ -130,7 +130,7 @@ onBeforeUnmount(() => {
       leave-from-class="opacity-100 translate-y-0 sm:scale-100"
       leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
     >
-      <div v-if="open" class="fixed inset-0 z-modal flex items-center justify-center p-4 bg-zinc-950/40 backdrop-blur-sm" role="dialog" aria-modal="true" :aria-label="title || undefined" @click.self="onOverlayClick">
+      <div v-if="open" class="fixed inset-0 z-modal flex items-center justify-center p-4 bg-wb-scrim/40 backdrop-blur-sm" role="dialog" aria-modal="true" :aria-label="title || undefined" @click.self="onOverlayClick">
         <div ref="panelEl" tabindex="-1" class="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup transform transition outline-none" :class="[maxWidthClass, panelClass]">
           <slot name="header">
             <div class="flex shrink-0 items-start justify-between gap-4 px-5 py-4" :class="headerClass">

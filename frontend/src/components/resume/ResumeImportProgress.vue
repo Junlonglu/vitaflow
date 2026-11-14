@@ -15,7 +15,7 @@ withDefaults(defineProps<{
 <template>
   <Teleport to="body">
     <Transition name="resume-import-progress">
-      <div v-if="open" class="fixed inset-0 z-overlay flex items-center justify-center bg-zinc-950/45 p-4 backdrop-blur-sm">
+      <div v-if="open" class="fixed inset-0 z-overlay flex items-center justify-center bg-wb-scrim/45 p-4 backdrop-blur-sm">
         <section class="w-full max-w-[520px] rounded-2xl border border-zinc-200 bg-white p-7 shadow-wb-popup sm:p-8">
           <div class="flex items-center justify-between gap-4">
             <div class="flex min-w-0 items-center gap-4">
@@ -41,7 +41,7 @@ withDefaults(defineProps<{
             >
               <span
                 class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold transition duration-150"
-                :class="index < stageIndex ? 'bg-blue-500 text-white' : index === stageIndex ? 'bg-zinc-900 text-white' : 'bg-white text-zinc-400 ring-1 ring-zinc-200'"
+                :class="index < stageIndex ? 'bg-blue-500 text-wb-on-solid' : index === stageIndex ? 'bg-zinc-900 text-white' : 'bg-white text-zinc-400 ring-1 ring-zinc-200'"
               >
                 <CheckCircle2 v-if="index < stageIndex" class="h-4 w-4" />
                 <span v-else>{{ index + 1 }}</span>

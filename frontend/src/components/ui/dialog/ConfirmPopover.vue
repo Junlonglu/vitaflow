@@ -169,8 +169,8 @@ onBeforeUnmount(unbind)
           </button>
           <button
             type="button"
-            class="h-8 rounded-lg px-3 text-[12.5px] font-medium text-white transition-colors"
-            :class="destructive ? 'bg-red-600 hover:bg-red-700' : 'bg-black/90 hover:bg-black/75'"
+            class="h-8 rounded-lg px-3 text-[12.5px] font-medium transition-colors"
+            :class="destructive ? 'bg-red-600 text-wb-on-solid hover:bg-red-700' : 'bg-wb-primary text-wb-primary-fg hover:bg-wb-primary-hover'"
             @click="confirm"
           >
             {{ confirmText }}

@@ -164,7 +164,7 @@ onMounted(() => load())
     </div>
 
     <Transition name="fade">
-      <div v-if="editorOpen" class="fixed inset-0 z-modal flex items-center justify-center bg-zinc-950/45 p-4 backdrop-blur-sm">
+      <div v-if="editorOpen" class="fixed inset-0 z-modal flex items-center justify-center bg-wb-scrim/45 p-4 backdrop-blur-sm">
         <section class="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup">
           <header class="flex items-center justify-between border-b border-zinc-100 px-4 sm:px-6 py-3 sm:py-4"><div><h2 class="font-semibold text-zinc-900">{{ editingId ? '编辑公告' : '添加公告' }}</h2><p class="mt-1 text-xs text-zinc-400">支持标题、列表、引用、链接等富文本格式</p></div><button class="rounded-lg p-2 text-zinc-400 hover:bg-zinc-100" @click="editorOpen = false"><X class="h-5 w-5" /></button></header>
           <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-6"><div><label class="mb-1.5 block text-xs font-medium text-zinc-600">公告标题</label><input v-model="form.title" maxlength="120" class="h-10 w-full rounded-lg border border-zinc-200 px-3 text-sm outline-none focus:border-zinc-400" placeholder="请输入公告标题" /></div><div><label class="mb-1.5 block text-xs font-medium text-zinc-600">公告正文</label><RichTextEditor v-model="form.content" /></div><div><label class="mb-1.5 block text-xs font-medium text-zinc-600">保存状态</label><Select v-model="form.status" :options="formStatusOptions" placeholder="选择保存状态" /></div></div>

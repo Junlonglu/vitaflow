@@ -333,7 +333,7 @@ onUnmounted(() => {
     <p v-if="imageError" class="border-t border-red-100 bg-red-50 px-3 py-2 text-xs text-red-600">{{ imageError }}</p>
 
     <Transition name="fade">
-      <div v-if="linkDialogOpen" class="fixed inset-0 z-modal flex items-center justify-center bg-zinc-950/45 p-4 backdrop-blur-sm" @click.self="linkDialogOpen = false">
+      <div v-if="linkDialogOpen" class="fixed inset-0 z-modal flex items-center justify-center bg-wb-scrim/45 p-4 backdrop-blur-sm" @click.self="linkDialogOpen = false">
         <section class="flex w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup">
           <header class="flex items-center justify-between border-b border-zinc-100 px-6 py-4">
             <h3 class="font-semibold text-zinc-900">添加链接</h3>

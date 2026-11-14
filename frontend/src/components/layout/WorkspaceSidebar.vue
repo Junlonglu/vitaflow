@@ -536,7 +536,7 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
           </button>
           <button
             type="button"
-            class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-zinc-200/70 hover:text-zinc-700"
+            class="hit-area flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-zinc-200/70 hover:text-zinc-700"
             :title="isExpanded(item.id) ? '收起对话' : '展开对话'"
             @click.stop="toggleExpanded(item.id)"
           >
@@ -580,24 +580,27 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
               >{{ session.title || "无标题对话" }}</span>
             </span>
             <span class="shrink-0 text-[11px] tabular-nums text-zinc-400 group-hover/session:hidden">{{ formatRelativeTime(session.update_time) }}</span>
-            <button
-              type="button"
-              class="hidden h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-amber-50 hover:text-amber-600 group-hover/session:flex"
-              :class="session.is_pinned ? 'text-amber-500' : ''"
-              :title="session.is_pinned ? '取消置顶' : '置顶对话'"
-              :disabled="pinningId === session.id"
-              @click.stop="togglePin(item.id, session)"
-            >
-              <Pin class="h-3 w-3" :class="session.is_pinned ? 'fill-amber-400' : ''" />
-            </button>
-            <button
-              type="button"
-              class="hidden h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-500 group-hover/session:flex"
-              title="删除对话"
-              @click.stop="askRemoveSession($event, item.id, session)"
-            >
-              <Trash2 class="h-3 w-3" />
-            </button>
+            <!-- 两个按钮之间留 4px：正好等于 hit-area 两侧各外扩的 2px，命中区相切不重叠，误点不会落到「删除」上 -->
+            <span class="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                class="hit-area hidden h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-amber-50 hover:text-amber-600 group-hover/session:flex"
+                :class="session.is_pinned ? 'text-amber-500' : ''"
+                :title="session.is_pinned ? '取消置顶' : '置顶对话'"
+                :disabled="pinningId === session.id"
+                @click.stop="togglePin(item.id, session)"
+              >
+                <Pin class="h-3 w-3" :class="session.is_pinned ? 'fill-amber-400' : ''" />
+              </button>
+              <button
+                type="button"
+                class="hit-area hidden h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-500 group-hover/session:flex"
+                title="删除对话"
+                @click.stop="askRemoveSession($event, item.id, session)"
+              >
+                <Trash2 class="h-3 w-3" />
+              </button>
+            </span>
           </div>
 
           <button

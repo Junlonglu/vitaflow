@@ -495,7 +495,7 @@ watch(
                 </div>
               </div>
               <div v-if="message.role === 'user' && !message.streaming" class="touch-always-visible mt-1.5 flex justify-end pr-2 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
-                <button type="button" class="inline-flex items-center gap-1.5 text-[11px] md:text-[12px] font-medium text-zinc-400 hover:text-blue-600 active:scale-95 transition-colors disabled:opacity-40" :disabled="loading" title="编辑后重新生成" @click="startRegenerate(message)">
+                <button type="button" class="hit-area inline-flex items-center gap-1.5 text-[11px] md:text-[12px] font-medium text-zinc-400 hover:text-blue-600 active:scale-95 transition-colors disabled:opacity-40" :disabled="loading" title="编辑后重新生成" @click="startRegenerate(message)">
                   <RotateCcw class="h-3 w-3 shrink-0" stroke-width="1.8" />
                   <span class="whitespace-nowrap">重新生成</span>
                 </button>

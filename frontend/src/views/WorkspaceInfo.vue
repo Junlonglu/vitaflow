@@ -522,7 +522,7 @@ onUnmounted(() => window.clearTimeout(searchTimer))
               </span>
               <button
                 type="button"
-                class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
+                class="hit-area inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
                 @click="openImport(item)"
               >
                 <FileDown class="h-3.5 w-3.5" />

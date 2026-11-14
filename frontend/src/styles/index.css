@@ -230,3 +230,22 @@ a { color: inherit; text-decoration: none; }
 :is(input, textarea, select, [contenteditable="true"]):focus-visible {
   outline: none !important;
 }
+
+/* ============================================================
+ * 命中区补丁（2026-11-15）
+ *
+ * 侧栏行高只有 32px，行内图标按钮视觉尺寸 20×20（与 WorkBuddy 一致），
+ * 直接放大到 28 会把标题挤掉一截。改用伪元素外扩：视觉不动，命中区变
+ * 24 宽 × 28 高（满足 WCAG 2.2 SC 2.5.8 的 24×24 下限）。
+ * 水平只扩 2px，避免相邻的「置顶 / 删除」两个按钮命中区互相盖住。
+ * 用法：给按钮加 class="hit-area"（需要按钮自身是定位上下文，已内置）。
+ * ============================================================ */
+@utility hit-area {
+  position: relative;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: -4px -2px;
+  }
+}

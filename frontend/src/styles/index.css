@@ -66,8 +66,13 @@ a { color: inherit; text-decoration: none; }
   border-radius: 999px;
 }
 .thin-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--wb-scrollbar-hover); }
-/* 全站默认滚动条（不是每个滚动容器都挂了 thin-scrollbar） */
-* { scrollbar-color: var(--wb-scrollbar) transparent; }
+/* 全站默认滚动条（不是每个滚动容器都挂了 thin-scrollbar）。
+   scrollbar-width 同时决定 scrollbar-gutter 预留多宽——统一 thin（≈8px）后，
+   预留值和视觉上的条宽一致，也贴近 WorkBuddy 的 8px 细条。 */
+* {
+  scrollbar-color: var(--wb-scrollbar) transparent;
+  scrollbar-width: thin;
+}
 [data-theme="dark"] { color-scheme: dark; }
 
 /* 全局富文本编辑器及展示内容样式重置（绝对强制，抵抗 Tailwind v4 preflight 样式重置） */
@@ -242,4 +247,37 @@ a { color: inherit; text-decoration: none; }
     position: absolute;
     inset: -4px -2px;
   }
+}
+
+/* ============================================================
+ * 滚动一致性（2026-11-15）
+ *
+ * 两个「切页时看得出来」的毛病：
+ *
+ * 1. 滚动条占位。长列表出现竖直滚动条时，可用宽度少 8px，正文会整体
+ *    左移一档——切页、搜索、加载更多都会触发。scrollbar-gutter: stable
+ *    让容器始终预留那 8px，滚动条出现与否宽度都不变。
+ *    用属性选择器批量命中，是因为全站 41 处 overflow-y-auto 分散在
+ *    组件里，逐个加类名收益不如维护成本。
+ *
+ * 2. 滚动链。弹窗 / 抽屉里的长内容滚到底后，滚轮会继续传给背后的页面，
+ *    造成「关掉弹窗发现页面不知道滚到哪了」。overscroll-behavior: contain
+ *    把滚动截在容器内。
+ *
+ * 注意：gutter 只在支持 scrollbar-gutter 的浏览器生效（Chrome 94+ /
+ * Safari 18.2+），不支持的浏览器保持原状，不会更差。
+ * ============================================================ */
+@supports (scrollbar-gutter: stable) {
+  :where(
+    [class*="overflow-y-auto"],
+    [class*="overflow-y-scroll"],
+    [class*="overflow-auto"],
+    .thin-scrollbar
+  ) {
+    scrollbar-gutter: stable;
+  }
+}
+
+:where([class*="overflow-y-auto"], [class*="overflow-y-scroll"], .thin-scrollbar) {
+  overscroll-behavior: contain;
 }

@@ -13,6 +13,7 @@ from app.core.security import get_current_admin
 from app.models.ai_config import UserFeedback
 from app.models.user import User
 from app.services.email_service import send_feedback_result_email
+from app.services.rich_text_service import sanitize_rich_text_html
 from app.api.admin.common import page_data
 
 

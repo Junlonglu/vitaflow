@@ -11,7 +11,7 @@ from app.core.response import success
 from app.core.security import get_current_admin
 from app.models.resume import Resume
 from app.services.resume_starter_service import admin_resume_starter_industries, create_admin_resume_starter, delete_admin_resume_starter, delete_industry_template_config, list_admin_resume_starters, list_industry_template_configs, save_industry_template_config, update_admin_resume_starter
-from app.services.template_service import ordered_template_records, update_template_display
+from app.services.template_service import _with_preview, ordered_template_records, update_template_display
 from app.api.admin.common import page_data
 
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import re
 import traceback
-from typing import Iterable
+from typing import Any, Iterable
 
 _MASK = "[REDACTED]"
 

@@ -16,7 +16,7 @@ from app.models.ai_task import AiTask
 from app.models.ai_config import FlowPointRule, FlowPointTransaction
 from app.models.user import User
 from app.services.flow_points_service import ensure_default_point_rules, invalidate_point_rule_cache, point_amount, point_number
-from app.api.admin.common import _ai_model_config_lookups, _ai_task_model_filter, page_data
+from app.api.admin.common import _ai_model_config_lookups, _ai_task_model_filter, admin_task_model_info, page_data
 
 
 router = APIRouter(prefix="", tags=["admin"], dependencies=[Depends(get_current_admin)])

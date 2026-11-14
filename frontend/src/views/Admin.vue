@@ -1043,7 +1043,7 @@ onMounted(() => load())
                 </div>
                 <div class="mt-6">
                   <label class="block text-xs font-medium text-zinc-700 mb-2.5">新用户赠送点数</label>
-                  <input v-model.number="settingsForm.signup_gift_points" type="number" min="0" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
+                  <input v-model.number="settingsForm.signup_gift_points" type="number" min="0" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
                 </div>
               </article>
               
@@ -1059,7 +1059,7 @@ onMounted(() => load())
                 </div>
                 <div class="mt-6">
                   <label class="block text-xs font-medium text-zinc-700 mb-2.5">接收邮箱</label>
-                  <input v-model.trim="settingsForm.feedback_notify_email" type="email" placeholder="admin@example.com" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
+                  <input v-model.trim="settingsForm.feedback_notify_email" type="email" placeholder="admin@example.com" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
                 </div>
               </article>
 
@@ -1075,7 +1075,7 @@ onMounted(() => load())
                 </div>
                 <div class="mt-6">
                   <label class="block text-xs font-medium text-zinc-700 mb-2.5">每日尝试次数</label>
-                  <input v-model.number="settingsForm.redeem_daily_attempt_limit" type="number" min="0" max="1000" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
+                  <input v-model.number="settingsForm.redeem_daily_attempt_limit" type="number" min="0" max="1000" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
                 </div>
               </article>
             </section>
@@ -1156,8 +1156,8 @@ onMounted(() => load())
                     <td class="px-5 py-4 text-zinc-500">{{ formatDate(item.create_time) }}</td>
                     <td class="px-5 py-4 text-right">
                       <div class="flex justify-end gap-2 whitespace-nowrap text-xs font-medium">
-                        <button class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition-all hover:bg-zinc-50 hover:text-zinc-900 active:scale-95" @click="openUserPointTransactions(item)">流水</button>
-                        <button v-if="item.role !== 'admin'" class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition-all active:scale-95" :class="item.status === 'active' ? 'hover:border-red-200 hover:bg-red-50 hover:text-red-600' : 'hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700'" @click="requestToggleUser(item)">{{ item.status === 'active' ? '停用' : '恢复' }}</button>
+                        <button class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 hover:text-zinc-900 active:scale-95" @click="openUserPointTransactions(item)">流水</button>
+                        <button v-if="item.role !== 'admin'" class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition active:scale-95" :class="item.status === 'active' ? 'hover:border-red-200 hover:bg-red-50 hover:text-red-600' : 'hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700'" @click="requestToggleUser(item)">{{ item.status === 'active' ? '停用' : '恢复' }}</button>
                         <span v-else class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-100 bg-zinc-50 px-2.5 py-1.5 text-xs font-medium text-zinc-400">受保护</span>
                       </div>
                     </td>
@@ -1194,14 +1194,14 @@ onMounted(() => load())
                     <td class="max-w-md truncate px-5 py-4 text-zinc-600" :title="item.description">{{ item.description || '—' }}</td>
                     <td class="px-5 py-4 text-zinc-500 whitespace-nowrap">{{ formatDate(item.create_time) }}</td>
                     <td class="px-5 py-4 text-right whitespace-nowrap">
-                      <button v-if="item.can_revoke" class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600 active:scale-95" @click="requestRevokeGrant(item)">撤回批次</button>
+                      <button v-if="item.can_revoke" class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 active:scale-95" @click="requestRevokeGrant(item)">撤回批次</button>
                       <span v-else class="text-xs text-zinc-300">—</span>
                     </td>
                   </tr>
                 </tbody>
               </table>
 
-              <table v-if="section === 'feedbacks'" class="w-full min-w-[980px] text-left text-sm"><thead><tr class="border-b bg-zinc-50 text-xs text-zinc-500"><th class="px-5 py-3">所属模块</th><th class="px-5 py-3">用户</th><th class="px-5 py-3">联系方式</th><th class="px-5 py-3">状态</th><th class="px-5 py-3">时间</th><th class="px-5 py-3 text-right">操作</th></tr></thead><tbody><tr v-for="item in feedbacks.items" :key="item.id" class="border-b border-zinc-100 last:border-0"><td class="px-5 py-4"><p class="font-medium text-zinc-900">{{ item.category || '意见反馈' }}</p></td><td class="px-5 py-4"><p>{{ item.username }}</p><p class="mt-0.5 text-xs text-zinc-400">{{ item.email }}</p></td><td class="px-5 py-4 text-zinc-500">{{ item.contact || '—' }}</td><td class="px-5 py-4"><div class="flex flex-wrap items-center gap-2"><span class="rounded-full px-2 py-1 text-xs ring-1 ring-inset" :class="statusClass(item.status === 'resolved' ? 'success' : item.status === 'closed' ? 'disabled' : 'pending')">{{ feedbackStatusText(item.status) }}</span><span v-if="item.admin_reply" class="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">已回复</span></div></td><td class="px-5 py-4 text-zinc-500">{{ formatDate(item.create_time) }}</td><td class="px-5 py-4 text-right"><button class="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-all hover:bg-zinc-50 hover:text-zinc-900 active:scale-95" @click="openFeedbackReply(item)">处理</button></td></tr></tbody></table>
+              <table v-if="section === 'feedbacks'" class="w-full min-w-[980px] text-left text-sm"><thead><tr class="border-b bg-zinc-50 text-xs text-zinc-500"><th class="px-5 py-3">所属模块</th><th class="px-5 py-3">用户</th><th class="px-5 py-3">联系方式</th><th class="px-5 py-3">状态</th><th class="px-5 py-3">时间</th><th class="px-5 py-3 text-right">操作</th></tr></thead><tbody><tr v-for="item in feedbacks.items" :key="item.id" class="border-b border-zinc-100 last:border-0"><td class="px-5 py-4"><p class="font-medium text-zinc-900">{{ item.category || '意见反馈' }}</p></td><td class="px-5 py-4"><p>{{ item.username }}</p><p class="mt-0.5 text-xs text-zinc-400">{{ item.email }}</p></td><td class="px-5 py-4 text-zinc-500">{{ item.contact || '—' }}</td><td class="px-5 py-4"><div class="flex flex-wrap items-center gap-2"><span class="rounded-full px-2 py-1 text-xs ring-1 ring-inset" :class="statusClass(item.status === 'resolved' ? 'success' : item.status === 'closed' ? 'disabled' : 'pending')">{{ feedbackStatusText(item.status) }}</span><span v-if="item.admin_reply" class="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">已回复</span></div></td><td class="px-5 py-4 text-zinc-500">{{ formatDate(item.create_time) }}</td><td class="px-5 py-4 text-right"><button class="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 hover:text-zinc-900 active:scale-95" @click="openFeedbackReply(item)">处理</button></td></tr></tbody></table>
 
               <table v-if="section === 'exports'" class="w-full min-w-[800px] text-left text-sm"><thead><tr class="border-b bg-zinc-50 text-xs text-zinc-500"><th class="px-5 py-3">文件</th><th class="px-5 py-3">用户</th><th class="px-5 py-3">格式</th><th class="px-5 py-3">简历 ID</th><th class="px-5 py-3">状态</th><th class="px-5 py-3">时间</th></tr></thead><tbody><tr v-for="item in exports.items" :key="item.id" class="border-b border-zinc-100 last:border-0"><td class="max-w-64 truncate px-5 py-4 font-medium" :title="item.file_name">{{ item.file_name }}</td><td class="px-5 py-4">{{ item.username }}</td><td class="px-5 py-4 uppercase">{{ item.file_type }}</td><td class="px-5 py-4">{{ item.resume_id }}</td><td class="px-5 py-4"><span class="rounded-full px-2 py-1 text-xs ring-1 ring-inset" :class="statusClass(item.status)">{{ statusText(item.status) }}</span></td><td class="px-5 py-4 text-zinc-500">{{ formatDate(item.create_time) }}</td></tr></tbody></table>
 
@@ -1227,7 +1227,7 @@ onMounted(() => load())
                       <input
                         :value="item.sort_order"
                         type="number"
-                        class="h-7 w-12 rounded bg-zinc-50 px-2 text-xs font-medium text-zinc-700 outline-none focus:bg-white focus:ring-1 focus:ring-zinc-300 transition-all text-center"
+                        class="h-7 w-12 rounded bg-zinc-50 px-2 text-xs font-medium text-zinc-700 outline-none focus:bg-white focus:ring-1 focus:ring-zinc-300 transition-colors text-center"
                         @change="changeTemplateOrderInput(item, $event)"
                       />
                     </div>
@@ -1279,8 +1279,8 @@ onMounted(() => load())
                     <td class="px-3 py-3 text-zinc-400">{{ item.sort_order }}</td>
                     <td class="px-4 py-3 text-right">
                       <div class="flex justify-end gap-2 whitespace-nowrap text-xs font-medium">
-                        <button class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition-all hover:bg-zinc-50 hover:text-zinc-900 active:scale-95" @click="openStarterEditor(item)">编辑</button>
-                        <button class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600 active:scale-95" @click="requestDeleteStarter(item)">删除</button>
+                        <button class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 hover:text-zinc-900 active:scale-95" @click="openStarterEditor(item)">编辑</button>
+                        <button class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 active:scale-95" @click="requestDeleteStarter(item)">删除</button>
                       </div>
                     </td>
                   </tr>
@@ -1328,14 +1328,14 @@ onMounted(() => load())
 
     <Teleport to="body">
       <Transition
-        enter-active-class="transition duration-200 ease-out"
+        enter-active-class="transition duration-150 ease-out"
         enter-from-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
         enter-to-class="opacity-100 translate-y-0 sm:scale-100"
         leave-active-class="transition duration-150 ease-in"
         leave-from-class="opacity-100 translate-y-0 sm:scale-100"
         leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
       >
-        <div v-if="showUserPointTransactions" class="fixed inset-0 z-[110] flex items-center justify-center bg-zinc-950/40 p-4 backdrop-blur-sm" @click.self="closeUserPointTransactions">
+        <div v-if="showUserPointTransactions" class="fixed inset-0 z-overlay flex items-center justify-center bg-zinc-950/40 p-4 backdrop-blur-sm" @click.self="closeUserPointTransactions">
           <div class="flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup">
             <div class="flex items-start justify-between gap-4 border-b border-zinc-100 px-6 py-4">
               <div class="min-w-0">
@@ -1395,14 +1395,14 @@ onMounted(() => load())
 
     <Teleport to="body">
       <Transition
-        enter-active-class="transition duration-200 ease-out"
+        enter-active-class="transition duration-150 ease-out"
         enter-from-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
         enter-to-class="opacity-100 translate-y-0 sm:scale-100"
         leave-active-class="transition duration-150 ease-in"
         leave-from-class="opacity-100 translate-y-0 sm:scale-100"
         leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
       >
-        <div v-if="showStarterEditor" class="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-zinc-950/40 backdrop-blur-sm" @click.self="closeStarterEditor">
+        <div v-if="showStarterEditor" class="fixed inset-0 z-overlay flex items-center justify-center p-4 bg-zinc-950/40 backdrop-blur-sm" @click.self="closeStarterEditor">
           <div class="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup">
             <div class="flex items-start justify-between gap-4 border-b border-zinc-100 px-6 py-4">
               <div>
@@ -1537,15 +1537,15 @@ onMounted(() => load())
 
     <Teleport to="body">
       <Transition
-        enter-active-class="transition duration-200 ease-out"
+        enter-active-class="transition duration-150 ease-out"
         enter-from-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
         enter-to-class="opacity-100 translate-y-0 sm:scale-100"
         leave-active-class="transition duration-150 ease-in"
         leave-from-class="opacity-100 translate-y-0 sm:scale-100"
         leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
       >
-        <div v-if="showFeedbackReply" class="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-zinc-950/40 backdrop-blur-sm" @click.self="closeFeedbackReply">
-          <div class="flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup transform transition-all">
+        <div v-if="showFeedbackReply" class="fixed inset-0 z-overlay flex items-center justify-center p-4 bg-zinc-950/40 backdrop-blur-sm" @click.self="closeFeedbackReply">
+          <div class="flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup transform transition">
             <div class="px-6 py-4 flex items-center justify-between border-b border-zinc-100">
               <div>
                 <h3 class="font-semibold text-zinc-900 text-base">处理反馈</h3>

@@ -58,7 +58,7 @@ const handleMouseMove = (e: MouseEvent) => {
             @mousemove="handleMouseMove"
             @mouseenter="isHovering = true"
             @mouseleave="isHovering = false"
-            class="resume-card group relative aspect-[210/297] w-full rounded-md bg-white shadow-[0_20px_50px_rgba(0,0,0,0.1)] transition-all duration-1000 ease-out border border-zinc-100 z-10 overflow-hidden cursor-crosshair"
+            class="resume-card group relative aspect-[210/297] w-full rounded-md bg-white shadow-[0_20px_50px_rgba(0,0,0,0.1)] transition-transform duration-1000 ease-out border border-zinc-100 z-base overflow-hidden cursor-crosshair"
           >
             <!-- Base Mockup Layer -->
             <div class="absolute inset-0 p-10 pointer-events-none">
@@ -113,7 +113,7 @@ const handleMouseMove = (e: MouseEvent) => {
             
             <!-- Interaction Hint -->
             <div 
-              class="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 transition-all duration-500 pointer-events-none flex flex-col items-center gap-1.5"
+              class="absolute bottom-6 left-1/2 -translate-x-1/2 z-sticky transition duration-150 pointer-events-none flex flex-col items-center gap-1.5"
               :class="isHovering ? 'opacity-0 translate-y-2' : 'opacity-40'"
             >
               <span class="text-[9px] font-mono tracking-[0.4em] text-zinc-900 uppercase font-bold ml-[0.4em]">Hover</span>
@@ -121,7 +121,7 @@ const handleMouseMove = (e: MouseEvent) => {
             
             <!-- Spotlight/Reveal Layer (Real Resume) -->
             <div 
-              class="absolute inset-0 bg-white z-20 pointer-events-none transition-opacity duration-300"
+              class="absolute inset-0 bg-white z-raised pointer-events-none transition-opacity duration-150"
               :style="{
                 clipPath: `circle(90px at ${mousePos.x}px ${mousePos.y}px)`,
                 opacity: isHovering ? 1 : 0
@@ -184,7 +184,7 @@ const handleMouseMove = (e: MouseEvent) => {
           </div>
           
           <!-- Typographic AI Label -->
-          <div class="absolute -top-6 -right-6 animate-fade-in-up z-20 float-anim delay-200">
+          <div class="absolute -top-6 -right-6 animate-fade-in-up z-raised float-anim delay-200">
             <div class="rounded bg-zinc-900 px-4 py-2 border border-zinc-800 flex items-center justify-center">
               <span class="text-[10px] font-mono tracking-[0.25em] text-zinc-100 uppercase font-bold">AI-Powered</span>
             </div>
@@ -206,7 +206,7 @@ const handleMouseMove = (e: MouseEvent) => {
           <div class="absolute inset-0 aspect-[210/297] w-full rounded-2xl bg-white/60 border border-white/70 backdrop-blur-md" style="transform: rotateY(-10deg) rotateX(3deg) translateZ(-40px) translateX(12px) translateY(8px);"></div>
 
           <!-- Main Resume Card Backdrop (PC style mockup) -->
-          <div class="resume-card relative aspect-[210/297] w-full rounded-2xl bg-white shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-zinc-100 overflow-hidden z-10">
+          <div class="resume-card relative aspect-[210/297] w-full rounded-2xl bg-white shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-zinc-100 overflow-hidden z-base">
             <!-- Base Mockup Layer -->
             <div class="absolute inset-0 p-6 sm:p-8 pointer-events-none opacity-40">
               <!-- decorative header -->
@@ -247,7 +247,7 @@ const handleMouseMove = (e: MouseEvent) => {
             </div>
 
             <!-- Crisp Elegant Glassmorphic Content Card (Seamless overlay) -->
-            <div class="absolute inset-0 z-20 flex flex-col justify-center items-center p-6 text-center bg-white/80 backdrop-blur-[6px]">
+            <div class="absolute inset-0 z-raised flex flex-col justify-center items-center p-6 text-center bg-white/80 backdrop-blur-[6px]">
               <!-- AI Badge -->
               <div class="mb-5 rounded-full bg-zinc-100 px-3.5 py-1 border border-zinc-200 flex items-center justify-center animate-fade-in-up">
                 <span class="text-[10px] font-mono tracking-[0.2em] text-zinc-600 uppercase font-bold">AI-Powered</span>
@@ -264,10 +264,10 @@ const handleMouseMove = (e: MouseEvent) => {
 
               <!-- Call to Actions -->
               <div class="flex flex-col w-full gap-3 max-w-[220px] animate-fade-in-up">
-                <RouterLink to="/workspace" class="w-full inline-flex h-11 items-center justify-center rounded-full bg-zinc-900 px-6 text-xs font-medium text-white active:scale-95 transition-all !text-white">
+                <RouterLink to="/workspace" class="w-full inline-flex h-11 items-center justify-center rounded-full bg-zinc-900 px-6 text-xs font-medium text-white active:scale-95 transition !text-white">
                   开始创建 <ArrowRight class="ml-2 h-4 w-4 text-white" />
                 </RouterLink>
-                <RouterLink to="/templates" class="w-full inline-flex h-11 items-center justify-center rounded-full border border-zinc-200 bg-white px-6 text-xs font-medium text-zinc-900 active:scale-95 transition-all hover:bg-zinc-50">
+                <RouterLink to="/templates" class="w-full inline-flex h-11 items-center justify-center rounded-full border border-zinc-200 bg-white px-6 text-xs font-medium text-zinc-900 active:scale-95 transition hover:bg-zinc-50">
                   查看模板
                 </RouterLink>
               </div>

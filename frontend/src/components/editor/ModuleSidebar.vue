@@ -136,13 +136,13 @@ function addModule(presetType?: string) {
 </script>
 
 <template>
-  <div v-bind="$attrs" class="w-full shrink-0 border-b border-zinc-200/60 bg-white flex flex-col relative z-20">
+  <div v-bind="$attrs" class="w-full shrink-0 border-b border-zinc-200/60 bg-white flex flex-col relative z-raised">
     <!-- Module List -->
     <div class="flex items-center w-full">
       <div class="relative w-full overflow-hidden flex items-center group/nav flex-1">
       <!-- Left Fade & Arrow -->
-      <div v-show="!arrivedState.left" class="absolute left-0 top-0 bottom-0 w-16 bg-gradient-to-r from-white via-white/90 to-transparent z-10 flex items-center justify-start px-2 pointer-events-none transition-opacity duration-300">
-        <button @click="scrollNav('left')" aria-label="向左滚动模块" title="向左滚动" class="pointer-events-auto hidden h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-500 opacity-0 transition-colors hover:text-zinc-900 hover:border-zinc-300 group-hover/nav:opacity-100 md:flex">
+      <div v-show="!arrivedState.left" class="absolute left-0 top-0 bottom-0 w-16 bg-gradient-to-r from-white via-white/90 to-transparent z-base flex items-center justify-start px-2 pointer-events-none transition-opacity duration-150">
+        <button @click="scrollNav('left')" aria-label="向左滚动模块" title="向左滚动" class="pointer-events-auto hidden h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-500 opacity-0 transition hover:text-zinc-900 hover:border-zinc-300 group-hover/nav:opacity-100 md:flex">
           <ChevronLeft class="h-4 w-4" />
         </button>
       </div>
@@ -152,7 +152,7 @@ function addModule(presetType?: string) {
           v-for="element in orderedSections"
           :key="element"
           :data-module="element"
-          class="group relative flex select-none items-center h-8 shrink-0 cursor-pointer rounded-lg border px-3 text-xs font-medium transition-colors duration-200 md:h-9 md:px-3.5 md:text-[13px] outline-none focus:outline-none focus-visible:outline-none"
+          class="group relative flex select-none items-center h-8 shrink-0 cursor-pointer rounded-lg border px-3 text-xs font-medium transition-colors duration-100 md:h-9 md:px-3.5 md:text-[13px] outline-none focus:outline-none focus-visible:outline-none"
           :class="[
             current === element 
               ? 'border-zinc-200/80 bg-zinc-100 text-zinc-900' 
@@ -172,7 +172,7 @@ function addModule(presetType?: string) {
           </span>
 
           <!-- Action Buttons -->
-          <div class="flex items-center justify-end gap-1 transition-opacity duration-200"
+          <div class="flex items-center justify-end gap-1 transition-opacity duration-100"
                :class="[
                  element !== 'basics' ? 'ml-1 -mr-1' : '',
                  !builtIn.includes(element) ? 'w-[44px]' : 'w-[24px]',
@@ -191,7 +191,7 @@ function addModule(presetType?: string) {
 
         <!-- Add Custom Module Button -->
         <button
-          class="group flex h-8 shrink-0 items-center justify-center rounded-lg border border-dashed border-zinc-300 bg-transparent px-3 text-xs font-medium text-zinc-500 transition-colors duration-200 hover:border-zinc-400 hover:bg-zinc-50 hover:text-zinc-800 md:h-9 md:px-3.5 md:text-[13px]"
+          class="group flex h-8 shrink-0 items-center justify-center rounded-lg border border-dashed border-zinc-300 bg-transparent px-3 text-xs font-medium text-zinc-500 transition-colors duration-100 hover:border-zinc-400 hover:bg-zinc-50 hover:text-zinc-800 md:h-9 md:px-3.5 md:text-[13px]"
           @click="showAddModuleModal = true"
         >
           <Plus class="h-3.5 w-3.5 md:h-4 md:w-4 mr-1" />
@@ -200,21 +200,21 @@ function addModule(presetType?: string) {
       </div>
 
         <!-- Right Fade & Arrow -->
-        <div v-show="!arrivedState.right" class="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-white via-white/80 to-transparent z-10 flex items-center justify-end px-2 pointer-events-none transition-opacity duration-300">
-          <button @click="scrollNav('right')" aria-label="向右滚动模块" title="向右滚动" class="pointer-events-auto hidden h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-500 opacity-0 transition-colors hover:text-zinc-900 hover:border-zinc-300 group-hover/nav:opacity-100 md:flex">
+        <div v-show="!arrivedState.right" class="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-white via-white/80 to-transparent z-base flex items-center justify-end px-2 pointer-events-none transition-opacity duration-150">
+          <button @click="scrollNav('right')" aria-label="向右滚动模块" title="向右滚动" class="pointer-events-auto hidden h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-500 opacity-0 transition hover:text-zinc-900 hover:border-zinc-300 group-hover/nav:opacity-100 md:flex">
             <ChevronRight class="h-4 w-4" />
           </button>
         </div>
       </div>
 
       <!-- Settings / Sort Button (Sticky) -->
-      <div class="relative z-20 flex items-center justify-center pl-0 pr-2 md:pr-3 shrink-0 bg-white">
+      <div class="relative z-raised flex items-center justify-center pl-0 pr-2 md:pr-3 shrink-0 bg-white">
         <button
-          class="group flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-zinc-400 transition-colors duration-200 hover:bg-zinc-100 hover:text-zinc-700 md:h-9 md:w-9"
+          class="group flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-zinc-400 transition-colors duration-100 hover:bg-zinc-100 hover:text-zinc-700 md:h-9 md:w-9"
           @click="showSortModal = true"
           title="排序与管理"
         >
-          <Settings class="h-4 w-4 md:h-[18px] md:w-[18px] transition-transform duration-300 group-hover:rotate-90" stroke-width="1.5" />
+          <Settings class="h-4 w-4 md:h-[18px] md:w-[18px] transition-transform duration-100 group-hover:rotate-90" stroke-width="1.5" />
         </button>
       </div>
     </div>
@@ -223,14 +223,14 @@ function addModule(presetType?: string) {
   <!-- Mobile Sort Modal -->
   <Teleport to="body">
     <Transition
-      enter-active-class="transition duration-200 ease-out"
+      enter-active-class="transition duration-150 ease-out"
       enter-from-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
       enter-to-class="opacity-100 translate-y-0 sm:scale-100"
       leave-active-class="transition duration-150 ease-in"
       leave-from-class="opacity-100 translate-y-0 sm:scale-100"
       leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
     >
-      <div v-if="showSortModal" class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-zinc-950/40 backdrop-blur-sm" @click.self="showSortModal = false">
+      <div v-if="showSortModal" class="fixed inset-0 z-modal flex items-end sm:items-center justify-center p-0 sm:p-4 bg-zinc-950/40 backdrop-blur-sm" @click.self="showSortModal = false">
         <div class="bg-white rounded-t-2xl sm:rounded-2xl shadow-wb-popup w-full max-w-sm overflow-hidden flex flex-col max-h-[85vh]">
           <div class="px-5 py-4 border-b border-zinc-100 flex items-center justify-between shrink-0">
             <h3 class="font-semibold text-zinc-900">模块排序与管理</h3>
@@ -271,7 +271,7 @@ function addModule(presetType?: string) {
           </div>
           
           <div class="p-4 border-t border-zinc-100 bg-white shrink-0 pb-safe grid grid-cols-2 gap-3">
-            <button @click="showAddModuleModal = true" class="w-full h-11 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border border-zinc-200/80 rounded-xl font-medium text-[15px] flex items-center justify-center gap-1.5 transition-all active:scale-[0.98]">
+            <button @click="showAddModuleModal = true" class="w-full h-11 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border border-zinc-200/80 rounded-xl font-medium text-[15px] flex items-center justify-center gap-1.5 transition active:scale-[0.98]">
               <Plus class="w-4 h-4" />
               添加模块
             </button>
@@ -286,14 +286,14 @@ function addModule(presetType?: string) {
 
   <Teleport to="body">
     <Transition
-      enter-active-class="transition duration-200 ease-out"
+      enter-active-class="transition duration-150 ease-out"
       enter-from-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
       enter-to-class="opacity-100 translate-y-0 sm:scale-100"
       leave-active-class="transition duration-150 ease-in"
       leave-from-class="opacity-100 translate-y-0 sm:scale-100"
       leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
     >
-      <div v-if="showAddModuleModal" class="fixed inset-0 z-[110] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-zinc-950/40 backdrop-blur-sm" @click.self="showAddModuleModal = false">
+      <div v-if="showAddModuleModal" class="fixed inset-0 z-overlay flex items-end sm:items-center justify-center p-0 sm:p-4 bg-zinc-950/40 backdrop-blur-sm" @click.self="showAddModuleModal = false">
         <div class="bg-white rounded-t-2xl sm:rounded-2xl shadow-wb-popup w-full max-w-2xl overflow-hidden flex flex-col max-h-[88vh]">
           <div class="px-5 py-4 border-b border-zinc-100 flex items-center justify-between shrink-0">
             <h3 class="font-semibold text-zinc-900">添加模块</h3>
@@ -319,7 +319,7 @@ function addModule(presetType?: string) {
             </section>
           </div>
           <div class="p-4 border-t border-zinc-100 bg-white shrink-0 pb-safe">
-            <button @click="addModule()" class="w-full h-11 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border border-dashed border-zinc-300 rounded-xl font-medium text-[15px] flex items-center justify-center gap-1.5 transition-all active:scale-[0.98]">
+            <button @click="addModule()" class="w-full h-11 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border border-dashed border-zinc-300 rounded-xl font-medium text-[15px] flex items-center justify-center gap-1.5 transition active:scale-[0.98]">
               <Plus class="w-4 h-4" />
               空白自定义模块
             </button>

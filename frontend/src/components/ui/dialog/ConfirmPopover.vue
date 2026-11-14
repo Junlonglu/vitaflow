@@ -139,7 +139,7 @@ onBeforeUnmount(unbind)
 
 <template>
   <Teleport to="body">
-    <div v-if="open" class="fixed inset-0 z-[210]" @mousedown.self="close" @contextmenu.prevent="close">
+    <div v-if="open" class="fixed inset-0 z-overlay" @mousedown.self="close" @contextmenu.prevent="close">
       <div
         ref="cardRef"
         class="fixed rounded-xl border border-zinc-200 bg-white p-4 shadow-wb-popup"

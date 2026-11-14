@@ -56,7 +56,7 @@ function formatDate(value?: string) {
 
     <template #footer>
       <label class="group flex cursor-pointer select-none items-center gap-2.5 text-sm font-medium text-zinc-600 transition-colors hover:text-zinc-900">
-        <div class="relative flex h-5 w-5 items-center justify-center rounded-md border border-zinc-300 bg-white transition-all duration-200 group-hover:border-zinc-400" :class="{ '!border-zinc-900 !bg-zinc-900': neverShowAgain }">
+        <div class="relative flex h-5 w-5 items-center justify-center rounded-md border border-zinc-300 bg-white transition-colors duration-100 group-hover:border-zinc-400" :class="{ '!border-zinc-900 !bg-zinc-900': neverShowAgain }">
           <Check v-if="neverShowAgain" class="h-3.5 w-3.5 text-white stroke-[3]" />
         </div>
         <input v-model="neverShowAgain" type="checkbox" class="sr-only" />

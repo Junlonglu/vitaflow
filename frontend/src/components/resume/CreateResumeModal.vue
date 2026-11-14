@@ -271,11 +271,11 @@ watch(
               <article
                 v-for="item in pagedTemplates"
                 :key="item.template_id"
-                class="group relative flex cursor-pointer flex-col rounded-xl bg-white p-2 ring-1 ring-zinc-200/70 transition-all duration-150 hover:ring-zinc-300 sm:p-2.5"
+                class="group relative flex cursor-pointer flex-col rounded-xl bg-white p-2 ring-1 ring-zinc-200/70 transition duration-150 hover:ring-zinc-300 sm:p-2.5"
                 @click="emit('selectTemplate', item.template_id)"
               >
                 <div class="pointer-events-none relative aspect-[1/1.1] w-full overflow-hidden rounded-lg border border-zinc-100/80 bg-zinc-50">
-                  <div class="absolute inset-x-0 top-0 w-full transform transition-transform duration-700 ease-out group-hover:scale-[1.05]">
+                  <div class="absolute inset-x-0 top-0 w-full transform transition-transform duration-150 ease-out group-hover:scale-[1.05]">
                     <TemplatePreview :html="item.preview_html" />
                   </div>
                   <div class="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-zinc-50 via-zinc-50/80 to-transparent"></div>
@@ -284,10 +284,10 @@ watch(
                 <div class="mb-1 mt-3 flex min-h-[24px] items-center justify-between gap-2 px-2 sm:px-3">
                   <h2 class="flex-1 truncate text-xs font-medium tracking-tight text-zinc-900 transition-colors group-hover:text-zinc-950 sm:text-sm">{{ item.name }}</h2>
                   <div class="relative flex shrink-0 items-center">
-                    <span class="inline-flex shrink-0 items-center rounded-full bg-zinc-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-zinc-600 transition-all duration-200 group-hover:scale-95 group-hover:opacity-0 group-hover:pointer-events-none sm:px-2.5 sm:py-1 sm:text-[10px]">
+                    <span class="inline-flex shrink-0 items-center rounded-full bg-zinc-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-zinc-600 transition duration-100 group-hover:scale-95 group-hover:opacity-0 group-hover:pointer-events-none sm:px-2.5 sm:py-1 sm:text-[10px]">
                       {{ item.category }}
                     </span>
-                    <span class="absolute right-0 hidden translate-x-1 shrink-0 items-center gap-1 whitespace-nowrap text-[11px] font-medium text-blue-600 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100 sm:flex">
+                    <span class="absolute right-0 hidden translate-x-1 shrink-0 items-center gap-1 whitespace-nowrap text-[11px] font-medium text-blue-600 opacity-0 transition duration-100 group-hover:translate-x-0 group-hover:opacity-100 sm:flex">
                       {{ templateSelectMode === 'import' ? '应用导入' : '使用该版式' }}
                     </span>
                   </div>
@@ -295,7 +295,7 @@ watch(
               </article>
             </div>
 
-            <div v-if="!isImportRendering && templates.length > 8" class="mt-8 flex flex-col items-center justify-between gap-4 transition-all duration-300 sm:flex-row sm:rounded-xl sm:bg-white sm:p-3 sm:pl-7 sm:pr-3 sm:ring-1 sm:ring-zinc-200/70 sm:">
+            <div v-if="!isImportRendering && templates.length > 8" class="mt-8 flex flex-col items-center justify-between gap-4 transition duration-150 sm:flex-row sm:rounded-xl sm:bg-white sm:p-3 sm:pl-7 sm:pr-3 sm:ring-1 sm:ring-zinc-200/70 sm:">
               <div class="hidden items-center gap-3 text-sm text-zinc-500 sm:flex">
                 <span>共 <strong class="font-semibold text-zinc-900">{{ templates.length }}</strong> 款模板</span>
                 <span class="text-zinc-200">|</span>

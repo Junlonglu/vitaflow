@@ -440,7 +440,7 @@ function formatUpdated(value?: string) {
 
 <template>
   <aside
-    class="fixed inset-y-0 left-0 z-[60] flex h-full w-[272px] shrink-0 flex-col border-r border-zinc-200/60 bg-zinc-50 shadow-wb-popup transition-transform duration-200 ease-out md:static md:z-auto md:w-[248px] md:translate-x-0 md:bg-zinc-50/60 "
+    class="fixed inset-y-0 left-0 z-drawer flex h-full w-[272px] shrink-0 flex-col border-r border-zinc-200/60 bg-zinc-50 shadow-wb-popup transition-transform duration-150 ease-out md:static md:z-auto md:w-[248px] md:translate-x-0 md:bg-zinc-50/60 "
     :class="drawerOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'"
   >
     <div class="shrink-0 px-3 pt-3">
@@ -704,7 +704,7 @@ function formatUpdated(value?: string) {
   <Teleport to="body">
     <div
       v-if="resumeMenu.open"
-      class="fixed inset-0 z-[200]"
+      class="fixed inset-0 z-scrim"
       @mousedown.self="closeResumeMenu"
       @contextmenu.prevent="closeResumeMenu"
       @wheel.prevent="closeResumeMenu"

@@ -286,10 +286,10 @@ onUnmounted(() => {
       <div class="h-3.5 md:h-4 w-[1px] bg-zinc-200 shrink-0 hidden sm:block"></div>
       <div class="flex flex-wrap sm:flex-nowrap items-center gap-0.5 md:gap-1 shrink-0" @mousedown.prevent>
         <div class="w-16 md:w-24 shrink-0">
-          <Select v-model="currentBlockType" :options="blockTypeOptions" ghost class="!h-7 md:!h-8 !text-xs !bg-transparent !border-none !shadow-none !px-1 md:!px-2 !rounded-lg !font-medium !text-zinc-600 hover:!bg-zinc-300 hover:!text-zinc-950 data-[state=open]:!bg-zinc-300 data-[state=open]:!text-zinc-950 data-[state=open]:!ring-0 !transition-all" @change="handleBlockTypeChange" />
+          <Select v-model="currentBlockType" :options="blockTypeOptions" ghost class="!h-7 md:!h-8 !text-xs !bg-transparent !border-none !shadow-none !px-1 md:!px-2 !rounded-lg !font-medium !text-zinc-600 hover:!bg-zinc-300 hover:!text-zinc-950 data-[state=open]:!bg-zinc-300 data-[state=open]:!text-zinc-950 data-[state=open]:!ring-0 !transition" @change="handleBlockTypeChange" />
         </div>
         <div class="w-[3.25rem] md:w-20 shrink-0">
-          <Select v-model="currentFontSize" :options="fontSizeOptions" ghost class="!h-7 md:!h-8 !text-xs !bg-transparent !border-none !shadow-none !px-1 md:!px-2 !rounded-lg !font-medium !text-zinc-600 hover:!bg-zinc-300 hover:!text-zinc-950 data-[state=open]:!bg-zinc-300 data-[state=open]:!text-zinc-950 data-[state=open]:!ring-0 !transition-all" @change="handleFontSizeChange" />
+          <Select v-model="currentFontSize" :options="fontSizeOptions" ghost class="!h-7 md:!h-8 !text-xs !bg-transparent !border-none !shadow-none !px-1 md:!px-2 !rounded-lg !font-medium !text-zinc-600 hover:!bg-zinc-300 hover:!text-zinc-950 data-[state=open]:!bg-zinc-300 data-[state=open]:!text-zinc-950 data-[state=open]:!ring-0 !transition" @change="handleFontSizeChange" />
         </div>
         <label class="editor-button !rounded-lg relative cursor-pointer" title="文字颜色" @mousedown.prevent><span class="text-xs md:text-sm font-bold">A</span><span class="absolute bottom-1 h-0.5 w-3 md:w-4 bg-gradient-to-r from-red-500 via-green-500 to-blue-500"></span><input type="color" class="absolute inset-0 cursor-pointer opacity-0" @input="command('foreColor', ($event.target as HTMLInputElement).value)" /></label>
       </div>
@@ -333,7 +333,7 @@ onUnmounted(() => {
     <p v-if="imageError" class="border-t border-red-100 bg-red-50 px-3 py-2 text-xs text-red-600">{{ imageError }}</p>
 
     <Transition name="fade">
-      <div v-if="linkDialogOpen" class="fixed inset-0 z-[90] flex items-center justify-center bg-zinc-950/45 p-4 backdrop-blur-sm" @click.self="linkDialogOpen = false">
+      <div v-if="linkDialogOpen" class="fixed inset-0 z-modal flex items-center justify-center bg-zinc-950/45 p-4 backdrop-blur-sm" @click.self="linkDialogOpen = false">
         <section class="flex w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup">
           <header class="flex items-center justify-between border-b border-zinc-100 px-6 py-4">
             <h3 class="font-semibold text-zinc-900">添加链接</h3>

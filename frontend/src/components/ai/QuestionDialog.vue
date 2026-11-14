@@ -65,7 +65,7 @@ function submit() {
 
 <template>
   <Teleport to="body">
-    <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" @click.self="emit('close')">
+    <div v-if="open" class="fixed inset-0 z-modal flex items-center justify-center bg-black/50 p-4" @click.self="emit('close')">
       <div class="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup">
         <div class="flex items-center gap-2 border-b border-zinc-100 px-5 py-4">
           <div class="flex-1">
@@ -97,7 +97,7 @@ function submit() {
             v-model="answers[step]"
             rows="4"
             :placeholder="current?.hint || '填写相关经历或材料，没有可留空'"
-            class="mt-3 w-full resize-none rounded-xl border border-zinc-200 px-3 py-2.5 text-sm leading-relaxed text-zinc-800 placeholder:text-zinc-400 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            class="mt-3 w-full resize-none rounded-xl border border-zinc-200 px-3 py-2.5 text-sm leading-relaxed text-zinc-800 placeholder:text-zinc-400 outline-none transition focus:border-zinc-900"
           ></textarea>
         </div>
 

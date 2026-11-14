@@ -35,18 +35,18 @@ defineEmits<{
           <tbody>
             <tr v-for="item in rules" :key="item.feature_type" class="border-b border-zinc-100 last:border-0">
               <td class="px-5 py-4 align-top">
-                <input v-model="item.display_name" class="block h-9 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
+                <input v-model="item.display_name" class="block h-9 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
                 <p class="mt-1 text-xs text-zinc-400">{{ item.feature_type }}</p>
               </td>
               <td class="px-5 py-4 align-top">
-                <input v-model.number="item.points_per_call" type="number" min="0" step="0.01" class="block h-9 w-32 rounded-lg border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
+                <input v-model.number="item.points_per_call" type="number" min="0" step="0.01" class="block h-9 w-32 rounded-lg border border-zinc-200 bg-white px-3 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
               </td>
               <td class="px-5 py-4 align-top">
-                <input v-model.number="item.points_per_million_input_tokens" type="number" min="0" step="0.01" class="block h-9 w-36 rounded-lg border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
+                <input v-model.number="item.points_per_million_input_tokens" type="number" min="0" step="0.01" class="block h-9 w-36 rounded-lg border border-zinc-200 bg-white px-3 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
                 <p class="mt-1 text-xs text-zinc-400">按输入 Token 折算</p>
               </td>
               <td class="px-5 py-4 align-top">
-                <input v-model.number="item.points_per_million_output_tokens" type="number" min="0" step="0.01" class="block h-9 w-36 rounded-lg border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
+                <input v-model.number="item.points_per_million_output_tokens" type="number" min="0" step="0.01" class="block h-9 w-36 rounded-lg border border-zinc-200 bg-white px-3 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
                 <p class="mt-1 text-xs text-zinc-400">按输出 Token 折算</p>
               </td>
               <td class="px-5 py-4 align-top">

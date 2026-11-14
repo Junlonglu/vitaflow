@@ -26,7 +26,7 @@ function logout() {
 
 <template>
   <div class="min-h-screen bg-zinc-50/50">
-    <header class="sticky top-0 z-20 border-b border-zinc-200/60 bg-white/80 backdrop-blur-md">
+    <header class="sticky top-0 z-sticky border-b border-zinc-200/60 bg-white/80 backdrop-blur-md">
       <div class="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
         <RouterLink to="/" class="inline-flex items-center rounded-lg transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500" @click="mobileMenuOpen = false">
           <BrandLogo />
@@ -156,7 +156,7 @@ function logout() {
 
       <!-- Mobile Dropdown Menu (Logged In) -->
       <Transition name="mobile-menu">
-        <div v-if="loggedIn && mobileMenuOpen" class="sm:hidden absolute top-full left-0 right-0 border-b border-zinc-200/80 bg-white/95 backdrop-blur-xl px-4 py-4 space-y-1 shadow-wb-popup z-50">
+        <div v-if="loggedIn && mobileMenuOpen" class="sm:hidden absolute top-full left-0 right-0 border-b border-zinc-200/80 bg-white/95 backdrop-blur-xl px-4 py-4 space-y-1 shadow-wb-popup z-popover">
           <RouterLink 
             class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 transition-colors"
             :class="{ 'bg-zinc-100 text-zinc-900': route.path === '/templates' }"

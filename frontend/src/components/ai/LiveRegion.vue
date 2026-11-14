@@ -142,7 +142,7 @@ function overlayToBottom() {
     <Teleport to="body">
       <div
         v-if="fullscreen"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 md:p-8"
+        class="fixed inset-0 z-modal flex items-center justify-center bg-black/60 p-4 md:p-8"
         @click.self="closeFullscreen"
       >
         <div
@@ -167,7 +167,7 @@ function overlayToBottom() {
             <slot />
           </div>
           <div
-            class="pointer-events-none absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 transition-opacity duration-200"
+            class="pointer-events-none absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 transition-opacity duration-150"
             :class="overlayControls ? 'opacity-100' : 'opacity-0'"
           >
             <button

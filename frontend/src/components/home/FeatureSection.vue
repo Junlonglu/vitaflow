@@ -33,9 +33,9 @@ const features = [
       </div>
       <div class="mx-auto mt-8 sm:mt-20 lg:mt-24 lg:max-w-none">
         <div class="grid max-w-none grid-cols-4 gap-2 sm:gap-8">
-          <div v-for="feature in features" :key="feature.title" class="group relative flex flex-col items-center justify-center text-center p-3 sm:p-8 rounded-2xl sm:rounded-3xl bg-white ring-1 ring-zinc-200/60 hover:ring-zinc-300 transition-all duration-150 aspect-square sm:aspect-auto">
-            <div class="mb-2 sm:mb-6 flex h-10 w-10 sm:h-14 sm:w-14 items-center justify-center rounded-xl sm:rounded-2xl sm:bg-zinc-50 sm:border sm:border-zinc-100 transition-transform duration-300 group-hover:scale-105">
-              <component :is="feature.icon" class="h-4.5 w-4.5 sm:h-6 sm:w-6 text-zinc-700 transition-colors duration-300 group-hover:text-zinc-900" />
+          <div v-for="feature in features" :key="feature.title" class="group relative flex flex-col items-center justify-center text-center p-3 sm:p-8 rounded-2xl sm:rounded-3xl bg-white ring-1 ring-zinc-200/60 hover:ring-zinc-300 transition duration-150 aspect-square sm:aspect-auto">
+            <div class="mb-2 sm:mb-6 flex h-10 w-10 sm:h-14 sm:w-14 items-center justify-center rounded-xl sm:rounded-2xl sm:bg-zinc-50 sm:border sm:border-zinc-100 transition-transform duration-100 group-hover:scale-105">
+              <component :is="feature.icon" class="h-4.5 w-4.5 sm:h-6 sm:w-6 text-zinc-700 transition-colors duration-100 group-hover:text-zinc-900" />
             </div>
             <h3 class="text-xs sm:text-lg font-semibold text-zinc-900 tracking-tight whitespace-nowrap">{{ feature.title }}</h3>
             <p class="hidden sm:block mt-3 text-sm text-zinc-500 leading-relaxed font-normal">{{ feature.desc }}</p>

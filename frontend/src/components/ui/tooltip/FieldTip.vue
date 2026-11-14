@@ -27,7 +27,7 @@ defineProps<{ text: string }>()
           side="top"
           align="center"
           :side-offset="6"
-          class="z-50 max-w-64 rounded-lg bg-zinc-900 px-3 py-2 text-xs leading-relaxed text-zinc-50 shadow-wb-popup"
+          class="z-popover max-w-64 rounded-lg bg-zinc-900 px-3 py-2 text-xs leading-relaxed text-zinc-50 shadow-wb-popup"
         >
           {{ text }}
           <TooltipArrow class="fill-zinc-900" :width="10" :height="5" />

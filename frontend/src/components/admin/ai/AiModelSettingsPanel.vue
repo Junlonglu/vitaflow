@@ -75,7 +75,7 @@ const catalogModelOptions = computed(() => [
         <button
           v-for="item in configs"
           :key="item.id"
-          class="group relative w-full rounded-xl border p-4 text-left transition-all"
+          class="group relative w-full rounded-xl border p-4 text-left transition-colors"
           :class="item.id === configForm.id ? 'border-zinc-900 bg-zinc-50/80 ring-1 ring-zinc-900' : 'border-zinc-200 bg-white hover:border-zinc-300 hover:bg-zinc-50/40'"
           @click="$emit('reset', item)"
         >
@@ -86,10 +86,10 @@ const catalogModelOptions = computed(() => [
             </div>
             <div class="flex shrink-0 items-center gap-1">
               <div v-if="!item.is_active" class="flex w-7 shrink-0 items-center justify-center">
-                <button class="touch-always-visible rounded-full p-1.5 text-zinc-400 opacity-0 transition-all hover:bg-red-50 hover:text-red-600 focus:opacity-100 active:scale-95 group-hover:opacity-100" title="删除策略" @click.stop="$emit('delete', item)"><Trash2 class="h-3.5 w-3.5" /></button>
+                <button class="touch-always-visible rounded-full p-1.5 text-zinc-400 opacity-0 transition hover:bg-red-50 hover:text-red-600 focus:opacity-100 active:scale-95 group-hover:opacity-100" title="删除策略" @click.stop="$emit('delete', item)"><Trash2 class="h-3.5 w-3.5" /></button>
               </div>
               <span v-if="item.is_active" class="flex w-[90px] items-center justify-center gap-1.5 whitespace-nowrap rounded-full border border-emerald-200/60 bg-emerald-50 py-1 text-xs font-medium text-emerald-700"><span class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500"></span>使用中</span>
-              <button v-else class="flex w-[90px] items-center justify-center gap-1 whitespace-nowrap rounded-full border border-zinc-200/60 bg-zinc-100 py-1 text-xs font-medium text-zinc-600 transition-all hover:border-zinc-900 hover:bg-zinc-900 hover:text-white active:scale-95" @click.stop="$emit('activate', item)"><Zap class="h-3 w-3" />设为启用</button>
+              <button v-else class="flex w-[90px] items-center justify-center gap-1 whitespace-nowrap rounded-full border border-zinc-200/60 bg-zinc-100 py-1 text-xs font-medium text-zinc-600 transition hover:border-zinc-900 hover:bg-zinc-900 hover:text-white active:scale-95" @click.stop="$emit('activate', item)"><Zap class="h-3 w-3" />设为启用</button>
             </div>
           </div>
           <div class="mt-3.5 flex flex-wrap gap-1.5">
@@ -106,26 +106,26 @@ const catalogModelOptions = computed(() => [
     <article class="min-w-0 rounded-xl border border-zinc-200 bg-white p-5">
       <h3 class="text-lg font-semibold text-zinc-900">{{ configForm.id ? "编辑模型策略" : "新增模型策略" }}</h3>
       <div class="mt-5 space-y-4">
-        <label class="block space-y-1.5 text-sm font-medium text-zinc-700">策略名称<input v-model="configForm.name" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
+        <label class="block space-y-1.5 text-sm font-medium text-zinc-700">策略名称<input v-model="configForm.name" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
         <label class="block space-y-1.5 text-sm font-medium text-zinc-700">目录模型
           <Select v-if="catalogModels.length" v-model="configForm.model_ref" :options="catalogModelOptions" placeholder="（未选择）" class="!h-10 !rounded-xl text-sm" />
-          <input v-else v-model="configForm.model_ref" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="provider/model，例如 faux/demo" />
+          <input v-else v-model="configForm.model_ref" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="provider/model，例如 faux/demo" />
           <span class="block text-xs font-normal text-zinc-400">{{ catalogModels.length ? "模型来自 AI 服务目录（模型目录板块维护）；对话按它路由模型，计费也按它归集" : "模型目录暂不可用，请检查 AI 服务后刷新" }}</span>
         </label>
         <div class="grid gap-4 pt-1 sm:grid-cols-2">
-          <label class="space-y-1.5 text-sm font-medium text-zinc-700"><span class="flex items-center gap-1">历史消息条数<FieldTip text="对话每轮注入模型的历史消息条数上限（用户与助手消息合计），超出部分模型不可见；简历正文经工具按需读取，不受此限制。未选择策略时回退全局默认（12 条，硬顶 40）。" /></span><input v-model.number="configForm.context_messages" type="number" min="1" max="40" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
-          <label class="space-y-1.5 text-sm font-medium text-zinc-700"><span class="flex items-center gap-1">排序值<FieldTip text="数字越小越靠前：在「助手可选」且启用的策略中，排序值最小的一个会成为用户未手动选模型时的默认对话模型；策略列表顺序也按它升序。" /></span><input v-model.number="configForm.sort_order" type="number" min="0" max="9999" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
+          <label class="space-y-1.5 text-sm font-medium text-zinc-700"><span class="flex items-center gap-1">历史消息条数<FieldTip text="对话每轮注入模型的历史消息条数上限（用户与助手消息合计），超出部分模型不可见；简历正文经工具按需读取，不受此限制。未选择策略时回退全局默认（12 条，硬顶 40）。" /></span><input v-model.number="configForm.context_messages" type="number" min="1" max="40" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
+          <label class="space-y-1.5 text-sm font-medium text-zinc-700"><span class="flex items-center gap-1">排序值<FieldTip text="数字越小越靠前：在「助手可选」且启用的策略中，排序值最小的一个会成为用户未手动选模型时的默认对话模型；策略列表顺序也按它升序。" /></span><input v-model.number="configForm.sort_order" type="number" min="0" max="9999" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
         </div>
         <div class="grid gap-3 pt-2 sm:grid-cols-2">
           <label class="group flex cursor-pointer select-none items-center gap-2.5 rounded-xl border border-zinc-200 bg-zinc-50/50 p-3 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-50 hover:text-zinc-900">
-            <div class="relative flex h-5 w-5 items-center justify-center rounded-md border border-zinc-300 bg-white transition-all duration-200 group-hover:border-zinc-400" :class="{ '!border-zinc-900 !bg-zinc-900': configForm.is_chat_selectable }">
+            <div class="relative flex h-5 w-5 items-center justify-center rounded-md border border-zinc-300 bg-white transition-colors duration-100 group-hover:border-zinc-400" :class="{ '!border-zinc-900 !bg-zinc-900': configForm.is_chat_selectable }">
               <Check v-if="configForm.is_chat_selectable" class="h-3.5 w-3.5 text-white stroke-[3]" />
             </div>
             <input v-model="configForm.is_chat_selectable" type="checkbox" class="sr-only" />
             <span class="text-zinc-800 group-hover:text-zinc-900">AI 助手可选</span>
           </label>
           <label class="group flex cursor-pointer select-none items-center gap-2.5 rounded-xl border border-zinc-200 bg-zinc-50/50 p-3 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-50 hover:text-zinc-900">
-            <div class="relative flex h-5 w-5 items-center justify-center rounded-md border border-zinc-300 bg-white transition-all duration-200 group-hover:border-zinc-400" :class="{ '!border-zinc-900 !bg-zinc-900': configForm.is_active }">
+            <div class="relative flex h-5 w-5 items-center justify-center rounded-md border border-zinc-300 bg-white transition-colors duration-100 group-hover:border-zinc-400" :class="{ '!border-zinc-900 !bg-zinc-900': configForm.is_active }">
               <Check v-if="configForm.is_active" class="h-3.5 w-3.5 text-white stroke-[3]" />
             </div>
             <input v-model="configForm.is_active" type="checkbox" class="sr-only" />
@@ -135,9 +135,9 @@ const catalogModelOptions = computed(() => [
         <div class="rounded-xl border border-zinc-200 bg-zinc-50/60 p-4">
           <p class="text-sm font-semibold text-zinc-800">AI 助手对话价格</p>
           <div class="mt-3 grid gap-3 sm:grid-cols-3">
-            <label class="space-y-1.5 text-xs font-medium text-zinc-600">每次扣点<input v-model="configForm.chat_points_per_call" type="number" min="0" step="0.01" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="默认" /></label>
-            <label class="space-y-1.5 text-xs font-medium text-zinc-600">输入百万 Token<input v-model="configForm.chat_points_per_million_input_tokens" type="number" min="0" step="0.01" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="默认" /></label>
-            <label class="space-y-1.5 text-xs font-medium text-zinc-600">输出百万 Token<input v-model="configForm.chat_points_per_million_output_tokens" type="number" min="0" step="0.01" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="默认" /></label>
+            <label class="space-y-1.5 text-xs font-medium text-zinc-600">每次扣点<input v-model="configForm.chat_points_per_call" type="number" min="0" step="0.01" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="默认" /></label>
+            <label class="space-y-1.5 text-xs font-medium text-zinc-600">输入百万 Token<input v-model="configForm.chat_points_per_million_input_tokens" type="number" min="0" step="0.01" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="默认" /></label>
+            <label class="space-y-1.5 text-xs font-medium text-zinc-600">输出百万 Token<input v-model="configForm.chat_points_per_million_output_tokens" type="number" min="0" step="0.01" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="默认" /></label>
           </div>
         </div>
         <div class="pt-2">

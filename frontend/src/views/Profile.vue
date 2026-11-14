@@ -197,7 +197,7 @@ const navItems = [
                 v-for="item in navItems" 
                 :key="item.id"
                 @click="activeTab = item.id"
-                class="flex w-full items-center gap-3.5 rounded-xl px-4 py-3.5 text-left text-sm font-medium transition-all duration-200"
+                class="flex w-full items-center gap-3.5 rounded-xl px-4 py-3.5 text-left text-sm font-medium transition-colors duration-100"
                 :class="activeTab === item.id ? 'bg-zinc-900 text-white font-semibold ' : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900'"
               >
                 <component :is="item.icon" class="h-4.5 w-4.5" />
@@ -211,7 +211,7 @@ const navItems = [
                 v-for="item in navItems" 
                 :key="item.id"
                 @click="activeTab = item.id"
-                class="flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 px-3 text-xs font-medium whitespace-nowrap shrink-0 transition-all duration-200"
+                class="flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 px-3 text-xs font-medium whitespace-nowrap shrink-0 transition-colors duration-100"
                 :class="activeTab === item.id ? 'bg-zinc-900 text-white font-semibold ' : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900'"
               >
                 <component :is="item.icon" class="h-4 w-4" />
@@ -239,7 +239,7 @@ const navItems = [
 
                 <div class="space-y-2">
                   <Label class="text-zinc-700 text-xs font-medium">用户名</Label>
-                  <Input v-model="username" maxlength="50" placeholder="请输入用户名" class="border-zinc-200 focus-visible:ring-zinc-900 transition-all h-11 w-full rounded-xl" />
+                  <Input v-model="username" maxlength="50" placeholder="请输入用户名" class="border-zinc-200 focus-visible:ring-zinc-900 transition-colors h-11 w-full rounded-xl" />
                 </div>
               </div>
             </div>
@@ -262,15 +262,15 @@ const navItems = [
               <div class="space-y-6 max-w-2xl">
                 <div class="space-y-2">
                   <Label class="text-zinc-700 text-xs font-medium">当前密码</Label>
-                  <Input v-model="passwordForm.current_password" type="password" placeholder="当前密码" class="border-zinc-200 focus-visible:ring-zinc-900 transition-all h-11 w-full rounded-xl" />
+                  <Input v-model="passwordForm.current_password" type="password" placeholder="当前密码" class="border-zinc-200 focus-visible:ring-zinc-900 transition-colors h-11 w-full rounded-xl" />
                 </div>
                 <div class="space-y-2">
                   <Label class="text-zinc-700 text-xs font-medium">新密码</Label>
-                  <Input v-model="passwordForm.new_password" type="password" placeholder="至少 6 位新密码" class="border-zinc-200 focus-visible:ring-zinc-900 transition-all h-11 w-full rounded-xl" />
+                  <Input v-model="passwordForm.new_password" type="password" placeholder="至少 6 位新密码" class="border-zinc-200 focus-visible:ring-zinc-900 transition-colors h-11 w-full rounded-xl" />
                 </div>
                 <div class="space-y-2">
                   <Label class="text-zinc-700 text-xs font-medium">确认新密码</Label>
-                  <Input v-model="passwordForm.confirm_password" type="password" placeholder="再次输入新密码" class="border-zinc-200 focus-visible:ring-zinc-900 transition-all h-11 w-full rounded-xl" @keyup.enter="savePassword" />
+                  <Input v-model="passwordForm.confirm_password" type="password" placeholder="再次输入新密码" class="border-zinc-200 focus-visible:ring-zinc-900 transition-colors h-11 w-full rounded-xl" @keyup.enter="savePassword" />
                 </div>
               </div>
             </div>
@@ -310,11 +310,11 @@ const navItems = [
                 <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
                   <div class="space-y-2">
                     <Label class="text-xs font-medium text-zinc-700">所属模块</Label>
-                    <Select v-model="feedbackCategory" :options="categoryOptions" class="h-11 w-full rounded-xl border-zinc-200 transition-all focus:border-zinc-900 focus:ring-zinc-900" />
+                    <Select v-model="feedbackCategory" :options="categoryOptions" class="h-11 w-full rounded-xl border-zinc-200 transition-colors focus:border-zinc-900 focus:ring-zinc-900" />
                   </div>
                   <div class="space-y-2">
                     <Label class="text-xs font-medium text-zinc-700">联系方式 (可选)</Label>
-                    <Input v-model="feedbackContact" placeholder="手机号、微信或邮箱" class="h-11 w-full rounded-xl border-zinc-200 transition-all focus-visible:ring-zinc-900" />
+                    <Input v-model="feedbackContact" placeholder="手机号、微信或邮箱" class="h-11 w-full rounded-xl border-zinc-200 transition-colors focus-visible:ring-zinc-900" />
                   </div>
                 </div>
                 <div class="space-y-2">
@@ -396,14 +396,14 @@ const navItems = [
 
     <Teleport to="body">
       <Transition
-        enter-active-class="transition duration-200 ease-out"
+        enter-active-class="transition duration-150 ease-out"
         enter-from-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
         enter-to-class="opacity-100 translate-y-0 sm:scale-100"
         leave-active-class="transition duration-150 ease-in"
         leave-from-class="opacity-100 translate-y-0 sm:scale-100"
         leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
       >
-        <div v-if="feedbackDialog && selectedFeedback" class="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-950/40 p-4 backdrop-blur-sm" @click.self="closeFeedbackDialog">
+        <div v-if="feedbackDialog && selectedFeedback" class="fixed inset-0 z-modal flex items-center justify-center bg-zinc-950/40 p-4 backdrop-blur-sm" @click.self="closeFeedbackDialog">
           <div class="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup">
             <div class="flex items-start justify-between gap-4 border-b border-zinc-100 px-6 py-4">
               <div class="min-w-0">

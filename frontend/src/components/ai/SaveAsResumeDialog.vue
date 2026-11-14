@@ -31,7 +31,7 @@ function confirm() {
 
 <template>
   <Teleport to="body">
-    <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" @click.self="emit('close')">
+    <div v-if="open" class="fixed inset-0 z-modal flex items-center justify-center bg-black/50 p-4" @click.self="emit('close')">
       <div class="w-full max-w-md rounded-2xl bg-white p-5 shadow-wb-popup">
         <div class="flex items-center gap-2">
           <h3 class="flex-1 text-sm font-semibold text-zinc-900">另存为新简历</h3>
@@ -46,7 +46,7 @@ function confirm() {
           v-model="title"
           type="text"
           maxlength="120"
-          class="mt-1.5 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+          class="mt-1.5 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-zinc-900"
           placeholder="输入新简历标题"
           @keydown.enter="confirm"
         />

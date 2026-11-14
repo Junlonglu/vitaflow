@@ -72,7 +72,7 @@ function displayFieldLabel(field: { key: string; label: string }) {
     <div :class="isWide ? 'w-[320px] shrink-0 flex flex-col gap-3 sticky top-4' : 'flex flex-col gap-3'">
       <div v-for="(item, i) in section.items" :key="item.id" class="flex flex-col">
         <div
-          class="rounded-2xl border bg-white p-4 cursor-pointer transition-all flex items-center justify-between group"
+          class="rounded-2xl border bg-white p-4 cursor-pointer transition-colors flex items-center justify-between group"
           :class="activeItemId === item.id ? 'border-zinc-900 ring-1 ring-zinc-900/10' : 'border-zinc-200/80 hover:border-zinc-300 '"
           @click="activeItemId = activeItemId === item.id ? null : item.id"
         >
@@ -103,7 +103,7 @@ function displayFieldLabel(field: { key: string; label: string }) {
     </div>
 
     <div v-if="isWide" class="w-2/3 flex-1">
-      <div v-if="activeItem" class="rounded-2xl border border-zinc-200/80 bg-white overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <div v-if="activeItem" class="rounded-2xl border border-zinc-200/80 bg-white overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150">
         <div class="px-6 py-4 border-b border-zinc-100 bg-zinc-50/50">
           <h3 class="text-sm font-semibold text-zinc-800 tracking-tight">编辑: {{ presetItemTitle(preset, activeItem, `新${preset.title}`) }}</h3>
         </div>
@@ -152,7 +152,7 @@ function displayFieldLabel(field: { key: string; label: string }) {
       </div>
     </div>
 
-    <div v-if="!isWide && activeItem" class="rounded-2xl border border-zinc-200/80 bg-white overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+    <div v-if="!isWide && activeItem" class="rounded-2xl border border-zinc-200/80 bg-white overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
       <div class="px-5 py-4 border-b border-zinc-100 bg-zinc-50/50">
         <h3 class="text-sm font-semibold text-zinc-800 tracking-tight">编辑: {{ presetItemTitle(preset, activeItem, `新${preset.title}`) }}</h3>
       </div>

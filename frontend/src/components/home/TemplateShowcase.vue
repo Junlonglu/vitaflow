@@ -17,9 +17,9 @@ onMounted(async () => {
         <p class="mt-3 sm:mt-4 text-sm sm:text-lg text-zinc-500">抛弃花哨，专注于排版的黄金分割。完美兼容各大厂 ATS 系统解析。</p>
       </div>
       <div class="grid grid-cols-2 gap-3.5 sm:gap-8 lg:grid-cols-4">
-        <div v-for="item in templates.slice(0, 4)" :key="item.template_id" class="group relative rounded-3xl bg-white p-2 sm:p-2.5 ring-1 ring-zinc-200/70 transition-all duration-150 hover:ring-zinc-300">
+        <div v-for="item in templates.slice(0, 4)" :key="item.template_id" class="group relative rounded-3xl bg-white p-2 sm:p-2.5 ring-1 ring-zinc-200/70 transition duration-150 hover:ring-zinc-300">
           <div class="relative w-full aspect-[1/1.1] overflow-hidden rounded-2xl bg-zinc-50 pointer-events-none border border-zinc-100/80">
-             <div class="absolute inset-x-0 top-0 w-full transform transition-transform duration-700 ease-out group-hover:scale-[1.05]">
+             <div class="absolute inset-x-0 top-0 w-full transform transition-transform duration-150 ease-out group-hover:scale-[1.05]">
                <TemplatePreview :html="item.preview_html" />
              </div>
              <!-- Soft fade at bottom -->

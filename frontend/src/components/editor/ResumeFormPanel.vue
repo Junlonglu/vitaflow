@@ -82,7 +82,7 @@ function customFieldLabels() {
     <!-- Scrollable Content -->
     <div class="flex-1 flex flex-col min-h-0 overflow-y-auto thin-scrollbar">
       <!-- Section Header (Scrolls with content) -->
-      <div class="flex items-center justify-between border-b border-zinc-100/80 bg-white/80 px-3 py-2 md:px-5 md:py-4 shrink-0 z-10">
+      <div class="flex items-center justify-between border-b border-zinc-100/80 bg-white/80 px-3 py-2 md:px-5 md:py-4 shrink-0 z-base">
         <div class="flex-1 min-w-0 mr-2 md:mr-4">
           <div class="group relative inline-flex items-center -ml-1 md:-ml-2 max-w-full">
             <div class="inline-grid items-center max-w-full">
@@ -91,7 +91,7 @@ function customFieldLabels() {
                 :value="data.layout.section_titles[current] || current"
                 @input="data.layout.section_titles[current] = ($event.target as HTMLInputElement).value; $emit('change')"
                 size="1"
-                class="peer col-start-1 row-start-1 w-full min-w-0 border border-transparent bg-transparent pl-1 md:pl-2 pr-6 md:pr-8 py-0.5 md:py-1 text-[15px] sm:text-[18px] font-semibold tracking-tight text-zinc-900 hover:border-zinc-200 hover:bg-zinc-50 focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500 transition-all outline-none rounded-md"
+                class="peer col-start-1 row-start-1 w-full min-w-0 border border-transparent bg-transparent pl-1 md:pl-2 pr-6 md:pr-8 py-0.5 md:py-1 text-[15px] sm:text-[18px] font-semibold tracking-tight text-zinc-900 hover:border-zinc-200 hover:bg-zinc-50 focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500 transition-colors outline-none rounded-md"
               />
             </div>
             <Pencil class="absolute right-2 h-3.5 w-3.5 text-zinc-400 pointer-events-none opacity-40 transition-opacity group-hover:opacity-100 peer-focus:opacity-0" />

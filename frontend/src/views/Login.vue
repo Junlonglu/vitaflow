@@ -211,13 +211,13 @@ async function handleResetPassword() {
       <!-- subtle background decoration -->
       <div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMSIgY3k9IjEiIHI9IjEiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4wNSkiLz48L3N2Zz4=')] opacity-50 mix-blend-overlay"></div>
       
-      <div class="relative z-10">
+      <div class="relative z-base">
         <RouterLink to="/" class="inline-flex w-fit rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">
           <BrandLogo tone="light" />
         </RouterLink>
       </div>
       
-      <div class="relative z-10 max-w-lg">
+      <div class="relative z-base max-w-lg">
         <h1 class="text-4xl sm:text-5xl font-medium tracking-tight leading-[1.15]">
           你的经历，<br />值得更好的表达。
         </h1>
@@ -226,7 +226,7 @@ async function handleResetPassword() {
         </p>
       </div>
       
-      <div class="relative z-10 flex flex-col gap-1">
+      <div class="relative z-base flex flex-col gap-1">
         <p class="text-sm text-zinc-600">&copy; 2026 <a href="https://github.com/cgz233/vitaflow" target="_blank" rel="noopener noreferrer" class="hover:text-zinc-400 transition-colors">VitaFlow</a></p>
         <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" class="text-xs text-zinc-500 hover:text-zinc-400 transition-colors">
           鲁ICP备2023002307号-2
@@ -259,7 +259,7 @@ async function handleResetPassword() {
             <div v-if="!isForgotPassword" class="mt-8 flex-1 space-y-5">
               <div>
                 <Label class="text-zinc-700 text-xs font-medium">邮箱</Label>
-                <Input v-model="loginEmail" type="email" placeholder="请输入邮箱" class="mt-1.5 focus:ring-zinc-900 focus:border-zinc-900 transition-all" />
+                <Input v-model="loginEmail" type="email" placeholder="请输入邮箱" class="mt-1.5 focus:ring-zinc-900 focus:border-zinc-900 transition-colors" />
               </div>
               <div>
                 <div class="flex items-center justify-between">
@@ -268,7 +268,7 @@ async function handleResetPassword() {
                     忘记密码？
                   </button>
                 </div>
-                <Input v-model="loginPassword" type="password" placeholder="请输入密码" class="mt-1.5 focus:ring-zinc-900 focus:border-zinc-900 transition-all" @keyup.enter="handleLogin" />
+                <Input v-model="loginPassword" type="password" placeholder="请输入密码" class="mt-1.5 focus:ring-zinc-900 focus:border-zinc-900 transition-colors" @keyup.enter="handleLogin" />
               </div>
               <div class="flex items-center gap-2 pt-1">
                 <button type="button" role="checkbox" :aria-checked="agreed" aria-label="同意用户协议与隐私政策" @click="agreed = !agreed" class="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-zinc-300 bg-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900/20" :class="{ '!border-zinc-900 !bg-zinc-900': agreed }">
@@ -287,12 +287,12 @@ async function handleResetPassword() {
             <div v-else class="mt-8 flex-1 space-y-5">
               <div>
                 <Label class="text-zinc-700 text-xs font-medium">邮箱</Label>
-                <Input v-model="resetForm.email" type="email" placeholder="请输入注册邮箱" class="mt-1.5 focus:ring-zinc-900 focus:border-zinc-900 transition-all" />
+                <Input v-model="resetForm.email" type="email" placeholder="请输入注册邮箱" class="mt-1.5 focus:ring-zinc-900 focus:border-zinc-900 transition-colors" />
               </div>
               <div>
                 <Label class="text-zinc-700 text-xs font-medium">邮箱验证码</Label>
                 <div class="mt-1.5 flex gap-2">
-                  <Input v-model="resetForm.verification_code" inputmode="numeric" maxlength="6" placeholder="6 位验证码" class="focus:ring-zinc-900 focus:border-zinc-900 transition-all" />
+                  <Input v-model="resetForm.verification_code" inputmode="numeric" maxlength="6" placeholder="6 位验证码" class="focus:ring-zinc-900 focus:border-zinc-900 transition-colors" />
                   <Button type="button" variant="outline" class="w-32 shrink-0" :disabled="sendingResetCode || resetCodeSeconds > 0" @click="sendResetCode">
                     {{ resetCodeSeconds > 0 ? `${resetCodeSeconds} 秒后重发` : (sendingResetCode ? "发送中..." : "发送验证码") }}
                   </Button>
@@ -300,7 +300,7 @@ async function handleResetPassword() {
               </div>
               <div>
                 <Label class="text-zinc-700 text-xs font-medium">新密码</Label>
-                <Input v-model="resetForm.new_password" type="password" placeholder="设置新密码" class="mt-1.5 focus:ring-zinc-900 focus:border-zinc-900 transition-all" @keyup.enter="handleResetPassword" />
+                <Input v-model="resetForm.new_password" type="password" placeholder="设置新密码" class="mt-1.5 focus:ring-zinc-900 focus:border-zinc-900 transition-colors" @keyup.enter="handleResetPassword" />
               </div>
               <p v-if="resetError" class="text-sm text-red-500">{{ resetError }}</p>
               <p v-if="resetSuccess" class="text-sm text-green-600 font-medium">{{ resetSuccess }}</p>
@@ -322,20 +322,20 @@ async function handleResetPassword() {
             <div class="mt-8 flex-1 space-y-4">
               <div>
                 <Label class="text-zinc-700 text-xs font-medium">用户名</Label>
-                <Input v-model="regForm.username" placeholder="你的昵称" class="mt-1.5 focus:ring-zinc-900 focus:border-zinc-900 transition-all" />
+                <Input v-model="regForm.username" placeholder="你的昵称" class="mt-1.5 focus:ring-zinc-900 focus:border-zinc-900 transition-colors" />
               </div>
               <div>
                 <Label class="text-zinc-700 text-xs font-medium">邮箱</Label>
-                <Input v-model="regForm.email" placeholder="你的邮箱" class="mt-1.5 focus:ring-zinc-900 focus:border-zinc-900 transition-all" />
+                <Input v-model="regForm.email" placeholder="你的邮箱" class="mt-1.5 focus:ring-zinc-900 focus:border-zinc-900 transition-colors" />
               </div>
               <div>
                 <Label class="text-zinc-700 text-xs font-medium">密码</Label>
-                <Input v-model="regForm.password" type="password" placeholder="设置密码" class="mt-1.5 focus:ring-zinc-900 focus:border-zinc-900 transition-all" @keyup.enter="handleRegister" />
+                <Input v-model="regForm.password" type="password" placeholder="设置密码" class="mt-1.5 focus:ring-zinc-900 focus:border-zinc-900 transition-colors" @keyup.enter="handleRegister" />
               </div>
               <div>
                 <Label class="text-zinc-700 text-xs font-medium">邮箱验证码</Label>
                 <div class="mt-1.5 flex gap-2">
-                  <Input v-model="regForm.verification_code" inputmode="numeric" maxlength="6" placeholder="6 位验证码" class="focus:ring-zinc-900 focus:border-zinc-900 transition-all" />
+                  <Input v-model="regForm.verification_code" inputmode="numeric" maxlength="6" placeholder="6 位验证码" class="focus:ring-zinc-900 focus:border-zinc-900 transition-colors" />
                   <Button type="button" variant="outline" class="w-32 shrink-0" :disabled="sendingCode || codeSeconds > 0" @click="sendCode">
                     {{ codeSeconds > 0 ? `${codeSeconds} 秒后重发` : (sendingCode ? "发送中..." : "发送验证码") }}
                   </Button>
@@ -365,8 +365,8 @@ async function handleResetPassword() {
     </div>
 
     <!-- 用户协议弹窗 -->
-    <div v-if="showAgreementModal" class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm p-4 animate-in fade-in-0 duration-200">
-      <div class="relative w-full max-w-2xl rounded-2xl bg-white p-6 sm:p-8 shadow-wb-popup animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
+    <div v-if="showAgreementModal" class="fixed inset-0 z-modal flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm p-4 animate-in fade-in-0 duration-150">
+      <div class="relative w-full max-w-2xl rounded-2xl bg-white p-6 sm:p-8 shadow-wb-popup animate-in zoom-in-95 duration-150 flex flex-col max-h-[85vh]">
         <div class="flex items-center justify-between border-b border-zinc-100 pb-4 mb-4 shrink-0">
           <h3 class="text-lg font-semibold text-zinc-900">用户协议与隐私政策</h3>
           <button @click="showAgreementModal = false" class="rounded-lg p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 transition-colors focus:outline-none">

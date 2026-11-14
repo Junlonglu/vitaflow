@@ -99,11 +99,11 @@ defineEmits<{
         </div>
         <div class="flex flex-col gap-1.5">
           <label class="text-xs font-medium text-zinc-500">点数</label>
-          <input v-model="codeFilters.points" type="number" min="1" inputmode="numeric" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-800 outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="全部点数" @keyup.enter="$emit('load', 1)" />
+          <input v-model="codeFilters.points" type="number" min="1" inputmode="numeric" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-800 outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="全部点数" @keyup.enter="$emit('load', 1)" />
         </div>
         <div class="flex flex-col gap-1.5">
           <label class="text-xs font-medium text-zinc-500">兑换码</label>
-          <input v-model="codeFilters.keyword" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-800 outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="输入兑换码搜索" @keyup.enter="$emit('load', 1)" />
+          <input v-model="codeFilters.keyword" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-800 outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="输入兑换码搜索" @keyup.enter="$emit('load', 1)" />
         </div>
         <div class="flex shrink-0 gap-2">
           <Button variant="outline" size="sm" class="h-10 shrink-0 whitespace-nowrap" @click="$emit('load', 1)">筛选</Button>
@@ -142,9 +142,9 @@ defineEmits<{
               </td>
               <td class="px-5 py-4">
                 <div class="flex items-center gap-1.5 whitespace-nowrap">
-                  <button class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition-all hover:bg-zinc-50 hover:text-zinc-900 active:scale-95" @click="$emit('openEditCode', item)"><Pencil class="h-3.5 w-3.5 text-zinc-500" />编辑</button>
-                  <button v-if="item.used_count < item.total_count && (!item.expire_time || new Date(item.expire_time).getTime() > Date.now())" class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition-all hover:bg-zinc-50 hover:text-zinc-900 active:scale-95" @click="$emit('toggleCode', item)"><EyeOff v-if="item.status === 'active'" class="h-3.5 w-3.5 text-zinc-500" /><Eye v-else class="h-3.5 w-3.5 text-zinc-500" />{{ item.status === "active" ? "下架" : "上架" }}</button>
-                  <button class="group inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-all active:scale-95 disabled:cursor-not-allowed disabled:border-zinc-100 disabled:bg-zinc-50 disabled:text-zinc-300 disabled:active:scale-100" :class="item.used_count > 0 ? '' : 'border-zinc-200 bg-white text-zinc-700 hover:border-red-200 hover:bg-red-50 hover:text-red-600'" :title="item.used_count > 0 ? '已有兑换记录，只能下架' : '删除兑换码'" :disabled="item.used_count > 0" @click="codeToDelete = item"><Trash2 class="h-3.5 w-3.5" :class="item.used_count > 0 ? 'text-zinc-300' : 'text-zinc-500 group-hover:text-red-600'" />删除</button>
+                  <button class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 hover:text-zinc-900 active:scale-95" @click="$emit('openEditCode', item)"><Pencil class="h-3.5 w-3.5 text-zinc-500" />编辑</button>
+                  <button v-if="item.used_count < item.total_count && (!item.expire_time || new Date(item.expire_time).getTime() > Date.now())" class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 hover:text-zinc-900 active:scale-95" @click="$emit('toggleCode', item)"><EyeOff v-if="item.status === 'active'" class="h-3.5 w-3.5 text-zinc-500" /><Eye v-else class="h-3.5 w-3.5 text-zinc-500" />{{ item.status === "active" ? "下架" : "上架" }}</button>
+                  <button class="group inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition active:scale-95 disabled:cursor-not-allowed disabled:border-zinc-100 disabled:bg-zinc-50 disabled:text-zinc-300 disabled:active:scale-100" :class="item.used_count > 0 ? '' : 'border-zinc-200 bg-white text-zinc-700 hover:border-red-200 hover:bg-red-50 hover:text-red-600'" :title="item.used_count > 0 ? '已有兑换记录，只能下架' : '删除兑换码'" :disabled="item.used_count > 0" @click="codeToDelete = item"><Trash2 class="h-3.5 w-3.5" :class="item.used_count > 0 ? 'text-zinc-300' : 'text-zinc-500 group-hover:text-red-600'" />删除</button>
                 </div>
               </td>
             </tr>
@@ -163,7 +163,7 @@ defineEmits<{
       />
     </article>
 
-    <div v-if="showGenerateModal" class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-sm transition-all duration-200">
+    <div v-if="showGenerateModal" class="fixed inset-0 z-modal flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-sm transition duration-150">
       <div class="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-6 shadow-wb-popup">
         <div class="mb-5 flex items-center justify-between">
           <h3 class="font-semibold text-zinc-900">生成兑换码</h3>
@@ -172,14 +172,14 @@ defineEmits<{
         <div class="grid gap-4">
           <label class="space-y-1.5 text-sm font-medium text-zinc-700">自定义兑换码<Textarea v-model="redeemForm.custom_codes" :rows="3" placeholder="可选，每行一个。填写后将按这里的兑换码创建，忽略生成数量。" /></label>
           <div class="grid gap-4 sm:grid-cols-4">
-            <label class="space-y-1.5 text-sm font-medium text-zinc-700">生成数量<input v-model.number="redeemForm.count" type="number" min="1" max="500" :disabled="Boolean(redeemForm.custom_codes.trim())" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 disabled:bg-zinc-50 disabled:text-zinc-400" /></label>
-            <label class="space-y-1.5 text-sm font-medium text-zinc-700">每个码点数<input v-model.number="redeemForm.points" type="number" min="0.01" step="0.01" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
-            <label class="space-y-1.5 text-sm font-medium text-zinc-700">每次兑换价格<input v-model.number="redeemForm.price" type="number" min="0" step="0.01" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
-            <label class="space-y-1.5 text-sm font-medium text-zinc-700">可兑换人数<input v-model.number="redeemForm.total_count" type="number" min="1" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
+            <label class="space-y-1.5 text-sm font-medium text-zinc-700">生成数量<input v-model.number="redeemForm.count" type="number" min="1" max="500" :disabled="Boolean(redeemForm.custom_codes.trim())" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 disabled:bg-zinc-50 disabled:text-zinc-400" /></label>
+            <label class="space-y-1.5 text-sm font-medium text-zinc-700">每个码点数<input v-model.number="redeemForm.points" type="number" min="0.01" step="0.01" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
+            <label class="space-y-1.5 text-sm font-medium text-zinc-700">每次兑换价格<input v-model.number="redeemForm.price" type="number" min="0" step="0.01" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
+            <label class="space-y-1.5 text-sm font-medium text-zinc-700">可兑换人数<input v-model.number="redeemForm.total_count" type="number" min="1" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
           </div>
           <div class="grid gap-4 sm:grid-cols-2">
-            <label class="space-y-1.5 text-sm font-medium text-zinc-700">过期时间<input v-model="redeemForm.expire_time" type="datetime-local" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
-            <label class="space-y-1.5 text-sm font-medium text-zinc-700">备注<input v-model="redeemForm.note" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="例如：内测用户赠送" /></label>
+            <label class="space-y-1.5 text-sm font-medium text-zinc-700">过期时间<input v-model="redeemForm.expire_time" type="datetime-local" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
+            <label class="space-y-1.5 text-sm font-medium text-zinc-700">备注<input v-model="redeemForm.note" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="例如：内测用户赠送" /></label>
           </div>
           <label class="flex cursor-pointer items-center justify-between rounded-xl border border-zinc-200/80 bg-zinc-50/50 px-4 py-3 text-sm text-zinc-700 transition-colors hover:bg-zinc-50">
             <div><span class="font-medium text-zinc-900">同一 IP 只能兑换一次</span></div>
@@ -190,7 +190,7 @@ defineEmits<{
       </div>
     </div>
 
-    <div v-if="showImportModal" class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-sm transition-all duration-200">
+    <div v-if="showImportModal" class="fixed inset-0 z-modal flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-sm transition duration-150">
       <div class="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-6 shadow-wb-popup">
         <div class="mb-5 flex items-center justify-between">
           <div>
@@ -202,19 +202,19 @@ defineEmits<{
         <div class="grid gap-4">
           <Textarea v-model="importText" :rows="8" :max-height="260" placeholder="FLOW-XXXX-XXXX&#10;FLOW-YYYY-YYYY" />
           <div class="grid gap-4 sm:grid-cols-4">
-            <label class="space-y-1.5 text-sm font-medium text-zinc-700">每个码点数<input v-model.number="importForm.points" type="number" min="0.01" step="0.01" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
-            <label class="space-y-1.5 text-sm font-medium text-zinc-700">每次兑换价格<input v-model.number="importForm.price" type="number" min="0" step="0.01" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
-            <label class="space-y-1.5 text-sm font-medium text-zinc-700">可兑换人数<input v-model.number="importForm.total_count" type="number" min="1" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
-            <label class="space-y-1.5 text-sm font-medium text-zinc-700">过期时间<input v-model="importForm.expire_time" type="datetime-local" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
+            <label class="space-y-1.5 text-sm font-medium text-zinc-700">每个码点数<input v-model.number="importForm.points" type="number" min="0.01" step="0.01" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
+            <label class="space-y-1.5 text-sm font-medium text-zinc-700">每次兑换价格<input v-model.number="importForm.price" type="number" min="0" step="0.01" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
+            <label class="space-y-1.5 text-sm font-medium text-zinc-700">可兑换人数<input v-model.number="importForm.total_count" type="number" min="1" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
+            <label class="space-y-1.5 text-sm font-medium text-zinc-700">过期时间<input v-model="importForm.expire_time" type="datetime-local" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
           </div>
           <label class="flex items-start gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-3 text-sm text-zinc-700"><input v-model="importForm.ip_once" type="checkbox" class="mt-1 h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900" /><span><span class="font-medium text-zinc-900">同一 IP 只能兑换一次</span><span class="mt-0.5 block text-xs text-zinc-500">导入的每个兑换码都会启用该限制。</span></span></label>
-          <label class="space-y-1.5 text-sm font-medium text-zinc-700">备注<input v-model="importForm.note" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="例如：线下活动导入" /></label>
+          <label class="space-y-1.5 text-sm font-medium text-zinc-700">备注<input v-model="importForm.note" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="例如：线下活动导入" /></label>
           <Button class="mt-2 h-11 rounded-xl" :disabled="importingCodes" @click="$emit('importCodes')"><Upload class="mr-2 h-4 w-4" />{{ importingCodes ? "导入中" : "确认导入" }}</Button>
         </div>
       </div>
     </div>
 
-    <div v-if="showBatchPriceModal" class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-sm transition-all duration-200">
+    <div v-if="showBatchPriceModal" class="fixed inset-0 z-modal flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-sm transition duration-150">
       <div class="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-wb-popup">
         <div class="mb-5 flex items-start justify-between gap-4">
           <div>
@@ -225,8 +225,8 @@ defineEmits<{
         </div>
         <div class="grid gap-4">
           <label class="space-y-1.5 text-sm font-medium text-zinc-700">匹配方式<Select v-model="batchPriceForm.match_type" :options="batchPriceMatchOptions" class="h-11 w-full rounded-xl" /></label>
-          <label class="space-y-1.5 text-sm font-medium text-zinc-700">{{ batchPriceForm.match_type === "batch_no" ? "批次 ID" : "备注" }}<input v-model="batchPriceForm.keyword" maxlength="2000" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" :placeholder="batchPriceForm.match_type === 'batch_no' ? '例如：FP20260629120000' : '例如：线下活动导入'" /></label>
-          <label class="space-y-1.5 text-sm font-medium text-zinc-700">统一价格<input v-model.number="batchPriceForm.price" type="number" min="0" step="0.01" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
+          <label class="space-y-1.5 text-sm font-medium text-zinc-700">{{ batchPriceForm.match_type === "batch_no" ? "批次 ID" : "备注" }}<input v-model="batchPriceForm.keyword" maxlength="2000" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" :placeholder="batchPriceForm.match_type === 'batch_no' ? '例如：FP20260629120000' : '例如：线下活动导入'" /></label>
+          <label class="space-y-1.5 text-sm font-medium text-zinc-700">统一价格<input v-model.number="batchPriceForm.price" type="number" min="0" step="0.01" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
           <div class="flex justify-end gap-3 pt-1">
             <Button variant="outline" class="h-10 px-5" @click="showBatchPriceModal = false">取消</Button>
             <Button class="h-10 px-5" :disabled="savingBatchPrice" @click="$emit('saveBatchPrice')">{{ savingBatchPrice ? "保存中..." : "保存价格" }}</Button>
@@ -235,7 +235,7 @@ defineEmits<{
       </div>
     </div>
 
-    <div v-if="editingCode" class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-sm">
+    <div v-if="editingCode" class="fixed inset-0 z-modal flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-sm">
       <div class="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-6 shadow-wb-popup">
         <div class="mb-5 flex items-start justify-between gap-4">
           <div>
@@ -266,7 +266,7 @@ defineEmits<{
       </div>
     </div>
 
-    <div v-if="codeToDelete" class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-sm">
+    <div v-if="codeToDelete" class="fixed inset-0 z-modal flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-sm">
       <div class="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-wb-popup">
         <div class="flex items-start gap-4">
           <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600"><Trash2 class="h-5 w-5" /></div>

@@ -202,7 +202,7 @@ function startFromTemplate(entry: "starter" | "import" | "blank") {
           @click="selectedId = item.template_id"
         >
           <div class="relative aspect-[3/4] overflow-hidden bg-zinc-100/60 p-1.5">
-            <div class="absolute inset-x-1.5 top-1.5 origin-top overflow-hidden rounded-sm transition-transform duration-500 group-hover:scale-[1.02]">
+            <div class="absolute inset-x-1.5 top-1.5 origin-top overflow-hidden rounded-sm transition-transform duration-150 group-hover:scale-[1.02]">
               <TemplatePreview :html="item.preview_html" bare />
             </div>
             <div class="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-white/95 to-transparent"></div>

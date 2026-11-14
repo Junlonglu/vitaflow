@@ -65,9 +65,9 @@ function logout() {
       <ChevronUp class="h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform" :class="open ? 'rotate-180' : ''" />
     </button>
 
-    <div v-if="open" class="fixed inset-0 z-40" @click="open = false"></div>
+    <div v-if="open" class="fixed inset-0 z-scrim" @click="open = false"></div>
     <Transition name="user-menu">
-      <div v-if="open" class="thin-scrollbar absolute bottom-full left-2 right-2 z-50 mb-1 max-h-[70vh] space-y-1 overflow-y-auto rounded-xl border border-zinc-200 bg-white p-1 shadow-wb-popup">
+      <div v-if="open" class="thin-scrollbar absolute bottom-full left-2 right-2 z-popover mb-1 max-h-[70vh] space-y-1 overflow-y-auto rounded-xl border border-zinc-200 bg-white p-1 shadow-wb-popup">
         <RouterLink
           v-for="item in menuItems"
           :key="item.to"

@@ -56,10 +56,10 @@ function startWithTemplate() {
         <article
           v-for="item in pagedTemplates"
           :key="item.template_id"
-          class="group relative flex flex-col rounded-xl bg-white p-2 sm:p-2.5 ring-1 ring-zinc-200/70 transition-all duration-150 hover:ring-zinc-300"
+          class="group relative flex flex-col rounded-xl bg-white p-2 sm:p-2.5 ring-1 ring-zinc-200/70 transition duration-150 hover:ring-zinc-300"
         >
           <div class="relative w-full aspect-[1/1.1] overflow-hidden rounded-lg bg-zinc-50 pointer-events-none border border-zinc-100/80">
-            <div class="absolute inset-x-0 top-0 w-full transform transition-transform duration-700 ease-out group-hover:scale-[1.05]">
+            <div class="absolute inset-x-0 top-0 w-full transform transition-transform duration-150 ease-out group-hover:scale-[1.05]">
               <TemplatePreview :html="item.preview_html" />
             </div>
             <div class="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-zinc-50 via-zinc-50/80 to-transparent pointer-events-none"></div>
@@ -73,7 +73,7 @@ function startWithTemplate() {
               </span>
             </div>
             <div class="mt-auto">
-              <Button class="w-full h-8 sm:h-10 text-xs sm:text-sm duration-300 rounded-xl font-medium border-none" @click="startWithTemplate">
+              <Button class="w-full h-8 sm:h-10 text-xs sm:text-sm duration-100 rounded-xl font-medium border-none" @click="startWithTemplate">
                 开始使用
               </Button>
             </div>
@@ -81,7 +81,7 @@ function startWithTemplate() {
         </article>
       </div>
 
-      <div v-if="templates.length > 0" class="mt-12 flex flex-col items-center justify-between gap-4 rounded-xl bg-white p-3 sm:pl-7 sm:pr-3 ring-1 ring-zinc-200/70 sm:flex-row transition-all duration-300 ">
+      <div v-if="templates.length > 0" class="mt-12 flex flex-col items-center justify-between gap-4 rounded-xl bg-white p-3 sm:pl-7 sm:pr-3 ring-1 ring-zinc-200/70 sm:flex-row transition duration-150 ">
         <div class="flex items-center gap-3 text-sm text-zinc-500">
           <span>共 <strong class="font-semibold text-zinc-900">{{ templates.length }}</strong> 个精选模板</span>
           <span class="text-zinc-200">|</span>

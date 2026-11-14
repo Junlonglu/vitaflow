@@ -747,7 +747,7 @@ async function sendInitialPrompt() {
 <template>
   <div v-if="resumeStore.currentResume && resumeStore.resumeData && resumeStore.templateConfig" class="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white" @focusout="handleFocusOut">
     <!-- Premium Header -->
-    <header class="flex h-14 md:h-16 shrink-0 items-center gap-1.5 md:gap-4 border-b border-zinc-200/60 bg-white/80 backdrop-blur-md px-2 md:px-6 relative z-40">
+    <header class="flex h-14 md:h-16 shrink-0 items-center gap-1.5 md:gap-4 border-b border-zinc-200/60 bg-white/80 backdrop-blur-md px-2 md:px-6 relative z-sticky">
       <Button size="icon" variant="ghost" class="md:hidden h-8 w-8 shrink-0 text-zinc-500 hover:text-zinc-900 rounded-lg hover:bg-zinc-100" aria-label="打开侧栏" @click="openDrawer">
         <PanelLeft class="h-4 w-4" />
       </Button>
@@ -759,7 +759,7 @@ async function sendInitialPrompt() {
             v-model="resumeStore.currentResume.title" 
             placeholder="无标题简历"
             size="1"
-            class="peer col-start-1 row-start-1 w-full min-w-0 border border-transparent bg-transparent pl-1 pr-6 md:pl-2 md:pr-8 py-1 text-[14px] sm:text-[18px] font-semibold tracking-tight text-zinc-900 hover:border-zinc-200 hover:bg-zinc-50 focus:border-blue-500 focus:bg-white focus:ring-1 focus:ring-blue-500 transition-all outline-none rounded-md truncate"
+            class="peer col-start-1 row-start-1 w-full min-w-0 border border-transparent bg-transparent pl-1 pr-6 md:pl-2 md:pr-8 py-1 text-[14px] sm:text-[18px] font-semibold tracking-tight text-zinc-900 hover:border-zinc-200 hover:bg-zinc-50 focus:border-zinc-900 focus:bg-white transition-colors outline-none rounded-md truncate"
             @input="markChanged" 
           />
           <Pencil class="absolute right-1.5 md:right-2.5 h-3.5 w-3.5 text-zinc-400 pointer-events-none opacity-40 transition-opacity group-hover:opacity-100 peer-focus:opacity-0" />
@@ -842,7 +842,7 @@ async function sendInitialPrompt() {
 
       <!-- Mobile Dropdown Menu -->
       <Transition name="modal-fade">
-        <div v-if="mobileMenuOpen" class="md:hidden absolute top-[calc(100%-4px)] right-2 z-50 w-40 space-y-0.5 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-wb-popup">
+        <div v-if="mobileMenuOpen" class="md:hidden absolute top-[calc(100%-4px)] right-2 z-popover w-40 space-y-0.5 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-wb-popup">
           <div v-if="flowPointSummary" class="flex items-center justify-between px-2.5 py-2 rounded-xl bg-zinc-100/70 text-zinc-700 text-xs font-medium mb-1 cursor-pointer hover:bg-zinc-200/50 transition-colors" @click="saveAndGoToAiRecords">
             <div class="flex items-center gap-1.5">
               <FlowPointIcon class="h-3.5 w-3.5 text-zinc-600" />
@@ -879,7 +879,7 @@ async function sendInitialPrompt() {
             <span>删除</span>
           </button>
           <button 
-            class="flex items-center justify-center w-full gap-2 px-4 py-2.5 rounded-xl bg-black/90 text-white hover:bg-black/75 transition-all active:scale-95 text-xs font-medium mt-2"
+            class="flex items-center justify-center w-full gap-2 px-4 py-2.5 rounded-xl bg-black/90 text-white hover:bg-black/75 transition active:scale-95 text-xs font-medium mt-2"
             :disabled="!!exportLoading"
             @click="mobileMenuOpen = false; exportPdf()"
           >
@@ -895,7 +895,7 @@ async function sendInitialPrompt() {
       <div class="workspace-surface flex min-w-0 flex-1">
         <!-- Left Unified Sidebar -->
         <!-- Left Unified Sidebar -->
-        <div :class="['flex-col h-full shrink-0 bg-white overflow-hidden transition-none relative z-20', (mobileTab === 'edit' || mobileTab === 'ai') ? 'flex w-full' : 'hidden md:flex']" :style="{ width: isMobile ? '100%' : leftPanelWidth + 'px' }">
+        <div :class="['flex-col h-full shrink-0 bg-white overflow-hidden transition-none relative z-raised', (mobileTab === 'edit' || mobileTab === 'ai') ? 'flex w-full' : 'hidden md:flex']" :style="{ width: isMobile ? '100%' : leftPanelWidth + 'px' }">
           
           <!-- Mode Switcher -->
           <div class="hidden shrink-0 items-center gap-1 border-b border-zinc-200/60 px-2 py-1.5 md:flex">
@@ -920,7 +920,7 @@ async function sendInitialPrompt() {
           <!-- Traditional Edit Mode -->
           <div v-show="mainMode === 'edit'" class="flex flex-col flex-1 min-h-0 overflow-hidden relative bg-zinc-50/30">
             <ModuleSidebar 
-              class="w-full shrink-0 relative z-20" 
+              class="w-full shrink-0 relative z-raised" 
               :data="resumeStore.resumeData" 
               :current="editor.currentSection" 
               @select="selectSection" 
@@ -931,7 +931,7 @@ async function sendInitialPrompt() {
 
             <ResumeReviewPanel
               v-if="pendingReviewMessage"
-              class="relative z-10 flex-1 min-h-0 min-w-0"
+              class="relative z-base flex-1 min-h-0 min-w-0"
               :sections="currentReviewSections"
               :selected-ids="selectedDiffIds"
               :total-count="pendingReviewChangeCount"
@@ -944,7 +944,7 @@ async function sendInitialPrompt() {
             />
             <ResumeFormPanel
               v-else
-              class="relative z-10 flex-1 min-h-0 min-w-0"
+              class="relative z-base flex-1 min-h-0 min-w-0"
               :data="resumeStore.resumeData"
               :config="resumeStore.templateConfig"
               :current="editor.currentSection"
@@ -966,14 +966,14 @@ async function sendInitialPrompt() {
         <!-- Resizer Handle -->
         <div
           v-if="!isMobile"
-          class="relative z-30 w-4 h-full cursor-col-resize flex items-center justify-center group"
+          class="relative z-sticky w-4 h-full cursor-col-resize flex items-center justify-center group"
           @mousedown="startResize"
         >
            <!-- Subtle hover line -->
-           <div class="absolute inset-y-0 left-1/2 -ml-[0.5px] w-[1px] bg-blue-500 opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity duration-300 delay-75"></div>
+           <div class="absolute inset-y-0 left-1/2 -ml-[0.5px] w-[1px] bg-blue-500 opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity duration-100 delay-75"></div>
            
            <!-- Drag pill -->
-           <div class="relative z-10 flex h-8 w-1 rounded-full bg-zinc-300 ring-1 ring-black/5 group-hover:bg-blue-500 group-active:bg-blue-600 transition-all duration-300 group-hover:scale-125"></div>
+           <div class="relative z-base flex h-8 w-1 rounded-full bg-zinc-300 ring-1 ring-black/5 group-hover:bg-blue-500 group-active:bg-blue-600 transition duration-100 group-hover:scale-125"></div>
         </div>
 
         <!-- Preview Canvas -->
@@ -987,12 +987,12 @@ async function sendInitialPrompt() {
 
       <!-- Backdrop for closing side panels when clicking outside -->
       <Transition name="fade">
-        <div v-if="showStyle || showTemplateModal" class="absolute inset-0 z-[55] bg-transparent" @click="showStyle = false; showTemplateModal = false"></div>
+        <div v-if="showStyle || showTemplateModal" class="absolute inset-0 z-scrim bg-transparent" @click="showStyle = false; showTemplateModal = false"></div>
       </Transition>
 
       <!-- Style remains a focused utility drawer. -->
       <Transition name="slide-panel">
-        <aside v-if="showStyle" class="absolute bottom-0 right-0 top-0 z-[60] flex w-full flex-col border-l border-zinc-200/80 bg-white/95 backdrop-blur-2xl shadow-wb-popup md:w-[420px]">
+        <aside v-if="showStyle" class="absolute bottom-0 right-0 top-0 z-drawer flex w-full flex-col border-l border-zinc-200/80 bg-white/95 backdrop-blur-2xl shadow-wb-popup md:w-[420px]">
           <div class="shrink-0 border-b border-zinc-100/80 px-4 py-2 md:px-5 md:py-3.5 bg-white/50">
             <div class="flex items-center justify-between gap-3">
               <h2 class="text-base md:text-lg font-semibold text-zinc-900 tracking-tight flex items-center gap-2">
@@ -1008,7 +1008,7 @@ async function sendInitialPrompt() {
               <div class="mb-3 flex items-center gap-1.5 relative group">
                 <h3 class="text-[14px] font-semibold text-zinc-900">简历语言</h3>
                 <Info class="h-4 w-4 text-zinc-400 cursor-help transition-colors group-hover:text-zinc-600" />
-                <div class="pointer-events-none absolute left-0 top-full mt-1.5 w-[280px] origin-top-left scale-95 rounded-xl bg-zinc-800 p-3 text-[13px] leading-relaxed text-zinc-100 opacity-0 shadow-wb-popup transition-all duration-200 group-hover:pointer-events-auto group-hover:scale-100 group-hover:opacity-100 z-50">
+                <div class="pointer-events-none absolute left-0 top-full mt-1.5 w-[280px] origin-top-left scale-95 rounded-xl bg-zinc-800 p-3 text-[13px] leading-relaxed text-zinc-100 opacity-0 shadow-wb-popup transition duration-100 group-hover:pointer-events-auto group-hover:scale-100 group-hover:opacity-100 z-popover">
                   切换语言会更新默认模块标题、字段标签和导出语言；已填写正文、手动修改或 AI 生成的标题不会被覆盖。
                 </div>
               </div>
@@ -1035,7 +1035,7 @@ async function sendInitialPrompt() {
       </Transition>
 
       <Transition name="apply-success">
-        <div v-if="applySuccess" class="pointer-events-none absolute inset-0 z-[64] flex items-center justify-center overflow-hidden">
+        <div v-if="applySuccess" class="pointer-events-none absolute inset-0 z-overlay flex items-center justify-center overflow-hidden">
           <div class="apply-success-ring absolute h-72 w-72 rounded-full border border-blue-400/40"></div>
           <div class="apply-success-ring apply-success-ring--delay absolute h-72 w-72 rounded-full border border-blue-400/30"></div>
           <div class="relative flex items-center gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 shadow-wb-popup">
@@ -1047,7 +1047,7 @@ async function sendInitialPrompt() {
 
       <!-- Template Selection Side Panel (Consistent with Style Panel) -->
       <Transition name="slide-panel">
-        <aside v-if="showTemplateModal" class="absolute bottom-0 right-0 top-0 z-[60] flex w-full flex-col border-l border-zinc-200/80 bg-white/95 backdrop-blur-2xl shadow-wb-popup md:w-[420px]">
+        <aside v-if="showTemplateModal" class="absolute bottom-0 right-0 top-0 z-drawer flex w-full flex-col border-l border-zinc-200/80 bg-white/95 backdrop-blur-2xl shadow-wb-popup md:w-[420px]">
           <div class="shrink-0 border-b border-zinc-100/80 px-4 py-2 md:px-5 md:py-3.5 bg-white/50">
             <div class="flex items-center justify-between gap-3">
               <h2 class="text-base md:text-lg font-semibold text-zinc-900 tracking-tight flex items-center gap-2">
@@ -1089,7 +1089,7 @@ async function sendInitialPrompt() {
     <!-- Toast Notification -->
     <Teleport to="body">
       <Transition name="toast-slide">
-        <div v-if="toastMessage" class="fixed bottom-10 left-1/2 z-[100] flex w-max max-w-[90vw] -translate-x-1/2 items-center gap-2 rounded-lg bg-zinc-900 px-4 py-2.5 text-[13px] font-medium text-white shadow-wb-popup">
+        <div v-if="toastMessage" class="fixed bottom-10 left-1/2 z-toast flex w-max max-w-[90vw] -translate-x-1/2 items-center gap-2 rounded-lg bg-zinc-900 px-4 py-2.5 text-[13px] font-medium text-white shadow-wb-popup">
           <CheckCircle2 v-if="toastType === 'success'" class="h-4 w-4 shrink-0 text-emerald-400" />
           <AlertCircle v-else-if="toastType === 'error'" class="h-4 w-4 shrink-0 text-red-400" />
           <span class="break-words">{{ toastMessage }}</span>
@@ -1098,7 +1098,7 @@ async function sendInitialPrompt() {
     </Teleport>
 
     <Transition name="export-fade">
-      <div v-if="exportLoading" class="fixed inset-0 z-[80] flex items-center justify-center bg-zinc-950/45 px-6 backdrop-blur-sm">
+      <div v-if="exportLoading" class="fixed inset-0 z-modal flex items-center justify-center bg-zinc-950/45 px-6 backdrop-blur-sm">
         <div class="w-full max-w-[320px] rounded-2xl border border-zinc-200 bg-white px-6 py-7 text-center shadow-wb-popup">
           <LoaderCircle class="mx-auto h-10 w-10 animate-spin text-zinc-900" />
           <h3 class="mt-4 text-base font-semibold text-zinc-900">
@@ -1112,7 +1112,7 @@ async function sendInitialPrompt() {
     </Transition>
 
     <!-- Mobile Bottom Nav -->
-    <div class="md:hidden fixed bottom-2.5 left-1/2 z-50 w-[86%] max-w-[280px] -translate-x-1/2 rounded-lg border border-zinc-200 bg-white p-1 select-none" :class="drawerOpen ? 'hidden' : ''">
+    <div class="md:hidden fixed bottom-2.5 left-1/2 z-sticky w-[86%] max-w-[280px] -translate-x-1/2 rounded-lg border border-zinc-200 bg-white p-1 select-none" :class="drawerOpen ? 'hidden' : ''">
       <div class="flex w-full items-center gap-0.5">
         <button class="flex h-8 flex-1 items-center justify-center gap-1 rounded-md transition-colors" :class="mobileTab === 'edit' ? 'bg-zinc-100 text-zinc-900' : 'text-zinc-500'" @click="mobileTab = 'edit'; mainMode = 'edit'">
           <Edit3 class="h-3.5 w-3.5" />

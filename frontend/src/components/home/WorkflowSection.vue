@@ -12,7 +12,7 @@ import { ArrowRight } from "lucide-vue-next"
       <div class="mt-8 sm:mt-24">
         <div class="flex flex-row justify-center items-center gap-3 sm:gap-12 md:gap-32">
           <div v-for="(item, index) in ['选择优质模板', 'AI 辅助填写', '一键导出 PDF']" :key="item" class="group flex flex-col items-center">
-            <div class="flex h-10 w-10 sm:h-16 sm:w-16 items-center justify-center rounded-xl sm:rounded-2xl border border-zinc-200 bg-zinc-50 text-base sm:text-xl font-medium text-zinc-900 mb-2 sm:mb-6 transition-colors duration-300 group-hover:bg-zinc-100 group-hover:border-zinc-300">
+            <div class="flex h-10 w-10 sm:h-16 sm:w-16 items-center justify-center rounded-xl sm:rounded-2xl border border-zinc-200 bg-zinc-50 text-base sm:text-xl font-medium text-zinc-900 mb-2 sm:mb-6 transition-colors duration-100 group-hover:bg-zinc-100 group-hover:border-zinc-300">
               {{ index + 1 }}
             </div>
             <span class="text-xs sm:text-base font-medium text-zinc-900 whitespace-nowrap">{{ item }}</span>

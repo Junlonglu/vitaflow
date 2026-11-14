@@ -15,7 +15,7 @@ withDefaults(defineProps<{
 <template>
   <Teleport to="body">
     <Transition name="resume-import-progress">
-      <div v-if="open" class="fixed inset-0 z-[110] flex items-center justify-center bg-zinc-950/45 p-4 backdrop-blur-sm">
+      <div v-if="open" class="fixed inset-0 z-overlay flex items-center justify-center bg-zinc-950/45 p-4 backdrop-blur-sm">
         <section class="w-full max-w-[520px] rounded-2xl border border-zinc-200 bg-white p-7 shadow-wb-popup sm:p-8">
           <div class="flex items-center justify-between gap-4">
             <div class="flex min-w-0 items-center gap-4">
@@ -36,11 +36,11 @@ withDefaults(defineProps<{
             <div
               v-for="(stage, index) in stages"
               :key="stage"
-              class="flex items-center gap-3 rounded-2xl px-4 py-3 transition-all duration-300"
+              class="flex items-center gap-3 rounded-2xl px-4 py-3 transition duration-150"
               :class="index === stageIndex ? 'bg-zinc-50 ring-1 ring-zinc-100' : ''"
             >
               <span
-                class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold transition-all duration-300"
+                class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold transition duration-150"
                 :class="index < stageIndex ? 'bg-blue-500 text-white' : index === stageIndex ? 'bg-zinc-900 text-white' : 'bg-white text-zinc-400 ring-1 ring-zinc-200'"
               >
                 <CheckCircle2 v-if="index < stageIndex" class="h-4 w-4" />
@@ -55,7 +55,7 @@ withDefaults(defineProps<{
           </div>
 
           <div class="mt-7 h-1.5 overflow-hidden rounded-full bg-zinc-100">
-            <div class="h-full rounded-full bg-blue-500 transition-all duration-700 ease-out" :style="{ width: `${progress}%` }"></div>
+            <div class="h-full rounded-full bg-blue-500 transition-[width] duration-300 ease-out" :style="{ width: `${progress}%` }"></div>
           </div>
 
           <div class="mt-5 flex items-start gap-3 rounded-2xl bg-zinc-50 px-4 py-3 text-xs leading-5 text-zinc-500 ring-1 ring-zinc-200/70">

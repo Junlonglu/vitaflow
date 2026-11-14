@@ -105,7 +105,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="relative min-h-screen bg-[#fafafa] text-zinc-950 flex flex-col selection:bg-blue-100 selection:text-blue-900">
     <!-- Sticky Minimalist Header -->
-    <header class="sticky top-0 z-50 border-b border-zinc-200/80 bg-white/90 backdrop-blur-md transition-all">
+    <header class="sticky top-0 z-sticky border-b border-zinc-200/80 bg-white/90 backdrop-blur-md transition">
       <div class="mx-auto flex h-14 max-w-5xl items-center justify-between gap-4 px-4 sm:px-6">
         <div class="flex items-center gap-3">
           <a href="/" title="访问官网" class="flex items-center transition-opacity hover:opacity-85 active:scale-95">
@@ -137,7 +137,7 @@ onBeforeUnmount(() => {
       <template v-else-if="sharedResume">
         <div class="flex justify-center overflow-hidden">
           <div
-            class="relative overflow-hidden bg-white border border-zinc-200 shadow-wb-popup sm:rounded-lg transition-all duration-300"
+            class="relative overflow-hidden bg-white border border-zinc-200 shadow-wb-popup sm:rounded-lg transition-[width,height] duration-300"
             :style="{ width: `${shellWidth}px`, height: `${shellHeight}px` }"
           >
             <iframe
@@ -162,7 +162,7 @@ onBeforeUnmount(() => {
           <span class="text-sm font-bold tracking-tight text-zinc-900">VitaFlow 简历流</span>
           <p class="mt-1 text-xs text-zinc-500">还在为找工作发愁？使用 VitaFlow 轻松提炼出彩简历。</p>
         </div>
-        <a href="/" target="_blank" class="inline-flex h-10 items-center justify-center rounded-lg bg-black/90 px-5 text-xs font-medium !text-white transition-all duration-100 hover:bg-black/75 active:scale-95">
+        <a href="/" target="_blank" class="inline-flex h-10 items-center justify-center rounded-lg bg-black/90 px-5 text-xs font-medium !text-white transition duration-100 hover:bg-black/75 active:scale-95">
           免费制作同款简历 &rarr;
         </a>
       </div>

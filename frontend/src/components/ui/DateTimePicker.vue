@@ -152,7 +152,7 @@ const quickTimes = [
     <!-- Trigger Button -->
     <button
       type="button"
-      class="flex h-11 w-full items-center justify-between rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 transition-all hover:border-zinc-300 hover:bg-zinc-50/50 active:scale-[0.99] outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
+      class="flex h-11 w-full items-center justify-between rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 transition hover:border-zinc-300 hover:bg-zinc-50/50 active:scale-[0.99] outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
       @click="open = true"
     >
       <span class="truncate font-medium" :class="modelValue ? 'text-zinc-900' : 'text-zinc-400'">{{ displayString }}</span>
@@ -162,8 +162,8 @@ const quickTimes = [
     <!-- Modal Popover -->
     <Teleport to="body">
       <Transition name="fade-scale">
-        <div v-if="open" class="fixed inset-0 z-[200] flex items-center justify-center bg-zinc-950/40 p-4 backdrop-blur-sm" @click.self="open = false">
-          <div class="w-full max-w-sm overflow-hidden rounded-2xl border border-zinc-200 bg-white p-5 shadow-wb-popup animate-in zoom-in-95 duration-200">
+        <div v-if="open" class="fixed inset-0 z-overlay flex items-center justify-center bg-zinc-950/40 p-4 backdrop-blur-sm" @click.self="open = false">
+          <div class="w-full max-w-sm overflow-hidden rounded-2xl border border-zinc-200 bg-white p-5 shadow-wb-popup animate-in zoom-in-95 duration-150">
             <!-- Header Month Nav -->
             <div class="flex items-center justify-between mb-4">
               <span class="text-base font-bold tracking-tight text-zinc-900">{{ currentYear }}年 {{ currentMonth + 1 }}月</span>
@@ -188,7 +188,7 @@ const quickTimes = [
                 v-for="(day, idx) in monthDays"
                 :key="idx"
                 type="button"
-                class="relative flex h-9 w-9 items-center justify-center rounded-full text-xs font-medium transition-all mx-auto active:scale-95"
+                class="relative flex h-9 w-9 items-center justify-center rounded-full text-xs font-medium transition mx-auto active:scale-95"
                 :class="[
                   isSelected(day.date)
                     ? 'bg-zinc-900 text-white font-bold'
@@ -219,7 +219,7 @@ const quickTimes = [
                   v-for="qt in quickTimes"
                   :key="qt.label"
                   type="button"
-                  class="rounded-xl border py-1.5 text-xs font-medium transition-all"
+                  class="rounded-xl border py-1.5 text-xs font-medium transition-colors"
                   :class="hour === qt.h && minute === qt.m ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50'"
                   @click="setTime(qt.h, qt.m)"
                 >

@@ -796,7 +796,7 @@ watch(
       @copy-code="copyCode"
     />
 
-    <div v-if="configToDelete" class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-sm transition-all duration-200">
+    <div v-if="configToDelete" class="fixed inset-0 z-modal flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-sm transition duration-150">
       <div class="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-wb-popup">
         <div class="mb-5 flex items-center justify-between">
           <div class="flex items-center gap-2 text-red-600">

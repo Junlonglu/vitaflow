@@ -358,13 +358,13 @@ onMounted(() => refresh())
               <p class="mt-3 text-5xl font-semibold tracking-tight text-zinc-950">{{ balance }}</p>
               <div class="ai-records-hint mt-2 text-sm text-zinc-700 break-words whitespace-pre-wrap" v-html="summary?.hint || '1 元约等于 100 Flow Points，具体扣点以后台规则为准。'"></div>
             </div>
-            <span class="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white text-blue-600 border border-zinc-100 ring-1 ring-blue-600/10 hover:scale-[1.02] transition-all duration-300 group">
-              <FlowPointIcon class="relative h-7 w-7 text-blue-600 transform group-hover:rotate-3 transition-transform duration-300" />
+            <span class="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white text-blue-600 border border-zinc-100 ring-1 ring-blue-600/10 hover:scale-[1.02] transition duration-100 group">
+              <FlowPointIcon class="relative h-7 w-7 text-blue-600 transform group-hover:rotate-3 transition-transform duration-100" />
             </span>
           </div>
           <div class="border-t border-zinc-100 bg-zinc-50/70 p-4">
             <div class="flex flex-col gap-3 sm:flex-row">
-              <input v-model="redeemCode" type="text" class="h-11 w-full sm:flex-1 rounded-xl border border-zinc-200 bg-white px-4 text-sm text-zinc-900 outline-none transition-all placeholder:text-zinc-400 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400" placeholder="输入 Flow Points 兑换码" @keyup.enter="redeem" />
+              <input v-model="redeemCode" type="text" class="h-11 w-full sm:flex-1 rounded-xl border border-zinc-200 bg-white px-4 text-sm text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400" placeholder="输入 Flow Points 兑换码" @keyup.enter="redeem" />
               <Button class="h-11 px-5" :disabled="redeeming || !redeemCode.trim()" @click="redeem">
                 <LoaderCircle v-if="redeeming" class="h-4 w-4 animate-spin" />
                 <TicketCheck v-else class="h-4 w-4" />
@@ -391,7 +391,7 @@ onMounted(() => refresh())
       <section class="mt-6 overflow-hidden rounded-xl border border-zinc-200 bg-white">
         <div class="flex flex-col gap-3 border-b border-zinc-100 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div class="flex w-full sm:w-auto bg-zinc-100 p-1 rounded-full">
-            <button v-for="tab in tabs" :key="tab.key" class="flex-1 sm:flex-none inline-flex h-8 sm:h-9 items-center justify-center gap-1 sm:gap-1.5 rounded-full px-2.5 sm:px-4 text-xs sm:text-sm font-medium transition-all duration-200 whitespace-nowrap" :class="activeTab === tab.key ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:text-zinc-900'" @click="switchTab(tab.key)">
+            <button v-for="tab in tabs" :key="tab.key" class="flex-1 sm:flex-none inline-flex h-8 sm:h-9 items-center justify-center gap-1 sm:gap-1.5 rounded-full px-2.5 sm:px-4 text-xs sm:text-sm font-medium transition-colors duration-100 whitespace-nowrap" :class="activeTab === tab.key ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:text-zinc-900'" @click="switchTab(tab.key)">
               <component :is="tab.icon" class="h-3.5 w-3.5" />
               {{ tab.label }}
             </button>
@@ -535,7 +535,7 @@ onMounted(() => refresh())
         </div>
       </section>
 
-      <div v-if="selectedHistory" class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/35 px-4 py-6 backdrop-blur-sm" @click.self="selectedHistory = null">
+      <div v-if="selectedHistory" class="fixed inset-0 z-modal flex items-center justify-center bg-zinc-950/35 px-4 py-6 backdrop-blur-sm" @click.self="selectedHistory = null">
         <article class="flex max-h-[86vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup">
           <header class="flex items-start justify-between gap-4 border-b border-zinc-100 px-6 py-5">
             <div>

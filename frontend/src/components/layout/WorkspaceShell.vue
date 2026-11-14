@@ -48,7 +48,7 @@ onUnmounted(() => {
 
     <!-- 移动端抽屉遮罩 -->
     <Transition name="ws-drawer">
-      <div v-if="drawerOpen" class="fixed inset-0 z-[55] bg-zinc-900/25 backdrop-blur-[1px] md:hidden" @click="closeDrawer"></div>
+      <div v-if="drawerOpen" class="fixed inset-0 z-scrim bg-zinc-900/25 backdrop-blur-[1px] md:hidden" @click="closeDrawer"></div>
     </Transition>
 
     <div class="relative flex min-w-0 flex-1 overflow-hidden">

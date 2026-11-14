@@ -10,7 +10,7 @@
  * 各页面的类名，所以布局与信息密度不变。
  *
  * 三处刻意的取值差异，改之前先读 docs/design/workbuddy-visual-reference.md：
- * 1. 灰阶去蓝：zi​nc 原值是带蓝调的，WorkBuddy 用纯中性灰（#f2f2f2 / #ebebeb /
+ * 1. 灰阶去蓝：zinc 原值是带蓝调的，WorkBuddy 用纯中性灰（#f2f2f2 / #ebebeb /
  *    #e6e6e6 一族）。这里只在同明度区间内做中性化，对比度不低于原值，
  *    zinc-500 仍保持 4.9:1 以上，说明文字可读性不受影响。
  * 2. 正文纯黑：WorkBuddy 文字主色是 #000、次色 #000000b3。原 #111827 偏蓝，
@@ -194,4 +194,39 @@ a { color: inherit; text-decoration: none; }
     visibility: visible !important;
     pointer-events: auto !important;
   }
+}
+
+/* ============================================================
+ * 键盘焦点（2026-11-15）
+ *
+ * 只在 :focus-visible 出现——鼠标点击、程序化 focus 都不显示，键盘 Tab 与读屏
+ * 才显示。样式用中性深灰 2px 外描边（跟随圆角），**不用蓝色发光环**：全站
+ * 灰阶已经中性化，蓝环会突然变成第三种色相。
+ *
+ * 输入类控件单独排除：它们靠 focus:border-zinc-900 的加深描边表达焦点
+ * （见 docs/design-system.md §2.4），再叠一圈外描边会出现「双边框」。
+ *
+ * 需要 !important + :is() 是因为 Tailwind 工具类里有 131 处 outline-none，
+ * 且部分是 !important 的兜底块；先清 131 处再靠优先级，风险大于收益。
+ * ============================================================ */
+:is(
+  a,
+  button,
+  [role="button"],
+  [role="tab"],
+  [role="checkbox"],
+  [role="radio"],
+  [role="option"],
+  [role="menuitem"],
+  [role="switch"],
+  summary,
+  [tabindex]:not([tabindex="-1"])
+):focus-visible {
+  outline: 2px solid var(--wb-focus-ring) !important;
+  outline-color: var(--wb-focus-ring) !important;
+  outline-offset: 2px !important;
+}
+
+:is(input, textarea, select, [contenteditable="true"]):focus-visible {
+  outline: none !important;
 }

@@ -47,11 +47,53 @@ function onOverlayClick() {
 }
 
 function onKeydown(event: KeyboardEvent) {
-  if (event.key !== "Escape" || !props.open) return
-  // 只有最上层弹窗响应 Esc；一次按下不会连关两层。
-  if (!dialog.isTop()) return
-  event.preventDefault()
-  close()
+  if (!props.open || !dialog.isTop()) return
+  if (event.key === "Escape") {
+    // 只有最上层弹窗响应 Esc；一次按下不会连关两层。
+    event.preventDefault()
+    close()
+    return
+  }
+  if (event.key === "Tab") trapTab(event)
+}
+
+// Tab 必须在面板内循环：否则键盘用户 Tab 到最后一个控件后会掉到背后的页面，
+// 弹窗还开着却没有任何可见焦点（2026-11-15 实测 Tab 第 5 次就落到 body）。
+const FOCUSABLE = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled]):not([type='hidden'])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",")
+
+function trapTab(event: KeyboardEvent) {
+  const panel = panelEl.value
+  if (!panel) return
+  const nodes = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+    (el) => el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement,
+  )
+  if (!nodes.length) {
+    event.preventDefault()
+    panel.focus({ preventScroll: true })
+    return
+  }
+  const first = nodes[0]
+  const last = nodes[nodes.length - 1]
+  const active = document.activeElement as HTMLElement | null
+  if (!active || !panel.contains(active)) {
+    event.preventDefault()
+    first.focus()
+    return
+  }
+  if (event.shiftKey && (active === first || active === panel)) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault()
+    first.focus()
+  }
 }
 
 watch(

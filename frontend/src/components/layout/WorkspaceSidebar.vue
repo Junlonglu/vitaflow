@@ -536,7 +536,7 @@ function formatUpdated(value?: string) {
           :class="resumeRowClass(item.id)"
           @contextmenu.prevent.stop="openResumeMenu($event, item.id)"
         >
-          <button type="button" class="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-3 pr-2 text-left" @click="openResume(item.id)">
+          <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded-md py-1.5 pl-3 pr-2 text-left" @click="openResume(item.id)">
             <span class="min-w-0 flex-1">
               <span class="block truncate text-[13.5px] font-medium leading-5">{{ item.title || "无标题简历" }}</span>
             </span>

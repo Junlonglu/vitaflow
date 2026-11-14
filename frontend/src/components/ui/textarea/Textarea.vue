@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, nextTick, watch } from "vue"
 
-const props = defineProps<{ modelValue?: string; placeholder?: string; rows?: number }>()
+const props = defineProps<{ modelValue?: string; placeholder?: string; rows?: number; maxHeight?: number }>()
 const emit = defineEmits<{ "update:modelValue": [value: string] }>()
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
@@ -9,8 +9,15 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null)
 function adjustHeight() {
   const el = textareaRef.value
   if (!el) return
-  el.style.height = 'auto'
-  el.style.height = el.scrollHeight + 'px'
+  const scrollTop = el.scrollTop
+  el.style.height = "auto"
+  const rowsHeight = el.clientHeight
+  const contentHeight = el.scrollHeight
+  const next = Math.max(rowsHeight, contentHeight)
+  const capped = props.maxHeight ? Math.min(next, props.maxHeight) : next
+  el.style.height = `${capped}px`
+  el.style.overflowY = capped < contentHeight ? "auto" : "hidden"
+  el.scrollTop = scrollTop
 }
 
 watch(() => props.modelValue, () => {

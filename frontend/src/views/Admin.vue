@@ -7,6 +7,7 @@ import {
 } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
 import Select from "@/components/ui/select/Select.vue"
+import Textarea from "@/components/ui/textarea/Textarea.vue"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
 import PaginationFooter from "@/components/ui/pagination/PaginationFooter.vue"
 import AdminShell from "@/components/admin/AdminShell.vue"
@@ -1460,16 +1461,16 @@ onMounted(() => load())
               <div class="space-y-5 p-5">
                 <div>
                   <label class="mb-1.5 block text-xs font-medium text-zinc-600">行业描述</label>
-                  <textarea v-model="starterForm.industry_description" rows="2" class="w-full resize-none rounded-xl border border-zinc-200 bg-white px-3.5 py-3 text-sm leading-relaxed outline-none transition focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"></textarea>
+                  <Textarea v-model="starterForm.industry_description" :rows="2" />
                 </div>
                 <div class="grid gap-4 lg:grid-cols-2">
                   <div>
                     <label class="mb-1.5 block text-xs font-medium text-zinc-600">岗位关键词</label>
-                    <textarea v-model="starterForm.keywords_text" rows="4" placeholder="一行一个，或用逗号分隔" class="w-full resize-none rounded-xl border border-zinc-200 bg-white px-3.5 py-3 text-sm leading-relaxed outline-none transition focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"></textarea>
+                    <Textarea v-model="starterForm.keywords_text" :rows="4" placeholder="一行一个，或用逗号分隔" />
                   </div>
                   <div>
                     <label class="mb-1.5 block text-xs font-medium text-zinc-600">起稿关注点</label>
-                    <textarea v-model="starterForm.focus_text" rows="4" placeholder="突出什么、避免什么、如何表达" class="w-full resize-none rounded-xl border border-zinc-200 bg-white px-3.5 py-3 text-sm leading-relaxed outline-none transition focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"></textarea>
+                    <Textarea v-model="starterForm.focus_text" :rows="4" placeholder="突出什么、避免什么、如何表达" />
                   </div>
                 </div>
                 <div>
@@ -1478,7 +1479,7 @@ onMounted(() => load())
                 </div>
                 <div>
                   <label class="mb-1.5 block text-xs font-medium text-zinc-600">个人简介初稿</label>
-                  <textarea v-model="starterForm.summary" rows="3" class="w-full resize-none rounded-xl border border-zinc-200 bg-white px-3.5 py-3 text-sm leading-relaxed outline-none transition focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"></textarea>
+                  <Textarea v-model="starterForm.summary" :rows="3" />
                 </div>
                 <div>
                   <label class="mb-1.5 block text-xs font-medium text-zinc-600">经验阶段配置 JSON</label>
@@ -1491,14 +1492,14 @@ onMounted(() => load())
                 </div>
                 <div>
                   <label class="mb-1.5 block text-xs font-medium text-zinc-600">专业技能</label>
-                  <textarea v-model="starterForm.skills_text" rows="5" placeholder="能力名称 | 关键词1, 关键词2 | 能力描述" class="w-full resize-none rounded-xl border border-zinc-200 bg-white px-3.5 py-3 text-sm leading-relaxed outline-none transition focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"></textarea>
+                  <Textarea v-model="starterForm.skills_text" :rows="5" placeholder="能力名称 | 关键词1, 关键词2 | 能力描述" />
                 </div>
                 <div class="grid gap-4 lg:grid-cols-2">
                   <div class="space-y-3">
                     <label class="block text-xs font-medium text-zinc-600">工作经历样例</label>
                     <input v-model.trim="starterForm.work_position" placeholder="职位名称" class="h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
-                    <textarea v-model="starterForm.work_description" rows="3" placeholder="工作描述" class="w-full resize-none rounded-xl border border-zinc-200 bg-white px-3.5 py-3 text-sm leading-relaxed outline-none transition focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"></textarea>
-                    <textarea v-model="starterForm.work_highlights_text" rows="4" placeholder="工作亮点，一行一个" class="w-full resize-none rounded-xl border border-zinc-200 bg-white px-3.5 py-3 text-sm leading-relaxed outline-none transition focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"></textarea>
+                    <Textarea v-model="starterForm.work_description" :rows="3" placeholder="工作描述" />
+                    <Textarea v-model="starterForm.work_highlights_text" :rows="4" placeholder="工作亮点，一行一个" />
                   </div>
                   <div class="space-y-3">
                     <label class="block text-xs font-medium text-zinc-600">项目经历样例</label>
@@ -1507,8 +1508,8 @@ onMounted(() => load())
                       <input v-model.trim="starterForm.project_role" placeholder="项目角色" class="h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
                       <input v-model.trim="starterForm.project_tech_stack" placeholder="技术/工具/方法" class="h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
                     </div>
-                    <textarea v-model="starterForm.project_description" rows="3" placeholder="项目描述" class="w-full resize-none rounded-xl border border-zinc-200 bg-white px-3.5 py-3 text-sm leading-relaxed outline-none transition focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"></textarea>
-                    <textarea v-model="starterForm.project_highlights_text" rows="4" placeholder="项目亮点，一行一个" class="w-full resize-none rounded-xl border border-zinc-200 bg-white px-3.5 py-3 text-sm leading-relaxed outline-none transition focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"></textarea>
+                    <Textarea v-model="starterForm.project_description" :rows="3" placeholder="项目描述" />
+                    <Textarea v-model="starterForm.project_highlights_text" :rows="4" placeholder="项目亮点，一行一个" />
                   </div>
                 </div>
               </div>
@@ -1573,12 +1574,12 @@ onMounted(() => load())
                 </div>
                 <div>
                   <label class="mb-1.5 block text-xs font-medium text-zinc-600">用户可见回复</label>
-                  <textarea v-model="feedbackReplyForm.admin_reply" rows="6" placeholder="写给用户看的处理结果或说明" class="w-full resize-none rounded-xl border border-zinc-200 bg-white px-3.5 py-3 text-sm leading-relaxed text-zinc-800 outline-none transition focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"></textarea>
+                  <Textarea v-model="feedbackReplyForm.admin_reply" :rows="6" placeholder="写给用户看的处理结果或说明" />
                   <p v-if="feedbackReplyTarget?.reply_time" class="mt-1.5 text-[11px] text-zinc-400">上次回复：{{ formatDate(feedbackReplyTarget.reply_time) }}</p>
                 </div>
                 <div>
                   <label class="mb-1.5 block text-xs font-medium text-zinc-600">内部处理备注</label>
-                  <textarea v-model="feedbackReplyForm.admin_note" rows="4" placeholder="仅管理员后台可见，可留空" class="w-full resize-none rounded-xl border border-zinc-200 bg-white px-3.5 py-3 text-sm leading-relaxed text-zinc-800 outline-none transition focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"></textarea>
+                  <Textarea v-model="feedbackReplyForm.admin_note" :rows="4" placeholder="仅管理员后台可见，可留空" />
                 </div>
               </div>
             </div>

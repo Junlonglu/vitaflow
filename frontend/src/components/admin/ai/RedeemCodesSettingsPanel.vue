@@ -2,6 +2,7 @@
 import { Copy, Download, Eye, EyeOff, Pencil, Plus, Settings2, Ticket, Trash2, Upload, X } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
 import Select from "@/components/ui/select/Select.vue"
+import Textarea from "@/components/ui/textarea/Textarea.vue"
 import PaginationFooter from "@/components/ui/pagination/PaginationFooter.vue"
 import type { AdminRedeemCode, PageData } from "@/api/admin"
 
@@ -169,7 +170,7 @@ defineEmits<{
           <button class="rounded-full p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600" @click="showGenerateModal = false"><X class="h-5 w-5" /></button>
         </div>
         <div class="grid gap-4">
-          <label class="space-y-1.5 text-sm font-medium text-zinc-700">自定义兑换码<textarea v-model="redeemForm.custom_codes" rows="3" class="block w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="可选，每行一个。填写后将按这里的兑换码创建，忽略生成数量。"></textarea></label>
+          <label class="space-y-1.5 text-sm font-medium text-zinc-700">自定义兑换码<Textarea v-model="redeemForm.custom_codes" :rows="3" placeholder="可选，每行一个。填写后将按这里的兑换码创建，忽略生成数量。" /></label>
           <div class="grid gap-4 sm:grid-cols-4">
             <label class="space-y-1.5 text-sm font-medium text-zinc-700">生成数量<input v-model.number="redeemForm.count" type="number" min="1" max="500" :disabled="Boolean(redeemForm.custom_codes.trim())" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 disabled:bg-zinc-50 disabled:text-zinc-400" /></label>
             <label class="space-y-1.5 text-sm font-medium text-zinc-700">每个码点数<input v-model.number="redeemForm.points" type="number" min="0.01" step="0.01" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
@@ -199,7 +200,7 @@ defineEmits<{
           <button class="rounded-full p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600" @click="showImportModal = false"><X class="h-5 w-5" /></button>
         </div>
         <div class="grid gap-4">
-          <textarea v-model="importText" rows="8" class="block w-full rounded-xl border border-zinc-200 bg-white px-3 py-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="FLOW-XXXX-XXXX&#10;FLOW-YYYY-YYYY"></textarea>
+          <Textarea v-model="importText" :rows="8" :max-height="260" placeholder="FLOW-XXXX-XXXX&#10;FLOW-YYYY-YYYY" />
           <div class="grid gap-4 sm:grid-cols-4">
             <label class="space-y-1.5 text-sm font-medium text-zinc-700">每个码点数<input v-model.number="importForm.points" type="number" min="0.01" step="0.01" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
             <label class="space-y-1.5 text-sm font-medium text-zinc-700">每次兑换价格<input v-model.number="importForm.price" type="number" min="0" step="0.01" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>

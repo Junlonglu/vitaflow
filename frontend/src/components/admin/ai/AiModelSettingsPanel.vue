@@ -66,7 +66,7 @@ const catalogModelOptions = computed(() => [
 
 <template>
   <div class="grid items-start gap-5 lg:grid-cols-[1.25fr_1.4fr]">
-    <article class="min-w-0 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+    <article class="min-w-0 rounded-xl border border-zinc-200 bg-white p-5">
       <div class="flex items-center justify-between gap-3">
         <h3 class="font-semibold text-zinc-900">模型策略</h3>
         <Button variant="outline" size="sm" @click="$emit('reset')"><Plus class="mr-1.5 h-4 w-4" />新增策略</Button>
@@ -76,7 +76,7 @@ const catalogModelOptions = computed(() => [
           v-for="item in configs"
           :key="item.id"
           class="group relative w-full rounded-xl border p-4 text-left transition-all"
-          :class="item.id === configForm.id ? 'border-zinc-900 bg-zinc-50/80 ring-1 ring-zinc-900 shadow-sm' : 'border-zinc-200 bg-white hover:border-zinc-300 hover:bg-zinc-50/40'"
+          :class="item.id === configForm.id ? 'border-zinc-900 bg-zinc-50/80 ring-1 ring-zinc-900' : 'border-zinc-200 bg-white hover:border-zinc-300 hover:bg-zinc-50/40'"
           @click="$emit('reset', item)"
         >
           <div class="flex items-start justify-between gap-2">
@@ -103,7 +103,7 @@ const catalogModelOptions = computed(() => [
       </div>
     </article>
 
-    <article class="min-w-0 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+    <article class="min-w-0 rounded-xl border border-zinc-200 bg-white p-5">
       <h3 class="text-lg font-semibold text-zinc-900">{{ configForm.id ? "编辑模型策略" : "新增模型策略" }}</h3>
       <div class="mt-5 space-y-4">
         <label class="block space-y-1.5 text-sm font-medium text-zinc-700">策略名称<input v-model="configForm.name" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
@@ -118,21 +118,21 @@ const catalogModelOptions = computed(() => [
         </div>
         <div class="grid gap-3 pt-2 sm:grid-cols-2">
           <label class="group flex cursor-pointer select-none items-center gap-2.5 rounded-xl border border-zinc-200 bg-zinc-50/50 p-3 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-50 hover:text-zinc-900">
-            <div class="relative flex h-5 w-5 items-center justify-center rounded-md border border-zinc-300 bg-white transition-all duration-200 group-hover:border-zinc-400" :class="{ '!border-zinc-900 !bg-zinc-900 shadow-sm': configForm.is_chat_selectable }">
+            <div class="relative flex h-5 w-5 items-center justify-center rounded-md border border-zinc-300 bg-white transition-all duration-200 group-hover:border-zinc-400" :class="{ '!border-zinc-900 !bg-zinc-900': configForm.is_chat_selectable }">
               <Check v-if="configForm.is_chat_selectable" class="h-3.5 w-3.5 text-white stroke-[3]" />
             </div>
             <input v-model="configForm.is_chat_selectable" type="checkbox" class="sr-only" />
             <span class="text-zinc-800 group-hover:text-zinc-900">AI 助手可选</span>
           </label>
           <label class="group flex cursor-pointer select-none items-center gap-2.5 rounded-xl border border-zinc-200 bg-zinc-50/50 p-3 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-50 hover:text-zinc-900">
-            <div class="relative flex h-5 w-5 items-center justify-center rounded-md border border-zinc-300 bg-white transition-all duration-200 group-hover:border-zinc-400" :class="{ '!border-zinc-900 !bg-zinc-900 shadow-sm': configForm.is_active }">
+            <div class="relative flex h-5 w-5 items-center justify-center rounded-md border border-zinc-300 bg-white transition-all duration-200 group-hover:border-zinc-400" :class="{ '!border-zinc-900 !bg-zinc-900': configForm.is_active }">
               <Check v-if="configForm.is_active" class="h-3.5 w-3.5 text-white stroke-[3]" />
             </div>
             <input v-model="configForm.is_active" type="checkbox" class="sr-only" />
             <span class="text-zinc-800 group-hover:text-zinc-900">设为启用</span>
           </label>
         </div>
-        <div class="rounded-2xl border border-zinc-200 bg-zinc-50/60 p-4">
+        <div class="rounded-xl border border-zinc-200 bg-zinc-50/60 p-4">
           <p class="text-sm font-semibold text-zinc-800">AI 助手对话价格</p>
           <div class="mt-3 grid gap-3 sm:grid-cols-3">
             <label class="space-y-1.5 text-xs font-medium text-zinc-600">每次扣点<input v-model="configForm.chat_points_per_call" type="number" min="0" step="0.01" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="默认" /></label>

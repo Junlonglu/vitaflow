@@ -198,13 +198,13 @@ onBeforeUnmount(() => {
     @pointerleave="stopDrag"
   >
     <div v-if="loading && !pages.length" class="flex h-full min-h-[360px] items-center justify-center">
-      <div class="rounded-2xl border border-blue-100 bg-white px-6 py-5 text-center shadow-sm">
+      <div class="rounded-2xl border border-blue-100 bg-white px-6 py-5 text-center">
         <div class="mx-auto mb-3 h-9 w-9 animate-spin rounded-full border-2 border-blue-100 border-t-blue-600"></div>
         <p class="text-sm font-medium text-zinc-700">正在生成预览</p>
       </div>
     </div>
     <div v-else-if="error" class="flex h-full min-h-[360px] items-center justify-center">
-      <div class="rounded-2xl border border-red-100 bg-white px-6 py-5 text-center text-sm text-red-600 shadow-sm">
+      <div class="rounded-2xl border border-red-100 bg-white px-6 py-5 text-center text-sm text-red-600">
         {{ error }}
       </div>
     </div>
@@ -215,7 +215,7 @@ onBeforeUnmount(() => {
       <div
         v-for="page in pages"
         :key="page.pageNumber"
-        class="overflow-hidden bg-white shadow-xl"
+        class="overflow-hidden bg-white shadow-wb-popup"
         :style="{ width: `${page.width * scale}px`, height: `${page.height * scale}px` }"
       >
         <canvas

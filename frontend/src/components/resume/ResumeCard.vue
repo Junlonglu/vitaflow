@@ -56,7 +56,7 @@ function formatUpdateTime(timeStr?: string) {
 
     <!-- 预览贴边，卡片自身这一圈就是唯一边框；底部渐隐到白，避免硬切 -->
     <div class="pointer-events-none relative aspect-[1/1.1] w-full overflow-hidden bg-zinc-100/60 p-2.5 sm:p-3">
-      <div class="absolute inset-x-2.5 top-2.5 origin-top transform overflow-hidden rounded-[3px] transition-transform duration-700 ease-out group-hover:scale-[1.03] sm:inset-x-3 sm:top-3">
+      <div class="absolute inset-x-2.5 top-2.5 origin-top transform overflow-hidden rounded-sm transition-transform duration-700 ease-out group-hover:scale-[1.03] sm:inset-x-3 sm:top-3">
         <TemplatePreview :html="template?.preview_html" bare />
       </div>
       <div class="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-white via-white/90 to-transparent"></div>

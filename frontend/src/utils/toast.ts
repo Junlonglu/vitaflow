@@ -5,7 +5,7 @@ export function showGlobalToast(message: string, type: "success" | "error" = "su
   if (!div) {
     div = document.createElement("div")
     div.id = "vitaflow-global-toast"
-    div.className = "fixed z-[9999] flex w-max max-w-[90vw] items-center gap-2 rounded-xl bg-zinc-900 px-5 py-3 text-[14px] font-medium text-white shadow-xl border border-zinc-800 transition-all duration-300 opacity-0"
+    div.className = "fixed z-[9999] flex w-max max-w-[90vw] items-center gap-2 rounded-xl bg-zinc-900 px-5 py-3 text-[14px] font-medium text-white shadow-wb-popup border border-zinc-800 transition-all duration-300 opacity-0"
     div.style.left = "50%"
     div.style.bottom = "2.5rem" // bottom-10
     div.style.transform = "translate(-50%, 20px)"

@@ -115,7 +115,7 @@ watch(
 
           <div v-if="templateSelectMode === 'create' && createMode === 'entry'" class="mx-auto max-w-3xl">
             <div class="grid gap-3 sm:grid-cols-3">
-              <button class="group flex min-h-40 flex-col justify-between rounded-2xl border border-zinc-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-md active:scale-[0.99]" @click="emit('openStarter')">
+              <button class="group flex min-h-40 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-5 text-left transition-colors duration-150 hover:border-zinc-300 active:scale-[0.99]" @click="emit('openStarter')">
                 <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700">
                   <Briefcase class="h-4 w-4" />
                 </span>
@@ -124,7 +124,7 @@ watch(
                   <span class="mt-2 block text-sm leading-6 text-zinc-500">基于行业和岗位生成一份可继续编辑的内容初稿。</span>
                 </span>
               </button>
-              <button class="group flex min-h-40 flex-col justify-between rounded-2xl border border-zinc-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-md active:scale-[0.99]" @click="emit('openBlank')">
+              <button class="group flex min-h-40 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-5 text-left transition-colors duration-150 hover:border-zinc-300 active:scale-[0.99]" @click="emit('openBlank')">
                 <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700">
                   <LayoutTemplate class="h-4 w-4" />
                 </span>
@@ -133,7 +133,7 @@ watch(
                   <span class="mt-2 block text-sm leading-6 text-zinc-500">保留默认版式和空白内容，适合完全自己填写。</span>
                 </span>
               </button>
-              <button class="group flex min-h-40 flex-col justify-between rounded-2xl border border-zinc-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-md active:scale-[0.99]" @click="emit('openImport')">
+              <button class="group flex min-h-40 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-5 text-left transition-colors duration-150 hover:border-zinc-300 active:scale-[0.99]" @click="emit('openImport')">
                 <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700">
                   <FileUp class="h-4 w-4" />
                 </span>
@@ -189,7 +189,7 @@ watch(
                     v-for="role in selectedStarterIndustry.roles"
                     :key="role.starter_id"
                     class="group relative flex h-14 flex-col justify-center rounded-lg border px-3 py-2 text-left transition active:scale-[0.99]"
-                    :class="selectedStarterRoleId === role.starter_id ? 'border-blue-600 bg-blue-50/50 shadow-sm' : 'border-zinc-200 bg-white hover:border-zinc-300 hover:bg-zinc-50'"
+                    :class="selectedStarterRoleId === role.starter_id ? 'border-blue-600 bg-blue-50/50' : 'border-zinc-200 bg-white hover:border-zinc-300 hover:bg-zinc-50'"
                     @click="emit('update:selectedStarterRoleId', role.starter_id)"
                   >
                     <span class="block truncate text-[13.5px] font-semibold leading-5" :class="selectedStarterRoleId === role.starter_id ? 'text-blue-900' : 'text-zinc-900'">{{ role.title }}</span>
@@ -208,7 +208,7 @@ watch(
                     v-for="level in starterLevels"
                     :key="level.id"
                     class="flex-1 rounded-lg px-4 py-1.5 text-[13px] font-medium transition sm:flex-none"
-                    :class="selectedStarterLevelId === level.id ? 'bg-white text-zinc-950 shadow-sm ring-1 ring-black/5' : 'text-zinc-500 hover:bg-zinc-200/50 hover:text-zinc-900'"
+                    :class="selectedStarterLevelId === level.id ? 'bg-white text-zinc-950 ring-1 ring-black/5' : 'text-zinc-500 hover:bg-zinc-200/50 hover:text-zinc-900'"
                     @click="emit('update:selectedStarterLevelId', level.id)"
                   >
                     {{ level.short_label }}
@@ -231,7 +231,7 @@ watch(
                       <Sparkles class="h-3.5 w-3.5 text-blue-500" />
                       AI 智能生成
                     </Button>
-                    <Button class="h-9 rounded-full bg-zinc-900 px-5 text-[13px] text-white hover:bg-zinc-800 sm:w-36" :disabled="starterCreating || starterRolesLoading || !selectedStarterRole" @click="emit('createStarterResume')">
+                    <Button class="h-9 rounded-full px-5 text-[13px] sm:w-36" :disabled="starterCreating || starterRolesLoading || !selectedStarterRole" @click="emit('createStarterResume')">
                       {{ starterCreating ? "正在创建..." : "创建初稿" }}
                       <ArrowRight v-if="!starterCreating" class="h-4 w-4" />
                     </Button>
@@ -271,10 +271,10 @@ watch(
               <article
                 v-for="item in pagedTemplates"
                 :key="item.template_id"
-                class="group relative flex cursor-pointer flex-col rounded-[1.5rem] bg-white p-2 shadow-sm ring-1 ring-zinc-100 transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-zinc-200/50 hover:ring-zinc-200 sm:rounded-[2rem] sm:p-2.5"
+                class="group relative flex cursor-pointer flex-col rounded-xl bg-white p-2 ring-1 ring-zinc-200/70 transition-all duration-150 hover:ring-zinc-300 sm:p-2.5"
                 @click="emit('selectTemplate', item.template_id)"
               >
-                <div class="pointer-events-none relative aspect-[1/1.1] w-full overflow-hidden rounded-[1.25rem] border border-zinc-100/80 bg-zinc-50 sm:rounded-[1.5rem]">
+                <div class="pointer-events-none relative aspect-[1/1.1] w-full overflow-hidden rounded-lg border border-zinc-100/80 bg-zinc-50">
                   <div class="absolute inset-x-0 top-0 w-full transform transition-transform duration-700 ease-out group-hover:scale-[1.05]">
                     <TemplatePreview :html="item.preview_html" />
                   </div>
@@ -295,21 +295,21 @@ watch(
               </article>
             </div>
 
-            <div v-if="!isImportRendering && templates.length > 8" class="mt-8 flex flex-col items-center justify-between gap-4 transition-all duration-300 sm:flex-row sm:rounded-[2rem] sm:bg-white sm:p-3 sm:pl-7 sm:pr-3 sm:shadow-sm sm:ring-1 sm:ring-zinc-100 sm:hover:shadow-md">
+            <div v-if="!isImportRendering && templates.length > 8" class="mt-8 flex flex-col items-center justify-between gap-4 transition-all duration-300 sm:flex-row sm:rounded-xl sm:bg-white sm:p-3 sm:pl-7 sm:pr-3 sm:ring-1 sm:ring-zinc-200/70 sm:">
               <div class="hidden items-center gap-3 text-sm text-zinc-500 sm:flex">
                 <span>共 <strong class="font-semibold text-zinc-900">{{ templates.length }}</strong> 款模板</span>
                 <span class="text-zinc-200">|</span>
                 <span>第 <strong class="font-semibold text-zinc-900">{{ modalPage }}</strong> / {{ Math.ceil(templates.length / 8) }} 页</span>
               </div>
-              <div class="flex w-full items-center justify-between gap-1 rounded-[1.5rem] bg-zinc-50 p-1.5 ring-1 ring-zinc-100/80 sm:w-auto sm:justify-start">
-                <button class="inline-flex h-10 items-center justify-center gap-1.5 rounded-[1.25rem] bg-white px-4.5 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white active:scale-[0.98]" :disabled="modalPage <= 1" @click="emit('update:modalPage', modalPage - 1)">
+              <div class="flex w-full items-center justify-between gap-1 rounded-lg bg-zinc-50 p-1.5 ring-1 ring-zinc-100/80 sm:w-auto sm:justify-start">
+                <button class="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-white px-4.5 text-sm font-medium text-zinc-700 ring-1 ring-zinc-200/70 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white active:scale-[0.98]" :disabled="modalPage <= 1" @click="emit('update:modalPage', modalPage - 1)">
                   <ChevronLeft class="h-4 w-4 text-zinc-400" />
                   <span class="text-xs font-semibold tracking-wide">上一页</span>
                 </button>
                 <span class="px-4 font-mono text-xs font-semibold tracking-wider text-zinc-600">
                   {{ modalPage }} / {{ Math.ceil(templates.length / 8) }}
                 </span>
-                <button class="inline-flex h-10 items-center justify-center gap-1.5 rounded-[1.25rem] bg-white px-4.5 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white active:scale-[0.98]" :disabled="modalPage >= Math.ceil(templates.length / 8)" @click="emit('update:modalPage', modalPage + 1)">
+                <button class="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-white px-4.5 text-sm font-medium text-zinc-700 ring-1 ring-zinc-200/70 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white active:scale-[0.98]" :disabled="modalPage >= Math.ceil(templates.length / 8)" @click="emit('update:modalPage', modalPage + 1)">
                   <span class="text-xs font-semibold tracking-wide">下一页</span>
                   <ChevronRight class="h-4 w-4 text-zinc-400" />
                 </button>

@@ -435,7 +435,7 @@ watch(
 
     <p v-if="fauxProvider" class="rounded-xl border border-amber-200/60 bg-amber-50 px-4 py-2.5 text-xs font-medium text-amber-700">当前为 faux 演示模式：目录仅提供内置 faux/demo 模型，不可编辑；接入真实服务商请切换 AI 服务为 real 模式</p>
 
-    <div v-for="provider in providers" :key="provider.key" class="rounded-2xl border border-zinc-200 bg-white shadow-sm">
+    <div v-for="provider in providers" :key="provider.key" class="rounded-xl border border-zinc-200 bg-white">
       <div class="flex items-start justify-between gap-3 border-b border-zinc-100 p-4">
         <div class="min-w-0">
           <div class="flex items-center gap-2">
@@ -503,10 +503,10 @@ watch(
       </div>
     </div>
 
-    <div v-if="!providers.length" class="rounded-2xl border border-dashed border-zinc-200 bg-white py-10 text-center text-sm text-zinc-400">模型目录为空{{ fauxProvider ? "" : "，请先新增服务商" }}</div>
+    <div v-if="!providers.length" class="rounded-xl border border-dashed border-zinc-200 bg-white py-10 text-center text-sm text-zinc-400">模型目录为空{{ fauxProvider ? "" : "，请先新增服务商" }}</div>
 
     <!-- 路由组：多个目录模型共用一个引用，上游故障时选型静默换人 -->
-    <div v-if="!fauxProvider" class="rounded-2xl border border-zinc-200 bg-white shadow-sm">
+    <div v-if="!fauxProvider" class="rounded-xl border border-zinc-200 bg-white">
       <div class="flex items-center justify-between gap-3 border-b border-zinc-100 p-4">
         <div>
           <h3 class="font-semibold text-zinc-900">路由组</h3>
@@ -532,7 +532,7 @@ watch(
 
   <Teleport to="body">
     <div v-if="providerDialogOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" @click.self="providerDialogOpen = false">
-      <div class="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+      <div class="w-full max-w-md rounded-2xl bg-white p-5 shadow-wb-popup">
         <h4 class="text-lg font-semibold text-zinc-900">{{ providerEditingKey ? "编辑服务商" : "新增服务商" }}</h4>
         <div v-if="!providerEditingKey" class="mt-3">
           <p class="mb-2 text-xs font-medium text-zinc-500">常用厂商（点击自动填写标识与地址）</p>
@@ -547,8 +547,8 @@ watch(
           <div class="space-y-1.5 text-sm font-medium text-zinc-700">
             <span class="flex items-center justify-between"><span>API Key<span class="ml-1 text-xs font-normal text-zinc-400">可选，留空稍后补</span></span>
               <span class="flex gap-0.5 rounded-lg bg-zinc-100 p-0.5 text-xs font-medium">
-                <button type="button" class="rounded-md px-2.5 py-0.5 transition-colors" :class="keyMode === 'env' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'" @click="keyMode = 'env'">环境变量</button>
-                <button type="button" class="rounded-md px-2.5 py-0.5 transition-colors" :class="keyMode === 'plain' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'" @click="keyMode = 'plain'">明文</button>
+                <button type="button" class="rounded-md px-2.5 py-0.5 transition-colors" :class="keyMode === 'env' ? 'bg-white text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'" @click="keyMode = 'env'">环境变量</button>
+                <button type="button" class="rounded-md px-2.5 py-0.5 transition-colors" :class="keyMode === 'plain' ? 'bg-white text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'" @click="keyMode = 'plain'">明文</button>
               </span>
             </span>
             <Select v-if="keyMode === 'env' && envKeys.length" v-model="providerForm.api_key" :options="envKeyOptions" placeholder="选择环境变量" class="!h-10 !rounded-xl text-sm" />
@@ -578,7 +578,7 @@ watch(
     </div>
 
     <div v-if="remoteDialogOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" @click.self="remoteDialogOpen = false">
-      <div class="flex max-h-[80vh] w-full max-w-md flex-col rounded-2xl bg-white p-5 shadow-xl">
+      <div class="flex max-h-[80vh] w-full max-w-md flex-col rounded-2xl bg-white p-5 shadow-wb-popup">
         <h4 class="text-lg font-semibold text-zinc-900">获取上游模型<span class="ml-2 text-sm font-normal text-zinc-400">{{ remoteProviderKey }}</span></h4>
         <p class="mt-1 text-xs text-zinc-400">从服务商接口拉取模型列表；已导入的模型不受影响，重新拉取不会覆盖勾选状态</p>
         <div class="mt-3 min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
@@ -603,7 +603,7 @@ watch(
     </div>
 
     <div v-if="modelDialogOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" @click.self="modelDialogOpen = false">
-      <div class="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+      <div class="w-full max-w-md rounded-2xl bg-white p-5 shadow-wb-popup">
         <h4 class="text-lg font-semibold text-zinc-900">{{ modelEditing ? "编辑模型" : "新增模型" }}<span class="ml-2 text-sm font-normal text-zinc-400">{{ modelForm.providerKey }}</span></h4>
         <div class="mt-4 space-y-3">
           <label class="block space-y-1.5 text-sm font-medium text-zinc-700">模型 id<span class="text-red-500">*</span><input v-model="modelForm.id" :disabled="!!modelEditing" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 disabled:bg-zinc-50 disabled:text-zinc-400" placeholder="例如 deepseek-chat" /><p v-if="modelErrors.id" class="text-xs font-normal text-red-600">{{ modelErrors.id }}</p></label>
@@ -634,7 +634,7 @@ watch(
     </div>
 
     <div v-if="groupDialogOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" @click.self="groupDialogOpen = false">
-      <div class="flex max-h-[80vh] w-full max-w-md flex-col rounded-2xl bg-white p-5 shadow-xl">
+      <div class="flex max-h-[80vh] w-full max-w-md flex-col rounded-2xl bg-white p-5 shadow-wb-popup">
         <h4 class="text-lg font-semibold text-zinc-900">{{ groupEditingId ? "编辑路由组" : "新增路由组" }}</h4>
         <div class="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
           <label class="block space-y-1.5 text-sm font-medium text-zinc-700">组标识<span class="text-red-500">*</span><input v-model="groupForm.id" :disabled="!!groupEditingId" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-all focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 disabled:bg-zinc-50 disabled:text-zinc-400" placeholder="例如 main" /><p v-if="groupErrors.id" class="text-xs font-normal text-red-600">{{ groupErrors.id }}</p><span class="block text-xs font-normal text-zinc-400">对话引用将形如 group/{{ groupForm.id || "标识" }}，保存后不可改</span></label>

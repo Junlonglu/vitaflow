@@ -56,9 +56,9 @@ function startWithTemplate() {
         <article
           v-for="item in pagedTemplates"
           :key="item.template_id"
-          class="group relative flex flex-col rounded-[1.5rem] sm:rounded-[2rem] bg-white p-2 sm:p-2.5 shadow-sm ring-1 ring-zinc-100 transition-all duration-500 hover:shadow-2xl hover:shadow-zinc-200/50 hover:ring-zinc-200 hover:-translate-y-2"
+          class="group relative flex flex-col rounded-xl bg-white p-2 sm:p-2.5 ring-1 ring-zinc-200/70 transition-all duration-150 hover:ring-zinc-300"
         >
-          <div class="relative w-full aspect-[1/1.1] overflow-hidden rounded-[1.25rem] sm:rounded-[1.5rem] bg-zinc-50 pointer-events-none border border-zinc-100/80">
+          <div class="relative w-full aspect-[1/1.1] overflow-hidden rounded-lg bg-zinc-50 pointer-events-none border border-zinc-100/80">
             <div class="absolute inset-x-0 top-0 w-full transform transition-transform duration-700 ease-out group-hover:scale-[1.05]">
               <TemplatePreview :html="item.preview_html" />
             </div>
@@ -73,7 +73,7 @@ function startWithTemplate() {
               </span>
             </div>
             <div class="mt-auto">
-              <Button class="w-full h-8 sm:h-10 text-xs sm:text-sm bg-zinc-900 text-white hover:bg-zinc-800 transition-all duration-300 shadow-md rounded-xl font-medium active:scale-[0.98] border-none" @click="startWithTemplate">
+              <Button class="w-full h-8 sm:h-10 text-xs sm:text-sm duration-300 rounded-xl font-medium border-none" @click="startWithTemplate">
                 开始使用
               </Button>
             </div>
@@ -81,15 +81,15 @@ function startWithTemplate() {
         </article>
       </div>
 
-      <div v-if="templates.length > 0" class="mt-12 flex flex-col items-center justify-between gap-4 rounded-[2rem] bg-white p-3 sm:pl-7 sm:pr-3 shadow-sm ring-1 ring-zinc-100 sm:flex-row transition-all duration-300 hover:shadow-md">
+      <div v-if="templates.length > 0" class="mt-12 flex flex-col items-center justify-between gap-4 rounded-xl bg-white p-3 sm:pl-7 sm:pr-3 ring-1 ring-zinc-200/70 sm:flex-row transition-all duration-300 ">
         <div class="flex items-center gap-3 text-sm text-zinc-500">
           <span>共 <strong class="font-semibold text-zinc-900">{{ templates.length }}</strong> 个精选模板</span>
           <span class="text-zinc-200">|</span>
           <span>第 <strong class="font-semibold text-zinc-900">{{ page }}</strong> / {{ totalPages }} 页</span>
         </div>
-        <div class="flex items-center gap-1 bg-zinc-50 p-1.5 rounded-[1.5rem] ring-1 ring-zinc-100/80 w-full sm:w-auto justify-between sm:justify-start">
+        <div class="flex items-center gap-1 bg-zinc-50 p-1.5 rounded-lg ring-1 ring-zinc-100/80 w-full sm:w-auto justify-between sm:justify-start">
           <button
-            class="inline-flex h-10 items-center justify-center gap-1.5 rounded-[1.25rem] bg-white px-4.5 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white active:scale-[0.98]"
+            class="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-white px-4.5 text-sm font-medium text-zinc-700 ring-1 ring-zinc-200/70 transition hover:bg-zinc-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white active:scale-[0.98]"
             :disabled="page <= 1"
             @click="changePage(page - 1)"
           >
@@ -100,7 +100,7 @@ function startWithTemplate() {
             {{ page }} / {{ totalPages }}
           </span>
           <button
-            class="inline-flex h-10 items-center justify-center gap-1.5 rounded-[1.25rem] bg-white px-4.5 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white active:scale-[0.98]"
+            class="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-white px-4.5 text-sm font-medium text-zinc-700 ring-1 ring-zinc-200/70 transition hover:bg-zinc-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white active:scale-[0.98]"
             :disabled="page >= totalPages"
             @click="changePage(page + 1)"
           >

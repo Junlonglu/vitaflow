@@ -387,7 +387,7 @@ onUnmounted(() => window.clearTimeout(searchTimer))
             <FileDown class="mr-1.5 h-4 w-4" />
             从简历提取
           </Button>
-          <Button type="button" class="h-9 bg-zinc-900 px-3 text-[13px] text-white hover:bg-zinc-800" @click="openCreate()">
+          <Button type="button" class="h-9 px-3 text-[13px]" @click="openCreate()">
             <Plus class="mr-1.5 h-4 w-4" />
             新增信息
           </Button>
@@ -458,7 +458,7 @@ onUnmounted(() => window.clearTimeout(searchTimer))
             <Button type="button" variant="outline" class="h-9 px-3 text-[13px]" @click="openExtract">
               <Upload class="mr-1.5 h-4 w-4" />从简历提取
             </Button>
-            <Button type="button" class="h-9 bg-zinc-900 px-3 text-[13px] text-white hover:bg-zinc-800" @click="openCreate()">
+            <Button type="button" class="h-9 px-3 text-[13px]" @click="openCreate()">
               <Plus class="mr-1.5 h-4 w-4" />新增信息
             </Button>
           </div>
@@ -584,7 +584,7 @@ onUnmounted(() => window.clearTimeout(searchTimer))
     <template #footer>
       <div class="flex justify-end gap-2">
         <Button type="button" variant="ghost" class="h-9 px-3 text-[13px]" @click="editor.open = false">取消</Button>
-        <Button type="button" class="h-9 bg-zinc-900 px-4 text-[13px] text-white hover:bg-zinc-800" :disabled="saving" @click="saveFragment">
+        <Button type="button" class="h-9 px-4 text-[13px]" :disabled="saving" @click="saveFragment">
           <LoaderCircle v-if="saving" class="mr-1.5 h-4 w-4 animate-spin" />
           {{ editing ? "保存修改" : "保存" }}
         </Button>
@@ -610,7 +610,7 @@ onUnmounted(() => window.clearTimeout(searchTimer))
     <template #footer>
       <div class="flex justify-end gap-2">
         <Button type="button" variant="ghost" class="h-9 px-3 text-[13px]" @click="extractOpen = false">取消</Button>
-        <Button type="button" class="h-9 bg-zinc-900 px-4 text-[13px] text-white hover:bg-zinc-800" :disabled="extracting || !extractResumeId" @click="runExtract">
+        <Button type="button" class="h-9 px-4 text-[13px]" :disabled="extracting || !extractResumeId" @click="runExtract">
           <LoaderCircle v-if="extracting" class="mr-1.5 h-4 w-4 animate-spin" />
           开始提取
         </Button>
@@ -636,7 +636,7 @@ onUnmounted(() => window.clearTimeout(searchTimer))
     <template #footer>
       <div class="flex justify-end gap-2">
         <Button type="button" variant="ghost" class="h-9 px-3 text-[13px]" @click="importOpen = false">取消</Button>
-        <Button type="button" class="h-9 bg-zinc-900 px-4 text-[13px] text-white hover:bg-zinc-800" :disabled="importing || !importResumeId" @click="runImport">
+        <Button type="button" class="h-9 px-4 text-[13px]" :disabled="importing || !importResumeId" @click="runImport">
           <LoaderCircle v-if="importing" class="mr-1.5 h-4 w-4 animate-spin" />
           导入
         </Button>

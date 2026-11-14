@@ -440,7 +440,7 @@ function formatUpdated(value?: string) {
 
 <template>
   <aside
-    class="fixed inset-y-0 left-0 z-[60] flex h-full w-[272px] shrink-0 flex-col border-r border-zinc-200/60 bg-zinc-50 shadow-2xl transition-transform duration-200 ease-out md:static md:z-auto md:w-[248px] md:translate-x-0 md:bg-zinc-50/60 md:shadow-none"
+    class="fixed inset-y-0 left-0 z-[60] flex h-full w-[272px] shrink-0 flex-col border-r border-zinc-200/60 bg-zinc-50 shadow-wb-popup transition-transform duration-200 ease-out md:static md:z-auto md:w-[248px] md:translate-x-0 md:bg-zinc-50/60 "
     :class="drawerOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'"
   >
     <div class="shrink-0 px-3 pt-3">
@@ -710,7 +710,7 @@ function formatUpdated(value?: string) {
       @wheel.prevent="closeResumeMenu"
     >
       <div
-        class="fixed space-y-1 rounded-xl border border-zinc-200 bg-white p-1 shadow-[0_10px_28px_-8px_rgba(0,0,0,0.18)]"
+        class="fixed space-y-1 rounded-xl border border-zinc-200 bg-white p-1 shadow-wb-popup"
         :style="{ width: `${RESUME_MENU_WIDTH}px`, left: `${resumeMenu.x}px`, top: `${resumeMenu.y}px` }"
       >
         <button

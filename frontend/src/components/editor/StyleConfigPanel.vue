@@ -135,14 +135,14 @@ function resetDefaultStyle() {
           :key="item.value"
           type="button"
           class="flex flex-col items-start rounded-xl border p-2.5 transition-all duration-200 active:scale-95 text-left w-full select-none"
-          :class="config.font_family === item.value ? 'border-zinc-900 bg-zinc-900 text-white shadow-md' : 'border-zinc-200/80 bg-zinc-50/50 text-zinc-600 hover:border-zinc-300 hover:bg-white hover:text-zinc-900 hover:shadow-sm'"
+          :class="config.font_family === item.value ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200/80 bg-zinc-50/50 text-zinc-600 hover:border-zinc-300 hover:bg-white hover:text-zinc-900 '"
           @click="config.font_family = item.value; $emit('change')"
         >
           <div class="flex w-full items-center justify-between">
             <span class="text-base font-semibold tracking-wide" :style="{ fontFamily: item.value }">Aa 文</span>
             <div
               v-if="config.font_family === item.value"
-              class="flex h-4 w-4 items-center justify-center rounded-full bg-white text-zinc-900 shadow-sm"
+              class="flex h-4 w-4 items-center justify-center rounded-full bg-white text-zinc-900"
             >
               <Check class="h-2.5 w-2.5 stroke-[3]" />
             </div>
@@ -159,7 +159,7 @@ function resetDefaultStyle() {
           :key="item.value"
           type="button"
           class="flex h-8 items-center justify-center rounded-lg text-xs font-medium transition-all duration-150 whitespace-nowrap select-none"
-          :class="config.avatar_position === item.value ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'"
+          :class="config.avatar_position === item.value ? 'bg-white text-zinc-900' : 'text-zinc-500 hover:text-zinc-900'"
           @click="selectAvatarPosition(item.value)"
         >
           {{ item.label }}
@@ -171,7 +171,7 @@ function resetDefaultStyle() {
         <Label class="text-xs font-medium text-zinc-700">{{ item.label }}</Label>
         <div class="flex h-9 w-full items-center gap-2 rounded-xl border border-zinc-200/80 bg-zinc-50/60 px-2.5 transition-colors focus-within:border-zinc-900 focus-within:bg-white">
           <div
-            class="relative h-5 w-5 shrink-0 overflow-hidden rounded-full border border-zinc-200/80 shadow-sm transition-transform hover:scale-105 active:scale-95 cursor-pointer"
+            class="relative h-5 w-5 shrink-0 overflow-hidden rounded-full border border-zinc-200/80 transition-transform hover:scale-105 active:scale-95 cursor-pointer"
             :style="{ backgroundColor: getColorValue(item.key) }"
           >
             <input
@@ -197,7 +197,7 @@ function resetDefaultStyle() {
         <div class="flex h-9 items-center justify-between rounded-xl border border-zinc-200/80 bg-zinc-50/60 p-1 block w-full transition-colors focus-within:border-zinc-900 focus-within:bg-white">
           <button
             type="button"
-            class="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 transition-all hover:bg-white hover:text-zinc-900 hover:shadow-sm active:scale-95 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:shadow-none"
+            class="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 transition-all hover:bg-white hover:text-zinc-900 active:scale-95 disabled:opacity-40 disabled:hover:bg-transparent disabled:"
             :disabled="field === 'line_height' ? getConfigValue(field) <= 1.0 : getConfigValue(field) <= 0"
             @click="stepConfigValue(field, field === 'line_height' ? -0.1 : -1)"
           >
@@ -212,7 +212,7 @@ function resetDefaultStyle() {
           />
           <button
             type="button"
-            class="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 transition-all hover:bg-white hover:text-zinc-900 hover:shadow-sm active:scale-95"
+            class="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 transition-all hover:bg-white hover:text-zinc-900 active:scale-95"
             @click="stepConfigValue(field, field === 'line_height' ? 0.1 : 1)"
           >
             <Plus class="h-3.5 w-3.5" />

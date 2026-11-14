@@ -66,7 +66,7 @@ function submit() {
 <template>
   <Teleport to="body">
     <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" @click.self="emit('close')">
-      <div class="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+      <div class="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup">
         <div class="flex items-center gap-2 border-b border-zinc-100 px-5 py-4">
           <div class="flex-1">
             <h3 class="text-sm font-semibold text-zinc-900">补充岗位相关信息</h3>
@@ -130,10 +130,10 @@ function submit() {
             <Button v-if="step > 0" type="button" size="sm" variant="outline" class="h-8 rounded-full px-3 text-xs" @click="isSummary ? (step = total - 1) : goPrev()">
               <ArrowLeft class="mr-1 h-3.5 w-3.5" /> {{ isSummary ? "返回修改" : "上一题" }}
             </Button>
-            <Button v-if="!isSummary" type="button" size="sm" class="h-8 rounded-full bg-zinc-900 px-4 text-xs text-white hover:bg-zinc-800" @click="goNext">
+            <Button v-if="!isSummary" type="button" size="sm" class="h-8 rounded-full px-4 text-xs" @click="goNext">
               {{ step === total - 1 ? "完成" : "下一题" }} <ArrowRight class="ml-1 h-3.5 w-3.5" />
             </Button>
-            <Button v-else type="button" size="sm" class="h-8 rounded-full bg-zinc-900 px-4 text-xs text-white hover:bg-zinc-800" @click="submit">提交给 AI</Button>
+            <Button v-else type="button" size="sm" class="h-8 rounded-full px-4 text-xs" @click="submit">提交给 AI</Button>
           </div>
         </div>
       </div>

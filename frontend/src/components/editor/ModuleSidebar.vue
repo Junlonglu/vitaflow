@@ -95,7 +95,6 @@ function onDragStart(e: DragEvent, key: string) {
     clone.style.position = 'absolute'
     clone.style.top = '-9999px'
     clone.style.left = '-9999px'
-    clone.classList.remove('shadow-sm', 'shadow-md')
     clone.style.backgroundColor = target.classList.contains('bg-zinc-900') ? '#18181b' : '#ffffff'
     clone.style.border = '1px solid #e4e4e7'
     document.body.appendChild(clone)
@@ -232,7 +231,7 @@ function addModule(presetType?: string) {
       leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
     >
       <div v-if="showSortModal" class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-zinc-950/40 backdrop-blur-sm" @click.self="showSortModal = false">
-        <div class="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col max-h-[85vh]">
+        <div class="bg-white rounded-t-2xl sm:rounded-2xl shadow-wb-popup w-full max-w-sm overflow-hidden flex flex-col max-h-[85vh]">
           <div class="px-5 py-4 border-b border-zinc-100 flex items-center justify-between shrink-0">
             <h3 class="font-semibold text-zinc-900">模块排序与管理</h3>
             <button @click="showSortModal = false" class="p-2 -mr-2 text-zinc-400 hover:text-zinc-900 rounded-full hover:bg-zinc-100 transition-colors">
@@ -241,7 +240,7 @@ function addModule(presetType?: string) {
           </div>
           
           <div class="overflow-y-auto p-3 space-y-1.5 flex-1">
-            <div v-for="(element, idx) in orderedSections" :key="element" class="flex items-center gap-3 px-3 py-3 rounded-xl bg-white border border-zinc-100 shadow-sm">
+            <div v-for="(element, idx) in orderedSections" :key="element" class="flex items-center gap-3 px-3 py-3 rounded-xl bg-white border border-zinc-100">
               <button class="flex-1 min-w-0 flex items-center text-left" @click="$emit('select', element); showSortModal = false">
                 <div class="text-[14px] font-medium transition-colors" :class="visible(element) ? (current === element ? 'text-blue-600' : 'text-zinc-900 hover:text-blue-600') : 'text-zinc-400 line-through'">
                   {{ data.layout?.section_titles?.[element] || element }}
@@ -276,7 +275,7 @@ function addModule(presetType?: string) {
               <Plus class="w-4 h-4" />
               添加模块
             </button>
-            <button @click="showSortModal = false" class="w-full h-11 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl font-medium text-[15px] transition-transform active:scale-[0.98]">
+            <button @click="showSortModal = false" class="w-full h-11 bg-black/90 hover:bg-black/75 text-white rounded-xl font-medium text-[15px] transition-transform active:scale-[0.98]">
               完成
             </button>
           </div>
@@ -295,7 +294,7 @@ function addModule(presetType?: string) {
       leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
     >
       <div v-if="showAddModuleModal" class="fixed inset-0 z-[110] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-zinc-950/40 backdrop-blur-sm" @click.self="showAddModuleModal = false">
-        <div class="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[88vh]">
+        <div class="bg-white rounded-t-2xl sm:rounded-2xl shadow-wb-popup w-full max-w-2xl overflow-hidden flex flex-col max-h-[88vh]">
           <div class="px-5 py-4 border-b border-zinc-100 flex items-center justify-between shrink-0">
             <h3 class="font-semibold text-zinc-900">添加模块</h3>
             <button @click="showAddModuleModal = false" class="p-2 -mr-2 text-zinc-400 hover:text-zinc-900 rounded-full hover:bg-zinc-100 transition-colors">
@@ -310,7 +309,7 @@ function addModule(presetType?: string) {
                   v-for="preset in presets"
                   :key="preset.type"
                   type="button"
-                  class="rounded-xl border border-zinc-200 bg-white px-3 py-3 text-left transition hover:border-zinc-900 hover:bg-zinc-50 hover:shadow-sm"
+                  class="rounded-xl border border-zinc-200 bg-white px-3 py-3 text-left transition hover:border-zinc-900 hover:bg-zinc-50 "
                   @click="addModule(preset.type)"
                 >
                   <div class="text-sm font-semibold text-zinc-900">{{ preset.title }}</div>

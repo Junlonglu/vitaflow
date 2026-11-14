@@ -48,7 +48,7 @@ const selectedSet = (): Set<string> => new Set(props.selectedIds)
           </div>
           <div v-if="section.unchanged.length" class="mt-3 space-y-1.5">
             <p class="text-[11px] text-zinc-400">以下内容无变化</p>
-            <div v-for="entry in section.unchanged" :key="entry.key" class="rounded-[10px] bg-zinc-50 px-3 py-2">
+            <div v-for="entry in section.unchanged" :key="entry.key" class="rounded-lg bg-zinc-50 px-3 py-2">
               <p class="text-[12px] font-medium text-zinc-500">{{ entry.title }}</p>
               <p class="mt-0.5 line-clamp-3 whitespace-pre-wrap break-words text-[12px] leading-relaxed text-zinc-400">{{ entry.text }}</p>
             </div>

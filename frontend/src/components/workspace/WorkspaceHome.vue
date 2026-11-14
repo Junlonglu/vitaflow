@@ -103,7 +103,7 @@ async function submit() {
           <span class="text-[11px] text-zinc-400">Enter 发送 · Shift + Enter 换行</span>
           <button
             type="button"
-            class="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-zinc-900 text-white transition-colors hover:bg-zinc-800 active:scale-95 disabled:opacity-30"
+            class="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-black/90 text-white transition-colors hover:bg-black/75 active:scale-95 disabled:opacity-30"
             :disabled="busy"
             aria-label="开始"
             @click="submit"

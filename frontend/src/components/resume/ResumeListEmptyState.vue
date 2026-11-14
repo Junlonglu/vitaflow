@@ -21,7 +21,7 @@ defineEmits<{
       <p class="mt-1.5 max-w-sm text-[12.5px] leading-5 text-zinc-500">
         没有找到标题包含「{{ keyword }}」的简历，换个关键词试试。
       </p>
-      <Button variant="outline" class="mt-5 h-8 border-zinc-200 px-3 text-[12.5px] font-medium text-zinc-700 shadow-none" @click="$emit('clear')">
+      <Button variant="outline" class="mt-5 h-8 border-zinc-200 px-3 text-[12.5px] font-medium text-zinc-700" @click="$emit('clear')">
         清空搜索
       </Button>
     </template>
@@ -30,7 +30,7 @@ defineEmits<{
       <p class="mt-1.5 max-w-sm text-[12.5px] leading-5 text-zinc-500">
         选一个模板开始手写，或者直接让 AI 生成一版可继续编辑的初稿。
       </p>
-      <Button class="mt-5 h-8 bg-zinc-900 px-3 text-[12.5px] font-medium text-white shadow-none hover:bg-zinc-800" @click="$emit('create')">
+      <Button class="mt-5 h-8 px-3 text-[12.5px] font-medium" @click="$emit('create')">
         创建简历
       </Button>
     </template>

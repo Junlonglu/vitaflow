@@ -1,5 +1,43 @@
 @import "tailwindcss";
+@import "./wb-theme.css";
 @source "../**/*.{vue,ts}";
+
+/* ============================================================
+ * WorkBuddy 对齐层（2026-11-14）
+ *
+ * 目标：布局沿用本项目既有骨架，只把「配色冷暖、字体、动效节奏」换成
+ * WorkBuddy 桌面端的观感。做法是覆盖 Tailwind 的主题变量，而不是改
+ * 各页面的类名，所以布局与信息密度不变。
+ *
+ * 三处刻意的取值差异，改之前先读 docs/design/workbuddy-visual-reference.md：
+ * 1. 灰阶去蓝：zi​nc 原值是带蓝调的，WorkBuddy 用纯中性灰（#f2f2f2 / #ebebeb /
+ *    #e6e6e6 一族）。这里只在同明度区间内做中性化，对比度不低于原值，
+ *    zinc-500 仍保持 4.9:1 以上，说明文字可读性不受影响。
+ * 2. 正文纯黑：WorkBuddy 文字主色是 #000、次色 #000000b3。原 #111827 偏蓝，
+ *    换成中性近黑后观感更「墨」，与它的近黑主按钮成一套。
+ * 3. 动效 100ms：WorkBuddy 的按钮过渡是 0.1s 标准曲线，几乎瞬时、不弹。
+ * ============================================================ */
+@theme {
+  /* 字体：拉丁与数字走 Inter（比 PingFang 的拉丁更紧凑），中文回落到
+     PingFang SC / 微软雅黑 —— 与 WorkBuddy 在 Windows 上的实际结果一致。 */
+  --font-sans: Inter, "PingFang SC", ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+
+  /* 中性灰阶：只去色相、明度基本不变（原 zinc 带一点蓝调）。
+     逐档对比度与改动前持平或略高：500 → 5.07:1、600 → 7.4:1、400 → 2.52:1。
+     zinc-200/300 略微提亮，贴近 WorkBuddy 的 #ebebeb / #dedede 描边。 */
+  --color-zinc-50: #fafafa;
+  --color-zinc-100: #f4f4f4;
+  --color-zinc-200: #e8e8e8;
+  --color-zinc-300: #d6d6d6;
+  --color-zinc-400: #a3a3a3;
+  --color-zinc-500: #6e6e6e;
+  --color-zinc-600: #545454;
+  --color-zinc-700: #3d3d3d;
+  --color-zinc-800: #262626;
+  --color-zinc-900: #171717;
+  --color-zinc-950: #0a0a0a;
+}
 
 * { 
   box-sizing: border-box; 
@@ -9,14 +47,23 @@ html { overflow-y: scroll; }
 body, html body, html body[style] {
   margin: 0;
   padding-right: 0 !important;
-  color: #111827; /* 既有正文基线（原 gray-900 值）；站点灰阶规范见 docs/design-system.md（zinc） */
-  background: #f7f8fb; /* 页面底色基线，非 Tailwind 色阶值（zinc-50 是 #fafafa），首页观感依赖此值 */
+  color: #0a0a0a; /* 中性近黑（WorkBuddy 文字主色为 #000）；原 #111827 偏蓝 */
+  background: #f7f7f8; /* 中性页面底色；原 #f7f8fb 带蓝调。首页观感依赖此值，改动需同步截图确认 */
   overflow: visible !important;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+  font-family: var(--font-sans);
+  /* WorkBuddy 桌面端开启的字体平滑；中文小字号下笔画更细、更接近工具感 */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 a { color: inherit; text-decoration: none; }
+/* 滚动条对齐 WorkBuddy：8px、半透明黑、无轨道底 */
 .thin-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
-.thin-scrollbar::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 999px; }
+.thin-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background: rgb(0 0 0 / 20%);
+  border-radius: 999px;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb:hover { background: rgb(0 0 0 / 32%); }
 
 /* 全局富文本编辑器及展示内容样式重置（绝对强制，抵抗 Tailwind v4 preflight 样式重置） */
 .rich-text-editor ul, .announcement-content ul, .history-announcement-content ul, .ai-records-hint ul {
@@ -82,16 +129,16 @@ a { color: inherit; text-decoration: none; }
     --color-white: #ffffff;
     --color-black: #000000;
     --color-zinc-50: #fafafa;
-    --color-zinc-100: #f4f4f5;
-    --color-zinc-200: #e4e4e7;
-    --color-zinc-300: #d4d4d8;
-    --color-zinc-400: #a1a1aa;
-    --color-zinc-500: #71717a;
-    --color-zinc-600: #52525b;
-    --color-zinc-700: #3f3f46;
-    --color-zinc-800: #27272a;
-    --color-zinc-900: #18181b;
-    --color-zinc-950: #09090b;
+    --color-zinc-100: #f4f4f4;
+    --color-zinc-200: #e8e8e8;
+    --color-zinc-300: #d6d6d6;
+    --color-zinc-400: #a3a3a3;
+    --color-zinc-500: #6e6e6e;
+    --color-zinc-600: #545454;
+    --color-zinc-700: #3d3d3d;
+    --color-zinc-800: #262626;
+    --color-zinc-900: #171717;
+    --color-zinc-950: #0a0a0a;
     --color-blue-50: #eff6ff;
     --color-blue-100: #dbeafe;
     --color-blue-200: #bfdbfe;

@@ -80,7 +80,7 @@ function handleSubmit() {
             required
             step="0.01"
             :min="mode === 'all' ? 1 : undefined"
-            class="h-11 w-full rounded-xl border border-zinc-200 bg-white px-4 text-sm text-zinc-900 shadow-sm transition placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+            class="h-11 w-full rounded-xl border border-zinc-200 bg-white px-4 text-sm text-zinc-900 transition placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
             placeholder="请输入点数 (例如: 100)"
           />
         </div>
@@ -95,7 +95,7 @@ function handleSubmit() {
             v-model="description"
             type="text"
             required
-            class="h-11 w-full rounded-xl border border-zinc-200 bg-white px-4 text-sm text-zinc-900 shadow-sm transition placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+            class="h-11 w-full rounded-xl border border-zinc-200 bg-white px-4 text-sm text-zinc-900 transition placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
             placeholder="请输入备注说明"
           />
         </div>

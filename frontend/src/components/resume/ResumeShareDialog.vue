@@ -167,7 +167,7 @@ watch(
                 @click="enabled = !enabled"
               >
                 <span
-                  class="absolute left-0 top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform"
+                  class="absolute left-0 top-1 h-5 w-5 rounded-full bg-white transition-transform"
                   :class="enabled ? 'translate-x-6' : 'translate-x-1'"
                 ></span>
               </button>
@@ -190,7 +190,7 @@ watch(
                 @click="maskSensitive = !maskSensitive"
               >
                 <span
-                  class="absolute left-0 top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform"
+                  class="absolute left-0 top-1 h-5 w-5 rounded-full bg-white transition-transform"
                   :class="maskSensitive ? 'translate-x-6' : 'translate-x-1'"
                 ></span>
               </button>

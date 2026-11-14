@@ -128,7 +128,7 @@ onBeforeUnmount(() => {
         <p class="mt-4 text-sm font-medium text-zinc-500 tracking-wide">正在加载分享简历...</p>
       </div>
 
-      <section v-else-if="error" class="mx-auto mt-16 max-w-md rounded-2xl border border-zinc-200 bg-white px-6 py-10 text-center shadow-sm">
+      <section v-else-if="error" class="mx-auto mt-16 max-w-md rounded-2xl border border-zinc-200 bg-white px-6 py-10 text-center">
         <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-zinc-100 text-zinc-500"><AlertCircle class="h-6 w-6" /></span>
         <h1 class="mt-5 text-lg font-semibold text-zinc-900">无法查看这份简历</h1>
         <p class="mt-2 text-sm leading-relaxed text-zinc-500">{{ error }}</p>
@@ -137,7 +137,7 @@ onBeforeUnmount(() => {
       <template v-else-if="sharedResume">
         <div class="flex justify-center overflow-hidden">
           <div
-            class="relative overflow-hidden bg-white border border-zinc-200 shadow-[0_2px_12px_rgba(0,0,0,0.06)] sm:rounded-lg transition-all duration-300"
+            class="relative overflow-hidden bg-white border border-zinc-200 shadow-wb-popup sm:rounded-lg transition-all duration-300"
             :style="{ width: `${shellWidth}px`, height: `${shellHeight}px` }"
           >
             <iframe
@@ -162,7 +162,7 @@ onBeforeUnmount(() => {
           <span class="text-sm font-bold tracking-tight text-zinc-900">VitaFlow 简历流</span>
           <p class="mt-1 text-xs text-zinc-500">还在为找工作发愁？使用 VitaFlow 轻松提炼出彩简历。</p>
         </div>
-        <a href="/" target="_blank" class="inline-flex h-10 items-center justify-center rounded-lg bg-zinc-900 px-5 text-xs font-medium !text-white shadow-sm transition-all hover:bg-zinc-800 active:scale-95">
+        <a href="/" target="_blank" class="inline-flex h-10 items-center justify-center rounded-lg bg-black/90 px-5 text-xs font-medium !text-white transition-all duration-100 hover:bg-black/75 active:scale-95">
           免费制作同款简历 &rarr;
         </a>
       </div>

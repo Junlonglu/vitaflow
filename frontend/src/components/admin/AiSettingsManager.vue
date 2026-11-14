@@ -712,7 +712,7 @@ watch(
           { id: 'model', label: '模型配置', desc: '模型目录 + 模型策略', icon: Settings2 },
           { id: 'rules', label: 'Flow Points', desc: '各 AI 功能扣点规则', icon: Zap },
           { id: 'codes', label: '兑换码', desc: '每人限一次，可批量管理', icon: Ticket },
-        ]" :key="item.id" class="rounded-xl border px-4 py-3 text-left transition" :class="currentTab === item.id ? 'border-zinc-900 bg-zinc-900 text-white shadow-sm' : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'" @click="setActiveTab(item.id)">
+        ]" :key="item.id" class="rounded-xl border px-4 py-3 text-left transition" :class="currentTab === item.id ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'" @click="setActiveTab(item.id)">
           <component :is="item.icon" class="h-4 w-4" />
           <p class="mt-2 text-sm font-semibold">{{ item.label }}</p>
           <p class="mt-1 text-xs" :class="currentTab === item.id ? 'text-zinc-300' : 'text-zinc-400'">{{ item.desc }}</p>
@@ -797,7 +797,7 @@ watch(
     />
 
     <div v-if="configToDelete" class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-sm transition-all duration-200">
-      <div class="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+      <div class="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-wb-popup">
         <div class="mb-5 flex items-center justify-between">
           <div class="flex items-center gap-2 text-red-600">
             <Trash2 class="h-5 w-5" />

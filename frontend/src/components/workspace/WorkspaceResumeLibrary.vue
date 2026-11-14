@@ -200,14 +200,14 @@ async function confirmDelete() {
       <div class="flex items-center gap-2">
         <Button
           variant="outline"
-          class="flex h-8 items-center rounded-lg border border-zinc-200 bg-white px-2.5 text-[12px] font-medium text-zinc-700 shadow-none transition-colors hover:border-zinc-300 hover:bg-white hover:text-zinc-950"
+          class="flex h-8 items-center rounded-lg border border-zinc-200 bg-white px-2.5 text-[12px] font-medium text-zinc-700 transition-colors hover:border-zinc-300 hover:bg-white hover:text-zinc-950"
           @click="openCreate('choice')"
         >
           <Plus class="mr-1 h-3.5 w-3.5 text-zinc-400" />
           创建简历
         </Button>
         <Button
-          class="flex h-8 items-center rounded-lg bg-zinc-900 px-2.5 text-[12px] font-medium text-white shadow-none transition-colors hover:bg-zinc-800"
+          class="flex h-8 items-center rounded-lg px-2.5 text-[12px] font-medium"
           @click="openCreate('ai')"
         >
           <Sparkles class="mr-1 h-3.5 w-3.5 text-zinc-400" />

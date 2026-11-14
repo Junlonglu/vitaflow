@@ -9,6 +9,7 @@
 | 第一次接触项目，搞清有哪些模块、怎么跑起来的 | [`PROJECT-OVERVIEW.md`](./PROJECT-OVERVIEW.md) |
 | 把项目跑起来（本地开发 / 全栈 Docker） | [`本地开发环境启动指南.md`](./本地开发环境启动指南.md) |
 | 改前端 UI、定样式或组件规范 | [`design-system.md`](./design-system.md) |
+| 想把界面改成 WorkBuddy 那种观感 | [`design/workbuddy-visual-reference.md`](./design/workbuddy-visual-reference.md) |
 | 改 AI 对话链路、提示词、技能或工具 | [`ai/resume-agent.md`](./ai/resume-agent.md) → [`ai/ai-call-flows.md`](./ai/ai-call-flows.md) |
 | 排查「AI 改简历为什么没生效 / 待确认变更怎么走」 | [`ai/ai-chat-pending-change.md`](./ai/ai-chat-pending-change.md) |
 | 改简历 JSON 结构、加字段或加模块 | [`data/resume-schema.md`](./data/resume-schema.md) |
@@ -41,6 +42,12 @@
 | [`architecture/pi-agent重构设计.md`](./architecture/pi-agent重构设计.md) | pi-agent 重构的动机、目标架构、迁移路径。`status: accepted`，同时作为旧链路退役后的回滚依据 |
 
 > 5 个 ADR（Node 旁路服务、统一对话入口、MySQL 事实源、section 级工具、模型目录归属）已合并进 `PROJECT-OVERVIEW.md` §14「关键架构决策」，包含各自被拒方案与理由。
+
+### `design/`：外部设计参考（1 篇）
+
+| 文档 | 内容 |
+| --- | --- |
+| [`design/workbuddy-visual-reference.md`](./design/workbuddy-visual-reference.md) | WorkBuddy 桌面端界面拆解（v2）：四层 token 架构（含 VS Code 基色桥）、窗口层窗口配置、色板与字体、尺度与动效、布局夹紧常量、骨架屏、页面骨架、组件配方、交互逻辑、技术栈，以及在本仓库落地的四步路径与风险 |
 
 ### `data/`：数据契约（1 篇）
 

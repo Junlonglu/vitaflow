@@ -204,7 +204,7 @@ const faqs = [
               </div>
             </div>
 
-          <aside class="hidden lg:block relative w-full rounded-3xl border border-zinc-200 bg-white p-6 sm:p-7 shadow-sm">
+          <aside class="hidden lg:block relative w-full rounded-xl border border-zinc-200 bg-white p-6 sm:p-7">
             <div class="mb-6 flex items-center justify-between px-1">
               <div class="flex items-center gap-2.5">
                 <div class="flex h-8 w-8 items-center justify-center rounded-xl bg-zinc-100 text-zinc-900">
@@ -225,7 +225,7 @@ const faqs = [
                 <!-- 图标 -->
                 <span
                   class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors"
-                  :class="action.primary ? 'bg-zinc-900 text-white shadow-sm' : 'bg-white border border-zinc-200 text-zinc-500 group-hover:border-zinc-300 group-hover:text-zinc-900'"
+                  :class="action.primary ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200 text-zinc-500 group-hover:border-zinc-300 group-hover:text-zinc-900'"
                 >
                   <component :is="action.icon" class="h-4 w-4" />
                 </span>
@@ -249,12 +249,12 @@ const faqs = [
       </section>
 
       <section class="mt-8 grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <nav class="flex overflow-x-auto gap-2 lg:flex-col lg:rounded-[2rem] lg:border lg:border-zinc-200 lg:bg-white lg:p-3 lg:shadow-sm lg:sticky lg:top-24 lg:self-start scrollbar-hide pb-2 lg:pb-3 -mx-4 px-4 sm:mx-0 sm:px-0">
+        <nav class="flex overflow-x-auto gap-2 lg:flex-col lg:rounded-xl lg:border lg:border-zinc-200 lg:bg-white lg:p-3 lg:sticky lg:top-24 lg:self-start scrollbar-hide pb-2 lg:pb-3 -mx-4 px-4 sm:mx-0 sm:px-0">
           <button
             v-for="topic in topics"
             :key="topic.id"
             class="flex shrink-0 lg:w-full items-center gap-2 lg:gap-3 rounded-full lg:rounded-2xl px-4 py-2.5 lg:py-3 text-left text-sm font-medium transition"
-            :class="activeTopicId === topic.id ? 'bg-zinc-950 text-white shadow-md shadow-zinc-900/10' : 'bg-zinc-100 lg:bg-transparent text-zinc-500 hover:bg-zinc-200 lg:hover:bg-zinc-100 hover:text-zinc-950'"
+            :class="activeTopicId === topic.id ? 'bg-zinc-950 text-white ' : 'bg-zinc-100 lg:bg-transparent text-zinc-500 hover:bg-zinc-200 lg:hover:bg-zinc-100 hover:text-zinc-950'"
             @click="activeTopicId = topic.id"
           >
             <component :is="topic.icon" class="h-4 w-4 shrink-0" />
@@ -262,7 +262,7 @@ const faqs = [
           </button>
         </nav>
 
-        <article class="overflow-hidden rounded-[2rem] border border-zinc-200 bg-white shadow-sm">
+        <article class="overflow-hidden rounded-xl border border-zinc-200 bg-white">
           <header class="border-b border-zinc-100 p-5 sm:p-8">
             <div class="flex flex-row items-start justify-between gap-4 sm:gap-5">
               <div>
@@ -283,7 +283,7 @@ const faqs = [
                 :key="step"
                 class="flex gap-4 rounded-2xl border border-zinc-100 bg-zinc-50/70 p-4"
               >
-                <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-xs font-semibold text-zinc-700 shadow-sm ring-1 ring-zinc-200">
+                <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-xs font-semibold text-zinc-700 ring-1 ring-zinc-200">
                   {{ index + 1 }}
                 </span>
                 <p class="text-sm leading-6 text-zinc-600">{{ step }}</p>
@@ -305,7 +305,7 @@ const faqs = [
           <section
             v-for="item in faqs"
             :key="item.question"
-            class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm"
+            class="rounded-2xl border border-zinc-200 bg-white p-5"
           >
             <div class="flex items-start gap-3">
               <CheckCircle2 class="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
@@ -318,7 +318,7 @@ const faqs = [
         </div>
       </section>
 
-      <section class="mt-10 rounded-[2rem] border border-zinc-200 bg-zinc-950 p-6 text-white shadow-sm sm:p-8">
+      <section class="mt-10 rounded-xl border border-zinc-200 bg-zinc-950 p-6 text-white sm:p-8">
         <div class="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div class="max-w-2xl">
             <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">

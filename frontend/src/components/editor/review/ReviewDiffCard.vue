@@ -15,7 +15,7 @@ const kindClass = {
 
 <template>
   <label
-    class="block cursor-pointer rounded-[14px] bg-white p-3 ring-1 ring-zinc-200/70 transition-colors hover:ring-zinc-300"
+    class="block cursor-pointer rounded-xl bg-white p-3 ring-1 ring-zinc-200/70 transition-colors hover:ring-zinc-300"
     :class="[props.selected ? 'ring-blue-300/80 bg-blue-50/20' : '', props.disabled ? 'pointer-events-none opacity-60' : '']"
   >
     <div class="flex items-center gap-2">

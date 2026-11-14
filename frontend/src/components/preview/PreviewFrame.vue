@@ -383,7 +383,7 @@ onBeforeUnmount(() => {
           </svg>
           Tips: 如果分页内容被截断，可在设置中调整「边距」或「行高」
         </div>
-        <div class="relative overflow-hidden bg-white shadow-xl" :style="shellStyle">
+        <div class="relative overflow-hidden bg-white shadow-wb-popup" :style="shellStyle">
           <div class="absolute left-0 overflow-hidden" :style="pageViewportStyle(page)">
             <iframe
               class="pointer-events-none origin-top-left border-0 bg-white"

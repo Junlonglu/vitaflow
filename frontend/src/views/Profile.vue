@@ -178,7 +178,7 @@ const navItems = [
         
         <!-- Left Sidebar: Unified Minimal Card (User Info + Navigation) -->
         <aside class="space-y-4">
-          <div class="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-zinc-100">
+          <div class="rounded-xl bg-white p-5 ring-1 ring-zinc-200/70">
             <!-- User Info Header -->
             <div class="flex items-center justify-between pb-5 mb-5 border-b border-zinc-100 px-2">
               <div class="min-w-0 flex-1 pr-2">
@@ -198,7 +198,7 @@ const navItems = [
                 :key="item.id"
                 @click="activeTab = item.id"
                 class="flex w-full items-center gap-3.5 rounded-xl px-4 py-3.5 text-left text-sm font-medium transition-all duration-200"
-                :class="activeTab === item.id ? 'bg-zinc-900 text-white font-semibold shadow-md shadow-zinc-900/10' : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900'"
+                :class="activeTab === item.id ? 'bg-zinc-900 text-white font-semibold ' : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900'"
               >
                 <component :is="item.icon" class="h-4.5 w-4.5" />
                 <span>{{ item.label }}</span>
@@ -212,7 +212,7 @@ const navItems = [
                 :key="item.id"
                 @click="activeTab = item.id"
                 class="flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 px-3 text-xs font-medium whitespace-nowrap shrink-0 transition-all duration-200"
-                :class="activeTab === item.id ? 'bg-zinc-900 text-white font-semibold shadow-md shadow-zinc-900/10' : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900'"
+                :class="activeTab === item.id ? 'bg-zinc-900 text-white font-semibold ' : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900'"
               >
                 <component :is="item.icon" class="h-4 w-4" />
                 <span>{{ item.label }}</span>
@@ -222,7 +222,7 @@ const navItems = [
         </aside>
 
         <!-- Right Main Content Area -->
-        <section class="rounded-[2rem] bg-white p-6 sm:p-10 shadow-sm ring-1 ring-zinc-100 lg:min-h-[480px] flex flex-col justify-between">
+        <section class="rounded-xl bg-white p-6 sm:p-10 ring-1 ring-zinc-200/70 lg:min-h-[480px] flex flex-col justify-between">
           
           <!-- Tab 1: Profile Settings -->
           <div v-if="activeTab === 'profile'" class="space-y-6 flex-1 flex flex-col justify-between">
@@ -234,18 +234,18 @@ const navItems = [
               <div class="space-y-6 max-w-2xl">
                 <div class="space-y-2">
                   <Label class="text-zinc-700 text-xs font-medium">登录邮箱</Label>
-                  <Input :model-value="user.userInfo?.email || ''" disabled class="bg-zinc-50 border-zinc-200 text-zinc-500 h-11 w-full rounded-xl shadow-sm" />
+                  <Input :model-value="user.userInfo?.email || ''" disabled class="bg-zinc-50 border-zinc-200 text-zinc-500 h-11 w-full rounded-xl" />
                 </div>
 
                 <div class="space-y-2">
                   <Label class="text-zinc-700 text-xs font-medium">用户名</Label>
-                  <Input v-model="username" maxlength="50" placeholder="请输入用户名" class="border-zinc-200 focus-visible:ring-zinc-900 transition-all h-11 w-full rounded-xl shadow-sm" />
+                  <Input v-model="username" maxlength="50" placeholder="请输入用户名" class="border-zinc-200 focus-visible:ring-zinc-900 transition-all h-11 w-full rounded-xl" />
                 </div>
               </div>
             </div>
 
             <div class="pt-6 border-t border-zinc-100 flex justify-end">
-              <Button @click="saveProfile" :disabled="profileSaving" class="bg-zinc-900 hover:bg-zinc-800 text-white h-11 px-8 rounded-xl text-sm font-semibold shadow-md hover:shadow-lg transition-all active:scale-95">
+              <Button @click="saveProfile" :disabled="profileSaving" class="h-11 px-8 rounded-xl text-sm font-semibold">
                 <Loader2 v-if="profileSaving" class="mr-2 h-4 w-4 animate-spin" />
                 <span>保存更改</span>
               </Button>
@@ -262,21 +262,21 @@ const navItems = [
               <div class="space-y-6 max-w-2xl">
                 <div class="space-y-2">
                   <Label class="text-zinc-700 text-xs font-medium">当前密码</Label>
-                  <Input v-model="passwordForm.current_password" type="password" placeholder="当前密码" class="border-zinc-200 focus-visible:ring-zinc-900 transition-all h-11 w-full rounded-xl shadow-sm" />
+                  <Input v-model="passwordForm.current_password" type="password" placeholder="当前密码" class="border-zinc-200 focus-visible:ring-zinc-900 transition-all h-11 w-full rounded-xl" />
                 </div>
                 <div class="space-y-2">
                   <Label class="text-zinc-700 text-xs font-medium">新密码</Label>
-                  <Input v-model="passwordForm.new_password" type="password" placeholder="至少 6 位新密码" class="border-zinc-200 focus-visible:ring-zinc-900 transition-all h-11 w-full rounded-xl shadow-sm" />
+                  <Input v-model="passwordForm.new_password" type="password" placeholder="至少 6 位新密码" class="border-zinc-200 focus-visible:ring-zinc-900 transition-all h-11 w-full rounded-xl" />
                 </div>
                 <div class="space-y-2">
                   <Label class="text-zinc-700 text-xs font-medium">确认新密码</Label>
-                  <Input v-model="passwordForm.confirm_password" type="password" placeholder="再次输入新密码" class="border-zinc-200 focus-visible:ring-zinc-900 transition-all h-11 w-full rounded-xl shadow-sm" @keyup.enter="savePassword" />
+                  <Input v-model="passwordForm.confirm_password" type="password" placeholder="再次输入新密码" class="border-zinc-200 focus-visible:ring-zinc-900 transition-all h-11 w-full rounded-xl" @keyup.enter="savePassword" />
                 </div>
               </div>
             </div>
 
             <div class="pt-6 border-t border-zinc-100 flex justify-end">
-              <Button @click="savePassword" :disabled="passwordSaving" class="bg-zinc-900 hover:bg-zinc-800 text-white h-11 px-8 rounded-xl text-sm font-semibold shadow-md hover:shadow-lg transition-all active:scale-95">
+              <Button @click="savePassword" :disabled="passwordSaving" class="h-11 px-8 rounded-xl text-sm font-semibold">
                 <Loader2 v-if="passwordSaving" class="mr-2 h-4 w-4 animate-spin" />
                 <span>更新密码</span>
               </Button>
@@ -290,14 +290,14 @@ const navItems = [
               <div class="grid grid-cols-2 rounded-xl bg-zinc-100 p-1 text-xs font-medium text-zinc-500 sm:w-56">
                 <button
                   class="rounded-lg px-3 py-2 transition"
-                  :class="feedbackView === 'submit' ? 'bg-white text-zinc-900 shadow-sm' : 'hover:text-zinc-900'"
+                  :class="feedbackView === 'submit' ? 'bg-white text-zinc-900' : 'hover:text-zinc-900'"
                   @click="feedbackView = 'submit'"
                 >
                   提交反馈
                 </button>
                 <button
                   class="rounded-lg px-3 py-2 transition"
-                  :class="feedbackView === 'history' ? 'bg-white text-zinc-900 shadow-sm' : 'hover:text-zinc-900'"
+                  :class="feedbackView === 'history' ? 'bg-white text-zinc-900' : 'hover:text-zinc-900'"
                   @click="feedbackView = 'history'; loadMyFeedbacks(myFeedbacks.page)"
                 >
                   反馈历史
@@ -310,11 +310,11 @@ const navItems = [
                 <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
                   <div class="space-y-2">
                     <Label class="text-xs font-medium text-zinc-700">所属模块</Label>
-                    <Select v-model="feedbackCategory" :options="categoryOptions" class="h-11 w-full rounded-xl border-zinc-200 shadow-sm transition-all focus:border-zinc-900 focus:ring-zinc-900" />
+                    <Select v-model="feedbackCategory" :options="categoryOptions" class="h-11 w-full rounded-xl border-zinc-200 transition-all focus:border-zinc-900 focus:ring-zinc-900" />
                   </div>
                   <div class="space-y-2">
                     <Label class="text-xs font-medium text-zinc-700">联系方式 (可选)</Label>
-                    <Input v-model="feedbackContact" placeholder="手机号、微信或邮箱" class="h-11 w-full rounded-xl border-zinc-200 shadow-sm transition-all focus-visible:ring-zinc-900" />
+                    <Input v-model="feedbackContact" placeholder="手机号、微信或邮箱" class="h-11 w-full rounded-xl border-zinc-200 transition-all focus-visible:ring-zinc-900" />
                   </div>
                 </div>
                 <div class="space-y-2">
@@ -324,7 +324,7 @@ const navItems = [
               </div>
 
               <div class="mt-8 flex justify-end border-t border-zinc-100 pt-6">
-                <Button @click="submitFeedback" :disabled="feedbackSubmitting || !feedbackContent.trim()" class="h-11 rounded-xl bg-zinc-900 px-8 text-sm font-semibold text-white shadow-md transition-all hover:bg-zinc-800 hover:shadow-lg active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
+                <Button @click="submitFeedback" :disabled="feedbackSubmitting || !feedbackContent.trim()" class="h-11 rounded-xl px-8 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50">
                   <Loader2 v-if="feedbackSubmitting" class="mr-2 h-4 w-4 animate-spin" />
                   <Send v-else class="mr-2 h-4 w-4" />
                   <span>提交反馈</span>
@@ -354,7 +354,7 @@ const navItems = [
                 暂无反馈记录
               </div>
 
-              <div v-else class="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+              <div v-else class="overflow-hidden rounded-xl border border-zinc-200 bg-white">
                 <ul class="divide-y divide-zinc-100">
                   <li v-for="item in myFeedbacks.items" :key="item.id" class="bg-white px-4 py-4 transition hover:bg-zinc-50/50 sm:px-5">
                     <div class="flex flex-col">
@@ -366,9 +366,9 @@ const navItems = [
                       <div class="mt-3.5 flex items-center justify-between gap-3 pt-3 border-t border-zinc-100/80">
                         <span class="text-xs text-zinc-400 font-medium shrink-0">{{ formatDate(item.create_time) }}</span>
                         <div class="flex items-center gap-2 shrink-0">
-                          <button class="h-8 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50 active:scale-95 whitespace-nowrap shrink-0" @click="openFeedbackDialog(item, 'preview')">预览</button>
+                          <button class="h-8 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 active:scale-95 whitespace-nowrap shrink-0" @click="openFeedbackDialog(item, 'preview')">预览</button>
                           <button
-                            class="h-8 rounded-lg border px-3 text-xs font-medium shadow-sm transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none whitespace-nowrap shrink-0"
+                            class="h-8 rounded-lg border px-3 text-xs font-medium transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 whitespace-nowrap shrink-0"
                             :class="item.admin_reply ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'border-zinc-200 bg-zinc-50 text-zinc-400'"
                             :disabled="!item.admin_reply"
                             @click="openFeedbackDialog(item, 'reply')"
@@ -404,7 +404,7 @@ const navItems = [
         leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
       >
         <div v-if="feedbackDialog && selectedFeedback" class="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-950/40 p-4 backdrop-blur-sm" @click.self="closeFeedbackDialog">
-          <div class="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+          <div class="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup">
             <div class="flex items-start justify-between gap-4 border-b border-zinc-100 px-6 py-4">
               <div class="min-w-0">
                 <h3 class="text-base font-semibold text-zinc-900">{{ feedbackDialog === 'preview' ? '反馈预览' : '管理员回复' }}</h3>
@@ -434,7 +434,7 @@ const navItems = [
             </div>
 
             <div class="flex justify-end border-t border-zinc-100 bg-zinc-50/50 px-6 py-4">
-              <button class="h-10 rounded-xl bg-zinc-900 px-6 text-sm font-medium text-white transition hover:bg-zinc-800" @click="closeFeedbackDialog">关闭</button>
+              <button class="h-10 rounded-xl bg-black/90 px-6 text-sm font-medium text-white transition hover:bg-black/75" @click="closeFeedbackDialog">关闭</button>
             </div>
           </div>
         </div>

@@ -60,11 +60,11 @@ function submit() {
     <div v-else class="flex flex-col gap-5 h-full">
       <div class="flex flex-col gap-1.5">
         <label class="text-[13px] font-medium text-zinc-700 shrink-0">目标职位</label>
-        <input v-model="form.target_position" placeholder="例如：Java 后端开发工程师、产品经理..." class="h-12 w-full rounded-[16px] bg-zinc-50/80 px-4 text-[15px] font-medium text-zinc-800 placeholder:text-zinc-400 border-0 ring-1 ring-zinc-200/50 transition-all focus:bg-white focus:ring-blue-500/30 focus:shadow-[0_8px_30px_rgba(16,185,129,0.06)] outline-none" />
+        <input v-model="form.target_position" placeholder="例如：Java 后端开发工程师、产品经理..." class="h-12 w-full rounded-2xl bg-zinc-50/80 px-4 text-[15px] font-medium text-zinc-800 placeholder:text-zinc-400 border-0 ring-1 ring-zinc-200/50 transition-all focus:bg-white focus:ring-blue-500/30 outline-none" />
       </div>
       <div class="flex flex-col gap-1.5 flex-1 min-h-0">
         <label class="text-[13px] font-medium text-zinc-700 shrink-0">个人信息</label>
-        <div class="flex-1 min-h-[300px] relative rounded-[20px] bg-zinc-50/80 ring-1 ring-zinc-200/50 transition-all focus-within:bg-white focus-within:ring-blue-500/30 focus-within:shadow-[0_8px_30px_rgba(16,185,129,0.06)] overflow-hidden">
+        <div class="flex-1 min-h-[300px] relative rounded-2xl bg-zinc-50/80 ring-1 ring-zinc-200/50 transition-all focus-within:bg-white focus-within:ring-blue-500/30 overflow-hidden">
           <textarea v-model="form.personal_info" placeholder="把姓名、学历、技能、项目、经历、奖项等信息写在这里" class="absolute inset-0 h-full w-full resize-none border-0 bg-transparent p-5 text-[15px] leading-relaxed text-zinc-800 placeholder:text-zinc-400 outline-none thin-scrollbar" style="box-shadow: none;" />
         </div>
       </div>
@@ -74,21 +74,21 @@ function submit() {
           <div class="flex rounded-full bg-zinc-100 p-1">
             <button
               class="rounded-full px-3 py-1.5 text-xs font-medium transition"
-              :class="form.language === 'zh-CN' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'"
+              :class="form.language === 'zh-CN' ? 'bg-white text-zinc-900' : 'text-zinc-500'"
               @click="form.language = 'zh-CN'"
             >
               中文
             </button>
             <button
               class="rounded-full px-3 py-1.5 text-xs font-medium transition"
-              :class="form.language === 'en' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'"
+              :class="form.language === 'en' ? 'bg-white text-zinc-900' : 'text-zinc-500'"
               @click="form.language = 'en'"
             >
               English
             </button>
           </div>
         </div>
-        <Button class="h-14 w-full rounded-full bg-zinc-900 text-[16px] font-medium text-white shadow-md transition-all active:scale-[0.98] hover:bg-zinc-800 hover:shadow-lg" @click="submit">
+        <Button class="h-14 w-full rounded-full text-[16px] font-medium" @click="submit">
           生成并创建简历
         </Button>
       </div>

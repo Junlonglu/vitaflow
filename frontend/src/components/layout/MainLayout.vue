@@ -105,7 +105,7 @@ function logout() {
           
           <template v-else>
             <RouterLink to="/workspace" class="ml-2 shrink-0">
-              <Button size="sm" class="h-9 px-4 bg-zinc-900 text-white hover:bg-zinc-800 transition-all active:scale-95 shadow-sm rounded-lg shrink-0">
+              <Button size="sm" class="h-9 px-4 rounded-lg shrink-0">
                 <Sparkles class="h-4 w-4 mr-1.5 shrink-0" />
                 <span class="whitespace-nowrap">开始使用</span>
               </Button>
@@ -125,7 +125,7 @@ function logout() {
               <span>模板</span>
             </RouterLink>
             <RouterLink to="/workspace" class="shrink-0">
-              <Button size="sm" class="h-8 px-2 min-[420px]:px-3 bg-zinc-900 text-white hover:bg-zinc-800 transition-all active:scale-95 shadow-sm rounded-lg text-xs shrink-0" title="开始使用">
+              <Button size="sm" class="h-8 px-2 min-[420px]:px-3 rounded-lg text-xs shrink-0" title="开始使用">
                 <Sparkles class="h-3.5 w-3.5 shrink-0 min-[420px]:mr-1" />
                 <span class="hidden whitespace-nowrap min-[420px]:inline">开始使用</span>
               </Button>
@@ -156,7 +156,7 @@ function logout() {
 
       <!-- Mobile Dropdown Menu (Logged In) -->
       <Transition name="mobile-menu">
-        <div v-if="loggedIn && mobileMenuOpen" class="sm:hidden absolute top-full left-0 right-0 border-b border-zinc-200/80 bg-white/95 backdrop-blur-xl px-4 py-4 space-y-1 shadow-2xl z-50">
+        <div v-if="loggedIn && mobileMenuOpen" class="sm:hidden absolute top-full left-0 right-0 border-b border-zinc-200/80 bg-white/95 backdrop-blur-xl px-4 py-4 space-y-1 shadow-wb-popup z-50">
           <RouterLink 
             class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 transition-colors"
             :class="{ 'bg-zinc-100 text-zinc-900': route.path === '/templates' }"

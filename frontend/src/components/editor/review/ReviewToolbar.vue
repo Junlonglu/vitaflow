@@ -27,7 +27,7 @@ const emit = defineEmits<{ "toggle-all": []; apply: []; cancel: [] }>()
     >
       取消
     </button>
-    <Button type="button" size="sm" class="h-8 rounded-full bg-zinc-900 px-4 text-xs font-medium text-white hover:bg-zinc-800" :disabled="props.applying || props.selectedCount === 0" @click="emit('apply')">
+    <Button type="button" size="sm" class="h-8 rounded-full px-4 text-xs font-medium" :disabled="props.applying || props.selectedCount === 0" @click="emit('apply')">
       应用所选（{{ props.selectedCount }}）
     </Button>
   </div>

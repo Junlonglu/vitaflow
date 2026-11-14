@@ -16,10 +16,10 @@ withDefaults(defineProps<{
   <Teleport to="body">
     <Transition name="resume-import-progress">
       <div v-if="open" class="fixed inset-0 z-[110] flex items-center justify-center bg-zinc-950/45 p-4 backdrop-blur-sm">
-        <section class="w-full max-w-[520px] rounded-[28px] border border-zinc-200 bg-white p-7 shadow-[0_24px_70px_-18px_rgba(0,0,0,0.28)] sm:p-8">
+        <section class="w-full max-w-[520px] rounded-2xl border border-zinc-200 bg-white p-7 shadow-wb-popup sm:p-8">
           <div class="flex items-center justify-between gap-4">
             <div class="flex min-w-0 items-center gap-4">
-              <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-zinc-900 text-white shadow-lg shadow-zinc-900/15">
+              <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-zinc-900 text-white ">
                 <FileUp class="h-6 w-6" stroke-width="1.6" />
               </span>
               <div class="min-w-0">
@@ -27,7 +27,7 @@ withDefaults(defineProps<{
                 <h3 class="mt-1 truncate text-lg font-semibold tracking-tight text-zinc-950 sm:text-xl">正在智能导入简历</h3>
               </div>
             </div>
-            <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-zinc-100 bg-zinc-50 text-sm font-semibold tabular-nums text-zinc-700 shadow-sm">{{ progress }}%</span>
+            <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-zinc-100 bg-zinc-50 text-sm font-semibold tabular-nums text-zinc-700">{{ progress }}%</span>
           </div>
 
           <p class="mt-4 text-sm leading-6 text-zinc-500">正在识别原简历内容与结构，并转换为可继续编辑的履历数据。</p>
@@ -37,7 +37,7 @@ withDefaults(defineProps<{
               v-for="(stage, index) in stages"
               :key="stage"
               class="flex items-center gap-3 rounded-2xl px-4 py-3 transition-all duration-300"
-              :class="index === stageIndex ? 'bg-zinc-50 shadow-sm ring-1 ring-zinc-100' : ''"
+              :class="index === stageIndex ? 'bg-zinc-50 ring-1 ring-zinc-100' : ''"
             >
               <span
                 class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold transition-all duration-300"

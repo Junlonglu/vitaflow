@@ -281,7 +281,7 @@ async function handleResetPassword() {
               </div>
               <p v-if="loginError" class="text-sm text-red-500">{{ loginError }}</p>
               <p v-if="loginSuccess" class="text-sm text-green-600 font-medium">{{ loginSuccess }}</p>
-              <Button class="w-full bg-zinc-900 hover:bg-zinc-800 text-white mt-4 h-11 transition-transform active:scale-95" @click="handleLogin">登录</Button>
+              <Button class="w-full mt-4 h-11" @click="handleLogin">登录</Button>
             </div>
 
             <div v-else class="mt-8 flex-1 space-y-5">
@@ -304,7 +304,7 @@ async function handleResetPassword() {
               </div>
               <p v-if="resetError" class="text-sm text-red-500">{{ resetError }}</p>
               <p v-if="resetSuccess" class="text-sm text-green-600 font-medium">{{ resetSuccess }}</p>
-              <Button class="w-full bg-zinc-900 hover:bg-zinc-800 text-white mt-4 h-11 transition-transform active:scale-95" @click="handleResetPassword">重置密码</Button>
+              <Button class="w-full mt-4 h-11" @click="handleResetPassword">重置密码</Button>
               <Button type="button" variant="outline" class="w-full h-11" @click="backToLogin">返回登录</Button>
             </div>
             
@@ -352,7 +352,7 @@ async function handleResetPassword() {
               </div>
               <p v-if="regError" class="text-sm text-red-500">{{ regError }}</p>
               <p v-if="regSuccess" class="text-sm text-green-600 font-medium">{{ regSuccess }}</p>
-              <Button class="w-full bg-zinc-900 hover:bg-zinc-800 text-white mt-2 h-11 transition-transform active:scale-95" @click="handleRegister">注册</Button>
+              <Button class="w-full mt-2 h-11" @click="handleRegister">注册</Button>
             </div>
             
             <div class="mt-8 text-center text-sm">
@@ -366,7 +366,7 @@ async function handleResetPassword() {
 
     <!-- 用户协议弹窗 -->
     <div v-if="showAgreementModal" class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm p-4 animate-in fade-in-0 duration-200">
-      <div class="relative w-full max-w-2xl rounded-2xl bg-white p-6 sm:p-8 shadow-xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
+      <div class="relative w-full max-w-2xl rounded-2xl bg-white p-6 sm:p-8 shadow-wb-popup animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
         <div class="flex items-center justify-between border-b border-zinc-100 pb-4 mb-4 shrink-0">
           <h3 class="text-lg font-semibold text-zinc-900">用户协议与隐私政策</h3>
           <button @click="showAgreementModal = false" class="rounded-lg p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 transition-colors focus:outline-none">
@@ -375,7 +375,7 @@ async function handleResetPassword() {
         </div>
         <div class="overflow-y-auto pr-2 py-2 flex-1 prose max-w-none text-sm text-zinc-600 leading-relaxed" v-html="userAgreementContent || '暂无协议内容'"></div>
         <div class="border-t border-zinc-100 pt-4 mt-4 flex items-center justify-end shrink-0">
-          <Button @click="showAgreementModal = false; agreed = true" class="bg-zinc-900 hover:bg-zinc-800 text-white px-6 py-2.5 rounded-xl">我已阅读并同意</Button>
+          <Button @click="showAgreementModal = false; agreed = true" class="px-6 py-2.5 rounded-xl">我已阅读并同意</Button>
         </div>
       </div>
     </div>

@@ -1,0 +1,248 @@
+/*
+ * WorkBuddy 风格 token 层（Tailwind v4）
+ *
+ * 用法：在 src/styles/index.css 的 `@import "tailwindcss";` 之后加一行
+ *   @import "./wb-theme.css";
+ * 亮/暗通过 <html data-theme="light|dark"> 切换（与 WorkBuddy 一致）。
+ *
+ * 来源：WorkBuddy 桌面端 renderer/assets/tokens-*.css 与 src-*.css（--wb-* / --cr-*），
+ * 详见 docs/design/workbuddy-visual-reference.md。这里只保留与界面观感强相关的子集。
+ */
+
+:root,
+[data-theme="light"] {
+  /* —— 原始色阶 —— */
+  --wb-brand-1: #dff7f2;
+  --wb-brand-3: #9fe8d9;
+  --wb-brand-5: #60d9c0;
+  --wb-brand-7: #40d1b3;
+  --wb-brand-8: #00c29a;
+  --wb-brand-9: #009273;
+  --wb-brand-10: #00614d;
+
+  --wb-gray-1: #fafafa;
+  --wb-gray-2: #f7f7f7;
+  --wb-gray-3: #f2f2f2;
+  --wb-gray-4: #ebebeb;
+  --wb-gray-5: #e6e6e6;
+
+  /* —— 页面底色 —— */
+  --wb-bg-page: #f2f2f2; /* home-bg-primary */
+  --wb-bg: #ffffff; /* home-bg-secondary / bg-primary */
+  --wb-bg-subtle: #f7f7f7;
+  --wb-bg-muted: #f2f2f2;
+  --wb-bg-hover: rgb(0 0 0 / 5%);
+  --wb-bg-active: rgb(0 0 0 / 8%);
+  --wb-card: #ffffff;
+
+  /* —— 文字 —— */
+  --wb-text: #000000;
+  --wb-text-secondary: #000000b3;
+  --wb-text-tertiary: #00000080;
+  --wb-text-disabled: #0000004d;
+  --wb-text-placeholder: #8a9099;
+  --wb-text-link: #1470b4;
+  --wb-text-brand: #00c29a;
+
+  /* —— 描边 —— */
+  --wb-border: #e6e6e6;
+  --wb-border-subtle: #f2f2f2;
+  --wb-border-strong: #dedede;
+  --wb-border-hover: #0000004d;
+
+  /* —— 状态 —— */
+  --wb-success: #0cbf5b;
+  --wb-warning: #ff7800;
+  --wb-danger: #f64041;
+
+  /* —— 主按钮：近黑，不是品牌色 —— */
+  --wb-primary: #000000e6;
+  --wb-primary-hover: #000000bf;
+  --wb-primary-fg: #ffffff;
+
+  /* —— 聊天面（--cr-*）—— */
+  --wb-chat-canvas: #fafafa;
+  --wb-chat-bubble: #f2f2f2; /* 用户气泡 */
+  --wb-chat-send: #000000e6; /* 发送键填充 */
+  --wb-chat-input-border-from: #ebebeb;
+  --wb-chat-input-border-to: #f2f2f2;
+}
+
+[data-theme="dark"] {
+  --wb-brand-1: #0e2520;
+  --wb-brand-3: #185f51;
+  --wb-brand-5: #1ca98c;
+  --wb-brand-7: #22cba8;
+  --wb-brand-8: #4cf0ce;
+  --wb-brand-9: #7cf0d8;
+  --wb-brand-10: #a8f5e5;
+
+  --wb-gray-1: #141414;
+  --wb-gray-2: #292929;
+  --wb-gray-3: #1f1f1f;
+  --wb-gray-4: #242424;
+  --wb-gray-5: #3a3a3a;
+
+  --wb-bg-page: #1f1f1f;
+  --wb-bg: #141414;
+  --wb-bg-subtle: #1a1b1e;
+  --wb-bg-muted: #242424;
+  --wb-bg-hover: rgb(255 255 255 / 6%);
+  --wb-bg-active: rgb(255 255 255 / 10%);
+  --wb-card: #1f1f1f;
+
+  --wb-text: #ffffff;
+  --wb-text-secondary: #ffffffb3;
+  --wb-text-tertiary: #ffffff80;
+  --wb-text-disabled: #ffffff4d;
+  --wb-text-placeholder: #ffffff4d;
+  --wb-text-link: #4d80ef;
+  --wb-text-brand: #4cf0ce;
+
+  --wb-border: #2a2c31;
+  --wb-border-subtle: #242424;
+  --wb-border-strong: #34373d;
+  --wb-border-hover: #ffffff4d;
+
+  --wb-success: #91e8b8;
+  --wb-warning: #ffae6e;
+  --wb-danger: #f78d8e;
+
+  --wb-primary: #ffffffeb;
+  --wb-primary-hover: #ffffffbf;
+  --wb-primary-fg: #000000;
+
+  --wb-chat-canvas: #141414;
+  --wb-chat-bubble: #ffffff1a;
+  --wb-chat-send: #ffffffeb;
+  --wb-chat-input-border-from: #3a3c42;
+  --wb-chat-input-border-to: #2e3036;
+}
+
+/* 让 Tailwind 生成 bg-wb-* / text-wb-* / border-wb-* / rounded-wb-* 等工具类 */
+@theme inline {
+  --color-wb-brand: var(--wb-brand-8);
+  --color-wb-brand-soft: var(--wb-brand-1);
+  --color-wb-brand-deep: var(--wb-brand-9);
+  --color-wb-bg: var(--wb-bg);
+  --color-wb-page: var(--wb-bg-page);
+  --color-wb-subtle: var(--wb-bg-subtle);
+  --color-wb-muted: var(--wb-bg-muted);
+  --color-wb-hover: var(--wb-bg-hover);
+  --color-wb-card: var(--wb-card);
+  --color-wb-border: var(--wb-border);
+  --color-wb-border-subtle: var(--wb-border-subtle);
+  --color-wb-border-strong: var(--wb-border-strong);
+  --color-wb-text: var(--wb-text);
+  --color-wb-text-secondary: var(--wb-text-secondary);
+  --color-wb-text-tertiary: var(--wb-text-tertiary);
+  --color-wb-text-disabled: var(--wb-text-disabled);
+  --color-wb-link: var(--wb-text-link);
+  --color-wb-primary: var(--wb-primary);
+  --color-wb-primary-hover: var(--wb-primary-hover);
+  --color-wb-primary-fg: var(--wb-primary-fg);
+  --color-wb-success: var(--wb-success);
+  --color-wb-warning: var(--wb-warning);
+  --color-wb-danger: var(--wb-danger);
+  --color-wb-bubble: var(--wb-chat-bubble);
+
+  --radius-wb-xs: 2px;
+  --radius-wb-sm: 4px;
+  --radius-wb-md: 6px;
+  --radius-wb-lg: 8px;
+  --radius-wb-xl: 12px;
+  --radius-wb-2xl: 16px;
+  --radius-wb-3xl: 20px;
+  --radius-wb-4xl: 24px;
+
+  --font-wb-sans: "PingFang SC", -apple-system, "Helvetica Neue", Arial,
+    "Microsoft Yahei", sans-serif;
+  --font-wb-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+
+  /* 字号 + 行高成对声明，text-wb-body 会同时带上行高 */
+  --text-wb-caption: 12px;
+  --text-wb-caption--line-height: 18px;
+  --text-wb-body: 14px;
+  --text-wb-body--line-height: 22px;
+  --text-wb-code: 13px;
+  --text-wb-code--line-height: 20px;
+  --text-wb-h3: 16px;
+  --text-wb-h3--line-height: 24px;
+  --text-wb-h2: 20px;
+  --text-wb-h2--line-height: 28px;
+  --text-wb-h1: 24px;
+  --text-wb-h1--line-height: 32px;
+  --text-wb-display: 32px;
+  --text-wb-display--line-height: 40px;
+
+  /* 全站唯一的一档「离开页面平面」的阴影，只给浮层（弹窗/下拉/抽屉/toast/tooltip）。
+     WorkBuddy 的浮层阴影极轻，靠两段小半径叠出层次，不像 Tailwind shadow-xl 那样一整块重投影。
+     静态内容（卡片/输入框/列表行/开关滑块）一律无阴影，边界靠 border 或 ring-1 ring-zinc-200/70。
+     画布内的纸面（首页 hero、模板预览、composer 输入区）允许就地写 shadow-[…]。 */
+  --shadow-wb-popup: 0 6px 24px -4px rgb(0 0 0 / 4%), 0 4px 6px -2px rgb(0 0 0 / 6%);
+
+  --ease-wb-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-wb-decelerate: cubic-bezier(0, 0, 0.2, 1);
+  --ease-wb-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --ease-wb-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ------------------------------------------------------------------
+ * 窗口层与布局常量
+ *
+ * 这些数值在 WorkBuddy 里分布在两处：窗口底色/标题栏高度来自主进程
+ * （BrowserWindow 配置 + loadQuery 注入），侧栏与面板的夹紧区间来自
+ * renderer 的布局模块常量。VitaFlow 是 Web 应用，合并为一份 CSS 变量。
+ * 用法示例：style="width: var(--wb-sidebar-width)"
+ * 详见 docs/design/workbuddy-visual-reference.md §2 / §6.1
+ * ------------------------------------------------------------------ */
+:root,
+[data-theme="light"] {
+  /* 窗口纸面：比页面底(--wb-bg-page #f2f2f2)更亮 */
+  --wb-window-bg: #ffffff;
+
+  /* 顶栏：56 默认；40 为紧凑态；Electron 桌面态为 64（本文件不涉及） */
+  --wb-titlebar-height: 56px;
+  --wb-titlebar-height-compact: 40px;
+
+  /* 侧栏夹紧区间：拖拽时 120 以下折叠、150 以上展开（滞回，防抖关键） */
+  --wb-sidebar-width: 280px;
+  --wb-sidebar-min-width: 240px;
+  --wb-sidebar-max-width: 360px;
+  --wb-sidebar-collapsed-width: 48px;
+  --wb-sidebar-collapse-threshold: 120px;
+  --wb-sidebar-expand-threshold: 150px;
+
+  /* 聊天区与右侧详情面板：主区不得低于 400，详情不得低于 360 */
+  --wb-chat-min-width: 400px;
+  --wb-chat-preferred-width: 600px;
+  --wb-detail-width: 500px;
+  --wb-detail-min-width: 360px;
+  --wb-detail-overview-width: 318px;
+
+  /* 移动断点 */
+  --wb-breakpoint-mobile: 600px;
+
+  /* 骨架屏：尺寸只"形似"真实布局，不精确占位 */
+  --sk-bg: #ffffff;
+  --sk-titlebar-bg: #f5f5f5;
+  --sk-sidebar-bg: #f7f7f8;
+  --sk-content-bg: #ffffff;
+  --sk-titlebar-h: 38px;
+  --sk-sidebar-w: 220px;
+  --sk-shimmer-color: rgb(0 0 0 / 4%);
+  --sk-text-placeholder: rgb(0 0 0 / 6%);
+  --sk-border-color: rgb(0 0 0 / 6%);
+}
+
+[data-theme="dark"] {
+  --wb-window-bg: #1e1e1e;
+
+  --sk-bg: #1e1e1e;
+  --sk-titlebar-bg: #242424;
+  --sk-sidebar-bg: #1c1c1c;
+  --sk-content-bg: #141414;
+  --sk-shimmer-color: rgb(255 255 255 / 4%);
+  --sk-text-placeholder: rgb(255 255 255 / 8%);
+  --sk-border-color: rgb(255 255 255 / 8%);
+}

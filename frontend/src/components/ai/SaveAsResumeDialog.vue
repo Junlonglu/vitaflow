@@ -32,7 +32,7 @@ function confirm() {
 <template>
   <Teleport to="body">
     <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" @click.self="emit('close')">
-      <div class="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+      <div class="w-full max-w-md rounded-2xl bg-white p-5 shadow-wb-popup">
         <div class="flex items-center gap-2">
           <h3 class="flex-1 text-sm font-semibold text-zinc-900">另存为新简历</h3>
           <button type="button" class="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700" title="关闭" aria-label="关闭" @click="emit('close')">
@@ -52,7 +52,7 @@ function confirm() {
         />
         <div class="mt-5 flex items-center justify-end gap-2">
           <Button type="button" size="sm" variant="outline" class="h-8 rounded-full px-3 text-xs" :disabled="loading" @click="emit('close')">不另存</Button>
-          <Button type="button" size="sm" class="h-8 rounded-full bg-zinc-900 px-4 text-xs text-white hover:bg-zinc-800" :disabled="loading || !title.trim()" @click="confirm">
+          <Button type="button" size="sm" class="h-8 rounded-full px-4 text-xs" :disabled="loading || !title.trim()" @click="confirm">
             另存并打开
           </Button>
         </div>

@@ -357,7 +357,7 @@ function addPresetField(preset: (typeof basicInfoPresets)[number]) {
       <div class="flex items-center gap-3 md:gap-5">
         <div class="relative group h-13 w-13 md:h-16 md:w-16 shrink-0">
           <!-- Avatar Image or Placeholder -->
-          <label class="relative flex h-full w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl md:rounded-2xl border-2 border-dashed transition-all" :class="[basics.avatar ? 'border-transparent ring-1 ring-zinc-200 shadow-sm' : 'border-zinc-300 hover:border-zinc-400 bg-zinc-50 hover:bg-zinc-100', { 'opacity-50 pointer-events-none': isUploading }]">
+          <label class="relative flex h-full w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl md:rounded-2xl border-2 border-dashed transition-all" :class="[basics.avatar ? 'border-transparent ring-1 ring-zinc-200' : 'border-zinc-300 hover:border-zinc-400 bg-zinc-50 hover:bg-zinc-100', { 'opacity-50 pointer-events-none': isUploading }]">
             <img v-if="basics.avatar" :src="basics.avatar" class="h-full w-full object-cover" />
             <UserRound v-else class="h-5 w-5 md:h-6 md:w-6 text-zinc-400" />
             
@@ -375,7 +375,7 @@ function addPresetField(preset: (typeof basicInfoPresets)[number]) {
           </label>
 
           <!-- Delete Button (Top Right) -->
-          <button v-if="basics.avatar" class="absolute -right-2 -top-2 z-10 flex h-5 w-5 md:h-6 md:w-6 items-center justify-center rounded-full bg-red-100 text-red-600 shadow-sm ring-2 ring-white transition-transform hover:scale-110 hover:bg-red-500 hover:text-white active:scale-95" @click="basics.avatar = ''; $emit('change')" title="删除头像">
+          <button v-if="basics.avatar" class="absolute -right-2 -top-2 z-10 flex h-5 w-5 md:h-6 md:w-6 items-center justify-center rounded-full bg-red-100 text-red-600 ring-2 ring-white transition-transform hover:scale-110 hover:bg-red-500 hover:text-white active:scale-95" @click="basics.avatar = ''; $emit('change')" title="删除头像">
             <X class="h-3 w-3 md:h-3.5 md:w-3.5" />
           </button>
         </div>
@@ -385,7 +385,7 @@ function addPresetField(preset: (typeof basicInfoPresets)[number]) {
         </div>
       </div>
     </div>
-    <div class="rounded-xl border border-zinc-200/80 bg-white shadow-sm">
+    <div class="rounded-xl border border-zinc-200/80 bg-white">
       <div class="flex items-center justify-between p-2.5 md:p-4 border-b border-zinc-100/80">
         <h3 class="text-xs md:text-sm font-semibold text-zinc-900">附加信息</h3>
         <Button size="sm" variant="outline" class="h-7 md:h-8 text-xs md:text-sm border-zinc-200" @click="addCustom"><Plus class="h-3.5 w-3.5 md:h-4 md:w-4 md:mr-1" /><span class="hidden md:inline">添加字段</span></Button>
@@ -398,7 +398,7 @@ function addPresetField(preset: (typeof basicInfoPresets)[number]) {
               v-for="item in rowItems[row]"
               :key="item.uid"
               :data-uid="item.uid"
-              class="field-row flex items-center gap-1.5 md:gap-3 p-1.5 md:p-2 rounded-xl border border-zinc-100 hover:border-zinc-300 hover:shadow-sm bg-zinc-50/50 hover:bg-white transition-all group hover:z-[60] focus-within:z-[60]"
+              class="field-row flex items-center gap-1.5 md:gap-3 p-1.5 md:p-2 rounded-xl border border-zinc-100 hover:border-zinc-300 bg-zinc-50/50 hover:bg-white transition-all group hover:z-[60] focus-within:z-[60]"
               :class="activeIconPicker === itemPickerKey(item) ? 'z-50 relative' : 'z-10 relative'"
             >
               <!-- Drag Handle -->
@@ -407,10 +407,10 @@ function addPresetField(preset: (typeof basicInfoPresets)[number]) {
               </span>
               <!-- Icon Picker -->
               <div class="relative shrink-0 icon-picker-container">
-                <button class="flex h-8 w-8 md:h-9 md:w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white hover:border-zinc-400 hover:bg-zinc-50 transition-colors shadow-sm" :title="item.icon" @click="activeIconPicker = activeIconPicker === itemPickerKey(item) ? '' : itemPickerKey(item)">
+                <button class="flex h-8 w-8 md:h-9 md:w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white hover:border-zinc-400 hover:bg-zinc-50 transition-colors" :title="item.icon" @click="activeIconPicker = activeIconPicker === itemPickerKey(item) ? '' : itemPickerKey(item)">
                   <component :is="iconMap[item.icon] || Info" class="h-3.5 w-3.5 md:h-4 md:w-4 text-zinc-600" />
                 </button>
-                <div v-if="activeIconPicker === itemPickerKey(item)" class="absolute left-0 bottom-11 z-30 grid w-56 grid-cols-6 gap-1 rounded-xl border border-zinc-200 bg-white/95 backdrop-blur-md p-2 shadow-xl">
+                <div v-if="activeIconPicker === itemPickerKey(item)" class="absolute left-0 bottom-11 z-30 grid w-56 grid-cols-6 gap-1 rounded-xl border border-zinc-200 bg-white/95 backdrop-blur-md p-2 shadow-wb-popup">
                   <button v-for="icon in iconOptions" :key="icon.value" class="flex h-8 w-8 items-center justify-center rounded-md hover:bg-zinc-100 transition-colors" :title="icon.label" @click="setItemIcon(item, icon.value)">
                     <component :is="icon.component" class="h-4 w-4 text-zinc-700" />
                   </button>
@@ -420,7 +420,7 @@ function addPresetField(preset: (typeof basicInfoPresets)[number]) {
               <!-- Label -->
               <div class="relative group/label hidden md:block w-16 shrink-0 outline-none" tabindex="0">
                 <div class="text-[14px] font-medium px-1 truncate cursor-pointer" :class="item.kind === 'builtin' ? 'text-zinc-700' : 'text-zinc-500'">{{ item.label }}</div>
-                <div v-if="isLabelTruncated(item.label)" class="absolute left-0 top-full mt-1.5 z-50 hidden group-hover/label:block group-focus/label:block w-max max-w-[200px] whitespace-normal rounded-md bg-zinc-900 px-2.5 py-1 text-xs text-white shadow-xl pointer-events-none">
+                <div v-if="isLabelTruncated(item.label)" class="absolute left-0 top-full mt-1.5 z-50 hidden group-hover/label:block group-focus/label:block w-max max-w-[200px] whitespace-normal rounded-md bg-zinc-900 px-2.5 py-1 text-xs text-white shadow-wb-popup pointer-events-none">
                   {{ item.label }}
                 </div>
               </div>
@@ -467,7 +467,7 @@ function addPresetField(preset: (typeof basicInfoPresets)[number]) {
     
     <Teleport to="body">
       <Transition name="toast-slide">
-        <div v-if="toastMessage" class="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] flex w-max max-w-[90vw] items-center gap-2 rounded-xl bg-zinc-900 px-5 py-3 text-sm font-medium text-white shadow-xl border border-zinc-800">
+        <div v-if="toastMessage" class="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] flex w-max max-w-[90vw] items-center gap-2 rounded-xl bg-zinc-900 px-5 py-3 text-sm font-medium text-white shadow-wb-popup border border-zinc-800">
           <CheckCircle2 v-if="toastType === 'success'" class="h-4 w-4 shrink-0 text-emerald-400" />
           <AlertCircle v-else-if="toastType === 'error'" class="h-4 w-4 shrink-0 text-red-400" />
           <span class="break-words">{{ toastMessage }}</span>

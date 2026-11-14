@@ -472,7 +472,7 @@ watch(
                     <Button
                       type="button"
                       size="sm"
-                      class="h-8 bg-zinc-900 px-4 text-xs md:text-[13px] font-medium text-white hover:bg-zinc-800"
+                      class="h-8 px-4 text-xs md:text-[13px] font-medium"
                       :disabled="decisionLoadingId === message.id"
                       @click="emit('confirm', message)"
                     >
@@ -516,7 +516,7 @@ watch(
           <p v-if="uploadError" class="w-full text-xs text-red-500">{{ uploadError }}</p>
         </div>
         <div class="relative flex items-start">
-          <div v-if="slashOpen" class="absolute bottom-full left-0 right-0 z-20 mb-2 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-lg">
+          <div v-if="slashOpen" class="absolute bottom-full left-0 right-0 z-20 mb-2 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-wb-popup">
             <p class="px-4 pb-1 pt-2.5 text-[11px] font-medium text-zinc-400">技能（↑↓ 选择，Enter 补全）</p>
             <button
               v-for="(skill, i) in slashMatches"
@@ -532,7 +532,7 @@ watch(
               <span v-if="skill.argumentHint" class="shrink-0 text-[11px] text-zinc-400">{{ skill.argumentHint }}</span>
             </button>
           </div>
-          <textarea ref="inputRef" v-model="input" placeholder="说你想改的地方，或输入 / 选一个技能..." rows="1" class="w-full min-h-[40px] sm:min-h-[46px] max-h-[100px] sm:max-h-[160px] resize-none bg-transparent px-3.5 sm:px-4 pt-2.5 sm:pt-3 pb-1 text-[13px] sm:text-[14.5px] leading-relaxed text-zinc-800 placeholder:text-zinc-400 border-0 shadow-none focus-visible:ring-0 outline-none" style="scrollbar-width: none;" @input="adjustHeight" @compositionstart="composing = true" @compositionend="composing = false" @keydown="handleSlashNav" @keydown.enter.exact.prevent="handleEnter($event)" @paste="handlePaste"></textarea>
+          <textarea ref="inputRef" v-model="input" placeholder="说你想改的地方，或输入 / 选一个技能..." rows="1" class="w-full min-h-[40px] sm:min-h-[46px] max-h-[100px] sm:max-h-[160px] resize-none bg-transparent px-3.5 sm:px-4 pt-2.5 sm:pt-3 pb-1 text-[13px] sm:text-[14.5px] leading-relaxed text-zinc-800 placeholder:text-zinc-400 border-0 focus-visible:ring-0 outline-none" style="scrollbar-width: none;" @input="adjustHeight" @compositionstart="composing = true" @compositionend="composing = false" @keydown="handleSlashNav" @keydown.enter.exact.prevent="handleEnter($event)" @paste="handlePaste"></textarea>
         </div>
         <div class="flex items-center gap-1 px-2 pb-2 pt-1">
           <input ref="fileInputRef" type="file" accept="image/png,image/jpeg,image/webp" multiple class="hidden" @change="handleImageChange" />
@@ -567,7 +567,7 @@ watch(
             <button v-if="regenerateSource" type="button" class="flex h-8 items-center justify-center rounded-lg px-2.5 text-[12.5px] font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 active:scale-95" title="取消重新生成" @click="cancelRegenerate">
               取消
             </button>
-            <button type="submit" class="group ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-white transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 hover:bg-zinc-800 active:scale-[0.94]" :disabled="loading || (!input.trim() && !attachments.length)" :title="regenerateSource ? '确认重新生成' : '发送'" @click="submit">
+            <button type="submit" class="group ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/90 text-white transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 hover:bg-black/75 active:scale-[0.94]" :disabled="loading || (!input.trim() && !attachments.length)" :title="regenerateSource ? '确认重新生成' : '发送'" @click="submit">
               <RotateCcw v-if="regenerateSource" class="h-4 w-4 transition-transform duration-300 ease-out group-hover:rotate-[-25deg]" stroke-width="1.8" />
               <LoaderCircle v-else-if="loading" class="h-4 w-4 animate-spin" stroke-width="2" />
               <ArrowUp v-else class="h-4 w-4 transition-transform duration-200 ease-out group-hover:-translate-y-0.5" stroke-width="2.2" />
@@ -592,7 +592,7 @@ watch(
         <button type="button" class="absolute top-6 right-6 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white/80 backdrop-blur-md transition-all hover:bg-white/20 hover:text-white active:scale-95 ring-1 ring-white/20" title="关闭预览" @click.stop="closePreview">
           <X class="h-6 w-6" stroke-width="2" />
         </button>
-        <img :src="previewImageUrl" alt="大图预览" class="max-h-[90vh] max-w-[90vw] rounded-2xl object-contain shadow-2xl transition-transform duration-300 select-none cursor-zoom-out" @click.stop="closePreview" />
+        <img :src="previewImageUrl" alt="大图预览" class="max-h-[90vh] max-w-[90vw] rounded-2xl object-contain shadow-wb-popup transition-transform duration-300 select-none cursor-zoom-out" @click.stop="closePreview" />
       </div>
     </Transition>
   </Teleport>
@@ -686,12 +686,15 @@ watch(
   animation: orb-breathe 4s ease-in-out infinite alternate;
 }
 
+/* 消息追加：对齐 WorkBuddy 的入场节奏（.32s 带回弹的 spring）。
+   它是整套动效里唯一"弹"的地方——其它过渡都应保持 100–150ms 的瞬时感。 */
 .message-list-enter-active {
-  transition: all 0.5s cubic-bezier(0.25, 0.1, 0.25, 1);
+  transition: opacity 0.32s cubic-bezier(0.34, 1.56, 0.64, 1),
+    transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .message-list-enter-from {
   opacity: 0;
-  transform: translateY(12px) scale(0.98);
+  transform: translateY(8px);
 }
 
 @keyframes typing-bounce {

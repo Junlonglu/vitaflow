@@ -20,7 +20,7 @@ defineEmits<{
       <div></div>
       <Button size="sm" class="h-10 w-full sm:w-auto" :disabled="saving" @click="$emit('save')"><CheckCircle2 class="mr-2 h-4 w-4" />保存规则</Button>
     </div>
-    <article class="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+    <article class="overflow-hidden rounded-xl border border-zinc-200 bg-white">
       <div class="overflow-x-auto">
         <table class="w-full min-w-[960px] text-left text-sm">
           <thead>

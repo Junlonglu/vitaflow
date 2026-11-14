@@ -54,7 +54,7 @@ onMounted(() => load())
       </header>
 
       <div v-if="error" class="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ error }}</div>
-      <section class="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+      <section class="overflow-hidden rounded-xl border border-zinc-200 bg-white">
         <div v-if="loading" class="flex h-72 items-center justify-center text-sm text-zinc-400"><RefreshCw class="mr-2 h-4 w-4 animate-spin" />正在加载公告</div>
         <div v-else-if="!data.items.length" class="flex h-72 flex-col items-center justify-center text-zinc-400"><span class="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-100"><Megaphone class="h-5 w-5" /></span><p class="text-sm">暂无历史公告</p></div>
         <div v-else class="divide-y divide-zinc-100">
@@ -70,7 +70,7 @@ onMounted(() => load())
 
     <Transition name="fade">
       <div v-if="detail" class="fixed inset-0 z-[80] flex items-center justify-center bg-zinc-950/45 p-4 backdrop-blur-sm" @click.self="detail = null">
-        <section role="dialog" aria-modal="true" class="flex max-h-[86vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <section role="dialog" aria-modal="true" class="flex max-h-[86vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup">
           <header class="flex items-start justify-between border-b border-zinc-100 px-6 py-5"><div><h2 class="text-xl font-semibold tracking-tight text-zinc-900">{{ detail.title }}</h2><p class="mt-1.5 text-xs text-zinc-400">发布于 {{ formatDate(detail.published_at) }}</p></div><button class="rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700" aria-label="关闭" @click="detail = null"><X class="h-5 w-5" /></button></header>
           <div class="history-announcement-content min-h-0 flex-1 overflow-y-auto px-6 py-5 text-sm leading-7 text-zinc-700 break-words whitespace-pre-wrap" v-html="detail.content"></div>
           <footer class="flex justify-end border-t border-zinc-100 bg-zinc-50 px-6 py-4"><Button @click="detail = null">关闭</Button></footer>

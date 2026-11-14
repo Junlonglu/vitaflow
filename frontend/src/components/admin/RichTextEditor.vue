@@ -334,7 +334,7 @@ onUnmounted(() => {
 
     <Transition name="fade">
       <div v-if="linkDialogOpen" class="fixed inset-0 z-[90] flex items-center justify-center bg-zinc-950/45 p-4 backdrop-blur-sm" @click.self="linkDialogOpen = false">
-        <section class="flex w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <section class="flex w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup">
           <header class="flex items-center justify-between border-b border-zinc-100 px-6 py-4">
             <h3 class="font-semibold text-zinc-900">添加链接</h3>
             <button class="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100" @click="linkDialogOpen = false"><X class="h-5 w-5" /></button>

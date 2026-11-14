@@ -31,7 +31,7 @@ const handleMouseMove = (e: MouseEvent) => {
             用极简的方式打造专业简历。AI 帮你提炼亮点，一键生成清晰优雅的 PDF 排版。
           </p>
           <div class="mt-10 flex gap-4 items-center">
-            <RouterLink to="/workspace" class="inline-flex h-12 items-center justify-center rounded-full bg-zinc-900 px-8 text-sm font-medium text-white transition-transform hover:scale-105 hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-2 !text-white">
+            <RouterLink to="/workspace" class="inline-flex h-12 items-center justify-center rounded-full bg-black/90 px-8 text-sm font-medium text-white transition-transform duration-100 hover:scale-105 hover:bg-black/75 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-2 !text-white">
               开始创建 <ArrowRight class="ml-2 h-4 w-4 text-white" />
             </RouterLink>
             <RouterLink to="/templates" class="inline-flex h-12 items-center justify-center rounded-full border border-zinc-200 bg-white px-8 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-zinc-200 focus:ring-offset-2">
@@ -47,10 +47,10 @@ const handleMouseMove = (e: MouseEvent) => {
           <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-gradient-to-tr from-zinc-200 via-zinc-100 to-zinc-300 rounded-full blur-3xl opacity-70 pointer-events-none"></div>
 
           <!-- Background Card 2 (Bottom layer) -->
-          <div class="absolute inset-0 aspect-[210/297] w-full rounded-md bg-white/40 shadow-sm border border-white/50 backdrop-blur-sm" style="transform: rotateY(-12deg) rotateX(2deg) translateZ(-80px) translateX(40px) translateY(20px);"></div>
+          <div class="absolute inset-0 aspect-[210/297] w-full rounded-md bg-white/40 border border-white/50 backdrop-blur-sm" style="transform: rotateY(-12deg) rotateX(2deg) translateZ(-80px) translateX(40px) translateY(20px);"></div>
           
           <!-- Background Card 1 (Middle layer) -->
-          <div class="absolute inset-0 aspect-[210/297] w-full rounded-md bg-white/60 shadow-md border border-white/70 backdrop-blur-md" style="transform: rotateY(-10deg) rotateX(3deg) translateZ(-40px) translateX(20px) translateY(10px);"></div>
+          <div class="absolute inset-0 aspect-[210/297] w-full rounded-md bg-white/60 border border-white/70 backdrop-blur-md" style="transform: rotateY(-10deg) rotateX(3deg) translateZ(-40px) translateX(20px) translateY(10px);"></div>
 
           <!-- Main Resume Card -->
           <div 
@@ -185,7 +185,7 @@ const handleMouseMove = (e: MouseEvent) => {
           
           <!-- Typographic AI Label -->
           <div class="absolute -top-6 -right-6 animate-fade-in-up z-20 float-anim delay-200">
-            <div class="rounded bg-zinc-900 px-4 py-2 shadow-xl border border-zinc-800 flex items-center justify-center">
+            <div class="rounded bg-zinc-900 px-4 py-2 border border-zinc-800 flex items-center justify-center">
               <span class="text-[10px] font-mono tracking-[0.25em] text-zinc-100 uppercase font-bold">AI-Powered</span>
             </div>
           </div>
@@ -200,10 +200,10 @@ const handleMouseMove = (e: MouseEvent) => {
           <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[115%] h-[115%] bg-gradient-to-tr from-zinc-200 via-zinc-100 to-zinc-300 rounded-full blur-2xl opacity-70 pointer-events-none"></div>
 
           <!-- Background Card 2 (Bottom layer) -->
-          <div class="absolute inset-0 aspect-[210/297] w-full rounded-2xl bg-white/40 shadow-sm border border-white/50 backdrop-blur-sm" style="transform: rotateY(-12deg) rotateX(2deg) translateZ(-80px) translateX(25px) translateY(15px);"></div>
+          <div class="absolute inset-0 aspect-[210/297] w-full rounded-2xl bg-white/40 border border-white/50 backdrop-blur-sm" style="transform: rotateY(-12deg) rotateX(2deg) translateZ(-80px) translateX(25px) translateY(15px);"></div>
           
           <!-- Background Card 1 (Middle layer) -->
-          <div class="absolute inset-0 aspect-[210/297] w-full rounded-2xl bg-white/60 shadow-md border border-white/70 backdrop-blur-md" style="transform: rotateY(-10deg) rotateX(3deg) translateZ(-40px) translateX(12px) translateY(8px);"></div>
+          <div class="absolute inset-0 aspect-[210/297] w-full rounded-2xl bg-white/60 border border-white/70 backdrop-blur-md" style="transform: rotateY(-10deg) rotateX(3deg) translateZ(-40px) translateX(12px) translateY(8px);"></div>
 
           <!-- Main Resume Card Backdrop (PC style mockup) -->
           <div class="resume-card relative aspect-[210/297] w-full rounded-2xl bg-white shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-zinc-100 overflow-hidden z-10">
@@ -264,10 +264,10 @@ const handleMouseMove = (e: MouseEvent) => {
 
               <!-- Call to Actions -->
               <div class="flex flex-col w-full gap-3 max-w-[220px] animate-fade-in-up">
-                <RouterLink to="/workspace" class="w-full inline-flex h-11 items-center justify-center rounded-full bg-zinc-900 px-6 text-xs font-medium text-white shadow-sm active:scale-95 transition-all !text-white">
+                <RouterLink to="/workspace" class="w-full inline-flex h-11 items-center justify-center rounded-full bg-zinc-900 px-6 text-xs font-medium text-white active:scale-95 transition-all !text-white">
                   开始创建 <ArrowRight class="ml-2 h-4 w-4 text-white" />
                 </RouterLink>
-                <RouterLink to="/templates" class="w-full inline-flex h-11 items-center justify-center rounded-full border border-zinc-200 bg-white px-6 text-xs font-medium text-zinc-900 shadow-sm active:scale-95 transition-all hover:bg-zinc-50">
+                <RouterLink to="/templates" class="w-full inline-flex h-11 items-center justify-center rounded-full border border-zinc-200 bg-white px-6 text-xs font-medium text-zinc-900 active:scale-95 transition-all hover:bg-zinc-50">
                   查看模板
                 </RouterLink>
               </div>

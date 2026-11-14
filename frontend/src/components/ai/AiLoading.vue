@@ -66,7 +66,7 @@ const progress = computed(() => {
       <div class="relative z-10 flex flex-col">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-4">
-            <span class="flex h-12 w-12 items-center justify-center rounded-[16px] bg-white text-zinc-700 shadow-[0_8px_24px_rgba(0,0,0,0.06)] ring-1 ring-zinc-200/60" style="view-transition-name: ai-hero-icon;">
+            <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-zinc-700 ring-1 ring-zinc-200/60" style="view-transition-name: ai-hero-icon;">
               <Sparkles class="h-6 w-6" stroke-width="1.5" />
             </span>
             <div>
@@ -74,7 +74,7 @@ const progress = computed(() => {
               <h3 class="mt-1 text-[18px] sm:text-[20px] font-semibold tracking-tight text-zinc-900">{{ title || "正在处理" }}</h3>
             </div>
           </div>
-          <div class="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-50 border border-zinc-100 shadow-sm text-sm font-semibold text-zinc-700 shrink-0">
+          <div class="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-50 border border-zinc-100 text-sm font-semibold text-zinc-700 shrink-0">
             {{ progress }}%
           </div>
         </div>
@@ -82,8 +82,8 @@ const progress = computed(() => {
         <p v-if="description" class="mt-3 text-[13px] sm:text-[14px] leading-relaxed text-zinc-500">{{ description }}</p>
 
         <div class="mt-4 flex-1 space-y-2.5">
-          <div v-for="(item, index) in stages" :key="item.label" class="analysis-step flex items-center gap-3.5 rounded-[16px] px-4 py-2.5 sm:py-3 transition-colors duration-500" :class="index <= activeIndex ? 'bg-zinc-50 ring-1 ring-zinc-100 shadow-sm' : 'bg-transparent'">
-            <span class="flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold transition-all duration-500 shrink-0" :class="index < activeIndex ? 'bg-blue-500 text-white shadow-md shadow-blue-500/20' : index === activeIndex ? 'bg-zinc-900 text-white shadow-md shadow-zinc-900/20' : 'bg-white text-zinc-400 ring-1 ring-zinc-200'">
+          <div v-for="(item, index) in stages" :key="item.label" class="analysis-step flex items-center gap-3.5 rounded-2xl px-4 py-2.5 sm:py-3 transition-colors duration-500" :class="index <= activeIndex ? 'bg-zinc-50 ring-1 ring-zinc-100' : 'bg-transparent'">
+            <span class="flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold transition-all duration-500 shrink-0" :class="index < activeIndex ? 'bg-blue-500 text-white ' : index === activeIndex ? 'bg-zinc-900 text-white ' : 'bg-white text-zinc-400 ring-1 ring-zinc-200'">
               <CheckCircle2 v-if="index < activeIndex" class="h-4 w-4" />
               <span v-else>{{ index + 1 }}</span>
             </span>

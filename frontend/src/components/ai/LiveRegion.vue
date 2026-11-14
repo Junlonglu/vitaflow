@@ -123,7 +123,7 @@ function overlayToBottom() {
     <div v-if="expanded && !pinned" class="absolute bottom-2 right-2 flex items-center gap-1.5">
       <button
         type="button"
-        class="flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[11px] font-medium text-zinc-500 shadow-sm ring-1 ring-zinc-200 transition-colors hover:text-zinc-900"
+        class="flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[11px] font-medium text-zinc-500 ring-1 ring-zinc-200 transition-colors hover:text-zinc-900"
         @click="scrollToBottom"
       >
         <ArrowDown class="h-3 w-3" />
@@ -131,7 +131,7 @@ function overlayToBottom() {
       </button>
       <button
         type="button"
-        class="flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[11px] font-medium text-zinc-500 shadow-sm ring-1 ring-zinc-200 transition-colors hover:text-zinc-900"
+        class="flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[11px] font-medium text-zinc-500 ring-1 ring-zinc-200 transition-colors hover:text-zinc-900"
         @click="expanded = false"
       >
         <ChevronsUp class="h-3 w-3" />
@@ -146,7 +146,7 @@ function overlayToBottom() {
         @click.self="closeFullscreen"
       >
         <div
-          class="relative flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
+          class="relative flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup"
           @mousemove="flashOverlayControls"
         >
           <div class="flex items-center gap-2 border-b border-zinc-100 px-4 py-3 text-sm font-medium text-zinc-700">
@@ -172,7 +172,7 @@ function overlayToBottom() {
           >
             <button
               type="button"
-              class="pointer-events-auto flex items-center gap-1 rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-zinc-600 shadow-md ring-1 ring-zinc-200 transition-colors hover:text-zinc-900"
+              class="pointer-events-auto flex items-center gap-1 rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-zinc-600 ring-1 ring-zinc-200 transition-colors hover:text-zinc-900"
               @click="overlayToTop"
             >
               <ArrowUp class="h-3.5 w-3.5" />
@@ -180,7 +180,7 @@ function overlayToBottom() {
             </button>
             <button
               type="button"
-              class="pointer-events-auto flex items-center gap-1 rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-zinc-600 shadow-md ring-1 ring-zinc-200 transition-colors hover:text-zinc-900"
+              class="pointer-events-auto flex items-center gap-1 rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-zinc-600 ring-1 ring-zinc-200 transition-colors hover:text-zinc-900"
               @click="overlayToBottom"
             >
               <ArrowDown class="h-3.5 w-3.5" />
@@ -188,7 +188,7 @@ function overlayToBottom() {
             </button>
             <button
               type="button"
-              class="pointer-events-auto flex items-center gap-1 rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-zinc-600 shadow-md ring-1 ring-zinc-200 transition-colors hover:text-zinc-900"
+              class="pointer-events-auto flex items-center gap-1 rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-zinc-600 ring-1 ring-zinc-200 transition-colors hover:text-zinc-900"
               @click="closeFullscreen"
             >
               <X class="h-3.5 w-3.5" />

@@ -1103,7 +1103,7 @@ onMounted(() => load())
 
             <!-- 独立的操作底部栏 -->
             <div class="flex items-center justify-end pt-2">
-              <Button :disabled="savingSettings" @click="saveSettings" class="px-6 py-2.5 shadow-md hover:shadow-lg transition-all"><Settings class="h-4 w-4 mr-2" />{{ savingSettings ? "保存中..." : "保存全部设置" }}</Button>
+              <Button :disabled="savingSettings" @click="saveSettings" class="px-6 py-2.5"><Settings class="h-4 w-4 mr-2" />{{ savingSettings ? "保存中..." : "保存全部设置" }}</Button>
             </div>
           </div>
         </template>
@@ -1156,8 +1156,8 @@ onMounted(() => load())
                     <td class="px-5 py-4 text-zinc-500">{{ formatDate(item.create_time) }}</td>
                     <td class="px-5 py-4 text-right">
                       <div class="flex justify-end gap-2 whitespace-nowrap text-xs font-medium">
-                        <button class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900 active:scale-95" @click="openUserPointTransactions(item)">流水</button>
-                        <button v-if="item.role !== 'admin'" class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 shadow-sm transition-all active:scale-95" :class="item.status === 'active' ? 'hover:border-red-200 hover:bg-red-50 hover:text-red-600' : 'hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700'" @click="requestToggleUser(item)">{{ item.status === 'active' ? '停用' : '恢复' }}</button>
+                        <button class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition-all hover:bg-zinc-50 hover:text-zinc-900 active:scale-95" @click="openUserPointTransactions(item)">流水</button>
+                        <button v-if="item.role !== 'admin'" class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition-all active:scale-95" :class="item.status === 'active' ? 'hover:border-red-200 hover:bg-red-50 hover:text-red-600' : 'hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700'" @click="requestToggleUser(item)">{{ item.status === 'active' ? '停用' : '恢复' }}</button>
                         <span v-else class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-100 bg-zinc-50 px-2.5 py-1.5 text-xs font-medium text-zinc-400">受保护</span>
                       </div>
                     </td>
@@ -1194,19 +1194,19 @@ onMounted(() => load())
                     <td class="max-w-md truncate px-5 py-4 text-zinc-600" :title="item.description">{{ item.description || '—' }}</td>
                     <td class="px-5 py-4 text-zinc-500 whitespace-nowrap">{{ formatDate(item.create_time) }}</td>
                     <td class="px-5 py-4 text-right whitespace-nowrap">
-                      <button v-if="item.can_revoke" class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 shadow-sm transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600 active:scale-95" @click="requestRevokeGrant(item)">撤回批次</button>
+                      <button v-if="item.can_revoke" class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600 active:scale-95" @click="requestRevokeGrant(item)">撤回批次</button>
                       <span v-else class="text-xs text-zinc-300">—</span>
                     </td>
                   </tr>
                 </tbody>
               </table>
 
-              <table v-if="section === 'feedbacks'" class="w-full min-w-[980px] text-left text-sm"><thead><tr class="border-b bg-zinc-50 text-xs text-zinc-500"><th class="px-5 py-3">所属模块</th><th class="px-5 py-3">用户</th><th class="px-5 py-3">联系方式</th><th class="px-5 py-3">状态</th><th class="px-5 py-3">时间</th><th class="px-5 py-3 text-right">操作</th></tr></thead><tbody><tr v-for="item in feedbacks.items" :key="item.id" class="border-b border-zinc-100 last:border-0"><td class="px-5 py-4"><p class="font-medium text-zinc-900">{{ item.category || '意见反馈' }}</p></td><td class="px-5 py-4"><p>{{ item.username }}</p><p class="mt-0.5 text-xs text-zinc-400">{{ item.email }}</p></td><td class="px-5 py-4 text-zinc-500">{{ item.contact || '—' }}</td><td class="px-5 py-4"><div class="flex flex-wrap items-center gap-2"><span class="rounded-full px-2 py-1 text-xs ring-1 ring-inset" :class="statusClass(item.status === 'resolved' ? 'success' : item.status === 'closed' ? 'disabled' : 'pending')">{{ feedbackStatusText(item.status) }}</span><span v-if="item.admin_reply" class="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">已回复</span></div></td><td class="px-5 py-4 text-zinc-500">{{ formatDate(item.create_time) }}</td><td class="px-5 py-4 text-right"><button class="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900 active:scale-95" @click="openFeedbackReply(item)">处理</button></td></tr></tbody></table>
+              <table v-if="section === 'feedbacks'" class="w-full min-w-[980px] text-left text-sm"><thead><tr class="border-b bg-zinc-50 text-xs text-zinc-500"><th class="px-5 py-3">所属模块</th><th class="px-5 py-3">用户</th><th class="px-5 py-3">联系方式</th><th class="px-5 py-3">状态</th><th class="px-5 py-3">时间</th><th class="px-5 py-3 text-right">操作</th></tr></thead><tbody><tr v-for="item in feedbacks.items" :key="item.id" class="border-b border-zinc-100 last:border-0"><td class="px-5 py-4"><p class="font-medium text-zinc-900">{{ item.category || '意见反馈' }}</p></td><td class="px-5 py-4"><p>{{ item.username }}</p><p class="mt-0.5 text-xs text-zinc-400">{{ item.email }}</p></td><td class="px-5 py-4 text-zinc-500">{{ item.contact || '—' }}</td><td class="px-5 py-4"><div class="flex flex-wrap items-center gap-2"><span class="rounded-full px-2 py-1 text-xs ring-1 ring-inset" :class="statusClass(item.status === 'resolved' ? 'success' : item.status === 'closed' ? 'disabled' : 'pending')">{{ feedbackStatusText(item.status) }}</span><span v-if="item.admin_reply" class="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">已回复</span></div></td><td class="px-5 py-4 text-zinc-500">{{ formatDate(item.create_time) }}</td><td class="px-5 py-4 text-right"><button class="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-all hover:bg-zinc-50 hover:text-zinc-900 active:scale-95" @click="openFeedbackReply(item)">处理</button></td></tr></tbody></table>
 
               <table v-if="section === 'exports'" class="w-full min-w-[800px] text-left text-sm"><thead><tr class="border-b bg-zinc-50 text-xs text-zinc-500"><th class="px-5 py-3">文件</th><th class="px-5 py-3">用户</th><th class="px-5 py-3">格式</th><th class="px-5 py-3">简历 ID</th><th class="px-5 py-3">状态</th><th class="px-5 py-3">时间</th></tr></thead><tbody><tr v-for="item in exports.items" :key="item.id" class="border-b border-zinc-100 last:border-0"><td class="max-w-64 truncate px-5 py-4 font-medium" :title="item.file_name">{{ item.file_name }}</td><td class="px-5 py-4">{{ item.username }}</td><td class="px-5 py-4 uppercase">{{ item.file_type }}</td><td class="px-5 py-4">{{ item.resume_id }}</td><td class="px-5 py-4"><span class="rounded-full px-2 py-1 text-xs ring-1 ring-inset" :class="statusClass(item.status)">{{ statusText(item.status) }}</span></td><td class="px-5 py-4 text-zinc-500">{{ formatDate(item.create_time) }}</td></tr></tbody></table>
 
               <div v-if="section === 'templates'" class="grid gap-5 p-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                <article v-for="item in templates.items" :key="item.template_id" class="group relative flex flex-col rounded-xl bg-white p-4 border border-zinc-200/60 shadow-sm transition hover:border-zinc-300">
+                <article v-for="item in templates.items" :key="item.template_id" class="group relative flex flex-col rounded-xl bg-white p-4 border border-zinc-200/60 transition hover:border-zinc-300">
                   <div class="flex items-center justify-between gap-2">
                     <h2 class="text-sm font-medium text-zinc-800 truncate">{{ item.name }}</h2>
                     <span class="rounded-md bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-600 shrink-0">{{ item.usage_count }} 人</span>
@@ -1234,7 +1234,7 @@ onMounted(() => load())
 
                     <button
                       class="inline-flex h-7 items-center justify-center gap-1 rounded px-2.5 text-xs font-medium transition whitespace-nowrap"
-                      :class="item.is_visible ? 'text-zinc-500 hover:bg-zinc-100/80' : 'bg-zinc-900 text-white hover:bg-zinc-800'"
+                      :class="item.is_visible ? 'text-zinc-500 hover:bg-zinc-100/80' : 'bg-black/90 text-white hover:bg-black/75'"
                       @click="updateTemplateDisplay(item, { is_visible: !item.is_visible })"
                     >
                       <EyeOff v-if="item.is_visible" class="h-3.5 w-3.5" />
@@ -1279,8 +1279,8 @@ onMounted(() => load())
                     <td class="px-3 py-3 text-zinc-400">{{ item.sort_order }}</td>
                     <td class="px-4 py-3 text-right">
                       <div class="flex justify-end gap-2 whitespace-nowrap text-xs font-medium">
-                        <button class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900 active:scale-95" @click="openStarterEditor(item)">编辑</button>
-                        <button class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 shadow-sm transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600 active:scale-95" @click="requestDeleteStarter(item)">删除</button>
+                        <button class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition-all hover:bg-zinc-50 hover:text-zinc-900 active:scale-95" @click="openStarterEditor(item)">编辑</button>
+                        <button class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600 active:scale-95" @click="requestDeleteStarter(item)">删除</button>
                       </div>
                     </td>
                   </tr>
@@ -1336,7 +1336,7 @@ onMounted(() => load())
         leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
       >
         <div v-if="showUserPointTransactions" class="fixed inset-0 z-[110] flex items-center justify-center bg-zinc-950/40 p-4 backdrop-blur-sm" @click.self="closeUserPointTransactions">
-          <div class="flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+          <div class="flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup">
             <div class="flex items-start justify-between gap-4 border-b border-zinc-100 px-6 py-4">
               <div class="min-w-0">
                 <h3 class="text-base font-semibold text-zinc-900">点数流水</h3>
@@ -1403,7 +1403,7 @@ onMounted(() => load())
         leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
       >
         <div v-if="showStarterEditor" class="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-zinc-950/40 backdrop-blur-sm" @click.self="closeStarterEditor">
-          <div class="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+          <div class="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup">
             <div class="flex items-start justify-between gap-4 border-b border-zinc-100 px-6 py-4">
               <div>
                 <h3 class="text-base font-semibold text-zinc-900">{{ starterEditorMode === "create" ? "新增岗位预设" : "编辑岗位预设" }}</h3>
@@ -1517,7 +1517,7 @@ onMounted(() => load())
 
             <div class="flex justify-end gap-2 border-t border-zinc-100 bg-zinc-50/60 px-6 py-4">
               <button class="h-10 rounded-xl border border-zinc-200 bg-white px-5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50" @click="closeStarterEditor">取消</button>
-              <button class="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-zinc-900 px-6 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60" :disabled="starterSaving" @click="saveStarter">
+              <button class="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-black/90 px-6 text-sm font-medium text-white transition hover:bg-black/75 disabled:cursor-not-allowed disabled:opacity-60" :disabled="starterSaving" @click="saveStarter">
                 <RefreshCw v-if="starterSaving" class="h-4 w-4 animate-spin" />
                 保存
               </button>
@@ -1545,7 +1545,7 @@ onMounted(() => load())
         leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
       >
         <div v-if="showFeedbackReply" class="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-zinc-950/40 backdrop-blur-sm" @click.self="closeFeedbackReply">
-          <div class="flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl transform transition-all">
+          <div class="flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup transform transition-all">
             <div class="px-6 py-4 flex items-center justify-between border-b border-zinc-100">
               <div>
                 <h3 class="font-semibold text-zinc-900 text-base">处理反馈</h3>
@@ -1590,7 +1590,7 @@ onMounted(() => load())
                 <RefreshCw v-if="feedbackEmailSending" class="h-4 w-4 animate-spin shrink-0" />
                 保存并发邮件
               </button>
-              <button @click="saveFeedbackReply" :disabled="feedbackReplySaving || feedbackEmailSending" class="inline-flex h-10 items-center justify-center gap-1.5 sm:gap-2 rounded-xl bg-zinc-900 px-5 sm:px-6 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 whitespace-nowrap shrink-0">
+              <button @click="saveFeedbackReply" :disabled="feedbackReplySaving || feedbackEmailSending" class="inline-flex h-10 items-center justify-center gap-1.5 sm:gap-2 rounded-xl bg-black/90 px-5 sm:px-6 text-sm font-medium text-white transition-colors hover:bg-black/75 disabled:cursor-not-allowed disabled:opacity-60 whitespace-nowrap shrink-0">
                 <RefreshCw v-if="feedbackReplySaving" class="h-4 w-4 animate-spin shrink-0" />
                 保存处理
               </button>

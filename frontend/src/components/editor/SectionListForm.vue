@@ -101,8 +101,8 @@ const activeItem = computed(() => props.items.find(i => i.id === activeItemId.va
         
         <!-- Summary Card -->
         <div 
-          class="rounded-[16px] border bg-white p-4 cursor-pointer transition-all flex items-center justify-between group"
-          :class="activeItemId === item.id ? 'border-emerald-500 shadow-sm ring-1 ring-emerald-500/20' : 'border-zinc-200/80 hover:border-zinc-300 hover:shadow-sm'"
+          class="rounded-2xl border bg-white p-4 cursor-pointer transition-all flex items-center justify-between group"
+          :class="activeItemId === item.id ? 'border-emerald-500 ring-1 ring-emerald-500/20' : 'border-zinc-200/80 hover:border-zinc-300 '"
           @click="toggleItem(item.id)"
         >
           <div class="min-w-0 pr-4">
@@ -129,7 +129,7 @@ const activeItem = computed(() => props.items.find(i => i.id === activeItemId.va
         </div>
 
         <!-- Inline Form (Narrow Mode) -->
-        <div v-if="!isWide && activeItemId === item.id" class="mt-2 rounded-[16px] border border-zinc-200/80 bg-white shadow-sm overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+        <div v-if="!isWide && activeItemId === item.id" class="mt-2 rounded-2xl border border-zinc-200/80 bg-white overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
           <SectionFields
             :item="item"
             :section-key="sectionKey"
@@ -154,7 +154,7 @@ const activeItem = computed(() => props.items.find(i => i.id === activeItemId.va
 
     <!-- Wide Mode Detail Column -->
     <div v-if="isWide" class="w-2/3 flex-1">
-      <div v-if="activeItem" class="rounded-[20px] border border-zinc-200/80 bg-white shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <div v-if="activeItem" class="rounded-2xl border border-zinc-200/80 bg-white overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
         <div class="px-6 py-4 border-b border-zinc-100 bg-zinc-50/50">
           <h3 class="text-sm font-semibold text-zinc-800 tracking-tight">编辑: {{ getItemTitle(activeItem) }}</h3>
         </div>
@@ -173,8 +173,8 @@ const activeItem = computed(() => props.items.find(i => i.id === activeItemId.va
           </template>
         </SectionFields>
       </div>
-      <div v-else class="flex flex-col items-center justify-center py-24 text-zinc-400 border border-dashed rounded-[20px] border-zinc-200 bg-zinc-50/50">
-         <div class="h-16 w-16 bg-white rounded-full flex items-center justify-center shadow-sm border border-zinc-100 mb-4">
+      <div v-else class="flex flex-col items-center justify-center py-24 text-zinc-400 border border-dashed rounded-2xl border-zinc-200 bg-zinc-50/50">
+         <div class="h-16 w-16 bg-white rounded-full flex items-center justify-center border border-zinc-100 mb-4">
            <FileEdit class="w-7 h-7 text-zinc-300" />
          </div>
          <span class="text-[15px] font-medium text-zinc-500">在左侧选择一个条目进行编辑</span>

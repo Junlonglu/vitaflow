@@ -202,7 +202,7 @@ function startFromTemplate(entry: "starter" | "import" | "blank") {
           @click="selectedId = item.template_id"
         >
           <div class="relative aspect-[3/4] overflow-hidden bg-zinc-100/60 p-1.5">
-            <div class="absolute inset-x-1.5 top-1.5 origin-top overflow-hidden rounded-[3px] transition-transform duration-500 group-hover:scale-[1.02]">
+            <div class="absolute inset-x-1.5 top-1.5 origin-top overflow-hidden rounded-sm transition-transform duration-500 group-hover:scale-[1.02]">
               <TemplatePreview :html="item.preview_html" bare />
             </div>
             <div class="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-white/95 to-transparent"></div>
@@ -214,7 +214,7 @@ function startFromTemplate(entry: "starter" | "import" | "blank") {
             </div>
             <button
               type="button"
-              class="touch-always-visible h-6 shrink-0 rounded-md bg-zinc-900 px-2 text-[11px] font-medium text-white transition-opacity hover:bg-zinc-800 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+              class="touch-always-visible h-6 shrink-0 rounded-md bg-black/90 px-2 text-[11px] font-medium text-white transition-opacity hover:bg-black/75 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
               @click.stop="useTemplate(item)"
             >
               使用
@@ -238,7 +238,7 @@ function startFromTemplate(entry: "starter" | "import" | "blank") {
             <div class="mt-4 space-y-1.5">
               <button
                 type="button"
-                class="flex h-9 w-full items-center gap-2 rounded-lg bg-zinc-900 px-3 text-[12.5px] font-medium text-white transition-colors hover:bg-zinc-800"
+                class="flex h-9 w-full items-center gap-2 rounded-lg bg-black/90 px-3 text-[12.5px] font-medium text-white transition-colors hover:bg-black/75"
                 @click="startFromTemplate('blank')"
               >
                 <LayoutTemplate class="h-3.5 w-3.5" />

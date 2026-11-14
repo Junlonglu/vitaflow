@@ -172,7 +172,7 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
 <template>
   <template v-if="dashboard">
     <section class="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
-      <article v-for="card in cards" :key="card.label" class="relative flex min-w-0 flex-col justify-between rounded-2xl border border-zinc-200 bg-white p-3.5 shadow-sm sm:p-5">
+      <article v-for="card in cards" :key="card.label" class="relative flex min-w-0 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-3.5 sm:p-5">
         <div>
           <div class="flex items-center justify-between gap-2">
             <p class="truncate whitespace-nowrap text-xs font-medium text-zinc-500 sm:text-sm">{{ card.label }}</p>
@@ -180,7 +180,7 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
           </div>
           <p class="mt-2 truncate text-xl font-semibold tracking-tight text-zinc-950 sm:mt-3 sm:text-2xl" :title="card.label === 'Token 消耗' ? `${formatNumber(card.value)} tokens` : String(formatNumber(card.value))">{{ card.formattedValue || formatNumber(card.value) }}</p>
         </div>
-        <p v-if="card.label !== '上线天数' && card.label !== '总收入'" class="mt-2 text-[10px] text-zinc-400 sm:text-xs" :class="card.label === '用户总数' ? 'whitespace-normal leading-relaxed' : 'whitespace-nowrap'">
+        <p v-if="card.label !== '上线天数' && card.label !== '总收入'" class="mt-2 text-[11px] text-zinc-400 sm:text-xs" :class="card.label === '用户总数' ? 'whitespace-normal leading-relaxed' : 'whitespace-nowrap'">
           <template v-if="card.label === '用户总数'">
             <span>今日新增 </span><span class="font-medium text-zinc-700">{{ card.formattedToday ?? card.today }}</span>
             <span class="mx-1.5 text-zinc-300">|</span>
@@ -190,23 +190,23 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
             <span class="hidden sm:inline">今日新增 </span><span class="sm:hidden">新增 </span><span class="font-medium text-zinc-700">{{ card.formattedToday ?? card.today }}</span>
           </template>
         </p>
-        <p v-else-if="card.label === '总收入'" class="mt-2 whitespace-nowrap text-[10px] text-zinc-400 sm:text-xs">
+        <p v-else-if="card.label === '总收入'" class="mt-2 whitespace-nowrap text-[11px] text-zinc-400 sm:text-xs">
           <span>今日收入 </span><span class="font-medium text-zinc-700">{{ card.formattedToday ?? card.today }}</span>
         </p>
-        <p v-else class="mt-2 whitespace-nowrap text-[10px] text-zinc-400 sm:text-xs">
+        <p v-else class="mt-2 whitespace-nowrap text-[11px] text-zinc-400 sm:text-xs">
           <span>上线首日 </span><span class="font-medium text-zinc-700">{{ formatDay(dashboard.totals.launch_date) }}</span>
         </p>
       </article>
     </section>
 
     <section class="mt-5 grid items-start gap-5 lg:grid-cols-2">
-      <article class="min-w-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
+      <article class="min-w-0 overflow-hidden rounded-xl border border-zinc-200 bg-white p-4 sm:p-5">
         <div class="mb-6 flex items-center justify-between"><div><h2 class="font-semibold text-zinc-900">近 7 天活跃趋势</h2><p class="mt-1 text-xs text-zinc-400">用户、简历、AI、导出与分享总活动</p></div><Activity class="h-5 w-5 text-zinc-400" /></div>
         <AdminChart v-if="dashboard.daily.length" :option="dailyTrendOption" class="h-56 w-full" />
         <p v-else class="py-8 text-center text-sm text-zinc-400">暂无趋势记录</p>
       </article>
 
-      <article class="min-w-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
+      <article class="min-w-0 overflow-hidden rounded-xl border border-zinc-200 bg-white p-4 sm:p-5">
         <h2 class="font-semibold text-zinc-900">运行质量</h2><p class="mt-1 text-xs text-zinc-400">AI 回合与导出成功率</p>
         <div class="mt-5 space-y-5">
           <div v-for="rate in [{ label: 'AI 调用成功率', value: dashboard.rates.ai_success }, { label: '文件导出成功率', value: dashboard.rates.export_success }]" :key="rate.label">
@@ -214,13 +214,13 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
             <div class="h-2 overflow-hidden rounded-full bg-zinc-100"><div class="h-full rounded-full bg-emerald-500" :style="{ width: `${rate.value}%` }"></div></div>
           </div>
           <div class="grid grid-cols-2 gap-3">
-            <div class="min-w-0 rounded-xl bg-zinc-50 p-3.5"><p class="text-xs text-zinc-400">AI Token 消耗</p><p class="mt-1.5 truncate text-base font-semibold text-zinc-900 sm:text-lg">{{ formatTokenNumber(dashboard.tokens?.total) }}</p><p class="mt-1 truncate text-[10px] text-zinc-400 sm:text-xs" :title="`输入 ${formatTokenNumber(dashboard.tokens?.input)} · 输出 ${formatTokenNumber(dashboard.tokens?.output)}`">入 {{ formatTokenNumber(dashboard.tokens?.input) }} · 出 {{ formatTokenNumber(dashboard.tokens?.output) }}</p></div>
-            <div class="min-w-0 rounded-xl bg-zinc-50 p-3.5"><p class="text-xs text-zinc-400">Flow Points</p><p class="mt-1.5 truncate text-base font-semibold text-zinc-900 sm:text-lg">{{ formatNumber(dashboard.points?.consumed) }}</p><p class="mt-1 truncate text-[10px] text-zinc-400 sm:text-xs" :title="`今日消耗 ${formatNumber(dashboard.points?.today_consumed)} · 累计充值 ${formatNumber(dashboard.points?.recharged)}`">今 {{ formatNumber(dashboard.points?.today_consumed) }} · 充 {{ formatNumber(dashboard.points?.recharged) }}</p></div>
+            <div class="min-w-0 rounded-xl bg-zinc-50 p-3.5"><p class="text-xs text-zinc-400">AI Token 消耗</p><p class="mt-1.5 truncate text-base font-semibold text-zinc-900 sm:text-lg">{{ formatTokenNumber(dashboard.tokens?.total) }}</p><p class="mt-1 truncate text-[11px] text-zinc-400 sm:text-xs" :title="`输入 ${formatTokenNumber(dashboard.tokens?.input)} · 输出 ${formatTokenNumber(dashboard.tokens?.output)}`">入 {{ formatTokenNumber(dashboard.tokens?.input) }} · 出 {{ formatTokenNumber(dashboard.tokens?.output) }}</p></div>
+            <div class="min-w-0 rounded-xl bg-zinc-50 p-3.5"><p class="text-xs text-zinc-400">Flow Points</p><p class="mt-1.5 truncate text-base font-semibold text-zinc-900 sm:text-lg">{{ formatNumber(dashboard.points?.consumed) }}</p><p class="mt-1 truncate text-[11px] text-zinc-400 sm:text-xs" :title="`今日消耗 ${formatNumber(dashboard.points?.today_consumed)} · 累计充值 ${formatNumber(dashboard.points?.recharged)}`">今 {{ formatNumber(dashboard.points?.today_consumed) }} · 充 {{ formatNumber(dashboard.points?.recharged) }}</p></div>
           </div>
         </div>
       </article>
 
-      <article class="col-span-full min-w-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
+      <article class="col-span-full min-w-0 overflow-hidden rounded-xl border border-zinc-200 bg-white p-4 sm:p-5">
         <h2 class="font-semibold text-zinc-900">对话环节质量</h2>
         <p class="mt-1 text-xs text-zinc-400">回合与工具各环节的耗时与失败下钻</p>
         <template v-if="stageRows.length">
@@ -238,14 +238,14 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
             <div v-for="stage in stageRows" :key="stage.key">
               <button type="button" class="flex w-full items-center gap-2 px-3 py-2.5 text-left transition hover:bg-zinc-50 sm:gap-3" :aria-expanded="openStages.has(stage.key)" @click="toggleStage(stage.key)">
                 <span class="min-w-0 flex-1 truncate text-xs font-medium text-zinc-900 sm:text-sm">{{ stageNameText(stage.key) }}</span>
-                <span class="shrink-0 text-[10px] text-zinc-400 sm:text-xs">{{ stage.samples }} 次</span>
+                <span class="shrink-0 text-[11px] text-zinc-400 sm:text-xs">{{ stage.samples }} 次</span>
                 <span class="shrink-0 text-xs font-semibold text-zinc-900 sm:text-sm">{{ formatMs(stage.avg_ms) }}</span>
-                <span class="w-16 shrink-0 text-right text-[10px] sm:w-20 sm:text-xs" :class="deltaClass(stage.recent_delta_pct)" :title="`近10次平均 ${formatMs(stage.recent_avg_ms)} · 较总体 ${deltaText(stage.recent_delta_pct)}`">近10 {{ deltaText(stage.recent_delta_pct) }}</span>
-                <span class="w-14 shrink-0 text-right text-[10px] sm:w-16 sm:text-xs" :class="(stageFailureRate(stage) || 0) > 0 ? 'text-red-600' : 'text-zinc-400'">{{ stageFailureRate(stage) === null ? "" : `失败 ${stageFailureRate(stage)}%` }}</span>
+                <span class="w-16 shrink-0 text-right text-[11px] sm:w-20 sm:text-xs" :class="deltaClass(stage.recent_delta_pct)" :title="`近10次平均 ${formatMs(stage.recent_avg_ms)} · 较总体 ${deltaText(stage.recent_delta_pct)}`">近10 {{ deltaText(stage.recent_delta_pct) }}</span>
+                <span class="w-14 shrink-0 text-right text-[11px] sm:w-16 sm:text-xs" :class="(stageFailureRate(stage) || 0) > 0 ? 'text-red-600' : 'text-zinc-400'">{{ stageFailureRate(stage) === null ? "" : `失败 ${stageFailureRate(stage)}%` }}</span>
                 <ChevronDown class="h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform" :class="openStages.has(stage.key) ? '' : '-rotate-90'" />
               </button>
               <div v-show="openStages.has(stage.key)" class="space-y-3 border-t border-zinc-100 bg-zinc-50/60 px-3 py-3">
-                <div class="grid grid-cols-2 gap-2 text-[10px] sm:grid-cols-3 sm:text-xs lg:grid-cols-6">
+                <div class="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-3 sm:text-xs lg:grid-cols-6">
                   <div><p class="text-zinc-400">样本</p><p class="mt-0.5 font-semibold text-zinc-900">{{ stage.samples }}</p></div>
                   <div><p class="text-zinc-400">平均</p><p class="mt-0.5 font-semibold text-zinc-900">{{ formatMs(stage.avg_ms) }}</p></div>
                   <div><p class="text-zinc-400">P50</p><p class="mt-0.5 font-semibold text-zinc-900">{{ formatMs(stage.p50_ms) }}</p></div>
@@ -255,20 +255,20 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
                 </div>
                 <div v-if="stage.key === 'first_token_ms' && firstTokenSubstages.length" class="space-y-1.5">
                   <p class="text-xs font-medium text-zinc-500">首字延迟细分</p>
-                  <div v-for="sub in firstTokenSubstages" :key="sub.key" class="flex items-center justify-between gap-2 whitespace-nowrap rounded-lg bg-white px-2.5 py-2 text-[10px] sm:text-xs">
+                  <div v-for="sub in firstTokenSubstages" :key="sub.key" class="flex items-center justify-between gap-2 whitespace-nowrap rounded-lg bg-white px-2.5 py-2 text-[11px] sm:text-xs">
                     <span class="text-zinc-600">{{ stageNameText(sub.key) }}</span>
                     <span class="text-zinc-500">平均 <strong class="text-zinc-900">{{ formatMs(sub.avg_ms) }}</strong> · 最长 <strong class="text-zinc-900">{{ formatMs(sub.max_ms) }}</strong></span>
                   </div>
                 </div>
                 <div v-if="stage.kind === 'tool'" class="space-y-2">
                   <div class="flex flex-wrap items-center gap-1.5">
-                    <span v-for="item in activeStageFailures(stage)" :key="item.category" class="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-700 ring-1 ring-inset ring-red-200">{{ traceCategoryText(item.category) }} × {{ item.count }}</span>
-                    <span v-if="!activeStageFailures(stage).length" class="text-[10px] text-zinc-400 sm:text-xs">无失败记录</span>
+                    <span v-for="item in activeStageFailures(stage)" :key="item.category" class="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 ring-1 ring-inset ring-red-200">{{ traceCategoryText(item.category) }} × {{ item.count }}</span>
+                    <span v-if="!activeStageFailures(stage).length" class="text-[11px] text-zinc-400 sm:text-xs">无失败记录</span>
                   </div>
                   <div v-if="(stage.recent_reasons || []).length" class="rounded-lg bg-white px-2.5 py-2">
-                    <p class="text-[10px] text-zinc-400">最近失败原因</p>
+                    <p class="text-[11px] text-zinc-400">最近失败原因</p>
                     <ul class="mt-1 space-y-0.5">
-                      <li v-for="reason in stage.recent_reasons" :key="reason" class="truncate text-[10px] text-zinc-600 sm:text-xs">· {{ reason }}</li>
+                      <li v-for="reason in stage.recent_reasons" :key="reason" class="truncate text-[11px] text-zinc-600 sm:text-xs">· {{ reason }}</li>
                     </ul>
                   </div>
                 </div>
@@ -279,7 +279,7 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
         <p v-else class="py-8 text-center text-sm text-zinc-400">暂无对话记录</p>
       </article>
 
-      <article class="col-span-full min-w-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
+      <article class="col-span-full min-w-0 overflow-hidden rounded-xl border border-zinc-200 bg-white p-4 sm:p-5">
         <div class="mb-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 class="font-semibold text-zinc-900">用户活跃时间段</h2>
@@ -294,7 +294,7 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
         <p v-if="!(dashboard.hourly_activity || []).length" class="py-8 text-center text-sm text-zinc-400">暂无活跃记录</p>
       </article>
 
-      <article class="col-span-full min-w-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
+      <article class="col-span-full min-w-0 overflow-hidden rounded-xl border border-zinc-200 bg-white p-4 sm:p-5">
         <h2 class="font-semibold text-zinc-900">AI 功能调用分布</h2>
         <p class="mt-1 text-xs text-zinc-400">对话按指令拆分，历史任务按原类型统计</p>
         <div class="mt-5 space-y-3">
@@ -305,11 +305,11 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
                 <span class="shrink-0 text-[11px] font-medium text-zinc-500 sm:text-xs">· 共 {{ item.total }} 次</span>
               </div>
               <div class="flex shrink-0 items-center gap-1 whitespace-nowrap sm:gap-1.5">
-                <span class="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200 sm:px-2 sm:text-[11px]">成功 {{ item.success }}</span>
-                <span class="rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700 ring-1 ring-inset ring-red-200 sm:px-2 sm:text-[11px]">失败 {{ item.failed }}</span>
+                <span class="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200 sm:px-2 sm:text-[11px]">成功 {{ item.success }}</span>
+                <span class="rounded-full bg-red-50 px-1.5 py-0.5 text-[11px] font-medium text-red-700 ring-1 ring-inset ring-red-200 sm:px-2 sm:text-[11px]">失败 {{ item.failed }}</span>
               </div>
             </div>
-            <div class="mt-3 flex items-center justify-between gap-1 overflow-hidden whitespace-nowrap border-t border-zinc-200/60 pt-3 text-[10px] sm:gap-2 sm:text-xs">
+            <div class="mt-3 flex items-center justify-between gap-1 overflow-hidden whitespace-nowrap border-t border-zinc-200/60 pt-3 text-[11px] sm:gap-2 sm:text-xs">
               <div class="flex min-w-0 items-center gap-1 overflow-hidden sm:gap-1.5">
                 <span class="shrink-0 text-zinc-400">Tokens:</span>
                 <strong class="truncate text-blue-700">{{ formatTokenNumber(item.tokens) }}</strong>
@@ -325,7 +325,7 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
         </div>
       </article>
 
-      <article class="col-span-full min-w-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
+      <article class="col-span-full min-w-0 overflow-hidden rounded-xl border border-zinc-200 bg-white p-4 sm:p-5">
         <h2 class="font-semibold text-zinc-900">模型调用统计</h2>
         <p class="mt-1 text-xs text-zinc-400">各模型调用量、Tokens 与 Flow Points 消耗</p>
         <div class="mt-5 space-y-3">
@@ -336,10 +336,10 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
                 <span class="shrink-0 text-[11px] font-medium text-zinc-500 sm:text-xs">· 共 {{ item.total }} 次</span>
               </div>
               <div class="flex shrink-0 items-center gap-1 whitespace-nowrap sm:gap-1.5">
-                <span class="rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 ring-1 ring-inset ring-blue-200 sm:px-2 sm:text-[11px]">{{ item.points_used || 0 }} 点</span>
+                <span class="rounded-full bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-700 ring-1 ring-inset ring-blue-200 sm:px-2 sm:text-[11px]">{{ item.points_used || 0 }} 点</span>
               </div>
             </div>
-            <div class="mt-3 flex items-center justify-between gap-1 overflow-hidden whitespace-nowrap border-t border-zinc-200/60 pt-3 text-[10px] sm:gap-2 sm:text-xs">
+            <div class="mt-3 flex items-center justify-between gap-1 overflow-hidden whitespace-nowrap border-t border-zinc-200/60 pt-3 text-[11px] sm:gap-2 sm:text-xs">
               <div class="flex min-w-0 items-center gap-1 overflow-hidden sm:gap-1.5">
                 <span class="shrink-0 text-zinc-400">Tokens:</span>
                 <strong class="truncate text-blue-700">{{ formatTokenNumber(item.tokens) }}</strong>
@@ -355,14 +355,14 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
         </div>
       </article>
 
-      <article class="col-span-full min-w-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
+      <article class="col-span-full min-w-0 overflow-hidden rounded-xl border border-zinc-200 bg-white p-4 sm:p-5">
         <h2 class="font-semibold text-zinc-900">模块润色调用分布</h2>
         <p class="mt-1 text-xs text-zinc-400">按简历模块拆分调用情况</p>
         <div class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div v-for="item in dashboard.section_breakdown" :key="item.section_type" class="min-w-0 overflow-hidden rounded-xl border border-zinc-100 p-3.5">
             <p class="truncate text-xs font-medium text-zinc-600">{{ sectionText(item.section_type) }}</p>
             <p class="mt-1.5 truncate text-xl font-semibold text-zinc-950">{{ item.total }}</p>
-            <p class="mt-1 truncate text-[10px] text-zinc-400 sm:text-xs">成功 {{ item.success }} · 失败 {{ item.failed }}</p>
+            <p class="mt-1 truncate text-[11px] text-zinc-400 sm:text-xs">成功 {{ item.success }} · 失败 {{ item.failed }}</p>
           </div>
           <p v-if="!dashboard.section_breakdown.length" class="col-span-full py-8 text-center text-sm text-zinc-400">暂无模块润色记录</p>
         </div>

@@ -151,7 +151,7 @@ onMounted(() => load())
       <Button class="w-full sm:w-auto" @click="openCreate"><Plus class="h-4 w-4" />添加公告</Button>
     </div>
 
-    <div class="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+    <div class="overflow-hidden rounded-xl border border-zinc-200 bg-white">
       <div v-if="loading" class="flex h-60 items-center justify-center text-sm text-zinc-400">正在加载公告…</div>
       <div v-else-if="!data.items.length" class="flex h-60 flex-col items-center justify-center text-zinc-400"><Megaphone class="mb-3 h-8 w-8" /><p class="text-sm">暂无公告</p></div>
       <div v-else class="divide-y divide-zinc-100">

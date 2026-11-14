@@ -1031,7 +1031,7 @@ onMounted(() => load())
           <div class="space-y-6 max-w-5xl">
             <!-- 基础配置：双栏网格，高度统一，紧凑优雅 -->
             <section class="grid gap-5 md:grid-cols-3">
-              <article class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm flex flex-col justify-between">
+              <article class="rounded-xl border border-zinc-200 bg-white p-6 flex flex-col justify-between">
                 <div>
                   <div class="flex items-start gap-3.5">
                     <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zinc-900 text-white"><Gift class="h-5 w-5" /></span>
@@ -1047,7 +1047,7 @@ onMounted(() => load())
                 </div>
               </article>
               
-              <article class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm flex flex-col justify-between">
+              <article class="rounded-xl border border-zinc-200 bg-white p-6 flex flex-col justify-between">
                 <div>
                   <div class="flex items-start gap-3.5">
                     <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700"><MessageSquare class="h-5 w-5" /></span>
@@ -1063,7 +1063,7 @@ onMounted(() => load())
                 </div>
               </article>
 
-              <article class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm flex flex-col justify-between">
+              <article class="rounded-xl border border-zinc-200 bg-white p-6 flex flex-col justify-between">
                 <div>
                   <div class="flex items-start gap-3.5">
                     <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700"><ShieldCheck class="h-5 w-5" /></span>
@@ -1081,7 +1081,7 @@ onMounted(() => load())
             </section>
 
             <!-- 提示文案设置：全宽单栏，释放富文本工具栏展示空间 -->
-            <article class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+            <article class="rounded-xl border border-zinc-200 bg-white p-6">
               <div class="border-b border-zinc-100 pb-4 mb-5">
                 <h2 class="font-semibold text-zinc-900 text-base">AI 记录页提示</h2>
                 <p class="mt-1 text-xs text-zinc-500">展示在用户 AI 记录页余额下方，可用于说明点数兑换比例、计费规则或活动信息。</p>
@@ -1091,7 +1091,7 @@ onMounted(() => load())
               </div>
             </article>
 
-            <article class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+            <article class="rounded-xl border border-zinc-200 bg-white p-6">
               <div class="border-b border-zinc-100 pb-4 mb-5">
                 <h2 class="font-semibold text-zinc-900 text-base">用户协议与隐私政策</h2>
                 <p class="mt-1 text-xs text-zinc-500">在用户注册与登录时展示并要求勾选，支持编辑富文本条款内容。</p>
@@ -1131,7 +1131,7 @@ onMounted(() => load())
             <Button v-if="section === 'industry-templates'" variant="outline" class="w-full sm:w-auto" @click="openStarterCreator"><Plus class="h-4 w-4" />新增岗位预设</Button>
           </div>
 
-          <div class="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+          <div class="overflow-hidden rounded-xl border border-zinc-200 bg-white">
             <div v-if="loading" class="flex h-64 items-center justify-center text-sm text-zinc-400"><RefreshCw class="mr-2 h-4 w-4 animate-spin" />正在加载</div>
             <div v-else class="overflow-x-auto">
               <table v-if="section === 'users'" class="w-full min-w-[900px] text-left text-sm">

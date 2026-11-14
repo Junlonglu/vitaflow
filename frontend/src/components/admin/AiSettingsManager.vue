@@ -694,7 +694,7 @@ watch(
 
 <template>
   <section class="space-y-5">
-    <div v-if="!props.mode" class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+    <div v-if="!props.mode" class="rounded-xl border border-zinc-200 bg-white p-5">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p class="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">{{ pageMeta.eyebrow }}</p>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Component } from "vue"
-import { computed, ref, watch } from "vue"
-import { ChevronDown, RefreshCw, ShieldCheck } from "lucide-vue-next"
+import { computed, ref } from "vue"
+import { ChevronDown, RefreshCw } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
 
 interface AdminNavItem {
@@ -29,15 +29,11 @@ defineEmits<{
   refresh: []
 }>()
 
-// 手风琴多开：各组独立开合；当前 section 所在组自动展开（移动端切换、初始进入时）
-const openGroups = ref(new Set<string>())
+// 折叠分组：默认全展开（二级导航只有 4 组，收起后侧栏会空掉一大片，反而更难找）；
+// 记住用户手动收起的状态，切 section 时不再强行展开。
+const openGroups = ref(new Set(props.navGroups.map((group) => group.label).filter((label): label is string => !!label)))
 
 const flatItems = computed(() => props.navGroups.flatMap((group) => group.items))
-
-watch(() => props.section, (id) => {
-  const group = props.navGroups.find((entry) => entry.items.some((item) => item.id === id))
-  if (group?.label) openGroups.value.add(group.label)
-}, { immediate: true })
 
 function toggleGroup(label: string) {
   const next = new Set(openGroups.value)
@@ -48,41 +44,37 @@ function toggleGroup(label: string) {
 </script>
 
 <template>
-    <div class="mx-auto flex max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:py-10">
-      <aside class="hidden w-56 shrink-0 2xl:block">
-        <div class="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
-          <div class="mb-3 flex items-center gap-2 px-3 py-2 text-sm font-semibold text-zinc-900">
-            <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-900 text-white"><ShieldCheck class="h-4 w-4" /></span>
-            管理控制台
-          </div>
+    <div class="mx-auto flex max-w-7xl gap-8 px-4 py-6 sm:px-6 lg:py-8">
+      <!-- 二级导航：不套白卡，和工作区侧栏同一套扁平行，避免「页中页」的割裂感 -->
+      <aside class="hidden w-44 shrink-0 lg:block">
+        <div class="sticky top-6">
           <template v-for="group in navGroups" :key="group.label ?? 'standalone'">
-            <!-- 无标题组：子项直接平铺 -->
             <template v-if="!group.label">
               <button
                 v-for="item in group.items"
                 :key="item.id"
-                class="mb-1 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition"
-                :class="section === item.id ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900'"
+                class="mb-0.5 flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-[13px] transition-colors"
+                :class="section === item.id ? 'bg-zinc-200/60 font-semibold text-zinc-900' : 'text-zinc-600 hover:bg-zinc-200/40 hover:text-zinc-900'"
                 @click="$emit('switchSection', item.id)"
               >
-                <component :is="item.icon" class="h-4 w-4" />{{ item.label }}
+                <component :is="item.icon" class="h-3.5 w-3.5 shrink-0" />{{ item.label }}
               </button>
             </template>
             <template v-else>
               <button
-                class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium text-zinc-500 transition hover:text-zinc-900"
+                class="mt-3 flex w-full items-center justify-between rounded-md px-2.5 py-1 text-left text-[11.5px] font-medium tracking-wider text-zinc-400 transition-colors hover:text-zinc-700"
                 :aria-expanded="openGroups.has(group.label)"
                 @click="toggleGroup(group.label)"
               >
                 {{ group.label }}
-                <ChevronDown class="h-4 w-4 transition-transform" :class="{ '-rotate-90': !openGroups.has(group.label) }" />
+                <ChevronDown class="h-3 w-3 transition-transform" :class="{ '-rotate-90': !openGroups.has(group.label) }" />
               </button>
-              <div v-show="openGroups.has(group.label)" class="mb-2 ml-3 border-l border-zinc-100 pl-1">
+              <div v-show="openGroups.has(group.label)" class="mt-1 space-y-0.5">
                 <button
                   v-for="item in group.items"
                   :key="item.id"
-                  class="mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition"
-                  :class="section === item.id ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900'"
+                  class="flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-[13px] transition-colors"
+                  :class="section === item.id ? 'bg-zinc-200/60 font-semibold text-zinc-900' : 'text-zinc-600 hover:bg-zinc-200/40 hover:text-zinc-900'"
                   @click="$emit('switchSection', item.id)"
                 >
                   <component :is="item.icon" class="h-3.5 w-3.5 shrink-0" />{{ item.label }}
@@ -94,28 +86,28 @@ function toggleGroup(label: string) {
       </aside>
 
       <main class="min-w-0 flex-1">
-        <div class="mb-5 flex flex-wrap gap-2 pb-1 2xl:hidden">
+        <!-- 窄屏：二级导航降级为横向滚动条，与工作区的内容页同一套 chips -->
+        <div class="scrollbar-none -mx-1 mb-5 flex gap-1.5 overflow-x-auto px-1 pb-1 lg:hidden">
           <button
             v-for="item in flatItems"
             :key="item.id"
-            class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm"
-            :class="section === item.id ? 'bg-zinc-900 text-white' : 'border border-zinc-200 bg-white text-zinc-600'"
+            class="flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] transition-colors"
+            :class="section === item.id ? 'bg-zinc-200/60 font-semibold text-zinc-900' : 'text-zinc-600 hover:bg-zinc-200/40'"
             @click="$emit('switchSection', item.id)"
           >
-            <component :is="item.icon" class="h-4 w-4" />{{ item.label }}
+            <component :is="item.icon" class="h-3.5 w-3.5" />{{ item.label }}
           </button>
         </div>
 
-        <header class="mb-7 flex items-end justify-between gap-4">
-          <div>
-            <p class="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-zinc-400 sm:mb-2 sm:text-xs sm:tracking-[0.18em]">VitaFlow Admin</p>
-            <h1 class="text-2xl font-semibold tracking-tight text-zinc-950 sm:text-3xl">{{ title }}</h1>
-            <p class="mt-1.5 text-xs text-zinc-500 sm:mt-2 sm:text-sm">管理与配置 VitaFlow 系统各项核心功能</p>
+        <header class="mb-6 flex flex-wrap items-start justify-between gap-3">
+          <div class="min-w-0">
+            <h1 class="text-[20px] font-semibold tracking-tight text-zinc-900">{{ title }}</h1>
+            <p class="mt-1 text-[12.5px] leading-relaxed text-zinc-500">管理与配置 VitaFlow 系统各项核心功能</p>
           </div>
           <Button variant="outline" size="sm" :disabled="loading" @click="$emit('refresh')"><RefreshCw class="h-4 w-4" :class="{ 'animate-spin': loading }" />刷新</Button>
         </header>
 
-        <div v-if="error" class="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ error }}</div>
+        <div v-if="error" class="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">{{ error }}</div>
 
         <slot />
       </main>

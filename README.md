@@ -1,6 +1,6 @@
 # VitaFlow 简历流
 
-VitaFlow 是一个面向求职者的智能简历生成与优化平台，提供在线简历编辑、AI 生成与诊断、JD 匹配优化、多模板预览、分享，以及 PDF/Word 导出能力。项目采用前后端分离架构，后端基于 FastAPI，前端基于 Vue 3 + Vite。
+VitaFlow 是一个面向求职者的智能简历生成与优化平台，提供在线简历编辑、AI 对话式优化、JD 匹配优化、多模板预览、分享，以及 PDF 导出能力。项目采用前后端分离架构，后端基于 FastAPI，前端基于 Vue 3 + Vite。
 
 **线上体验：[https://vitaflow.vip](https://vitaflow.vip)**
 
@@ -8,21 +8,21 @@ VitaFlow 是一个面向求职者的智能简历生成与优化平台，提供�
 
 - 账号注册、邮箱验证码、JWT 登录与个人资料管理
 - 简历列表、创建、复制、版本保存、文件导入与公开分享
-- 三栏式简历编辑器，支持模块化编辑、拖拽排序、头像裁剪上传和自动保存
+- 三栏式简历编辑器（模块侧栏 + 表单/AI 对话 + A4 预览），支持模块化编辑、拖拽排序、头像裁剪上传和自动保存
 - 多套简历模板，支持字体、颜色、间距、头像显示等样式配置
 - 后端 HTML 预览，浏览器预览与 PDF 导出共用渲染服务
-- AI 简历生成、简历评分、模块润色、JD 匹配优化和简历对话
-- AI 简历中英互译，支持语言智能识别、结构保护、翻译记录和独立 Flow Points 计费
+- AI 统一对话入口：修改、润色、翻译、JD 优化、生成都在同一条对话里完成，AI 产出需用户确认后才写入简历
+- 简历中英互译：自动识别原文语言，保持模块结构与富文本格式，翻译记录可在 AI 记录中查看并单独计费
 - Flow Points 点数、AI 使用记录、兑换码与点数流水
-- PDF/Word 导出，PDF 默认使用 Playwright + Chromium，支持 WeasyPrint 兜底
+- PDF 导出，默认使用 Playwright + Chromium，支持 WeasyPrint 兜底（Word 导出已下线，见下文）
 - MinIO / 阿里云 OSS 对象存储，支持代理访问或公开 URL
 - 用户反馈、站内公告、模板管理和管理后台
 
 ## 技术栈
 
-- 后端：FastAPI、SQLAlchemy、Alembic、MySQL、Redis、LangChain、LangGraph
+- 后端：FastAPI、SQLAlchemy、Alembic、MySQL、Redis
 - 前端：Vue 3、TypeScript、Vite、Vue Router、Pinia、Tailwind CSS
-- 导出：Playwright、Chromium、WeasyPrint、python-docx
+- PDF 导出：Playwright、Chromium、WeasyPrint
 - 存储：MinIO、阿里云 OSS
 - AI 服务：Node.js 旁路服务，承载 pi-agent 运行时（`ai-service/`，见 `docs/pi-agent重构设计.md`）
 
@@ -37,7 +37,7 @@ VitaFlow/
 │   │   ├── models/                  # SQLAlchemy 数据模型
 │   │   ├── schemas/                 # Pydantic 请求与响应结构
 │   │   ├── services/                # 核心业务服务
-│   │   │   ├── ai/                  # LLM、Prompt、Chain、Graph 与 Token 统计
+│   │   │   ├── ai/                  # 仅 token_usage.py：Token 计量工具
 │   │   │   └── storage/             # MinIO / 阿里云 OSS 统一存储层
 │   │   ├── static/                  # 字体及简历预览、打印公共样式
 │   │   ├── templates/resume/        # Jinja2 简历模板与模板片段
@@ -48,31 +48,31 @@ VitaFlow/
 │   ├── alembic.ini                  # Alembic 配置
 │   ├── requirements.txt             # Python 依赖
 │   └── README.md                    # 后端开发与部署说明
-├── ai-service/                      # Node AI 服务（pi-agent 旁路，骨架只读对话）
-│   ├── src/                         # server / agent / faux / prompt / config
+├── ai-service/                      # Node AI 服务（pi-agent 运行时，:8300）
+│   ├── src/                         # server / agent / prompt / skills / tools / billing / catalog
 │   └── README.md                    # AI 服务说明与运行方式
 ├── frontend/                        # Vue 3 前端
 │   ├── src/
 │   │   ├── api/                     # Axios 封装及各业务 API
 │   │   ├── components/
 │   │   │   ├── admin/               # 管理后台组件
-│   │   │   ├── ai/                  # AI 生成、优化、评分、翻译与对话组件
+│   │   │   ├── ai/                  # 对话面板、思考过程、工具进度与变更确认组件
 │   │   │   ├── editor/              # 简历编辑器及字段表单
 │   │   │   ├── preview/             # A4、HTML 与 PDF 预览组件
 │   │   │   ├── resume/              # 简历列表、创建、导入与分享组件
-│   │   │   ├── templates/           # 前端模板预览组件
+│   │   │   ├── templates/           # 模板缩略预览（TemplatePreview）
 │   │   │   └── ui/                  # 通用基础 UI 组件
 │   │   ├── router/                  # 路由定义与访问守卫
 │   │   ├── stores/                  # 用户、简历和编辑器 Pinia 状态
 │   │   ├── styles/                  # 全局样式
 │   │   ├── types/                   # API、用户、简历和 AI 类型定义
-│   │   ├── utils/                   # Diff、分页、打印和本地化工具
+│   │   ├── utils/                   # Diff、分页、预设与本地化工具
 │   │   ├── views/                   # 页面级视图
 │   │   ├── App.vue                  # 根组件
 │   │   └── main.ts                  # 前端应用入口
 │   ├── .env.example                 # 前端环境变量示例
 │   ├── package.json                 # 前端依赖与脚本
-│   ├── tailwind.config.js           # Tailwind CSS 配置
+│   ├── components.json              # shadcn-vue 生成器配置
 │   ├── vite.config.ts               # Vite 配置
 │   └── README.md                    # 前端开发说明
 ├── AGENTS.md                        # 代码代理与协作约束
@@ -195,7 +195,9 @@ npm run preview
 | `JWT_SECRET_KEY`、`JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | 登录令牌签名与过期时间 |
 | `ADMIN_EMAILS` | 管理员邮箱白名单，多个邮箱用英文逗号分隔 |
 | `SMTP_*` | 邮箱验证码和反馈回复邮件 |
-| `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL` | OpenAI 兼容模型服务 |
+| `AI_SERVICE_URL`、`AI_SERVICE_TOKEN` | ai-service 旁路地址与共享调用令牌 |
+| `AI_SERVICE_CONTEXT_MESSAGES` | 每轮注入模型的历史消息条数上限（默认 12，硬顶 40） |
+| `BYOK_ENCRYPTION_KEYS`、`BYOK_ALLOW_PRIVATE_NETWORK` | 用户自带 API Key 的加密密钥与内网探测开关 |
 | `STORAGE_PROVIDER` | `minio` 或 `aliyun_oss` |
 | `STORAGE_PUBLIC_URL_MODE` | `proxy` 或 `public` |
 | `EXPORT_DIR`、`UPLOAD_DIR` | 导出文件和上传文件目录 |
@@ -232,7 +234,7 @@ ALIYUN_OSS_PUBLIC_URL=https://vitaflow.oss-cn-hangzhou.aliyuncs.com
 
 `STORAGE_PUBLIC_URL_MODE=proxy` 时，上传后返回 `/api/files/{object_name}`，由后端代理读取对象，适合私有 bucket。`public` 模式会直接返回对象存储或 CDN 的公开地址。
 
-## PDF / Word 导出
+## PDF 导出
 
 PDF 导出默认使用 Chromium：
 
@@ -247,7 +249,9 @@ PDF_BASE_URL=http://127.0.0.1:8000
 - `auto`：优先 Chromium，失败后回退 WeasyPrint
 - `weasyprint`：仅使用 WeasyPrint
 
-Word 导出由 `python-docx` 生成。PDF 和 Word 导出记录会写入后端导出记录表，并可在管理后台查看。
+PDF 导出记录会写入后端导出记录表，并可在管理后台查看。
+
+> **Word 导出已下线**：`POST /api/resumes/{id}/export/word` 返回 `410`，前端也不再提供入口。原因是 `word_export_service` 尚未映射 `template_config`（字体 / 主题色 / 页边距），导出的 docx 与预览、PDF 观感不一致。服务实现保留，恢复方式见该路由的 docstring。
 
 ## 管理后台
 
@@ -268,7 +272,7 @@ ADMIN_EMAILS=admin@example.com
 - `/api/auth`：注册、登录、验证码、用户资料
 - `/api/resumes`：简历 CRUD、版本、预览、分享、导出
 - `/api/templates`：模板列表和模板详情
-- `/api/ai`：AI 生成、评分、润色、JD 优化、对话和点数
+- `/api/ai`：AI 对话（NDJSON 流式）、能力查询、任务记录与 Flow Points
 - `/api/files`：头像、公告图片、AI 对话图片和文件代理
 - `/api/announcements`：站内公告
 - `/api/feedback`：用户反馈
@@ -278,7 +282,7 @@ ADMIN_EMAILS=admin@example.com
 
 - `/`：首页（已登录自动进入工作区）
 - `/landing`：营销落地页
-- `/login`、`/register`：登录与注册
+- `/login`、`/register`：登录与注册（两个路由共用 `Login.vue`）
 - `/workspace`：工作区首页（左侧栏为简历与会话入口，中间为对话）
 - `/workspace/:id`：工作区内的简历编辑器与预览
 - `/workspace/templates`：工作区内的模板中心（选好模板直接起稿）

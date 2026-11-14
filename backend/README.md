@@ -1,6 +1,6 @@
 # VitaFlow Backend
 
-FastAPI 后端提供认证、简历管理、HTML 预览、PDF/Word 导出、头像上传和 AI 简历优化接口。
+FastAPI 后端提供认证、简历管理、HTML 预览、PDF 导出、头像上传和 AI 对话代理接口。
 
 ## 启动
 
@@ -88,8 +88,8 @@ macOS 本地开发建议保持 `PDF_CHROMIUM_EXECUTABLE_PATH` 为空，让 Playw
 - MySQL 表不使用物理外键，简历主体和模板配置使用 JSON 字段。
 - 注册验证码、发送限频和并发注册锁存储在 Redis，并通过 TTL 自动过期。
 - `preview_service` 用 Jinja2 渲染 HTML，预览和 PDF 导出共用该服务。
-- Markdown 由 `markdown` 转 HTML，并用 `bleach` 清理。
-- AI 调用通过 LangChain 和 LangGraph 封装，未配置 `AI_API_KEY` 时直接报错。
+- 富文本与 AI 输出进入 HTML 前由 `rich_text_service` 用 `bleach` 白名单清理；Markdown 渲染在前端（`src/lib/markdown.ts`，markdown-it）完成，后端不做 Markdown 转换。
+- AI 能力不在后端实现：后端只做鉴权、上下文装配、计费与落库，实际推理由 `ai-service`（pi-agent 运行时）承担，通过 `AI_SERVICE_URL` + `AI_SERVICE_TOKEN` 调用。
 - 简历翻译通过独立 AI 任务执行，保持模块结构、事实字段和富文本格式，并由 Flow Points 规则单独计费。
 - 头像存储通过统一存储服务封装，`STORAGE_PROVIDER=minio` 使用 MinIO，`STORAGE_PROVIDER=aliyun_oss` 使用阿里云 OSS。
 

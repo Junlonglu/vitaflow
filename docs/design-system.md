@@ -42,7 +42,7 @@
 | 图标 | lucide-vue-next（约 45+ 文件使用），个别自绘 SVG（BrandLogo、FlowAgentIcon、FlowPointIcon） |
 | 暗色模式 | **不支持**。全库无 `dark:`、`.dark`、`prefers-color-scheme` |
 | 全局样式 | 唯一入口 `src/styles/index.css`：body 背景 `#f7f8fb`、文字 `#111827`、字体栈 Inter → system-ui → "Microsoft YaHei"；含 `.thin-scrollbar`、富文本重置、旧浏览器 oklch/color-mix 兜底变量 |
-| 注意 | `tailwind.config.js` 在 v4 下**不被读取**（CSS 未加 `@config`），其中 `primary: #2563eb` 等定义全部无效，属死配置 |
+| 注意 | Tailwind v4 **不使用 JS 配置文件**（原 `tailwind.config.js` 已删除）。没有自定义主题扩展，颜色直接用默认色阶（灰阶用 `zinc-*`）；不要在项目根新增 `tailwind.config.js`，v4 不会读取 |
 
 **字号/字体**：标题 `font-semibold tracking-tight`，正文 `text-sm`（14px），辅助 `text-xs`。代码中大量 `text-[14px]` 任意值与 `text-sm` 等价，新代码一律用阶梯（`text-xs/sm/base`）。
 
@@ -191,7 +191,6 @@
 | Tabs | `ui/tabs/`；工作区里的模式切换（内容编辑 / Flow Agent）、模板分类改为扁平 tab：`h-7 rounded-lg px-2.5`，选中 `bg-zinc-100 text-zinc-900`，未选中 `text-zinc-500 hover:bg-zinc-50`，容器无底色只留发丝线 | |
 | Pagination | `ui/pagination/PaginationFooter.vue` | 列表分页统一用它 |
 | EmptyState | `common/EmptyState.vue` | 空状态统一入口 |
-| LoadingButton | `common/LoadingButton.vue` | 带加载态的按钮 |
 | BrandLogo | `common/BrandLogo.vue` | 品牌标识 |
 
 ### 3.5 Toast（轻提示）

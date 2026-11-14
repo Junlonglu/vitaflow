@@ -5,11 +5,11 @@
 ## 项目认知
 
 - VitaFlow 是前后端分离的智能简历平台。
-- 后端位于 `backend/`，使用 FastAPI、SQLAlchemy、Alembic、MySQL、Redis、LangChain/LangGraph、Jinja2、Playwright/WeasyPrint、python-docx。
+- 后端位于 `backend/`，使用 FastAPI、SQLAlchemy、Alembic、MySQL、Redis、Jinja2、Playwright/WeasyPrint、python-docx。
 - 前端位于 `frontend/`，使用 Vue 3、TypeScript、Vite、Vue Router、Pinia、Tailwind CSS。
 - AI 服务位于 `ai-service/`，是承载 pi-agent 运行时的 Node 旁路服务（`@earendil-works/pi-coding-agent@0.83.0` 锁版）。FastAPI 通过 HTTP/SSE 代理调用它，认证、数据库、计费仍归 FastAPI。详见 `docs/pi-agent重构设计.md`。
 - 后端接口统一挂载在 `/api` 下，响应结构应保持 `{ code, message, data }`。
-- 简历预览和 PDF 导出共用后端 HTML 渲染服务，改模板、样式、预览或导出逻辑时要同时考虑浏览器预览、PDF、Word 的一致性。
+- 简历预览和 PDF 导出共用后端 HTML 渲染服务，改模板、样式或预览逻辑时要同时考虑浏览器预览与 PDF 的一致性。Word 导出已下线（`/api/resumes/{id}/export/word` 返回 410），`word_export_service` 仅为待恢复而保留，不要把它当成在用功能。
 - 运行分两种模式：手动开发（默认）`docker compose up -d` 只启动 mysql/redis/minio/ai-service，后端 8000 与前端 5173 需在宿主机分别启动；全栈 `docker compose --profile full up -d --build` 额外启动 backend/frontend(Nginx)，入口为 `http://localhost:8080`。排查「页面打不开 / 502 / 接口 500」时，先确认当前模式以及对应进程是否真的在监听。
 
 ## 协作原则
@@ -29,7 +29,7 @@
 - 项目约定 MySQL 表不使用物理外键，关联关系通过业务字段维护。
 - Redis 用于验证码、限频、缓存或锁时，key 必须有清晰前缀和合理 TTL。
 - Markdown、富文本、AI 输出或用户输入进入 HTML 前必须经过既有清理链路，避免 XSS。
-- AI 能力应通过现有 `services/ai/` 封装接入；不要在路由或前端硬编码模型调用细节。
+- AI 能力由 `ai-service/`（pi-agent 运行时）承载，经 `backend/app/api/ai.py` 代理并统一处理鉴权、计费与落库；不要在路由或前端硬编码模型调用细节。`services/ai/` 现仅剩 `token_usage.py`，不要往里加新逻辑。
 - 文件上传、头像、公告图片和 AI 对话图片必须走统一存储服务，不要散落本地文件访问逻辑。
 - PDF 渲染涉及 Chromium、WeasyPrint、字体、资源 URL 和分页时，要优先复用现有 `preview_service` / 导出服务。
 - 后端启动、配置和日志行为应与 `backend/README.md` 保持一致。
@@ -121,7 +121,7 @@ npm run typecheck  # TypeScript 类型检查
 
 - 前端改动至少运行 `npm run build`，除非环境缺依赖或用户明确要求跳过。
 - 后端改动至少运行 `python -m pytest tests -q`；涉及数据库时运行 migration 检查。
-- 涉及预览、模板、PDF 或 Word 导出时，除了构建检查，还要人工或脚本验证预览/导出结果没有空白、分页错位或资源缺失。
+- 涉及预览、模板或 PDF 导出时，除了构建检查，还要人工或脚本验证预览/导出结果没有空白、分页错位或资源缺失。
 - 涉及认证、权限、管理员后台、分享链接或文件访问时，必须检查未登录、普通用户、管理员三个路径的行为。
 - 把大文件按资源域拆成多个模块后，必须验证每个路由函数引用的全局符号都能解析（`backend/tests/` 已有字节码反射检查）；导入成功或启动成功不能替代这一步。
 - 空数据库会掩盖只在非空数据或按钮点击时才执行到的分支。改动列表类接口后，要用有数据的环境把相关 GET 全量请求一遍，不能只测空库。

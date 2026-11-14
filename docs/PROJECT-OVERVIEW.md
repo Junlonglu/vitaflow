@@ -28,7 +28,7 @@ VitaFlow（中文名「简历流」）是一个面向求职者的**智能简历�
 | AI 服务 | Node 22 + Express 4 + `@earendil-works/pi-coding-agent@0.83.0`（锁定版本，含 `@earendil-works/pi-ai`）；tsx 运行 TS |
 | 部署 | Docker Compose；MySQL / Redis / MinIO / ai-service 常驻，backend 与 frontend 可选容器化（`--profile full`） |
 
-> 注意：`AGENTS.md` 中仍写着后端使用 LangChain/LangGraph，**这是过时描述**。旧 AI 管线已退役，`requirements.txt` 中已无 langchain 依赖，`services/ai/` 仅剩 `token_usage.py`。
+> AI 管线已迁至 `ai-service/`（pi-agent 运行时）：`requirements.txt` 中已无 langchain 依赖，旧链路退役后 `backend/app/services/ai/` 仅剩 `token_usage.py`。
 
 ---
 
@@ -471,14 +471,14 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 | `components/editor/` | section 表单、条目列表、字段编辑、富文本、拖拽排序 |
 | `components/preview/` | 预览容器、缩放、分页提示 |
 | `components/ai/` | 对话面板、消息气泡、`ThinkingProcess.vue`（思考过程可视化）、变更确认卡片、提问卡片、工具进度 |
-| `components/templates/` | 模板选择与缩略预览（**注意：`ClassicTemplate.vue`/`ModernTemplate.vue`/`TechTemplate.vue` 在 `src` 内已无引用，属旧渲染路径残留**） |
+| `components/templates/` | 模板缩略预览（`TemplatePreview.vue`）；实际简历渲染由后端 Jinja2 模板负责，历史上的 `ClassicTemplate.vue` / `ModernTemplate.vue` / `TechTemplate.vue` 已随旧渲染路径一并删除 |
 | `components/workspace/` | 工作区首页（对话起始态）、模板中心面板（`WorkspaceTemplates.vue`）、全部简历面板（`WorkspaceResumeLibrary.vue`）、内容页外壳（`WorkspacePage.vue`）、右侧预览空态 |
 | `components/admin/` `announcement/` `resume/` `home/` `layout/` `common/` `ui/` | 分域组件；`resume/` 下 `ResumeCreateFlow.vue` 承载全部创建流程（工作区与 `/resumes` 共用）；`layout/` 下 `MainLayout.vue` 只服务公开页（`/`、`/landing`、`/templates`），`WorkspaceShell.vue` / `WorkspaceSidebar.vue` / `WorkspaceUserMenu.vue` 是工作区外壳；`AppLayout.vue` 这个曾经的空壳包装器已删除 |
 | `composables/` | `useWorkspaceBridge.ts`：侧栏切换简历前调用编辑器注册的 `flushSave`，避免防抖间隙丢改动；`useWorkspaceDrawer.ts`：移动端侧栏抽屉的开合状态；`useWorkspaceCreate.ts`：创建入口意图分发（`choice` / `starter` / `ai` / `import` / `blank`），可带 `templateId` 跳过模板选择 |
 | `stores/` | 4 个：`user`（登录态、积分）、`resume`（列表）、`editor`（当前简历、脏标记、保存、预览刷新）、`chat`（每份简历的会话列表与当前会话，侧栏与编辑器共用） |
 | `api/` | 每个业务域一个文件；`request.ts` 是 axios 封装，`ai.ts` 是流式专用 |
 | `types/` | 与后端 schema 对齐的 TS 类型（`resume.ts` / `ai.ts` / `api.ts` / `user.ts`） |
-| `utils/` | `aiDiff.ts` / `wordDiff.ts`（变更 diff）、`resumePagination.ts`（分页估算）、`resumePresets.ts`（预设）、`printResume.ts`、`toast.ts` |
+| `utils/` | `aiDiff.ts` / `wordDiff.ts`（变更 diff）、`resumePagination.ts`（分页估算）、`resumePresets.ts`（预设）、`templateNames.ts`、`toast.ts` |
 | `lib/` | `markdown.ts` 渲染、通用工具 |
 
 ### 8.4 双通道请求
@@ -553,10 +553,8 @@ docker compose --profile full up -d --build
 | settings 未固定 | `ai-service/src/agent.ts` | 两处 `createAgentSession` 都未传 `settingsManager`，会读 `<cwd>/.pi-agent/settings.json`，导致 compaction/retry 行为受部署目录影响、不可复现。建议改 `SettingsManager.inMemory({ compaction, retry })` |
 | thinking 逐 token 穿两跳 | `agent.ts` → NDJSON → FastAPI → 浏览器 | 每次 1–3 字符，一次响应上百条，每条都要一次 `JSON.parse` + `res.write` + 前端状态更新。建议 Node 侧 80–120ms 节流合并；同时 `res.write` 未处理背压（未监听 `drain`） |
 | 工具回调往返 | 每个工具一次跨进程 HTTP | 一轮可能 3 次往返。优化方向：上下文里预置 section 只读快照，让 `get_resume_context` 本地返回 |
-| 模板双份实现 | `frontend/src/components/templates/{Classic,Modern,Tech}Template.vue` | 在 `src` 内已无引用，真正生效的是后端 Jinja2 模板；保留会误导且样式会漂移 |
 | 超时默认值不一致 | `config.ts` 默认 60000ms，`docker-compose.yml` 传 300000ms | 不走 Docker 直接 `npm run dev` 时，导入整份简历（实测 60s+）会撞默认超时 |
 | 计费收尾仍阻塞 | `server.ts` 在 `res.end()` 后 `await reportUsage` | 注释写 fire-and-forget，实际占住请求收尾；FastAPI 慢时会拖长 Node 连接生命周期 |
-| 文档过时 | `AGENTS.md` 仍写 LangChain/LangGraph | 旧管线已退役，应按 `docs/pi-agent重构设计.md` 理解 |
 | 静态共享令牌 | `AI_SERVICE_TOKEN` | ADR 中已列为开放问题。当前「内网 + 无 shell 工具 + Python 侧兜底校验」下风险可控；升级方向是短时签名（时间戳 + HMAC） |
 | BYOK 未覆盖一次性任务 | `api/ai.py`、`api/resumes.py` | 自定义模型目前只作用于 Agent 对话；生成/导入任务仍走平台模型。扩展时需同步改造各处 `precheck_flow_points` / `settle_task_flow_points`，否则会出现「用用户 Key 却扣平台积分」 |
 | `ui/input` 等旧控件 | `components/ui/` | 本轮已把 Input/Textarea 从 12px 收敛到 8px 控件档；`Select` 的 ghost 类、`ConfirmDialog` 里的 `rounded-xl` 按钮等仍有零散发散，遇到即按 §1 圆角阶梯校准 |

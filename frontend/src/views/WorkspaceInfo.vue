@@ -376,7 +376,7 @@ onUnmounted(() => window.clearTimeout(searchTimer))
       <header class="flex flex-wrap items-start justify-between gap-3">
         <div class="min-w-0">
           <h1 class="flex items-center gap-2 text-[20px] font-semibold tracking-tight text-zinc-900">
-            <Database class="h-5 w-5 text-zinc-400" stroke-width="1.8" />
+            <Database class="h-5 w-5 text-zinc-400" stroke-width="1.75" />
             信息库
           </h1>
           <p class="mt-1.5 max-w-2xl text-[12.5px] leading-relaxed text-zinc-500">

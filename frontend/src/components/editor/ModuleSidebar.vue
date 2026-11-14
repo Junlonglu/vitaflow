@@ -214,7 +214,7 @@ function addModule(presetType?: string) {
           @click="showSortModal = true"
           title="排序与管理"
         >
-          <Settings class="h-4 w-4 md:h-[18px] md:w-[18px] transition-transform duration-100 group-hover:rotate-90" stroke-width="1.5" />
+          <Settings class="h-4 w-4 transition-transform duration-100 group-hover:rotate-90" stroke-width="1.75" />
         </button>
       </div>
     </div>

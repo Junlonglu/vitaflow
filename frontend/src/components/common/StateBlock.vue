@@ -43,9 +43,9 @@ defineEmits<{ action: [] }>()
     <component
       :is="icon"
       v-if="icon"
-      class="h-6 w-6"
-      :class="tone === 'error' ? 'text-red-300' : 'text-zinc-300'"
-      :stroke-width="1.7"
+      class="h-7 w-7"
+      :class="tone === 'error' ? 'text-red-300' : 'text-zinc-400'"
+      :stroke-width="2"
     />
     <p class="mt-3 text-[14px] font-medium tracking-tight" :class="tone === 'error' ? 'text-red-700' : 'text-zinc-900'">
       {{ title }}

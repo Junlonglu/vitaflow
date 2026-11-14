@@ -147,8 +147,8 @@ function logout() {
               class="p-2 rounded-lg text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 focus:outline-none transition-colors"
               aria-label="Toggle Menu"
             >
-              <Menu v-if="!mobileMenuOpen" class="h-6 w-6" />
-              <X v-else class="h-6 w-6" />
+              <Menu v-if="!mobileMenuOpen" class="h-5 w-5" />
+              <X v-else class="h-5 w-5" />
             </button>
           </template>
         </div>

@@ -262,7 +262,7 @@ function startFromTemplate(entry: "starter" | "import" | "blank") {
         </template>
         <div v-else class="m-auto w-full max-w-[240px] text-center">
           <div class="flex h-[300px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-300 bg-white/60">
-            <LayoutTemplate class="h-6 w-6 text-zinc-300" />
+            <LayoutTemplate class="h-7 w-7 text-zinc-300" />
             <p class="text-[12px] text-zinc-400">模板预览区</p>
           </div>
           <p class="mt-4 text-[12px] leading-5 text-zinc-500">选中左侧任意模板，这里会显示完整预览。</p>

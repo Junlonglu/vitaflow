@@ -230,7 +230,7 @@ async function confirmDelete() {
     <!-- 搜索与排序：只在有简历时出现，空库时不用先学会搜索 -->
     <div v-if="items.length || hasFilter" class="mt-3 flex items-center gap-2">
       <div class="relative min-w-0 flex-1 sm:max-w-[280px]">
-        <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" stroke-width="1.8" />
+        <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" stroke-width="1.75" />
         <input
           v-model="keyword"
           type="search"
@@ -247,7 +247,7 @@ async function confirmDelete() {
           aria-label="清空搜索"
           @click="clearKeyword"
         >
-          <X class="h-3 w-3" stroke-width="2.2" />
+          <X class="h-3 w-3" stroke-width="2" />
         </button>
       </div>
       <Select

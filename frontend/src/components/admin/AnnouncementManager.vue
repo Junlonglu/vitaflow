@@ -153,7 +153,7 @@ onMounted(() => load())
 
     <div class="overflow-hidden rounded-xl border border-zinc-200 bg-white">
       <div v-if="loading" class="flex h-60 items-center justify-center text-sm text-zinc-400">正在加载公告…</div>
-      <div v-else-if="!data.items.length" class="flex h-60 flex-col items-center justify-center text-zinc-400"><Megaphone class="mb-3 h-8 w-8" /><p class="text-sm">暂无公告</p></div>
+      <div v-else-if="!data.items.length" class="flex h-60 flex-col items-center justify-center text-zinc-400"><Megaphone class="mb-3 h-7 w-7" /><p class="text-sm">暂无公告</p></div>
       <div v-else class="divide-y divide-zinc-100">
         <article v-for="item in data.items" :key="item.id" class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div class="min-w-0"><div class="flex items-center gap-2"><h3 class="truncate font-medium text-zinc-900">{{ item.title }}</h3><span class="shrink-0 rounded-full px-2 py-1 text-xs" :class="item.status === 'published' ? 'bg-emerald-50 text-emerald-700' : 'bg-zinc-100 text-zinc-500'">{{ item.status === 'published' ? '已发布' : '草稿' }}</span><span class="shrink-0 rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700">{{ item.read_count || 0 }} 人已读</span></div><p class="mt-1.5 text-xs text-zinc-400">创建于 {{ formatDate(item.create_time) }}<span v-if="item.published_at"> · 发布于 {{ formatDate(item.published_at) }}</span></p></div>

@@ -67,7 +67,7 @@ const progress = computed(() => {
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-4">
             <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-zinc-700 ring-1 ring-zinc-200/60" style="view-transition-name: ai-hero-icon;">
-              <Sparkles class="h-6 w-6" stroke-width="1.5" />
+              <Sparkles class="h-6 w-6" stroke-width="2" />
             </span>
             <div>
               <div class="text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-600/80">AI AGENT</div>

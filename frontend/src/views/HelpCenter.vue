@@ -299,7 +299,7 @@ const faqs = [
             <p class="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">FAQ</p>
             <h2 class="mt-2 text-xl font-semibold tracking-tight text-zinc-950">常见问题</h2>
           </div>
-          <CircleHelp class="hidden h-6 w-6 text-zinc-300 sm:block" />
+          <CircleHelp class="hidden h-5 w-5 text-zinc-300 sm:block" />
         </div>
         <div class="grid gap-3 md:grid-cols-2">
           <section

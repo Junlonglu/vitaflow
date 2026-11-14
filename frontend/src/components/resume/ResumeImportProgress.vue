@@ -20,7 +20,7 @@ withDefaults(defineProps<{
           <div class="flex items-center justify-between gap-4">
             <div class="flex min-w-0 items-center gap-4">
               <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-zinc-900 text-white ">
-                <FileUp class="h-6 w-6" stroke-width="1.6" />
+                <FileUp class="h-6 w-6" stroke-width="2" />
               </span>
               <div class="min-w-0">
                 <p class="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-400">Resume Import</p>

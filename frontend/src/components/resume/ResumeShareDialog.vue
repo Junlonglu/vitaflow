@@ -150,7 +150,7 @@ watch(
     </template>
 
     <div v-if="loading" class="flex h-72 items-center justify-center">
-      <RefreshCw class="h-6 w-6 animate-spin text-zinc-400" />
+      <RefreshCw class="h-5 w-5 animate-spin text-zinc-400" />
     </div>
     <div v-else class="space-y-5">
             <div class="flex items-center justify-between gap-4 rounded-2xl border border-zinc-200 bg-zinc-50/70 px-4 py-3.5">

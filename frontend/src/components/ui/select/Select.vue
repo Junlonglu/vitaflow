@@ -123,7 +123,7 @@ const updateValue = (strVal: string) => {
                   @mouseenter="(e) => showTip(e, getOptionPrice(option))"
                   @mouseleave="hideTip"
                 >
-                  <Info class="h-3.5 w-3.5" stroke-width="1.8" />
+                  <Info class="h-3.5 w-3.5" stroke-width="1.75" />
                 </button>
               </div>
             </div>
@@ -132,8 +132,8 @@ const updateValue = (strVal: string) => {
               class="ml-auto inline-flex shrink-0 items-center justify-end text-zinc-400 group-focus:text-zinc-600 transition-colors"
               :title="getOptionIcon(option) === 'image' ? '支持图片输入' : '仅支持文本输入'"
             >
-              <Image v-if="getOptionIcon(option) === 'image'" class="h-4 w-4" stroke-width="1.8" />
-              <FileText v-else class="h-4 w-4" stroke-width="1.8" />
+              <Image v-if="getOptionIcon(option) === 'image'" class="h-4 w-4" stroke-width="1.75" />
+              <FileText v-else class="h-4 w-4" stroke-width="1.75" />
             </span>
             <span v-if="getOptionMeta(option)" class="ml-auto shrink-0 text-xs text-zinc-400">{{ getOptionMeta(option) }}</span>
           </SelectItem>

@@ -23,7 +23,7 @@ const percent = computed(() => Math.round(props.scale * 100))
         title="缩小预览（Ctrl/⌘ + 滚轮）"
         @click="$emit('zoomOut')"
       >
-        <ZoomOut class="h-4 w-4" stroke-width="1.8" />
+        <ZoomOut class="h-4 w-4" stroke-width="1.75" />
       </button>
       <span class="w-11 text-center text-[11.5px] font-medium tabular-nums text-zinc-500">{{ percent }}%</span>
       <button
@@ -34,7 +34,7 @@ const percent = computed(() => Math.round(props.scale * 100))
         title="放大预览（Ctrl/⌘ + 滚轮）"
         @click="$emit('zoomIn')"
       >
-        <ZoomIn class="h-4 w-4" stroke-width="1.8" />
+        <ZoomIn class="h-4 w-4" stroke-width="1.75" />
       </button>
       <span class="mx-1 h-4 w-px bg-zinc-200"></span>
       <button
@@ -45,7 +45,7 @@ const percent = computed(() => Math.round(props.scale * 100))
         title="按预览区宽度自动缩放"
         @click="$emit('fit')"
       >
-        <Maximize2 class="h-3.5 w-3.5" stroke-width="1.8" />
+        <Maximize2 class="h-3.5 w-3.5" stroke-width="1.75" />
         适应宽度
       </button>
     </div>

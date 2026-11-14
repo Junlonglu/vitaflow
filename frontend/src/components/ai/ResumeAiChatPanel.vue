@@ -406,7 +406,7 @@ watch(
               :title="skill.description"
               @click="useSkill(skill)"
             >
-              <component :is="skill.icon" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-400 transition-colors group-hover:text-zinc-600" stroke-width="1.8" />
+              <component :is="skill.icon" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-400 transition-colors group-hover:text-zinc-600" stroke-width="1.75" />
               <span class="min-w-0">
                 <span class="flex items-baseline gap-1.5">
                   <span class="text-[12.5px] font-medium text-zinc-900">{{ skill.name }}</span>
@@ -421,7 +421,7 @@ watch(
         <TransitionGroup name="message-list" tag="div" class="mx-auto w-full max-w-3xl space-y-5 md:space-y-6">
           <article v-for="(message, index) in messages" :key="message.id" class="group relative flex gap-2 md:gap-4" :class="message.role === 'user' ? 'justify-end' : 'justify-start'">
             <div v-if="message.role === 'assistant'" class="absolute opacity-0 pointer-events-none md:relative md:opacity-100 md:pointer-events-auto self-start mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded bg-zinc-100 text-zinc-500" :style="index === lastAssistantIndex ? 'view-transition-name: ai-hero-icon;' : ''">
-              <Bot class="h-3.5 w-3.5" stroke-width="1.6" />
+              <Bot class="h-3.5 w-3.5" stroke-width="1.75" />
             </div>
             
             <div :class="message.role === 'assistant' ? 'assistant-message-shell' : 'max-w-[90%] md:max-w-[75%] relative'">
@@ -496,7 +496,7 @@ watch(
               </div>
               <div v-if="message.role === 'user' && !message.streaming" class="touch-always-visible mt-1.5 flex justify-end pr-2 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
                 <button type="button" class="hit-area inline-flex items-center gap-1.5 text-[11px] md:text-[12px] font-medium text-zinc-400 hover:text-blue-600 active:scale-95 transition-colors disabled:opacity-40" :disabled="loading" title="编辑后重新生成" @click="startRegenerate(message)">
-                  <RotateCcw class="h-3 w-3 shrink-0" stroke-width="1.8" />
+                  <RotateCcw class="h-3 w-3 shrink-0" stroke-width="1.75" />
                   <span class="whitespace-nowrap">重新生成</span>
                 </button>
               </div>
@@ -510,7 +510,7 @@ watch(
           <div v-for="(item, index) in attachments" :key="item.url" class="group relative h-14 w-14 sm:h-16 sm:w-16 shrink-0 rounded-lg border border-zinc-200/80 bg-white">
             <img :src="privateFileUrl(item.url)" :alt="item.name || '待发送图片'" class="h-full w-full rounded-lg object-cover" />
             <button type="button" class="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-white text-zinc-400 ring-1 ring-zinc-200/80 transition hover:text-red-500 active:scale-95" title="移除图片" @click="removeAttachment(index)">
-              <X class="h-3 w-3" stroke-width="2.5" />
+              <X class="h-3 w-3" stroke-width="2" />
             </button>
           </div>
           <p v-if="uploadError" class="w-full text-xs text-red-500">{{ uploadError }}</p>
@@ -538,13 +538,13 @@ watch(
           <input ref="fileInputRef" type="file" accept="image/png,image/jpeg,image/webp" multiple class="hidden" @change="handleImageChange" />
           <!-- 左：添加附件（图片） -->
           <button v-if="supportsMultimodal" type="button" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 active:scale-95 disabled:opacity-40" :disabled="loading || uploadingImage" title="添加图片" @click="chooseImage">
-            <LoaderCircle v-if="uploadingImage" class="h-4 w-4 animate-spin" stroke-width="1.8" />
-            <Plus v-else class="h-[18px] w-[18px]" stroke-width="1.8" />
+            <LoaderCircle v-if="uploadingImage" class="h-4 w-4 animate-spin" stroke-width="1.75" />
+            <Plus v-else class="h-4 w-4" stroke-width="1.75" />
           </button>
 
           <!-- 左：模型选择（图标 + 名称 + 展开箭头，无边框） -->
           <div v-if="modelOptions.length" class="flex min-w-0 items-center rounded-lg px-1.5 h-8 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900">
-            <Sparkles class="mr-1 h-3.5 w-3.5 shrink-0 text-zinc-400" stroke-width="1.8" />
+            <Sparkles class="mr-1 h-3.5 w-3.5 shrink-0 text-zinc-400" stroke-width="1.75" />
             <Select
               :model-value="selectedModelId || ''"
               :options="modelOptions"
@@ -559,18 +559,18 @@ watch(
           <!-- 右：新对话 / 清空 / 发送 -->
           <div class="ml-auto flex shrink-0 items-center gap-0.5">
             <button v-if="!loading && !regenerateSource" type="button" class="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 active:scale-95" title="新对话" @click="emit('new-session')">
-              <SquarePen class="h-[17px] w-[17px]" stroke-width="1.6" />
+              <SquarePen class="h-4 w-4" stroke-width="1.75" />
             </button>
             <button v-if="messages.length > 0 && !loading && !regenerateSource" type="button" class="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-500 active:scale-95" @click="showClearConfirm = true" title="清空对话">
-              <Trash2 class="h-[17px] w-[17px]" stroke-width="1.6" />
+              <Trash2 class="h-4 w-4" stroke-width="1.75" />
             </button>
             <button v-if="regenerateSource" type="button" class="flex h-8 items-center justify-center rounded-lg px-2.5 text-[12.5px] font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 active:scale-95" title="取消重新生成" @click="cancelRegenerate">
               取消
             </button>
             <button type="submit" class="group ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-wb-primary text-white transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 hover:bg-wb-primary-hover active:scale-[0.94]" :disabled="loading || (!input.trim() && !attachments.length)" :title="regenerateSource ? '确认重新生成' : '发送'" @click="submit">
-              <RotateCcw v-if="regenerateSource" class="h-4 w-4 transition-transform duration-100 ease-out group-hover:rotate-[-25deg]" stroke-width="1.8" />
+              <RotateCcw v-if="regenerateSource" class="h-4 w-4 transition-transform duration-100 ease-out group-hover:rotate-[-25deg]" stroke-width="2" />
               <LoaderCircle v-else-if="loading" class="h-4 w-4 animate-spin" stroke-width="2" />
-              <ArrowUp v-else class="h-4 w-4 transition-transform duration-100 ease-out group-hover:-translate-y-0.5" stroke-width="2.2" />
+              <ArrowUp v-else class="h-4 w-4 transition-transform duration-100 ease-out group-hover:-translate-y-0.5" stroke-width="2" />
             </button>
           </div>
         </div>

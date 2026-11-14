@@ -148,7 +148,7 @@ watch(
           <div v-if="templateSelectMode === 'create' && createMode === 'starter'" class="w-full">
             <div v-if="starterLoading" class="flex min-h-[360px] items-center justify-center text-sm text-zinc-500">正在加载岗位内容...</div>
             <div v-else-if="starterError" class="flex min-h-[360px] flex-col items-center justify-center px-6 text-center">
-              <AlertCircle class="h-8 w-8 text-zinc-300" />
+              <AlertCircle class="h-7 w-7 text-zinc-300" />
               <p class="mt-3 text-sm font-medium text-zinc-900">{{ starterError }}</p>
               <Button variant="outline" class="mt-4 h-9 rounded-full border-zinc-200 bg-white px-4 text-xs text-zinc-700" @click="emit('loadStarterCatalog')">重新加载</Button>
             </div>

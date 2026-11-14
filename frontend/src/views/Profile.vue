@@ -200,7 +200,7 @@ const navItems = [
                 class="flex w-full items-center gap-3.5 rounded-xl px-4 py-3.5 text-left text-sm font-medium transition-colors duration-100"
                 :class="activeTab === item.id ? 'bg-zinc-900 text-white font-semibold ' : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900'"
               >
-                <component :is="item.icon" class="h-4.5 w-4.5" />
+                <component :is="item.icon" class="h-5 w-5" />
                 <span>{{ item.label }}</span>
               </button>
             </nav>

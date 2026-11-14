@@ -171,7 +171,8 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
 
 <template>
   <template v-if="dashboard">
-    <section class="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+    <section class="@container">
+      <div class="grid grid-cols-2 gap-3 @2xl:grid-cols-4 @2xl:gap-4">
       <article v-for="card in cards" :key="card.label" class="relative flex min-w-0 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-3.5 sm:p-4">
         <div>
           <div class="flex items-center justify-between gap-1.5">
@@ -196,6 +197,7 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
           <span>上线首日 </span><span class="font-medium text-zinc-700">{{ formatDay(dashboard.totals.launch_date) }}</span>
         </p>
       </article>
+      </div>
     </section>
 
     <section class="mt-5 grid items-start gap-5 lg:grid-cols-2">

@@ -406,8 +406,9 @@ onMounted(() => refresh())
           正在加载
         </div>
 
-        <div v-else-if="activeTab === 'records'" class="overflow-x-auto">
-          <table class="w-full min-w-[780px] text-left text-sm">
+        <div v-else-if="activeTab === 'records'">
+          <div class="overflow-x-auto">
+            <table class="w-full min-w-[780px] text-left text-sm">
             <thead class="bg-zinc-50 text-xs text-zinc-500"><tr><th class="px-5 py-3">功能</th><th class="px-5 py-3">简历</th><th class="px-5 py-3">消费</th><th class="px-5 py-3">状态</th><th class="px-5 py-3">时间</th><th class="px-5 py-3">错误</th></tr></thead>
             <tbody>
               <tr v-for="item in records.items" :key="item.id" class="border-t border-zinc-100">
@@ -421,7 +422,8 @@ onMounted(() => refresh())
               <tr v-if="!records.items.length"><td colspan="6" class="h-56 text-center text-zinc-400">暂无调用记录</td></tr>
             </tbody>
           </table>
-          <footer v-if="records.total > records.page_size" class="sticky left-0 flex min-w-[780px] items-center justify-between border-t border-zinc-100 bg-white px-5 py-3 text-sm text-zinc-500">
+          </div>
+          <footer v-if="records.total > records.page_size" class="flex items-center justify-between gap-3 border-t border-zinc-100 px-5 py-3 text-sm text-zinc-500">
             <span>{{ pageRangeText(records) }} · 第 {{ records.page }} / {{ totalPages(records) }} 页</span>
             <div class="flex gap-2">
               <Button variant="outline" size="sm" :disabled="loading || records.page <= 1" @click="changeRecordsPage(records.page - 1)">上一页</Button>
@@ -430,8 +432,9 @@ onMounted(() => refresh())
           </footer>
         </div>
 
-        <div v-else-if="activeTab === 'points'" class="overflow-x-auto">
-          <table class="w-full min-w-[760px] text-left text-sm">
+        <div v-else-if="activeTab === 'points'">
+          <div class="overflow-x-auto">
+            <table class="w-full min-w-[760px] text-left text-sm">
             <thead class="bg-zinc-50 text-xs text-zinc-500"><tr><th class="px-5 py-3">功能</th><th class="px-5 py-3">变动</th><th class="px-5 py-3">余额</th><th class="px-5 py-3">说明</th><th class="px-5 py-3">时间</th></tr></thead>
             <tbody>
               <tr v-for="item in transactions.items" :key="item.id" class="border-t border-zinc-100">
@@ -444,7 +447,8 @@ onMounted(() => refresh())
               <tr v-if="!transactions.items.length"><td colspan="5" class="h-56 text-center text-zinc-400">暂无扣点流水</td></tr>
             </tbody>
           </table>
-          <footer v-if="transactions.total > transactions.page_size" class="sticky left-0 flex min-w-[760px] items-center justify-between border-t border-zinc-100 bg-white px-5 py-3 text-sm text-zinc-500">
+          </div>
+          <footer v-if="transactions.total > transactions.page_size" class="flex items-center justify-between gap-3 border-t border-zinc-100 px-5 py-3 text-sm text-zinc-500">
             <span>{{ pageRangeText(transactions) }} · 第 {{ transactions.page }} / {{ totalPages(transactions) }} 页</span>
             <div class="flex gap-2">
               <Button variant="outline" size="sm" :disabled="loading || transactions.page <= 1" @click="changeTransactionsPage(transactions.page - 1)">上一页</Button>

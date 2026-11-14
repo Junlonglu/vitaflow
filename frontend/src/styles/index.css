@@ -281,3 +281,10 @@ a { color: inherit; text-decoration: none; }
 :where([class*="overflow-y-auto"], [class*="overflow-y-scroll"], .thin-scrollbar) {
   overscroll-behavior: contain;
 }
+
+/* 横滚容器单独收滚动链：触控板双指横扫到尽头时，不要穿透成页面级
+ * 横滚或浏览器「后退」手势。overflow-x-auto 本身不含 overflow-y，
+ * 上一条 :where 命中不到，必须另写一条。 */
+:where([class*="overflow-x-auto"], [class*="overflow-x-scroll"]) {
+  overscroll-behavior-x: contain;
+}

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue"
 import { RouterLink, useRouter } from "vue-router"
-import { Bell, ChevronUp, CircleHelp, LayoutDashboard, LayoutTemplate, Files, LogOut, Settings2, UserRound } from "lucide-vue-next"
+import { Bell, ChevronUp, CircleHelp, Files, LogOut, UserRound } from "lucide-vue-next"
 import FlowPointIcon from "@/components/ui/FlowPointIcon.vue"
 import { useUserStore } from "@/stores/user"
 import { getFlowPointSummaryApi } from "@/api/ai"
@@ -13,21 +13,15 @@ const balance = ref<number | null>(null)
 
 const displayName = computed(() => user.userInfo?.username || "未登录")
 const initial = computed(() => displayName.value.trim().slice(0, 1).toUpperCase() || "V")
-const isAdmin = computed(() => user.userInfo?.role === "admin")
 
-const menuItems = computed(() => {
-  const items = [
-    { label: "全部简历", to: "/workspace/resumes", icon: Files },
-    { label: "模板中心", to: "/workspace/templates", icon: LayoutTemplate },
-    { label: "Flow Points", to: "/workspace/ai-records", icon: FlowPointIcon },
-    { label: "公告", to: "/workspace/announcements", icon: Bell },
-    { label: "帮助中心", to: "/workspace/help", icon: CircleHelp },
-    { label: "模型与技能", to: "/workspace/settings", icon: Settings2 },
-    { label: "个人资料", to: "/workspace/profile", icon: UserRound },
-  ]
-  if (isAdmin.value) items.push({ label: "管理后台", to: "/workspace/admin", icon: LayoutDashboard })
-  return items
-})
+/** 账号相关入口。模板中心 / 信息库 / 模型与技能 / 管理后台都在主导航里，这里不再重复。 */
+const menuItems = [
+  { label: "全部简历", to: "/workspace/resumes", icon: Files },
+  { label: "Flow Points", to: "/workspace/ai-records", icon: FlowPointIcon },
+  { label: "公告", to: "/workspace/announcements", icon: Bell },
+  { label: "帮助中心", to: "/workspace/help", icon: CircleHelp },
+  { label: "个人资料", to: "/workspace/profile", icon: UserRound },
+]
 
 onMounted(async () => {
   if (user.token && !user.userInfo) await user.getUserInfo().catch(() => null)

@@ -1,12 +1,29 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue"
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Component } from "vue"
 import { RouterLink, useRoute, useRouter } from "vue-router"
-import { ChevronRight, Copy, Database, Files, FolderOpen, LayoutTemplate, MessageSquare, Pin, Plus, Search, Sparkles, Trash2, X } from "lucide-vue-next"
+import {
+  ChevronRight,
+  Copy,
+  Database,
+  Files,
+  FolderOpen,
+  LayoutDashboard,
+  LayoutTemplate,
+  MessageSquare,
+  Pin,
+  Plus,
+  Search,
+  Settings2,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-vue-next"
 import BrandLogo from "@/components/common/BrandLogo.vue"
 import WorkspaceUserMenu from "@/components/layout/WorkspaceUserMenu.vue"
 import ConfirmPopover from "@/components/ui/dialog/ConfirmPopover.vue"
 import { SIDEBAR_PAGE_SIZE, useResumeStore } from "@/stores/resume"
 import { useChatStore } from "@/stores/chat"
+import { useUserStore } from "@/stores/user"
 import { useWorkspaceBridge } from "@/composables/useWorkspaceBridge"
 import { useWorkspaceDrawer } from "@/composables/useWorkspaceDrawer"
 import { useWorkspaceCreate, type CreateEntry } from "@/composables/useWorkspaceCreate"
@@ -17,9 +34,21 @@ const route = useRoute()
 const router = useRouter()
 const store = useResumeStore()
 const chatStore = useChatStore()
+const user = useUserStore()
 const { flushSave } = useWorkspaceBridge()
 const { drawerOpen, closeDrawer } = useWorkspaceDrawer()
 const { openCreate } = useWorkspaceCreate()
+
+/** 主导航：与「新建简历 / AI 生成」并列的功能入口，管理后台只对管理员可见。 */
+const navItems = computed<{ label: string; to: string; icon: Component }[]>(() => {
+  const items = [
+    { label: "模板中心", to: "/workspace/templates", icon: LayoutTemplate },
+    { label: "信息库", to: "/workspace/info", icon: Database },
+    { label: "模型与技能", to: "/workspace/settings", icon: Settings2 },
+  ]
+  if (user.userInfo?.role === "admin") items.push({ label: "管理后台", to: "/workspace/admin", icon: LayoutDashboard })
+  return items
+})
 
 const loading = ref(false)
 const activeId = computed(() => Number(route.params.id) || null)
@@ -44,10 +73,10 @@ function toggleExpanded(resumeId: number) {
   if (!chatStore.isLoaded(resumeId)) void chatStore.fetchSessions(resumeId).catch(() => undefined)
 }
 
-/** 子级会话高亮时父行不铺底，避免两层灰条叠在一起（WorkBuddy 的树形选中也是这个规则）。 */
+/** 子级会话选中时父行只铺极淡底（不跟子行抢视觉），hover 再加深到与子行同档，保证父行始终有可点反馈。 */
 function resumeRowClass(resumeId: number) {
   if (activeId.value !== resumeId) return "text-zinc-600 hover:bg-zinc-200/40"
-  if (isExpanded(resumeId) && chatStore.activeSessionId(resumeId)) return "text-zinc-900"
+  if (isExpanded(resumeId) && chatStore.activeSessionId(resumeId)) return "bg-zinc-200/25 text-zinc-900 hover:bg-zinc-200/60"
   return "bg-zinc-200/60 text-zinc-900"
 }
 
@@ -444,28 +473,18 @@ function formatUpdated(value?: string) {
         <span>AI 生成简历</span>
       </button>
       <RouterLink
-        to="/workspace/templates"
+        v-for="nav in navItems"
+        :key="nav.to"
+        :to="nav.to"
         class="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-[13px] font-medium transition-colors"
         :class="
-          route.path === '/workspace/templates'
+          route.path === nav.to
             ? 'bg-zinc-200/60 text-zinc-900'
             : 'text-zinc-600 hover:bg-zinc-200/40 hover:text-zinc-900'
         "
       >
-        <LayoutTemplate class="h-4 w-4 shrink-0" :class="route.path === '/workspace/templates' ? 'text-zinc-700' : 'text-zinc-400'" />
-        <span>模板中心</span>
-      </RouterLink>
-      <RouterLink
-        to="/workspace/info"
-        class="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-[13px] font-medium transition-colors"
-        :class="
-          route.path === '/workspace/info'
-            ? 'bg-zinc-200/60 text-zinc-900'
-            : 'text-zinc-600 hover:bg-zinc-200/40 hover:text-zinc-900'
-        "
-      >
-        <Database class="h-4 w-4 shrink-0" :class="route.path === '/workspace/info' ? 'text-zinc-700' : 'text-zinc-400'" />
-        <span>信息库</span>
+        <component :is="nav.icon" class="h-4 w-4 shrink-0" :class="route.path === nav.to ? 'text-zinc-700' : 'text-zinc-400'" />
+        <span>{{ nav.label }}</span>
       </RouterLink>
     </div>
 
@@ -533,8 +552,9 @@ function formatUpdated(value?: string) {
           </button>
         </div>
 
-        <div v-if="isExpanded(item.id)" class="ml-[22px] mt-px pb-1 pl-1">
-          <div v-if="chatStore.loadingResumeId === item.id && !chatStore.sessions(item.id).length" class="py-1 pl-1">
+        <!-- 会话列表不缩进容器，只缩进文字：选中底色和父行同宽，整行连通 -->
+        <div v-if="isExpanded(item.id)" class="mt-px pb-1">
+          <div v-if="chatStore.loadingResumeId === item.id && !chatStore.sessions(item.id).length" class="py-1 pl-[30px]">
             <div class="h-6 w-32 animate-pulse rounded bg-zinc-200/60"></div>
           </div>
 
@@ -542,7 +562,7 @@ function formatUpdated(value?: string) {
             v-for="session in chatStore.sessions(item.id)"
             :key="session.id"
             data-session-row
-            class="group/session flex w-full cursor-pointer items-center gap-1.5 rounded-md py-1.5 pl-2 pr-1 text-left transition-colors"
+            class="group/session flex w-full cursor-pointer items-center gap-1.5 rounded-md py-1.5 pl-[30px] pr-1 text-left transition-colors"
             :class="activeId === item.id && chatStore.activeSessionId(item.id) === session.id ? 'bg-zinc-200/60 text-zinc-900' : 'text-zinc-500 hover:bg-zinc-200/40 hover:text-zinc-800'"
             :title="sessionSnippet(session)"
             @click="openSession(item.id, session.id)"
@@ -586,7 +606,7 @@ function formatUpdated(value?: string) {
 
           <button
             type="button"
-            class="flex w-full items-center gap-1.5 rounded-md py-1.5 pl-2 pr-1 text-left text-[12px] text-zinc-400 transition-colors hover:bg-zinc-200/40 hover:text-zinc-700 disabled:opacity-60"
+            class="flex w-full items-center gap-1.5 rounded-md py-1.5 pl-[30px] pr-1 text-left text-[12px] text-zinc-400 transition-colors hover:bg-zinc-200/40 hover:text-zinc-700 disabled:opacity-60"
             :disabled="creatingSessionFor === item.id"
             :title="`新建对话（${modLabel} + Alt + N）`"
             @click="newSession(item.id)"

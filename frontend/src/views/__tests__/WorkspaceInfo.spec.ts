@@ -73,9 +73,18 @@ const stubs = {
   },
   ConfirmDialog: { props: ["open", "title", "description"], template: '<div v-if="open" class="confirm" />' },
   Button: { template: "<button v-bind=\"$attrs\" @click=\"$emit('click')\"><slot /></button>" },
+  // 统一 Select 是 radix 组件，测试里用原生 select 顶替，保留 v-model/change 语义。
+  Select: {
+    props: ["modelValue", "options"],
+    template: `<select class="ui-select" :value="modelValue" @change="$emit('update:modelValue', $event.target.value); $emit('change', $event.target.value)">
+      <option v-for="o in options || []" :key="String(o.value ?? o)" :value="String(o.value ?? o)">{{ o.label ?? o }}</option>
+    </select>`,
+  },
 }
 
-async function mountPage(items: InfoFragment[] = [fragment]) {
+const metaResponse: InfoFragmentMeta = { kinds, counts: { project: 1, award: 0 }, limit: 500 }
+
+async function mountPage(items: InfoFragment[] = [fragment], metaImpl?: () => Promise<InfoFragmentMeta>) {
   api.listInfoFragmentsApi.mockResolvedValue({
     items,
     total: items.length,

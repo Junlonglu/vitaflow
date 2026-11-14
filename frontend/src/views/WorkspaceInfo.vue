@@ -17,6 +17,7 @@ import WorkspacePage from "@/components/workspace/WorkspacePage.vue"
 import AppDialog from "@/components/ui/dialog/AppDialog.vue"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
 import Button from "@/components/ui/button/Button.vue"
+import Select from "@/components/ui/select/Select.vue"
 import {
   applyInfoFragmentsApi,
   createInfoFragmentApi,
@@ -48,6 +49,7 @@ const keyword = ref("")
 const kindMap = computed<Record<string, InfoFragmentKind>>(() =>
   Object.fromEntries(kinds.value.map((item) => [item.kind, item])),
 )
+const kindOptions = computed(() => kinds.value.map((item) => ({ value: item.kind, label: item.label })))
 const activeCount = computed(() => (activeKind.value ? counts.value[activeKind.value] || 0 : total.value))
 const allCount = computed(() => Object.values(counts.value).reduce((sum, value) => sum + value, 0))
 
@@ -501,16 +503,11 @@ onUnmounted(() => window.clearTimeout(searchTimer))
     body-class="thin-scrollbar overflow-y-auto px-5 py-4"
   >
     <div class="space-y-3.5">
-      <label class="block">
+      <div class="block">
         <span class="mb-1.5 block text-[12.5px] font-medium text-zinc-600">分类</span>
-        <select
-          v-model="editor.kind"
-          class="h-9 w-full rounded-lg border border-zinc-200 bg-white px-2.5 text-[13px] text-zinc-800 outline-none focus:border-zinc-300"
-        >
-          <option v-for="kind in kinds" :key="kind.kind" :value="kind.kind">{{ kind.label }}</option>
-        </select>
+        <Select v-model="editor.kind" :options="kindOptions" @change="resetValues" />
         <span v-if="editorKind" class="mt-1 block text-[11.5px] text-zinc-400">{{ editorKind.description }}</span>
-      </label>
+      </div>
 
       <label class="block">
         <span class="mb-1.5 block text-[12.5px] font-medium text-zinc-600">标题<span class="ml-1 text-zinc-400">（可留空，按字段自动生成）</span></span>
@@ -576,12 +573,10 @@ onUnmounted(() => window.clearTimeout(searchTimer))
         重新读取
       </button>
     </div>
-    <label v-else class="block">
+    <div v-else class="block">
       <span class="mb-1.5 block text-[12.5px] font-medium text-zinc-600">选择简历</span>
-      <select v-model.number="extractResumeId" class="h-9 w-full rounded-lg border border-zinc-200 bg-white px-2.5 text-[13px] text-zinc-800 outline-none focus:border-zinc-300">
-        <option v-for="option in resumeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-      </select>
-    </label>
+      <Select v-model="extractResumeId" :options="resumeOptions" placeholder="选择简历" />
+    </div>
     <template #footer>
       <div class="flex justify-end gap-2">
         <Button type="button" variant="ghost" class="h-9 px-3 text-[13px]" @click="extractOpen = false">取消</Button>
@@ -604,12 +599,10 @@ onUnmounted(() => window.clearTimeout(searchTimer))
         重新读取
       </button>
     </div>
-    <label v-else class="block">
+    <div v-else class="block">
       <span class="mb-1.5 block text-[12.5px] font-medium text-zinc-600">选择简历</span>
-      <select v-model.number="importResumeId" class="h-9 w-full rounded-lg border border-zinc-200 bg-white px-2.5 text-[13px] text-zinc-800 outline-none focus:border-zinc-300">
-        <option v-for="option in resumeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-      </select>
-    </label>
+      <Select v-model="importResumeId" :options="resumeOptions" placeholder="选择简历" />
+    </div>
     <template #footer>
       <div class="flex justify-end gap-2">
         <Button type="button" variant="ghost" class="h-9 px-3 text-[13px]" @click="importOpen = false">取消</Button>

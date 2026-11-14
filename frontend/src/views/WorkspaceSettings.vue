@@ -6,6 +6,7 @@ import AppDialog from "@/components/ui/dialog/AppDialog.vue"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
 import Button from "@/components/ui/button/Button.vue"
 import Switch from "@/components/ui/switch/Switch.vue"
+import Select from "@/components/ui/select/Select.vue"
 import {
   REASONING_EFFORT_OPTIONS,
   clearUserAiKeysApi,
@@ -496,15 +497,13 @@ async function handleSkillFolder(event: Event) {
                 <span class="mb-1.5 block text-[12px] font-medium text-zinc-700">最大输出 Token</span>
                 <input v-model.number="form.max_tokens" type="number" min="256" max="65536" aria-label="最大输出 Token" class="h-9 w-full rounded-lg border border-zinc-200 bg-white px-3 text-[13px] text-zinc-900 outline-none transition-colors hover:border-zinc-300 focus:border-zinc-500" />
               </label>
-              <label class="block sm:col-span-2">
+              <div class="block sm:col-span-2">
                 <span class="mb-1.5 block text-[12px] font-medium text-zinc-700">推理强度</span>
-                <select v-model="form.reasoning_effort" aria-label="推理强度" class="h-9 w-full rounded-lg border border-zinc-200 bg-white px-3 text-[13px] text-zinc-900 outline-none transition-colors hover:border-zinc-300 focus:border-zinc-500">
-                  <option v-for="option in REASONING_EFFORT_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
-                </select>
+                <Select v-model="form.reasoning_effort" :options="REASONING_EFFORT_OPTIONS" placeholder="推理强度" aria-label="推理强度" />
                 <span class="mt-1.5 block text-[11.5px] leading-relaxed text-zinc-400">
                   {{ REASONING_EFFORT_OPTIONS.find((option) => option.value === form.reasoning_effort)?.hint }}。开启后会向兼容端点下发 reasoning_effort；「跟随模型默认」兼容所有接入点。
                 </span>
-              </label>
+              </div>
             </div>
 
             <div class="mt-4 flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-zinc-200/70 pt-4">

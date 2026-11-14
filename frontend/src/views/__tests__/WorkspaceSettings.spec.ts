@@ -104,6 +104,14 @@ function stubs() {
       emits: ["update:modelValue"],
       template: '<button class="switch-stub" @click="$emit(\'update:modelValue\', !modelValue)" />',
     },
+    // 统一 Select 是 radix 组件，测试里用原生 select 顶替（保留 aria-label 供选择器定位）。
+    Select: {
+      props: ["modelValue", "options"],
+      emits: ["update:modelValue", "change"],
+      template: `<select class="ui-select" v-bind="$attrs" :value="modelValue" @change="$emit('update:modelValue', $event.target.value); $emit('change', $event.target.value)">
+        <option v-for="o in options || []" :key="String(o.value ?? o)" :value="String(o.value ?? o)">{{ o.label ?? o }}</option>
+      </select>`,
+    },
   }
 }
 

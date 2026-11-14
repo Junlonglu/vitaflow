@@ -478,6 +478,22 @@ def _ensure_custom_section(data: dict[str, Any], kind: str) -> dict[str, Any]:
     return section
 
 
+def _reveal_section(data: dict[str, Any], key: str) -> None:
+    """导入是用户明确想看到这条内容，目标模块若被隐藏就顺手取消隐藏。
+
+    简历编辑器按 ``layout.hidden_sections`` 决定模块是否渲染；只写数据不动这个
+    标记，用户会看到「提示导入成功，但简历里什么都没出现」。
+    """
+    if not key:
+        return
+    layout = data.get("layout")
+    if not isinstance(layout, dict):
+        return
+    hidden = layout.get("hidden_sections")
+    if isinstance(hidden, list) and key in hidden:
+        layout["hidden_sections"] = [item for item in hidden if item != key]
+
+
 def merge_fragments_into_resume(
     current_data: dict[str, Any] | None,
     rows: list[InfoFragment],
@@ -507,6 +523,8 @@ def merge_fragments_into_resume(
             continue
         if spec.section == "custom_sections":
             section = _ensure_custom_section(data, row.kind)
+            _reveal_section(data, "custom_sections")
+            _reveal_section(data, str(section.get("id") or ""))
             items = section.setdefault("items", [])
             if any(_item_key(item) == _item_key(payload) for item in items if isinstance(item, dict)):
                 continue
@@ -519,6 +537,8 @@ def merge_fragments_into_resume(
         if not isinstance(section_items, list):
             section_items = []
             data[spec.section] = section_items
+        # 命中去重也要显示模块：内容可能早就在简历里，只是被用户隐藏了。
+        _reveal_section(data, spec.section)
         if any(_item_key(item) == _item_key(payload) for item in section_items if isinstance(item, dict)):
             continue
         item = dict(payload)
@@ -553,8 +573,9 @@ def import_fragments(
         rows.append(_user_row(db, user_id, fragment_id))
 
     merged, added = merge_fragments_into_resume(resume.resume_data, rows)
-    if not added:
-        raise AppException("这些信息在简历里已经存在，没有可导入的内容", 400)
+    # 「已存在」不是错误：即便没有新增条目，也要把目标模块从 hidden_sections 里
+    # 放出来并写回，否则用户看到的是「导入了但简历里找不到」。是否真的新增由
+    # added 告知调用方，前端据此给出不同提示。
     normalized = normalize_resume_document(merged, {"language": resume.language})
     return normalized, added, rows
 

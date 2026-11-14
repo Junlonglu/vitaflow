@@ -290,13 +290,19 @@ function openImport(item: InfoFragment) {
 }
 
 async function runImport() {
-  if (!importTarget.value || !importResumeId.value || importing.value) return
+  const target = importTarget.value
+  if (!target || !importResumeId.value || importing.value) return
   importing.value = true
   try {
-    const result = await applyInfoFragmentsApi(importResumeId.value, [importTarget.value.id])
-    showGlobalToast(result.added.length ? "已添加到简历" : "简历里已有这条信息", result.added.length ? "success" : undefined)
+    const result = await applyInfoFragmentsApi(importResumeId.value, [target.id])
+    // 已存在也要跳转：后端可能刚把目标模块从 hidden_sections 里放出来，
+    // 留在信息库页面就看不到任何变化。
+    showGlobalToast(
+      result.added.length ? "已添加到简历" : `简历里已有这条信息，已显示${kindLabel(target.kind)}模块`,
+      result.added.length ? "success" : undefined,
+    )
     importOpen.value = false
-    if (result.added.length) router.push(`/workspace/${result.resume_id}`)
+    router.push(`/workspace/${result.resume_id}`)
   } catch (error) {
     showGlobalToast(errorMessage(error, "导入失败"), "error")
   } finally {

@@ -181,6 +181,23 @@ describe("WorkspaceInfo", () => {
     expect(router.push).toHaveBeenCalledWith("/workspace/5")
   })
 
+  it("still opens the resume when the fragment is already there", async () => {
+    api.applyInfoFragmentsApi.mockResolvedValue({ resume_id: 5, resume_data: {}, added: [] })
+    const wrapper = await mountPage()
+    const importButton = wrapper.findAll("button").find((button) => button.text().includes("导入简历"))
+    await importButton!.trigger("click")
+    await flushPromises()
+
+    const dialog = wrapper.find(".app-dialog")
+    const confirm = dialog.findAll("button").find((button) => button.text() === "导入")
+    await confirm!.trigger("click")
+    await flushPromises()
+
+    // 后端可能刚把目标模块从 hidden_sections 放出来，不跳转就看不到变化。
+    expect(router.push).toHaveBeenCalledWith("/workspace/5")
+    expect(toast.showGlobalToast).toHaveBeenCalledWith(expect.stringContaining("已有这条信息"), undefined)
+  })
+
   it("extracts fragments from a resume", async () => {
     api.extractInfoFragmentsApi.mockResolvedValue({ created: 4, updated: 0, skipped: 0 })
     const wrapper = await mountPage([])

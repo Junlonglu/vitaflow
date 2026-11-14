@@ -157,8 +157,10 @@ def apply_to_resume(
         resume.id,
         ResumeUpdate(resume_data=merged),
     )
-    svc.touch_usage(db, rows)
+    # 没有新增条目时不虚增使用次数；写回仍要做，因为可能刚取消了模块隐藏。
+    if added:
+        svc.touch_usage(db, rows)
     return success(
         {"resume_id": updated.id, "resume_data": updated.resume_data, "added": added},
-        f"已导入 {len(added)} 条信息到简历",
+        f"已导入 {len(added)} 条信息到简历" if added else "这些信息已在简历中",
     )

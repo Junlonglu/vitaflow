@@ -226,6 +226,36 @@ class FragmentServiceTest(unittest.TestCase):
         with self.assertRaises(Exception):
             svc.import_fragments(self.db, 1, resume, [])
 
+    def test_import_reveals_a_hidden_target_section(self):
+        resume = _resume(self.db)
+        data = dict(resume.resume_data)
+        data["layout"] = {**(data.get("layout") or {}), "hidden_sections": ["work", "projects"]}
+        resume.resume_data = data
+
+        work, _ = svc.create_fragment(self.db, 1, "work", {"company": "新公司", "position": "工程师"})
+        merged, added, _rows = svc.import_fragments(self.db, 1, resume, [work.id])
+
+        self.assertEqual(len(added), 1)
+        self.assertEqual(merged["work"][-1]["company"], "新公司")
+        hidden = merged["layout"]["hidden_sections"]
+        self.assertNotIn("work", hidden, "导入的目标模块必须重新可见")
+        self.assertIn("projects", hidden, "没导入的模块应保持用户原来的隐藏设置")
+
+    def test_import_of_existing_fragment_is_not_an_error_but_still_reveals(self):
+        resume = _resume(self.db)
+        data = dict(resume.resume_data)
+        data["layout"] = {**(data.get("layout") or {}), "hidden_sections": ["work"]}
+        resume.resume_data = data
+        existing, _ = svc.create_fragment(
+            self.db, 1, "work", {"company": "某公司", "position": "实习生", "highlights": ["完成 A 功能"]}
+        )
+
+        # 空库里「已在简历中」过去直接抛 400，前端按失败处理且不跳转，
+        # 用户就看不到那条被隐藏的内容。现在要返回可写回的文档 + 空 added。
+        merged, added, _rows = svc.import_fragments(self.db, 1, resume, [existing.id])
+        self.assertEqual(added, [])
+        self.assertNotIn("work", merged["layout"]["hidden_sections"])
+
     def test_search_for_agent_ranks_and_falls_back(self):
         svc.create_fragment(self.db, 1, "project", {"name": "VitaFlow 简历系统", "description": "AI 简历"})
         svc.create_fragment(self.db, 1, "project", {"name": "日志平台", "description": "监控"})
@@ -324,13 +354,16 @@ class FragmentApiTest(unittest.TestCase):
 
         rows = self.client.get("/api/info-fragments?kind=project").json()["data"]["items"]
         self.assertTrue(rows)
-        # 简历里已有同一条项目：重复导入被拒绝（不静默造重复条目）
+        # 简历里已有同一条项目：不再当错误（否则用户以为导入失败），
+        # 但也不能静默造重复条目；返回空 added 由前端给出「已存在」提示。
         duplicate = self.client.post(
             "/api/info-fragments/apply",
             json={"resume_id": resume.id, "fragment_ids": [rows[0]["id"]]},
         ).json()
-        self.assertEqual(duplicate["code"], 400)
-        self.assertIn("已经存在", duplicate["message"])
+        self.assertEqual(duplicate["code"], 200)
+        self.assertEqual(duplicate["data"]["added"], [])
+        self.assertIn("已在简历中", duplicate["message"])
+        self.assertEqual(len(duplicate["data"]["resume_data"]["projects"]), 1)
 
         # 新增一条信息库条目后再导入：成功写入并返回最新简历数据
         fresh = self.client.post(

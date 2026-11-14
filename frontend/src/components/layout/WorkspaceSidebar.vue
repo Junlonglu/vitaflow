@@ -459,7 +459,8 @@ function formatUpdated(value?: string) {
       </div>
     </div>
 
-    <div class="shrink-0 px-3 pt-2">
+    <!-- 并列行统一 4px 间隙（space-y-1）：相邻行的 hover/选中底色不能贴成一条 -->
+    <div class="shrink-0 space-y-1 px-3 pt-2">
       <button
         type="button"
         class="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-[13.5px] font-medium text-zinc-800 transition-colors hover:bg-zinc-200/50"
@@ -529,7 +530,7 @@ function formatUpdated(value?: string) {
         还没有简历<br />点击上方「新建简历」开始
       </p>
 
-      <div v-for="item in store.resumeList" :key="item.id" class="mb-0.5">
+      <div v-for="item in store.resumeList" :key="item.id" class="mb-1">
         <div
           class="group flex w-full items-center gap-0.5 rounded-md pr-1 transition-colors"
           :class="resumeRowClass(item.id)"
@@ -647,7 +648,7 @@ function formatUpdated(value?: string) {
       </p>
 
       <div v-if="matchedResumes.length" class="mb-3">
-        <div class="flex items-center gap-1.5 px-3 pb-1 text-[11px] font-medium tracking-wider text-zinc-400">
+        <div class="flex items-center gap-1.5 px-3 pb-1 text-[11.5px] font-medium tracking-wider text-zinc-400">
           <Files class="h-3 w-3" />
           <span>简历</span>
           <span class="text-zinc-300">{{ matchedResumes.length }}</span>
@@ -656,17 +657,17 @@ function formatUpdated(value?: string) {
           v-for="item in matchedResumes"
           :key="item.id"
           type="button"
-          class="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-zinc-700 transition-colors hover:bg-zinc-200/50"
+          class="mb-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-zinc-700 transition-colors hover:bg-zinc-200/50"
           @click="openResume(item.id)"
         >
           <Files class="h-3.5 w-3.5 shrink-0 text-zinc-400" />
-          <span class="min-w-0 flex-1 truncate text-[12.5px] font-medium">{{ item.title || "无标题简历" }}</span>
-          <span v-if="activeId === item.id" class="shrink-0 text-[10px] text-zinc-400">当前</span>
+          <span class="min-w-0 flex-1 truncate text-[13px] font-medium">{{ item.title || "无标题简历" }}</span>
+          <span v-if="activeId === item.id" class="shrink-0 text-[11px] text-zinc-400">当前</span>
         </button>
       </div>
 
       <div>
-        <div class="flex items-center gap-1.5 px-3 pb-1 text-[11px] font-medium tracking-wider text-zinc-400">
+        <div class="flex items-center gap-1.5 px-3 pb-1 text-[11.5px] font-medium tracking-wider text-zinc-400">
           <MessageSquare class="h-3 w-3" />
           <span>对话</span>
           <span v-if="searchResults.length" class="text-zinc-300">{{ searchResults.length }}</span>
@@ -681,17 +682,17 @@ function formatUpdated(value?: string) {
             v-for="item in searchResults"
             :key="`${item.resume_id}-${item.id}`"
             type="button"
-            class="flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-zinc-200/50"
+            class="mb-1 flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-zinc-200/50"
             @click="openSearchSession(item)"
           >
             <Pin v-if="item.is_pinned" class="mt-0.5 h-3 w-3 shrink-0 text-amber-500" />
             <MessageSquare v-else class="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-400" />
             <span class="min-w-0 flex-1">
-              <span class="block truncate text-[12.5px] font-medium leading-4 text-zinc-800">{{ item.title || "无标题对话" }}</span>
-              <span class="block truncate text-[10.5px] leading-4 text-zinc-400">{{ item.resume_title || "未知简历" }}</span>
+              <span class="block truncate text-[13px] font-medium leading-4 text-zinc-800">{{ item.title || "无标题对话" }}</span>
+              <span class="block truncate text-[11px] leading-4 text-zinc-400">{{ item.resume_title || "未知简历" }}</span>
             </span>
           </button>
-          <p v-if="!searchResults.length" class="px-3 py-3 text-center text-[11px] text-zinc-400">没有匹配的对话</p>
+          <p v-if="!searchResults.length" class="px-3 py-3 text-center text-[12px] text-zinc-400">没有匹配的对话</p>
         </template>
       </div>
     </div>
@@ -709,7 +710,7 @@ function formatUpdated(value?: string) {
       @wheel.prevent="closeResumeMenu"
     >
       <div
-        class="fixed rounded-xl border border-zinc-200 bg-white p-1 shadow-[0_10px_28px_-8px_rgba(0,0,0,0.18)]"
+        class="fixed space-y-1 rounded-xl border border-zinc-200 bg-white p-1 shadow-[0_10px_28px_-8px_rgba(0,0,0,0.18)]"
         :style="{ width: `${RESUME_MENU_WIDTH}px`, left: `${resumeMenu.x}px`, top: `${resumeMenu.y}px` }"
       >
         <button

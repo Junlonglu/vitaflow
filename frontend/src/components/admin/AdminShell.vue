@@ -53,7 +53,7 @@ function toggleGroup(label: string) {
               <button
                 v-for="item in group.items"
                 :key="item.id"
-                class="mb-0.5 flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-[13px] transition-colors"
+                class="mb-1 flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-[13px] transition-colors"
                 :class="section === item.id ? 'bg-zinc-200/60 font-semibold text-zinc-900' : 'text-zinc-600 hover:bg-zinc-200/40 hover:text-zinc-900'"
                 @click="$emit('switchSection', item.id)"
               >
@@ -69,7 +69,7 @@ function toggleGroup(label: string) {
                 {{ group.label }}
                 <ChevronDown class="h-3 w-3 transition-transform" :class="{ '-rotate-90': !openGroups.has(group.label) }" />
               </button>
-              <div v-show="openGroups.has(group.label)" class="mt-1 space-y-0.5">
+              <div v-show="openGroups.has(group.label)" class="mt-1 space-y-1">
                 <button
                   v-for="item in group.items"
                   :key="item.id"

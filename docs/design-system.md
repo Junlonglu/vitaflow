@@ -191,6 +191,19 @@
 | EmptyState | `common/EmptyState.vue` | 空状态统一入口 |
 | BrandLogo | `common/BrandLogo.vue` | 品牌标识 |
 
+### 3.4.1 树形列表行（侧栏「简历 → 会话」）
+
+两层结构（`layout/WorkspaceSidebar.vue`）的层级只靠**文字缩进**表达，不缩进容器，否则选中底色会比父行短一截。
+
+| 部位 | 规格 |
+|---|---|
+| 父行 | `h-8 rounded-md`，文字 `pl-2.5`；未选中 `text-zinc-600 hover:bg-zinc-200/40`，独占选中 `bg-zinc-200/60 text-zinc-900` |
+| 父行（子项选中时） | `bg-zinc-200/25 text-zinc-900` + `hover:bg-zinc-200/60`：静止态让位给子行，鼠标移上去立刻加深到与子行同档，父行永远有可点反馈 |
+| 子行 | 容器不缩进（`w-full` 与父行等宽），只把内容推进去 `pl-[30px] pr-1`；选中 `bg-zinc-200/60`，未选中 `text-zinc-500 hover:bg-zinc-200/40 hover:text-zinc-800` |
+| 行内元信息 | 时间戳 `text-[10.5px] text-zinc-400`，hover 时整块换成操作图标（置顶 / 删除），不做常显 |
+
+判定口诀：**底色按父行宽度拉满，层级交给 padding**。父子同时可见时，父行静止态必须比子行浅，hover 时必须比子行深（或同档）。
+
 ### 3.5 Toast（轻提示）
 
 非组件，统一调用 `showGlobalToast(message, "success" | "error")`（`src/utils/toast.ts`）：底部居中 `bottom-10`，黑底 `bg-zinc-900 rounded-xl shadow-xl`，图标 `emerald-400`（成功）/`red-400`（失败），3s 自动消失，全局单例。**禁止**在业务组件里再造 toast/悬浮提示。

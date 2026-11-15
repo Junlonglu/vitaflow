@@ -24,7 +24,7 @@ backend (FastAPI, :8000)                      ai-service (Express+pi-agent, :830
 
 | 数据 | 存放位置 | 维护方式 | 说明 |
 |---|---|---|---|
-| 模型目录（provider/baseUrl/apiKey/模型列表） | `ai-service/.pi-agent/models.json`（volume 挂载） | 管理后台「服务商接入」经 backend 代理 CRUD | 纯 UI CRUD：frontend `AiCatalogPanel.vue`（容器）/ `AiProviderCard.vue`（单卡编辑器）→ backend `admin/ai_configs.py` 的 `/admin/ai-catalog/*` → `call_catalog`（ai_service_client.py:255）→ ai-service `/v1/catalog*`（server.ts:133-256），写后 `rebuildRuntime()` 热生效，无需重启；一次保存可能串行发 4 类请求（改服务商 → 导入模型 → 更新资料 → 删除模型） |
+| 模型目录（provider/baseUrl/apiKey/模型列表） | `ai-service/.pi-agent/models.json`（volume 挂载） | 管理后台「服务商接入」经 backend 代理 CRUD | 纯 UI CRUD：frontend `AiCatalogPanel.vue`（容器）/ `AiProviderCard.vue`（单卡编辑器）→ backend `admin/ai_configs.py` 的 `/admin/ai-catalog/*` → `call_catalog`（ai_service_client.py:255）→ ai-service `/v1/catalog*`（server.ts:133-256），写后 `rebuildRuntime()` 热生效，无需重启；一次保存只发一条写请求：provider 的 POST/PUT 带 `models { added, removed, patches }`，ai-service 在同一个 `mutateCatalog` 里改资料→加新 id→删取消勾选的（§6.27）；拉上游列表走 `POST /v1/catalog/remote-models`，用卡片里填的地址与密钥，不要求先保存 |
 | 模型策略（哪个 ref 启用、上下文条数、按模型定价） | MySQL `ai_model_configs` 表 | 管理后台「模型策略」 | `AiModelConfig`（backend/app/models/ai_config.py），运行时快照由 `get_active_ai_config`（ai_config_service.py:189）读取，Redis 缓存 |
 | 计费规则（每功能兜底价） | MySQL `flow_point_rules` 表 | 管理后台「积分规则」 | 兜底价：生成 100 点/次、导入 50 点/次、对话 5 点/次+百万 token 费率（`DEFAULT_POINT_RULES`，flow_points_service.py:35） |
 | Provider 模式 | 环境变量 `PI_PROVIDER`（faux/real） | 根目录 .env → docker compose 注入 | faux=本地确定性演示模型；real=从 models.json 加载真实模型（real.ts） |

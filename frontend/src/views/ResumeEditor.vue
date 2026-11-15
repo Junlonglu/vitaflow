@@ -257,6 +257,7 @@ watch(selectedChatModelKey, (value) => {
 const isResizing = ref(false)
 
 function startResize(e: MouseEvent) {
+  e.preventDefault()   // 防止按下瞬间就起一个文字选区
   isResizing.value = true
   document.body.style.cursor = 'col-resize'
   document.body.style.userSelect = 'none'
@@ -266,6 +267,12 @@ function startResize(e: MouseEvent) {
   
   function onMouseMove(e: MouseEvent) {
     if (!isResizing.value) return
+    // 在窗口外松开鼠标时收不到 mouseup，userSelect: none 会永久留在 body 上。
+    // buttons 为 0 说明键已经松开，就地收尾。
+    if (e.buttons === 0) {
+      onMouseUp()
+      return
+    }
     const delta = e.clientX - startX
     let newWidth = startWidth + delta
     if (newWidth < 400) newWidth = 400
@@ -279,12 +286,14 @@ function startResize(e: MouseEvent) {
     document.body.style.userSelect = ''
     document.removeEventListener('mousemove', onMouseMove)
     document.removeEventListener('mouseup', onMouseUp)
+    window.removeEventListener('blur', onMouseUp)
     // 记住用户手动拖出来的宽度
     localStorage.setItem(PANEL_STORAGE_KEY, String(leftPanelWidth.value))
   }
   
   document.addEventListener('mousemove', onMouseMove)
   document.addEventListener('mouseup', onMouseUp)
+  window.addEventListener('blur', onMouseUp)
 }
 
 const showAiOptimizeModal = ref(false)
@@ -963,17 +972,17 @@ async function sendInitialPrompt() {
           </div>
         </div>
 
-        <!-- Resizer Handle -->
+        <!-- Resizer Handle：可见 16px，命中区靠 ::after 外扩到 24px（WCAG 2.5.8） -->
         <div
           v-if="!isMobile"
-          class="relative z-sticky w-4 h-full cursor-col-resize flex items-center justify-center group"
+          class="group relative z-sticky flex h-full w-4 cursor-col-resize select-none items-center justify-center after:absolute after:inset-y-0 after:-left-1 after:-right-1 after:content-['']"
           @mousedown="startResize"
         >
            <!-- Subtle hover line -->
-           <div class="absolute inset-y-0 left-1/2 -ml-[0.5px] w-[1px] bg-blue-500 opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity duration-100 delay-75"></div>
+           <div class="absolute inset-y-0 left-1/2 -ml-[0.5px] w-[1px] bg-wb-primary opacity-0 transition-opacity duration-100 delay-75 group-hover:opacity-100 group-active:opacity-100"></div>
            
            <!-- Drag pill -->
-           <div class="relative z-base flex h-8 w-1 rounded-full bg-zinc-300 ring-1 ring-black/5 group-hover:bg-blue-500 group-active:bg-blue-600 transition duration-100 group-hover:scale-125"></div>
+           <div class="relative z-base flex h-8 w-1 rounded-full bg-zinc-300 ring-1 ring-black/5 transition duration-100 group-hover:scale-125 group-hover:bg-wb-primary group-active:bg-wb-primary-hover"></div>
         </div>
 
         <!-- Preview Canvas -->

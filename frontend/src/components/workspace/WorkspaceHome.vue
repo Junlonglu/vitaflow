@@ -72,7 +72,7 @@ async function submit() {
           </button>
           <BrandLogo size="sm" />
         </div>
-        <RouterLink to="/workspace/resumes" class="text-[12px] font-medium text-zinc-600">全部简历</RouterLink>
+        <RouterLink to="/workspace/resumes" class="select-none text-[12px] font-medium text-zinc-600">全部简历</RouterLink>
       </div>
       <h1 class="text-[22px] font-semibold tracking-tight text-zinc-950 sm:text-[26px]">VitaFlow，帮你写好一份简历</h1>
       <p class="mt-2 text-[13px] leading-6 text-zinc-500">

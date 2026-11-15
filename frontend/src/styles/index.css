@@ -231,6 +231,40 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* ============================================================
+ * 选区基线（2026-11-15）
+ *
+ * 双击导航项 / 按钮会选中一片文字——浏览器默认让按钮文字可选，
+ * 但桌面应用里按钮是「控件不是文本」。实测后台页 38 个交互元素里
+ * 37 个可选中，双击侧栏任一项都留下蓝色选区。
+ *
+ * 用 :where 把特异性压到 0，任何显式的 .selectable / select-text
+ * 都能覆盖回来。故意不含 a[href]：正文里带链接的段落仍需可复制，
+ * 导航链接单独在下面处理。
+ * ============================================================ */
+@layer base {
+  :where(
+    button,
+    summary,
+    [role="button"],
+    [role="tab"],
+    [role="option"],
+    [role="menuitem"],
+    [role="switch"],
+    [role="checkbox"],
+    [role="radio"]
+  ) {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* 导航里的链接按控件处理；正文链接保持可选，方便复制带链接的段落 */
+  :where(nav, [role="navigation"], [role="tablist"], [role="menu"]) :where(a[href]) {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+}
+
+/* ============================================================
  * 命中区补丁（2026-11-15）
  *
  * 侧栏行高只有 32px，行内图标按钮视觉尺寸 20×20（与 WorkBuddy 一致），

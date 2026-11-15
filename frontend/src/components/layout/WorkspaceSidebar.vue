@@ -427,7 +427,7 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
 
 <template>
   <aside
-    class="fixed inset-y-0 left-0 z-drawer flex h-full w-[272px] shrink-0 flex-col border-r border-zinc-200/60 bg-zinc-50 shadow-wb-popup transition-transform duration-150 ease-out md:static md:z-auto md:w-[248px] md:translate-x-0 md:bg-zinc-50/60 "
+    class="fixed inset-y-0 left-0 z-drawer flex h-full w-[272px] shrink-0 select-none flex-col border-r border-zinc-200/60 bg-zinc-50 shadow-wb-popup transition-transform duration-150 ease-out md:static md:z-auto md:w-[248px] md:translate-x-0 md:bg-zinc-50/60 "
     :class="drawerOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'"
   >
     <div class="shrink-0 px-3 pt-3">

@@ -204,7 +204,7 @@ const faqs = [
               </div>
             </div>
 
-          <aside class="hidden lg:block relative w-full rounded-xl border border-zinc-200 bg-white p-6 sm:p-7">
+          <aside class="hidden select-none lg:block relative w-full rounded-xl border border-zinc-200 bg-white p-6 sm:p-7">
             <div class="mb-6 flex items-center justify-between px-1">
               <div class="flex items-center gap-2.5">
                 <div class="flex h-8 w-8 items-center justify-center rounded-xl bg-zinc-100 text-zinc-900">
@@ -330,7 +330,7 @@ const faqs = [
               把问题、使用场景和出现异常的位置写清楚，管理员处理后你可以在个人中心查看反馈状态和回复。
             </p>
           </div>
-          <RouterLink to="/workspace/profile?tab=feedback" class="shrink-0">
+          <RouterLink to="/workspace/profile?tab=feedback" class="shrink-0 select-none">
             <Button class="h-11 rounded-xl bg-white px-5 text-zinc-950 hover:bg-zinc-100">
               <MessageSquare class="mr-2 h-4 w-4" />
               提交反馈

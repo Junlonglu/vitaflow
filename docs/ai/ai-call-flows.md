@@ -24,7 +24,7 @@ backend (FastAPI, :8000)                      ai-service (Express+pi-agent, :830
 
 | 数据 | 存放位置 | 维护方式 | 说明 |
 |---|---|---|---|
-| 模型目录（provider/baseUrl/apiKey/模型列表） | `ai-service/.pi-agent/models.json`（volume 挂载） | 管理后台「服务商接入」经 backend 代理 CRUD | 纯 UI CRUD：frontend `AiCatalogPanel.vue`（容器）/ `AiProviderCard.vue`（单卡编辑器）→ backend `admin/ai_configs.py` 的 `/admin/ai-catalog/*` → `call_catalog`（ai_service_client.py:255）→ ai-service `/v1/catalog*`（server.ts:133-256），写后 `rebuildRuntime()` 热生效，无需重启；一次保存只发一条写请求：provider 的 POST/PUT 带 `models { added, removed, patches }`，ai-service 在同一个 `mutateCatalog` 里改资料→加新 id→删取消勾选的（§6.27）；拉上游列表走 `POST /v1/catalog/remote-models`，用卡片里填的地址与密钥，不要求先保存 |
+| 模型目录（provider/baseUrl/apiKey/模型列表） | `ai-service/.pi-agent/models.json`（volume 挂载） | 管理后台「服务商接入」经 backend 代理 CRUD | 纯 UI CRUD：frontend `AiCatalogPanel.vue`（列表容器 + 一次只开一张的展开控制）/ `AiProviderCard.vue`（摘要行 + 展开成表单）→ backend `admin/ai_configs.py` 的 `/admin/ai-catalog/*` → `call_catalog`（ai_service_client.py:255）→ ai-service `/v1/catalog*`（server.ts:133-256），写后 `rebuildRuntime()` 热生效，无需重启；一次保存只发一条写请求：provider 的 POST/PUT 带 `models { added, removed, patches }`，ai-service 在同一个 `mutateCatalog` 里改资料→加新 id→删取消勾选的（§6.27）；拉上游列表走 `POST /v1/catalog/remote-models`，用卡片里填的地址与密钥，不要求先保存 |
 | 模型策略（哪个 ref 启用、上下文条数、按模型定价） | MySQL `ai_model_configs` 表 | 管理后台「模型策略」 | `AiModelConfig`（backend/app/models/ai_config.py），运行时快照由 `get_active_ai_config`（ai_config_service.py:189）读取，Redis 缓存 |
 | 计费规则（每功能兜底价） | MySQL `flow_point_rules` 表 | 管理后台「积分规则」 | 兜底价：生成 100 点/次、导入 50 点/次、对话 5 点/次+百万 token 费率（`DEFAULT_POINT_RULES`，flow_points_service.py:35） |
 | Provider 模式 | 环境变量 `PI_PROVIDER`（faux/real） | 根目录 .env → docker compose 注入 | faux=本地确定性演示模型；real=从 models.json 加载真实模型（real.ts） |
@@ -96,7 +96,7 @@ backend (FastAPI, :8000)                      ai-service (Express+pi-agent, :830
 ## 4. 模型目录与多模态能力
 
 - 目录即 models.json；结构示例 `ai-service/models.json.example`。apiKey 支持 `$ENV_VAR` 引用（如 `$DEEPSEEK_API_KEY`，密钥不落盘）；管理后台的服务商卡提供环境变量名下拉（ai-service `GET /v1/catalog/env-keys`，server.ts:147，只返回 `*_API_KEY` 变量**名**）。
-- 接入界面是**单卡片表单**（`AiProviderCard.vue` + `providerDraft.ts`）：身份/密钥/模型芯片/端点都在草稿里改，点保存才按「建/改服务商 → 导入新增模型 → 更新资料 → 删除取消勾选的模型」串行提交；取消即整体回滚。不再有新增/编辑/模型/拉取四个弹窗。
+- 接入界面是**摘要行 + 展开成表单**（`AiProviderCard.vue` + `providerDraft.ts`）：列表里每行只有名称/标识/域名 · 子项数 · 前三个子项名 + 余额或用量，点开才出现身份/密钥/端点/模型芯片的表单，一次只开一张；所有改动先落草稿，点保存才把服务商与 `models { added, removed, patches }` 合成**一条**写请求，取消或收起即整体回滚（收起前有未保存改动会先确认，§6.28）。不再有新增/编辑/模型/拉取四个弹窗，也不再让每条记录都摊开。
 - 模型 `input` 数组含 `image` 即多模态：前端目录/策略面板显示「多模态」徽标；对话链路用它做图片守卫（2.2 第 4 步）。
 - backend 侧能力推导用 `afetch_catalog_providers`（ai_service_client.py:270，异步拉目录）。
 

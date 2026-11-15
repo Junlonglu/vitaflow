@@ -453,7 +453,7 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
         class="flex h-9 w-full items-center gap-2 rounded-md px-3 text-[13.5px] font-medium text-zinc-800 transition-colors hover:bg-zinc-200/50"
         @click="startCreate('choice')"
       >
-        <Plus class="h-4 w-4 shrink-0 text-zinc-500" />
+        <Plus class="h-4 w-4 shrink-0 text-zinc-600" />
         <span>新建简历</span>
       </button>
       <button
@@ -461,7 +461,7 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
         class="flex h-9 w-full items-center gap-2 rounded-md px-3 text-[13.5px] font-medium text-zinc-700 transition-colors hover:bg-zinc-200/50 hover:text-zinc-900"
         @click="startCreate('ai')"
       >
-        <Sparkles class="h-4 w-4 shrink-0 text-zinc-400" />
+        <Sparkles class="h-4 w-4 shrink-0 text-zinc-600" />
         <span>AI 生成简历</span>
       </button>
       <RouterLink
@@ -475,7 +475,7 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
             : 'font-medium text-zinc-600 hover:bg-zinc-200/40 hover:text-zinc-900'
         "
       >
-        <component :is="nav.icon" class="h-4 w-4 shrink-0" :class="route.path === nav.to ? 'text-zinc-700' : 'text-zinc-400'" />
+        <component :is="nav.icon" class="h-4 w-4 shrink-0" :class="route.path === nav.to ? 'text-zinc-700' : 'text-zinc-600'" />
         <span>{{ nav.label }}</span>
       </RouterLink>
     </div>
@@ -502,10 +502,10 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
       </div>
     </div>
 
-    <div v-if="!isSearching" class="mt-4 flex shrink-0 items-center gap-2 px-5 text-[11.5px] font-medium tracking-wider text-zinc-400">
-      <Files class="h-3 w-3" />
+    <div v-if="!isSearching" class="mt-4 flex shrink-0 items-center gap-2 px-5 text-[11.5px] font-medium tracking-wider text-zinc-500">
+      <Files class="h-3 w-3 text-zinc-600" />
       <span>简历</span>
-      <span v-if="store.resumeListTotal" class="text-zinc-300">{{ store.resumeListTotal }}</span>
+      <span v-if="store.resumeListTotal" class="text-zinc-400">{{ store.resumeListTotal }}</span>
     </div>
 
     <div v-if="!isSearching" class="thin-scrollbar mt-1 min-h-0 flex-1 overflow-y-auto px-2 pb-2">
@@ -638,10 +638,10 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
       </p>
 
       <div v-if="matchedResumes.length" class="mb-3">
-        <div class="flex items-center gap-1.5 px-3 pb-1 text-[11.5px] font-medium tracking-wider text-zinc-400">
-          <Files class="h-3 w-3" />
+        <div class="flex items-center gap-1.5 px-3 pb-1 text-[11.5px] font-medium tracking-wider text-zinc-500">
+          <Files class="h-3 w-3 text-zinc-600" />
           <span>简历</span>
-          <span class="text-zinc-300">{{ matchedResumes.length }}</span>
+          <span class="text-zinc-400">{{ matchedResumes.length }}</span>
         </div>
         <button
           v-for="item in matchedResumes"
@@ -650,17 +650,17 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
           class="mb-1 flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-zinc-700 transition-colors hover:bg-zinc-200/50"
           @click="openResume(item.id)"
         >
-          <Files class="h-3.5 w-3.5 shrink-0 text-zinc-400" />
+          <Files class="h-3.5 w-3.5 shrink-0 text-zinc-600" />
           <span class="min-w-0 flex-1 truncate text-[13px] font-medium">{{ item.title || "无标题简历" }}</span>
           <span v-if="activeId === item.id" class="shrink-0 text-[11px] text-zinc-400">当前</span>
         </button>
       </div>
 
       <div>
-        <div class="flex items-center gap-1.5 px-3 pb-1 text-[11.5px] font-medium tracking-wider text-zinc-400">
-          <MessageSquare class="h-3 w-3" />
+        <div class="flex items-center gap-1.5 px-3 pb-1 text-[11.5px] font-medium tracking-wider text-zinc-500">
+          <MessageSquare class="h-3 w-3 text-zinc-600" />
           <span>对话</span>
-          <span v-if="searchResults.length" class="text-zinc-300">{{ searchResults.length }}</span>
+          <span v-if="searchResults.length" class="text-zinc-400">{{ searchResults.length }}</span>
         </div>
 
         <div v-if="searchLoading" class="space-y-1 px-1">

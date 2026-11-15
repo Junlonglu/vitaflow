@@ -389,6 +389,106 @@ def check_session_folding(browser) -> list[str]:
     return bad
 
 
+# ---------------------------------------------------------------------------
+# 矩阵之外的独立检查：全站 tooltip（§6.24）
+# 气泡只在悬停 / 聚焦时才存在，静态矩阵快照里量不到，所以单开一段：
+# 悬停一个带 title 的按钮，量计算样式与几何，并验证 title 的摘除与恢复
+# （摘除是为了压掉浏览器原生提示；恢复是 §6.14 的文本出口判据）。
+# ---------------------------------------------------------------------------
+def check_tooltip(browser) -> list[str]:
+    bad: list[str] = []
+    ctx = browser.new_context(viewport={"width": 1280, "height": 820})
+    ctx.add_init_script(
+        "localStorage.setItem('vitaflow_token', " + json.dumps(TOKEN) + ");"
+        "localStorage.setItem('vitaflow-theme', 'light');"
+    )
+    page = ctx.new_page()
+    try:
+        page.goto(BASE + "/workspace", wait_until="domcontentloaded", timeout=45000)
+        page.wait_for_selector("aside", timeout=20000)
+        page.wait_for_timeout(2000)
+        sel = 'aside button[title="展开对话"]'
+        if not page.locator(sel).count():
+            bad.append("找不到带 title 的按钮，无法验证 tooltip")
+            return bad
+
+        page.hover(sel)
+        page.wait_for_timeout(450)
+        r = page.evaluate("""() => {
+          const t = document.querySelector('#wb-tooltip');
+          if (!t) return null;
+          const cs = getComputedStyle(t), dot = getComputedStyle(t, '::before');
+          const host = document.querySelector('[aria-describedby="wb-tooltip"]');
+          const tr = t.getBoundingClientRect(), hr = host ? host.getBoundingClientRect() : null;
+          return { shown: t.dataset.shown, placement: t.dataset.placement, text: t.textContent.trim(),
+                   bg: cs.backgroundColor, color: cs.color, radius: cs.borderRadius,
+                   fontSize: cs.fontSize, pad: cs.padding, z: cs.zIndex,
+                   arrowW: dot.borderLeftWidth, arrowH: dot.borderBottomWidth || dot.borderTopWidth,
+                   arrowColor: dot.borderBottomColor || dot.borderTopColor,
+                   gap: hr ? +(tr.top - hr.bottom).toFixed(1) : null,
+                   hostTitle: host ? host.hasAttribute('title') : null,
+                   hostDescribed: !!host };
+        }""")
+        if not r:
+            bad.append("悬停后没有出现 #wb-tooltip")
+            return bad
+        if r["shown"] != "true":
+            bad.append(f"气泡未显示（shown={r['shown']}）")
+        if r["bg"] != "rgb(64, 64, 64)":
+            bad.append(f"底色应为 #404040，实得 {r['bg']}")
+        if r["color"] != "rgb(255, 255, 255)":
+            bad.append(f"文字应为白色，实得 {r['color']}")
+        if r["radius"] != "12px":
+            bad.append(f"圆角应为 12px，实得 {r['radius']}")
+        if r["fontSize"] != "13px":
+            bad.append(f"字号应为 13px，实得 {r['fontSize']}")
+        if r["pad"] != "10px 14px":
+            bad.append(f"内边距应为 10px 14px，实得 {r['pad']}")
+        if r["placement"] != "bottom":
+            bad.append(f"默认应放下方，实得 {r['placement']}")
+        if r["gap"] is None or abs(r["gap"] - 8) > 1:
+            bad.append(f"气泡与目标间距应为 8，实得 {r['gap']}")
+        if r["arrowW"] != "5px" or r["arrowH"] != "5px":
+            bad.append(f"三角应为 10×5，实得 {r['arrowW']}×{r['arrowH']}")
+        if r["arrowColor"] != "rgb(64, 64, 64)":
+            bad.append(f"三角应与气泡同色，实得 {r['arrowColor']}")
+        if r["hostTitle"] is not False:
+            bad.append("悬停期间 title 未被摘除，会叠出浏览器原生提示")
+        if not r["hostDescribed"]:
+            bad.append("缺少 aria-describedby 关联")
+
+        # 离开后必须收起，并把 title 还回去
+        page.mouse.move(1240, 780)
+        page.wait_for_timeout(420)
+        left = page.evaluate("""() => {
+          const t = document.querySelector('#wb-tooltip');
+          return { shown: t ? t.dataset.shown : null,
+                   titleBack: !!document.querySelector('aside button[title="展开对话"]') };
+        }""")
+        if left["shown"] != "false":
+            bad.append(f"离开后气泡未收起（shown={left['shown']}）")
+        if not left["titleBack"]:
+            bad.append("离开后 title 未恢复，文本出口会断（§6.14）")
+
+        # 键盘聚焦也要出气泡，否则键盘用户只剩读屏一条路
+        page.evaluate("""() => {
+          const b = document.querySelector('aside button[title="展开对话"]');
+          b && b.focus();
+        }""")
+        page.wait_for_timeout(280)
+        focus = page.evaluate("""() => {
+          const t = document.querySelector('#wb-tooltip');
+          return t ? t.dataset.shown : null;
+        }""")
+        if focus != "true":
+            bad.append(f"键盘聚焦未弹出气泡（shown={focus}）")
+    except Exception as e:  # noqa: BLE001
+        bad.append(f"tooltip 检查异常: {type(e).__name__}: {e}")
+    finally:
+        ctx.close()
+    return bad
+
+
 def main() -> int:
     if not TOKEN:
         print("缺少 VITAFLOW_TOKEN。请设置登录态 JWT（只写 localStorage，不落盘）：\n"
@@ -461,21 +561,26 @@ def main() -> int:
 
         # 会话折叠交互（§6.23）：矩阵里数据不够多，单独注入内存态验证
         folding_bad = check_session_folding(browser)
+        # 全站 tooltip（§6.24）：气泡只在悬停/聚焦时存在，静态矩阵量不到
+        tooltip_bad = check_tooltip(browser)
         browser.close()
 
     if AS_JSON:
         print(json.dumps({"base": BASE, "mode": mode, "cells": rows,
                           "runtime_failures": runtime_bad,
                           "folding_failures": folding_bad,
+                          "tooltip_failures": tooltip_bad,
                           "failed_cells": len(failures)}, ensure_ascii=False, indent=2))
     else:
         print("─" * 62)
         print(f"运行时 light→dark（不刷新）: {'✓ 稳定' if not runtime_bad else '✗ ' + '; '.join(runtime_bad)}")
         print(f"侧栏轨位 + 折叠 5→8→5 + 激活保护: {'✓ 通过' if not folding_bad else '✗ ' + '; '.join(folding_bad)}")
+        print(f"全站 tooltip 规格与 title 摘除/恢复: {'✓ 通过' if not tooltip_bad else '✗ ' + '; '.join(tooltip_bad)}")
         print(f"合计 {len(rows)} 格 · 断言失败 {len(failures)} 格"
               + ("" if not runtime_bad else " · 运行时切换失败")
-              + ("" if not folding_bad else " · 折叠检查失败"))
-    return 1 if (failures or runtime_bad or folding_bad) else 0
+              + ("" if not folding_bad else " · 折叠检查失败")
+              + ("" if not tooltip_bad else " · tooltip 检查失败"))
+    return 1 if (failures or runtime_bad or folding_bad or tooltip_bad) else 0
 
 
 if __name__ == "__main__":

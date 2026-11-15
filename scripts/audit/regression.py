@@ -168,8 +168,31 @@ JS = r"""() => {
   const gridHost = [...document.querySelectorAll("[class*='@container']")].map((e) => e.firstElementChild).find(Boolean);
   const containerW = gridHost ? Math.round(gridHost.parentElement.getBoundingClientRect().width) : null;
 
+  // 6) 侧栏轨位（§6.23）：父行 / 会话行 / 查看更多 / 新对话的文字必须同落 40 轨，
+  //    父子两行时间戳右缘同列（父行常驻展开箭头由会话行右侧占位抵消）。
+  //    只有展开态才量得到会话行，其余格子跳过这条而不是硬报缺失。
+  const aside = document.querySelector('aside');
+  const srow = aside ? aside.querySelector('[data-session-row]') : null;
+  let sidebar = null;
+  if (aside && srow) {
+    const L = (el) => el ? el.getBoundingClientRect().left - aside.getBoundingClientRect().left : null;
+    const R = (el) => el ? el.getBoundingClientRect().right - aside.getBoundingClientRect().left : null;
+    const pbtn = aside.querySelector('div.group > button');
+    const more = aside.querySelector('[data-session-more]');
+    const addBtn = [...aside.querySelectorAll('button')].find(
+      (b) => b.querySelector('svg') && b.textContent.trim() === '新对话');
+    sidebar = {
+      parentText: L(pbtn?.querySelector('span.truncate')),
+      parentTimeRight: R(pbtn?.querySelector('span.tabular-nums')),
+      sessionText: L(srow.querySelector('span.truncate')),
+      sessionTimeRight: R(srow.querySelector('span.tabular-nums')),
+      moreText: more ? L(more.querySelector('span')) : null,
+      addText: addBtn ? L(addBtn.querySelector('span')) : null,
+    };
+  }
+
   return {
-    theme, font,
+    theme, font, sidebar,
     hscroll: document.documentElement.scrollWidth > vw,
     unreachable, clipped, selectable,
     paragraphs: paragraphs.length, paragraphsSelectable,
@@ -235,6 +258,134 @@ def assert_cell(theme: str, width: int, route: str, r: dict) -> list[str]:
         want = 4 if r["containerW"] >= 672 else 2
         if r["gridCols"] != want:
             bad.append(f"容器 {r['containerW']} 列数 {r['gridCols']}，应为 {want}")
+
+    # 侧栏轨位（§6.23）：文字同一竖线、父子时间戳右缘同一列
+    sb = r["sidebar"]
+    if sb is not None:
+        texts = [v for k, v in sb.items() if k.endswith("Text") and v is not None]
+        if texts and max(texts) - min(texts) > 1:
+            bad.append(f"侧栏文字轨不齐: {texts}")
+        if sb["parentTimeRight"] is not None and sb["sessionTimeRight"] is not None \
+                and abs(sb["parentTimeRight"] - sb["sessionTimeRight"]) > 2:
+            bad.append(f"父子时间戳右缘不齐: {sb['parentTimeRight']} / {sb['sessionTimeRight']}")
+    return bad
+
+
+# ---------------------------------------------------------------------------
+# 矩阵之外的独立检查：侧栏轨位 + 会话折叠（§6.23）
+# 矩阵各路由都没有展开态（/workspace/79 是历史 id，取不到会话），轨位断言会空跑；
+# 真实接口里每份简历通常也只有一两条对话，跑不到「过多对话」这一态。
+# 所以这里用 Pinia 临时往内存里注入 8 条（不落库、不改后端数据），强制验证
+# 文字/图标/时间戳轨位，以及 5 条折叠 → 展开 8 条 → 收起、激活会话不被藏掉。
+# ---------------------------------------------------------------------------
+def check_session_folding(browser) -> list[str]:
+    bad: list[str] = []
+    ctx = browser.new_context(viewport={"width": 1280, "height": 820})
+    ctx.add_init_script(
+        "localStorage.setItem('vitaflow_token', " + json.dumps(TOKEN) + ");"
+        "localStorage.setItem('vitaflow-theme', 'light');"
+    )
+    page = ctx.new_page()
+    try:
+        page.goto(BASE + "/workspace", wait_until="domcontentloaded", timeout=45000)
+        page.wait_for_selector("aside", timeout=20000)
+        page.wait_for_timeout(1800)
+        # 先展开，让真实 fetch 完成；之后再注入才不会被接口响应覆盖回去
+        exp = page.locator('aside button[title="展开对话"]').first
+        if exp.count():
+            exp.click()
+            page.wait_for_timeout(900)
+
+        injected = page.evaluate(r"""() => {
+          const app = document.querySelector('#app').__vue_app__;
+          const pinia = app && app.config.globalProperties.$pinia;
+          const chat = pinia && pinia._s.get('chat');
+          const resume = pinia && pinia._s.get('resume');
+          if (!chat || !resume || !resume.resumeList.length) return 0;
+          const now = Date.now(), by = { ...chat.sessionsByResume };
+          for (const r of resume.resumeList) {
+            by[r.id] = Array.from({ length: 8 }, (_, i) => ({
+              id: 90000 + r.id * 10 + i, resume_id: r.id, title: '审计会话 ' + (i + 1),
+              message_count: 1, last_message: '摘要', is_pinned: false,
+              create_time: new Date(now - (i + 1) * 3600000).toISOString(),
+              update_time: new Date(now - (i + 1) * 3600000).toISOString(),
+            }));
+          }
+          chat.sessionsByResume = by;
+          return chat.sessions(resume.resumeList[0].id).length;
+        }""")
+        if injected != 8:
+            bad.append(f"无法注入审计会话（拿到 {injected} 条），跳过折叠交互检查")
+            ctx.close()
+            return bad
+        page.wait_for_timeout(500)
+
+        def state():
+            return page.evaluate("""() => ({
+              rows: document.querySelectorAll('aside [data-session-row]').length,
+              more: document.querySelector('aside [data-session-more]')?.textContent.trim() || null,
+            })""")
+
+        # 轨位（§6.23）：矩阵各路由都没有展开态，这条强制检查放在这里才真的会跑
+        geom = page.evaluate("""() => {
+          const a = document.querySelector('aside');
+          const L = (el) => el ? +(el.getBoundingClientRect().left - a.getBoundingClientRect().left).toFixed(1) : null;
+          const R = (el) => el ? +(el.getBoundingClientRect().right - a.getBoundingClientRect().left).toFixed(1) : null;
+          const p = a.querySelector('div.group > button');
+          const s = a.querySelector('[data-session-row]');
+          const m = a.querySelector('[data-session-more]');
+          const add = [...a.querySelectorAll('button')].find(
+            (b) => b.querySelector('svg') && b.textContent.trim() === '新对话');
+          return {
+            parentIcon: L(p?.querySelector('svg')), parentText: L(p?.querySelector('span.truncate')),
+            parentTimeRight: R(p?.querySelector('span.tabular-nums')),
+            sessionText: L(s?.querySelector('span.truncate')),
+            sessionTimeRight: R(s?.querySelector('span.tabular-nums')),
+            moreText: L(m?.querySelector('span')), addIcon: L(add?.querySelector('svg')),
+            addText: L(add?.querySelector('span')),
+          };
+        }""")
+        texts = [v for k, v in geom.items() if k.endswith("Text") and v is not None]
+        icons = [v for k, v in geom.items() if k.endswith("Icon") and v is not None]
+        if len(texts) < 4 or max(texts) - min(texts) > 1:
+            bad.append(f"侧栏文字轨不齐: {geom}")
+        if len(icons) < 2 or max(icons) - min(icons) > 1:
+            bad.append(f"侧栏图标轨不齐: {geom}")
+        if geom["parentTimeRight"] is None or geom["sessionTimeRight"] is None \
+                or abs(geom["parentTimeRight"] - geom["sessionTimeRight"]) > 2:
+            bad.append(f"父子时间戳右缘不齐: {geom['parentTimeRight']} / {geom['sessionTimeRight']}")
+
+        s = state()
+        if s["rows"] != 5 or s["more"] != "查看更多 (3)":
+            bad.append(f"折叠态应为 5 行 + 查看更多 (3)，实得 {s}")
+        page.locator("aside [data-session-more]").click()
+        page.wait_for_timeout(350)
+        s = state()
+        if s["rows"] != 8 or s["more"] != "收起":
+            bad.append(f"展开态应为 8 行 + 收起，实得 {s}")
+        page.locator("aside [data-session-more]").click()
+        page.wait_for_timeout(350)
+        s = state()
+        if s["rows"] != 5 or s["more"] != "查看更多 (3)":
+            bad.append(f"再次收起应回到 5 行，实得 {s}")
+
+        # 正在看的对话落在折叠段：必须强制全展开，且不给「收起」把它藏掉
+        page.evaluate("""() => {
+          const pinia = document.querySelector('#app').__vue_app__.config.globalProperties.$pinia;
+          const chat = pinia._s.get('chat');
+          // 必须与展开中的那份简历一致：keys[0] 可能是别的简历，改它不会影响当前预览
+          const rid = pinia._s.get('resume').resumeList[0].id;
+          const list = chat.sessionsByResume[rid];
+          chat.activeByResume = { ...chat.activeByResume, [rid]: list[6].id };
+        }""")
+        page.wait_for_timeout(400)
+        s = state()
+        if s["rows"] != 8 or s["more"] is not None:
+            bad.append(f"激活会话落在折叠段时应强制全展开且隐藏按钮，实得 {s}")
+    except Exception as e:  # noqa: BLE001 - 审计脚本要把任何异常变成一条明确失败
+        bad.append(f"折叠检查异常: {type(e).__name__}: {e}")
+    finally:
+        ctx.close()
     return bad
 
 
@@ -307,18 +458,24 @@ def main() -> int:
         if after["hscroll"] or after["unreachable"] or after["clipped"]:
             runtime_bad.append("切换后出现横滚/不可达/裁剪")
         ctx.close()
+
+        # 会话折叠交互（§6.23）：矩阵里数据不够多，单独注入内存态验证
+        folding_bad = check_session_folding(browser)
         browser.close()
 
     if AS_JSON:
         print(json.dumps({"base": BASE, "mode": mode, "cells": rows,
                           "runtime_failures": runtime_bad,
+                          "folding_failures": folding_bad,
                           "failed_cells": len(failures)}, ensure_ascii=False, indent=2))
     else:
         print("─" * 62)
         print(f"运行时 light→dark（不刷新）: {'✓ 稳定' if not runtime_bad else '✗ ' + '; '.join(runtime_bad)}")
+        print(f"侧栏轨位 + 折叠 5→8→5 + 激活保护: {'✓ 通过' if not folding_bad else '✗ ' + '; '.join(folding_bad)}")
         print(f"合计 {len(rows)} 格 · 断言失败 {len(failures)} 格"
-              + ("" if not runtime_bad else " · 运行时切换失败"))
-    return 1 if (failures or runtime_bad) else 0
+              + ("" if not runtime_bad else " · 运行时切换失败")
+              + ("" if not folding_bad else " · 折叠检查失败"))
+    return 1 if (failures or runtime_bad or folding_bad) else 0
 
 
 if __name__ == "__main__":

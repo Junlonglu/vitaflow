@@ -26,11 +26,11 @@ defineProps<{ text: string }>()
         <TooltipContent
           side="top"
           align="center"
-          :side-offset="6"
-          class="z-popover max-w-64 rounded-lg bg-zinc-900 px-3 py-2 text-xs leading-relaxed text-zinc-50 shadow-wb-popup"
+          :side-offset="8"
+          class="z-popover max-w-[280px] rounded-xl bg-[#404040] px-3.5 py-2.5 text-left text-[13px] font-medium leading-[18px] text-[#fff] shadow-wb-popup"
         >
           {{ text }}
-          <TooltipArrow class="fill-zinc-900" :width="10" :height="5" />
+          <TooltipArrow class="fill-[#404040]" :width="10" :height="5" />
         </TooltipContent>
       </TooltipPortal>
     </TooltipRoot>

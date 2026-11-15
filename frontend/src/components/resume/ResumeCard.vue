@@ -51,9 +51,9 @@ const languageLabel = computed(() => (props.item.language === "en" ? "English" :
     <div class="flex flex-1 flex-col px-3 pb-3 pt-2.5 sm:px-3.5 sm:pb-3.5">
       <div class="group/title relative mb-1.5">
         <h2 class="truncate text-xs font-medium tracking-tight text-zinc-900 transition-colors group-hover/title:text-zinc-950 sm:text-sm" @mouseenter="$emit('checkTitle', $event, item.id)">{{ item.title }}</h2>
-        <div v-if="isTitleTruncated" class="pointer-events-none absolute bottom-full left-0 z-popover mb-1.5 hidden w-max max-w-xs whitespace-normal break-words rounded-md bg-zinc-900 p-2 text-xs leading-relaxed text-white group-hover/title:block">
+        <div v-if="isTitleTruncated" class="pointer-events-none absolute bottom-full left-0 z-popover mb-1.5 hidden w-max max-w-[280px] whitespace-normal break-words rounded-xl bg-[#404040] px-3.5 py-2.5 text-[13px] font-medium leading-[18px] text-[#fff] group-hover/title:block">
           {{ item.title }}
-          <div class="absolute left-4 top-full -mt-1 h-2 w-2 rotate-45 border-b border-r border-zinc-700/50 bg-zinc-900 pointer-events-none"></div>
+          <div class="pointer-events-none absolute left-4 top-full -mt-1 h-2 w-2 rotate-45 bg-[#404040]"></div>
         </div>
       </div>
       <div class="mt-1.5 flex min-h-[24px] items-center justify-between text-[11px] tracking-wide text-zinc-400/90">

@@ -46,6 +46,16 @@ class CatalogProviderWrite(BaseModel):
     secret_access_key: str = Field(default="", max_length=1000)
 
 
+class CatalogProviderUpdate(BaseModel):
+    """更新服务商：标识来自路径，不要求客户端回传（旧前端因此一直 422）。"""
+
+    name: str = Field(min_length=1, max_length=120)
+    base_url: str = Field(min_length=1, max_length=500)
+    api_key: str = Field(default="", max_length=1000)
+    access_key_id: str = Field(default="", max_length=500)
+    secret_access_key: str = Field(default="", max_length=1000)
+
+
 class CatalogModelWrite(BaseModel):
     id: str = Field(min_length=1, max_length=120)
     name: str = Field(min_length=1, max_length=200)
@@ -305,7 +315,7 @@ def create_catalog_provider(payload: CatalogProviderWrite):
 
 
 @router.put("/ai-catalog/providers/{provider_key}")
-def update_catalog_provider(provider_key: str, payload: CatalogProviderWrite):
+def update_catalog_provider(provider_key: str, payload: CatalogProviderUpdate):
     body = {
         "key": provider_key,
         "name": payload.name.strip(),

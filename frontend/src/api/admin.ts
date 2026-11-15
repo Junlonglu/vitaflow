@@ -382,7 +382,15 @@ export const deleteAdminAiConfigApi = (id: number) => request.delete(`/admin/ai-
 export const getAdminAiCatalogApi = () => request.get<AdminCatalog, AdminCatalog>("/admin/ai-catalog")
 export const getAdminCatalogEnvKeysApi = () => request.get<{ env_keys: string[] }, { env_keys: string[] }>("/admin/ai-catalog/env-keys")
 export const createAdminCatalogProviderApi = (data: AdminCatalogProviderWrite) => request.post<AdminCatalog, AdminCatalog>("/admin/ai-catalog/providers", data)
-export const updateAdminCatalogProviderApi = (key: string, data: { name: string; base_url: string; api_key?: string }) =>
+/** 更新时密钥/账号钥匙都是「填了才改」，留空表示保持原值。 */
+export interface AdminCatalogProviderPatch {
+  name: string
+  base_url: string
+  api_key?: string
+  access_key_id?: string
+  secret_access_key?: string
+}
+export const updateAdminCatalogProviderApi = (key: string, data: AdminCatalogProviderPatch) =>
   request.put<AdminCatalog, AdminCatalog>(`/admin/ai-catalog/providers/${encodeURIComponent(key)}`, data)
 export const deleteAdminCatalogProviderApi = (key: string) => request.delete<AdminCatalog, AdminCatalog>(`/admin/ai-catalog/providers/${encodeURIComponent(key)}`)
 export const createAdminCatalogModelApi = (providerKey: string, data: AdminCatalogModelWrite) =>

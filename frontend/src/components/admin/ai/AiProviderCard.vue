@@ -1,10 +1,10 @@
 <script setup lang="ts">
 /**
- * 服务商接入卡：一张卡就是一张表单。
+ * 服务商接入卡：列表里的一行摘要 + 展开后的表单（magpie 的 row → editor 形态）。
  *
- * 参考 magpie 的服务商卡——身份、密钥、模型勾选、端点、高级、保存/取消都在
- * 同一张卡里完成，不再开「新增/编辑/新增模型/拉取模型」弹窗。改动先留在草稿，
- * 点保存才由父组件按 diff 串行提交，取消即回滚。
+ * 收起时只剩一行：名称、标识、地址、模型数与预览、余额/套餐用量，一眼能扫完
+ * 目录里接了多少家；点开才变表单（身份、密钥、端点、模型、高级、保存/取消）。
+ * 一次只开一张由父组件控制，收起会丢弃草稿，所以切换前要确认。
  */
 import { computed, ref, watch } from "vue"
 import {
@@ -62,6 +62,8 @@ const props = defineProps<{
   planUsage?: AdminPlanUsage | null
   planLoading?: boolean
   busy?: boolean
+  /** 摘要行是否展开成表单；新增卡由父组件传 true（Boolean prop 缺席即 false）。 */
+  expanded?: boolean
   submitProvider: (payload: ProviderSavePayload) => Promise<void>
   syncModelsDev: (key: string) => Promise<void>
 }>()
@@ -71,6 +73,10 @@ const emit = defineEmits<{
   duplicate: [provider: AdminCatalogProvider]
   saved: [mode: "create" | "update", key: string]
   discard: []
+  /** 点摘要行：父组件决定展开还是收起（可能要确认丢弃草稿）。 */
+  toggle: []
+  /** 有/没有未保存的改动，父组件用它决定切换前要不要确认。 */
+  dirty: [value: boolean]
 }>()
 
 const draft = ref<ProviderDraft>(createProviderDraft(props.provider, props.seed))
@@ -118,6 +124,42 @@ const balanceLine = computed(() => {
   const snapshot = props.balance
   if (!snapshot?.ok || !snapshot.display) return ""
   return `余额 ${snapshot.display}${snapshot.stale ? "（上次读数）" : ""}`
+})
+
+// Boolean prop 缺席会被 Vue 转成 false，所以展开态必须显式传；新增卡由父组件传 true
+const open = computed(() => props.expanded === true)
+
+function hostOf(url: string): string {
+  return url.replace(/^https?:\/\//i, "").replace(/\/+$/, "")
+}
+
+/** 摘要行第二行：地址 + 模型数 + 前三个模型名，收起时也能判断这家接了什么。 */
+const metaLine = computed(() => {
+  const base = draft.value.base_url.trim()
+  const ids = draft.value.modelIds
+  if (!base && !ids.length) {
+    return props.provider ? "还没有配置接入地址与模型" : "新的服务商：填完下面的表单再保存"
+  }
+  const parts: string[] = []
+  if (base) parts.push(hostOf(base))
+  if (!ids.length) {
+    parts.push("还没有模型")
+  } else {
+    const names = ids.map((id) => modelLabel(id))
+    const head = names.slice(0, 3).join("、")
+    parts.push(`${ids.length} 个模型`, names.length > 3 ? `${head} 等` : head)
+  }
+  return parts.join(" · ")
+})
+
+/** 摘要行右侧的用量读数：取占用最高的那个窗口，详情仍在「高级」里。 */
+const planLine = computed(() => {
+  const usage = props.planUsage
+  if (!usage || usage.error || usage.needs_access_key) return ""
+  const windows = usage.plans.flatMap((entry) => entry.windows ?? [])
+  if (!windows.length) return ""
+  const top = windows.reduce((peak, entry) => (entry.used_percent > peak.used_percent ? entry : peak))
+  return `${top.name} ${Math.round(top.used_percent)}%`
 })
 
 const probeSummary = computed(() => {
@@ -186,6 +228,17 @@ watch(
   },
   { immediate: true },
 )
+
+// 收起就是放弃草稿（父组件确认过才会收起），所以收起时回到已保存的状态
+watch(
+  () => props.expanded,
+  (value) => {
+    if (value === false && props.provider) resetDraft()
+  },
+)
+
+// 父组件靠它判断「切换/收起卡片前要不要确认丢弃」
+watch(dirty, (value) => emit("dirty", value), { immediate: true })
 
 function applyPreset(preset: ProviderPreset) {
   draft.value.key = preset.key
@@ -396,22 +449,35 @@ function duplicate() {
 </script>
 
 <template>
-  <article class="rounded-xl border border-zinc-200 bg-white">
-    <header class="flex items-start justify-between gap-3 border-b border-zinc-100 px-4 py-3">
-      <div class="flex min-w-0 items-center gap-2">
-        <Server class="h-4 w-4 shrink-0 text-zinc-400" />
-        <p class="truncate text-sm font-semibold text-zinc-900">{{ draft.name || "新增服务商" }}</p>
-        <span v-if="provider" class="shrink-0 rounded-md border border-zinc-200/50 bg-zinc-100/80 px-2 py-0.5 text-[10px] font-medium text-zinc-600">{{ provider.key }}</span>
-        <span v-else class="shrink-0 rounded-md border border-dashed border-zinc-300 px-2 py-0.5 text-[10px] font-medium text-zinc-500">草稿</span>
-        <span v-if="dirty && provider" class="shrink-0 text-[11px] font-medium text-amber-600">未保存的改动</span>
+  <article class="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+    <!-- 摘要行：收起时整块就是列表里的一行，展开时是表单的头部 -->
+    <component
+      :is="provider ? 'button' : 'div'"
+      :type="provider ? 'button' : undefined"
+      class="flex w-full items-center gap-3 px-4 py-3 text-left"
+      :class="[open ? 'border-b border-zinc-100' : '', provider && !open ? 'transition-colors hover:bg-zinc-50' : '']"
+      :aria-expanded="provider ? open : undefined"
+      @click="provider && emit('toggle')"
+    >
+      <div class="flex min-w-0 flex-1 flex-col gap-1">
+        <div class="flex min-w-0 items-center gap-2">
+          <Server class="h-4 w-4 shrink-0 text-zinc-400" />
+          <span class="truncate text-sm font-semibold text-zinc-900">{{ draft.name || "新增服务商" }}</span>
+          <span v-if="provider" class="shrink-0 rounded-md border border-zinc-200/50 bg-zinc-100/80 px-2 py-0.5 text-[10px] font-medium text-zinc-600">{{ provider.key }}</span>
+          <span v-else class="shrink-0 rounded-md border border-dashed border-zinc-300 px-2 py-0.5 text-[10px] font-medium text-zinc-500">草稿</span>
+          <span v-if="provider && dirty" class="shrink-0 text-[11px] font-medium text-amber-600">未保存的改动</span>
+          <span v-else-if="provider && !provider.api_key_masked" class="shrink-0 text-[11px] font-medium text-amber-600">未配置密钥</span>
+        </div>
+        <span class="block truncate pl-6 text-[11px] text-zinc-400" :title="metaLine">{{ metaLine }}</span>
       </div>
-      <div class="flex shrink-0 items-center gap-2 text-[11px] text-zinc-400">
-        <span v-if="balanceLine" class="flex items-center gap-1"><Wallet class="h-3 w-3" />{{ balanceLine }}</span>
-        <span v-else-if="provider && !provider.api_key_masked" class="text-amber-600">未配置密钥</span>
+      <div class="flex shrink-0 items-center gap-3 text-[11px] text-zinc-400">
+        <span v-if="balanceLine" class="flex items-center gap-1 whitespace-nowrap"><Wallet class="h-3 w-3" />{{ balanceLine }}</span>
+        <span v-if="planLine" class="whitespace-nowrap">{{ planLine }}</span>
+        <ChevronRight v-if="provider" class="h-4 w-4 shrink-0 text-zinc-400 transition-transform" :class="open ? 'rotate-90' : ''" />
       </div>
-    </header>
+    </component>
 
-    <div class="space-y-3 px-4 py-3">
+    <div v-if="open" class="space-y-3 px-4 py-3">
       <div v-if="isCreate" class="grid grid-cols-[56px_minmax(0,1fr)] items-start gap-3">
         <p class="pt-2 text-xs font-medium text-zinc-500">预设</p>
         <div class="flex flex-wrap gap-1.5">
@@ -733,7 +799,7 @@ function duplicate() {
       </div>
     </div>
 
-    <footer class="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100 px-4 py-3">
+    <footer v-if="open" class="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100 px-4 py-3">
       <div class="flex items-center gap-1">
         <template v-if="provider">
           <Button variant="ghost" size="sm" class="px-2 text-red-600" @click="remove"><Trash2 class="h-3.5 w-3.5" />移除</Button>

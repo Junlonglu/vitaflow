@@ -1,13 +1,15 @@
 <script setup lang="ts">
 /**
- * 模型目录面板：服务商列表 + 路由组。
+ * 模型目录面板：服务商摘要列表 + 路由组。
  *
- * 接入本身全部收进 AiProviderCard（单卡片表单），这里只负责：
- * 列表容器、新增/复制的草稿卡、余额与套餐用量的拉取、路由组的新增与编辑。
+ * 接入本身全部收进 AiProviderCard（摘要行 + 展开成表单），这里只负责：
+ * 列表容器与「一次只开一张」的展开控制、新增/复制的草稿卡、余额与套餐用量的
+ * 拉取、路由组的新增与编辑。
  */
 import { Check, Pencil, Plus, RefreshCw, Server, Trash2 } from "lucide-vue-next"
 import { computed, ref, watch } from "vue"
 import Button from "@/components/ui/button/Button.vue"
+import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
 import Select from "@/components/ui/select/Select.vue"
 import {
   getAdminCatalogEnvKeysApi,
@@ -42,24 +44,80 @@ const PROVIDER_KEY_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/
 
 const fauxProvider = computed(() => props.providerMode === "faux")
 
-// ---- 新增/复制的草稿卡：只有一张，避免同时开多张未保存的表单
+// ---- 一次只开一张：openKey = 展开的那张服务商，createSeed = 新增/复制卡
+const openKey = ref<string | null>(null)
 const createSeed = ref<ProviderSeed | null>(null)
+const dirtyByKey = ref<Record<string, boolean>>({})
+
+const openDirty = computed(() => (openKey.value ? Boolean(dirtyByKey.value[openKey.value]) : false))
+/** 新建卡在保存前都是草稿，所以「有未保存改动」也要看它。 */
+const hasUnsaved = computed(() => Boolean(createSeed.value) || openDirty.value)
+
+/** 一次切换的目标：key = null 表示全收起，seed 有值表示开新增/复制卡。 */
+type OpenIntent = { key: string | null; seed?: ProviderSeed }
+const pending = ref<OpenIntent | null>(null)
+
+function applyIntent(intent: OpenIntent) {
+  createSeed.value = intent.seed ?? null
+  openKey.value = intent.key
+}
+
+/** 收起和切换都会丢掉草稿，所以有未保存改动时先挂起，等确认。 */
+function requestOpen(intent: OpenIntent) {
+  // 保存中的卡片不能收起：请求还在飞，收起会把「保存中…」的状态一起藏掉
+  if (props.saving) return
+  if (hasUnsaved.value) {
+    pending.value = intent
+    return
+  }
+  applyIntent(intent)
+}
+
+function toggleProvider(key: string) {
+  requestOpen({ key: openKey.value === key ? null : key })
+}
 
 function openCreateProvider() {
-  createSeed.value = {}
+  requestOpen({ key: null, seed: {} })
 }
 
 function duplicateProvider(provider: AdminCatalogProvider) {
-  createSeed.value = {
-    name: `${provider.name} 副本`,
-    base_url: provider.base_url,
-    modelIds: provider.models.map((model) => model.id),
-  }
+  requestOpen({
+    key: null,
+    seed: { name: `${provider.name} 副本`, base_url: provider.base_url, modelIds: provider.models.map((model) => model.id) },
+  })
 }
 
-function onCreated(mode: "create" | "update") {
-  if (mode === "create") createSeed.value = null
+function confirmDiscard() {
+  const intent = pending.value
+  pending.value = null
+  if (intent) applyIntent(intent)
 }
+
+const discardDescription = computed(() => {
+  const target = pending.value
+  if (!target) return ""
+  const next = target.seed ? "新建服务商" : target.key ? "打开另一张表单" : "收起当前表单"
+  return `${next}会让这张卡里还没保存的改动失效；想保留就先点保存。`
+})
+
+function onSaved(_mode: "create" | "update", _key: string) {
+  // 保存成功就收成摘要行：列表里的行本身已经是保存后的样子，不用留着表单
+  createSeed.value = null
+  openKey.value = null
+}
+
+// 目录刷新后，被删掉的服务商不能留着展开态与脏标记
+watch(
+  () => props.providers.map((provider) => provider.key).join(","),
+  (list) => {
+    const keys = new Set(list ? list.split(",") : [])
+    for (const key of Object.keys(dirtyByKey.value)) {
+      if (!keys.has(key)) delete dirtyByKey.value[key]
+    }
+    if (openKey.value && !keys.has(openKey.value)) openKey.value = null
+  },
+)
 
 // ---- 环境变量名（$VAR 引用），一次拉取后供所有卡片共用
 const envKeys = ref<string[]>([])
@@ -203,7 +261,7 @@ void loadEnvKeys()
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
         <h3 class="font-semibold text-zinc-900">服务商接入</h3>
-        <p class="mt-0.5 text-xs text-zinc-400">标识、密钥、模型、端点在一张卡里改完再保存；目录由 AI 服务持有（models.json），模型策略从这里选择</p>
+        <p class="mt-0.5 text-xs text-zinc-400">点一行展开成表单，改完再保存；目录由 AI 服务持有（models.json），模型策略从这里选择</p>
       </div>
       <div class="flex shrink-0 items-center gap-2">
         <Button variant="outline" size="sm" class="shrink-0 whitespace-nowrap" :disabled="saving" @click="onRefresh"><RefreshCw class="mr-1.5 h-3.5 w-3.5" />刷新</Button>
@@ -217,12 +275,13 @@ void loadEnvKeys()
       v-if="createSeed"
       :provider="null"
       :seed="createSeed"
+      :expanded="true"
       :groups="groups"
       :env-keys="envKeys"
       :busy="saving"
       :submit-provider="submitProvider"
       :sync-models-dev="syncModelsDev"
-      @saved="onCreated"
+      @saved="onSaved"
       @discard="createSeed = null"
     />
 
@@ -230,6 +289,7 @@ void loadEnvKeys()
       <AiProviderCard
         v-if="provider.editable"
         :provider="provider"
+        :expanded="openKey === provider.key"
         :groups="groups"
         :env-keys="envKeys"
         :balance="balanceOf(provider.key)"
@@ -238,24 +298,24 @@ void loadEnvKeys()
         :busy="saving"
         :submit-provider="submitProvider"
         :sync-models-dev="syncModelsDev"
+        @toggle="toggleProvider(provider.key)"
+        @dirty="(value) => (dirtyByKey[provider.key] = value)"
+        @saved="onSaved"
         @remove="removeProvider"
         @duplicate="duplicateProvider"
       />
-      <!-- faux 演示服务商：只读展示，不提供表单 -->
-      <article v-else class="rounded-xl border border-zinc-200 bg-white">
-        <header class="flex items-center gap-2 border-b border-zinc-100 px-4 py-3">
+      <!-- faux 演示服务商：只读摘要行，没有可展开的表单 -->
+      <article v-else class="rounded-xl border border-zinc-200 bg-white px-4 py-3">
+        <div class="flex min-w-0 items-center gap-2">
           <Server class="h-4 w-4 shrink-0 text-zinc-400" />
-          <p class="truncate text-sm font-semibold text-zinc-900">{{ provider.name }}</p>
+          <span class="truncate text-sm font-semibold text-zinc-900">{{ provider.name }}</span>
           <span class="shrink-0 rounded-md border border-zinc-200/50 bg-zinc-100/80 px-2 py-0.5 text-[10px] font-medium text-zinc-600">{{ provider.key }}</span>
           <span class="shrink-0 rounded-md border border-zinc-200/50 bg-zinc-100/80 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500">只读</span>
-        </header>
-        <div class="flex flex-wrap gap-1.5 px-4 py-3">
-          <span v-for="model in provider.models" :key="model.ref" class="inline-flex max-w-full items-center gap-1.5 rounded-md border border-zinc-300 bg-zinc-100 px-2 py-1 text-[11px] font-medium text-zinc-900">
-            <span class="truncate">{{ model.name }}</span>
-            <span class="shrink-0 text-[10px] text-zinc-500">{{ model.ref }}</span>
-          </span>
-          <p v-if="!provider.models.length" class="text-xs text-zinc-400">该服务商暂无模型</p>
+          <span class="ml-auto shrink-0 text-[11px] text-zinc-400">{{ provider.models.length }} 个模型</span>
         </div>
+        <p v-if="provider.models.length" class="mt-1 truncate pl-6 text-[11px] text-zinc-400" :title="provider.models.map((model) => model.name).join('、')">
+          {{ provider.models.map((model) => model.name).join("、") }}
+        </p>
       </article>
     </template>
 
@@ -317,4 +377,15 @@ void loadEnvKeys()
       </div>
     </div>
   </Teleport>
+
+  <!-- 一次只开一张：收起/切换会丢草稿，所以有未保存改动时先问一句 -->
+  <ConfirmDialog
+    :open="Boolean(pending)"
+    title="放弃未保存的改动？"
+    :description="discardDescription"
+    confirm-text="放弃改动"
+    cancel-text="继续编辑"
+    @update:open="(value) => { if (!value) pending = null }"
+    @confirm="confirmDiscard"
+  />
 </template>

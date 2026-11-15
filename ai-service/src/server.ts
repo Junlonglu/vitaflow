@@ -16,10 +16,13 @@ import type { ImageContent } from "@earendil-works/pi-ai/compat";
 import { queryProviderBalance } from "./balance.js";
 import {
   CatalogError,
+  applyModelDelta,
   assertGroupMembersExist,
+  type CatalogProvider,
   fauxCatalog,
   listApiKeyEnvNames,
   mutateCatalog,
+  parseModelDelta,
   readCatalog,
   renderProviders,
   requireEditableProvider,
@@ -199,6 +202,8 @@ app.post("/v1/catalog/providers", async (req, res) => {
   try {
     const key = validateProviderKey(req.body?.key);
     const { name, baseUrl, apiKey, accessKeyId, secretAccessKey } = validateProviderBody(req.body ?? {});
+    // 模型的勾选/资料一并与服务商落盘，一次成功或一次失败都没有
+    const delta = parseModelDelta(req.body ?? {});
     await mutateCatalog(AGENT_DIR, (catalog) => {
       if (catalog.providers[key]) throw new CatalogError(`服务商 ${key} 已存在`);
       catalog.providers[key] = {
@@ -209,6 +214,7 @@ app.post("/v1/catalog/providers", async (req, res) => {
         api: "openai-completions",
         models: [],
       };
+      applyModelDelta(catalog.providers[key], delta);
     });
     await rebuildRuntime();
     await catalogResponse(res);
@@ -223,6 +229,7 @@ app.put("/v1/catalog/providers/:key", async (req, res) => {
   try {
     const key = validateProviderKey(req.params.key);
     const { name, baseUrl, apiKey, accessKeyId, secretAccessKey } = validateProviderBody(req.body ?? {});
+    const delta = parseModelDelta(req.body ?? {});
     await mutateCatalog(AGENT_DIR, (catalog) => {
       const provider = requireEditableProvider(catalog, key);
       provider.name = name;
@@ -230,6 +237,7 @@ app.put("/v1/catalog/providers/:key", async (req, res) => {
       if (apiKey) provider.apiKey = apiKey;
       if (accessKeyId) provider.access_key_id = accessKeyId;
       if (secretAccessKey) provider.secret_access_key = secretAccessKey;
+      applyModelDelta(provider, delta);
     });
     await rebuildRuntime();
     await catalogResponse(res);
@@ -357,6 +365,38 @@ app.get("/v1/catalog/providers/:key/remote-models", async (req, res) => {
   } catch (err) {
     if (err instanceof CatalogError) return handleCatalogError(res, err);
     console.error("[vitaflow-ai] remote model list failed:", err);
+    res.status(502).json({ type: "error", message: (err as Error).message || "获取模型列表失败" });
+  }
+});
+
+// The card as it stands (magpie's provider/list with `typed`): the URL and key
+// are what the admin has typed, not what models.json holds, so a new provider
+// can pick its models before it is saved. Nothing is written here; a blank URL
+// or key falls back to the saved provider named by provider_key.
+app.post("/v1/catalog/remote-models", async (req, res) => {
+  if (!authorize(req)) return void res.status(401).json({ type: "error", message: "未授权：需要有效的服务令牌" });
+  if (config.provider === "faux") return void res.status(400).json({ type: "error", message: "faux 模式下不可操作真实服务商" });
+  try {
+    const baseUrl = String(req.body?.base_url ?? "").trim();
+    const apiKey = String(req.body?.api_key ?? "").trim();
+    const providerKey = String(req.body?.provider_key ?? "").trim();
+    let saved: CatalogProvider | null = null;
+    if (providerKey) {
+      const catalog = await readCatalog(AGENT_DIR);
+      saved = requireEditableProvider(catalog, validateProviderKey(providerKey));
+    }
+    const provider: CatalogProvider = {
+      name: saved?.name,
+      baseUrl: baseUrl || saved?.baseUrl || "",
+      apiKey: apiKey || saved?.apiKey,
+      api: saved?.api || "openai-completions",
+      models: [],
+    };
+    const models = await fetchRemoteModels(provider);
+    res.json({ models });
+  } catch (err) {
+    if (err instanceof CatalogError) return handleCatalogError(res, err);
+    console.error("[vitaflow-ai] remote model list (typed) failed:", err);
     res.status(502).json({ type: "error", message: (err as Error).message || "获取模型列表失败" });
   }
 });

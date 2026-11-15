@@ -37,6 +37,49 @@ class AiConfigWrite(BaseModel):
     is_active: bool = True
 
 
+class CatalogModelPatchWrite(BaseModel):
+    id: str = Field(min_length=1, max_length=120)
+    data: dict
+
+
+class CatalogModelDelta(BaseModel):
+    """模型勾选与资料随服务商一次提交：AI 服务一次写盘，不会「服务商建好了模型没进来」。"""
+
+    added: list[str] = Field(default_factory=list)
+    removed: list[str] = Field(default_factory=list)
+    patches: list[CatalogModelPatchWrite] = Field(default_factory=list)
+
+    def to_catalog_body(self) -> dict:
+        """字段名转成 AI 服务那份（camelCase），与单条模型接口同一套映射。"""
+        return {
+            "added": [item.strip() for item in self.added],
+            "removed": [item.strip() for item in self.removed],
+            "patches": [
+                {"id": patch.id.strip(), "data": _catalog_model_fields(patch.data)}
+                for patch in self.patches
+            ],
+        }
+
+
+# 前端写模型用 snake_case，AI 服务读 camelCase；单条模型接口一直由这里翻译，
+# 随服务商一起提交的 patches 也必须走同一套，否则 contextWindow/maxTokens 会被丢掉。
+_CATALOG_MODEL_FIELDS = {
+    "name": "name",
+    "reasoning": "reasoning",
+    "input": "input",
+    "context_window": "contextWindow",
+    "max_tokens": "maxTokens",
+}
+
+
+def _catalog_model_fields(data: dict) -> dict:
+    return {
+        target: data[source]
+        for source, target in _CATALOG_MODEL_FIELDS.items()
+        if data.get(source) is not None
+    }
+
+
 class CatalogProviderWrite(BaseModel):
     key: str = Field(min_length=1, max_length=80)
     name: str = Field(min_length=1, max_length=120)
@@ -44,6 +87,7 @@ class CatalogProviderWrite(BaseModel):
     api_key: str = Field(default="", max_length=1000)
     access_key_id: str = Field(default="", max_length=500)
     secret_access_key: str = Field(default="", max_length=1000)
+    models: Optional[CatalogModelDelta] = None
 
 
 class CatalogProviderUpdate(BaseModel):
@@ -54,6 +98,7 @@ class CatalogProviderUpdate(BaseModel):
     api_key: str = Field(default="", max_length=1000)
     access_key_id: str = Field(default="", max_length=500)
     secret_access_key: str = Field(default="", max_length=1000)
+    models: Optional[CatalogModelDelta] = None
 
 
 class CatalogModelWrite(BaseModel):
@@ -238,6 +283,26 @@ def get_catalog_remote_models(provider_key: str):
     return success(call_catalog("GET", f"/v1/catalog/providers/{provider_key}/remote-models"))
 
 
+class CatalogRemoteModelsProbe(BaseModel):
+    """读取上游模型列表用的表单值：不落盘，新建服务商也能先拉一次。"""
+
+    base_url: str = Field(default="", max_length=500)
+    api_key: str = Field(default="", max_length=1000)
+    provider_key: str = Field(default="", max_length=120)
+
+
+@router.post("/ai-catalog/remote-models")
+def post_catalog_remote_models(payload: CatalogRemoteModelsProbe):
+    """Same listing from the card as typed; blank fields fall back to the saved provider."""
+    return success(
+        call_catalog(
+            "POST",
+            "/v1/catalog/remote-models",
+            {"base_url": payload.base_url.strip(), "api_key": payload.api_key.strip(), "provider_key": payload.provider_key.strip()},
+        )
+    )
+
+
 @router.post("/ai-catalog/providers/{provider_key}/import-models")
 def import_catalog_models(provider_key: str, payload: CatalogImportModels):
     """Append picked upstream ids; existing models and their metadata stay untouched."""
@@ -308,6 +373,7 @@ def create_catalog_provider(payload: CatalogProviderWrite):
         "apiKey": payload.api_key.strip(),
         "access_key_id": payload.access_key_id.strip(),
         "secret_access_key": payload.secret_access_key.strip(),
+        "models": payload.models.to_catalog_body() if payload.models else None,
     }
     result = success(call_catalog("POST", "/v1/catalog/providers", body))
     invalidate_catalog_capabilities_cache()
@@ -315,13 +381,19 @@ def create_catalog_provider(payload: CatalogProviderWrite):
 
 
 @router.put("/ai-catalog/providers/{provider_key}")
-def update_catalog_provider(provider_key: str, payload: CatalogProviderUpdate):
+def update_catalog_provider(provider_key: str, payload: CatalogProviderUpdate, db: Session = Depends(get_db)):
+    # 取消勾选即删除：模型被模型策略引用时先停下，与单条删除接口同一判据
+    for model_id in (payload.models.removed if payload.models else []):
+        ref = f"{provider_key}/{model_id}"
+        if _catalog_ref_in_use(db, ref):
+            raise AppException(f"模型 {ref} 正被模型策略使用，请先在模型策略中改选", 409)
     body = {
         "key": provider_key,
         "name": payload.name.strip(),
         "baseUrl": payload.base_url.strip(),
         "access_key_id": payload.access_key_id.strip(),
         "secret_access_key": payload.secret_access_key.strip(),
+        "models": payload.models.to_catalog_body() if payload.models else None,
     }
     if payload.api_key.strip():
         body["apiKey"] = payload.api_key.strip()

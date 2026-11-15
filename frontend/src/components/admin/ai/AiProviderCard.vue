@@ -27,8 +27,8 @@ import {
 import Button from "@/components/ui/button/Button.vue"
 import Select from "@/components/ui/select/Select.vue"
 import {
-  getAdminRemoteModelsApi,
   probeAdminCatalogModelApi,
+  probeAdminRemoteModelsApi,
   type AdminBalanceSnapshot,
   type AdminCatalogProvider,
   type AdminPlanUsage,
@@ -129,8 +129,18 @@ const probeSummary = computed(() => {
 })
 
 const visibleIds = computed(() =>
-  tab.value === "catalog" ? [...draft.value.modelIds] : remoteModels.value.map((model) => model.id),
+  tab.value === "catalog" ? [...draft.value.modelIds] : remoteShown.value.map((model) => model.id),
 )
+
+// 上游列表动辄上百个模型：超过 24 条才给过滤框（magpie 同一阈值），全选/全不选只作用于筛出来的
+const remoteFilter = ref("")
+const remoteShown = computed(() => {
+  const q = remoteFilter.value.trim().toLowerCase()
+  if (!q) return remoteModels.value
+  return remoteModels.value.filter(
+    (model) => model.id.toLowerCase().includes(q) || (model.name || "").toLowerCase().includes(q),
+  )
+})
 
 function resetDraft() {
   draft.value = createProviderDraft(props.provider, props.seed)
@@ -140,6 +150,7 @@ function resetDraft() {
   probes.value = {}
   tab.value = "catalog"
   modelInput.value = ""
+  remoteFilter.value = ""
   if (!props.provider) return
   remoteModels.value = []
   remoteLoaded.value = false
@@ -265,16 +276,23 @@ function cancelKeyReplace() {
 }
 
 async function loadRemote(force = false) {
-  if (!props.provider) {
-    showGlobalToast("先保存服务商，才能从上游拉取模型列表", "error")
-    return
-  }
   if (remoteLoading.value) return
   if (remoteLoaded.value && !force) return
+  // 用卡片里当前填的地址与密钥去问，不要求先保存（magpie 的 provider/list typed）
+  const base = draft.value.base_url.trim()
+  const typedKey = draft.value.keyMode === "keep" ? "" : draft.value.api_key.trim()
+  if (!base && !props.provider) {
+    showGlobalToast("先填接入地址，再拉取上游模型列表", "error")
+    return
+  }
   remoteLoading.value = true
   remoteError.value = ""
   try {
-    const data = await getAdminRemoteModelsApi(props.provider.key)
+    const data = await probeAdminRemoteModelsApi({
+      base_url: base,
+      api_key: typedKey,
+      provider_key: props.provider?.key ?? "",
+    })
     remoteModels.value = data.models || []
     remoteLoaded.value = true
   } catch (err: any) {
@@ -506,6 +524,24 @@ function duplicate() {
         </div>
       </div>
 
+      <!-- 端点排在模型前面：拉取上游列表用的就是这里填的地址与上面的密钥 -->
+      <div class="grid grid-cols-[56px_minmax(0,1fr)] items-start gap-3">
+        <p class="pt-2 text-xs font-medium text-zinc-500">端点</p>
+        <div class="min-w-0 space-y-2">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="shrink-0 rounded-md border border-zinc-200/50 bg-zinc-100/80 px-2 py-1 text-[10px] font-medium text-zinc-600">OpenAI 兼容</span>
+            <input
+              v-model="draft.base_url"
+              class="block h-10 min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-3 font-mono text-xs outline-none transition-colors focus:border-zinc-900"
+              placeholder="https://api.deepseek.com/v1"
+            />
+            <Button variant="outline" size="sm" :disabled="!provider || saving" title="保存后才能发探测请求" @click="probeSelected">测试</Button>
+          </div>
+          <p class="text-xs text-zinc-400">带不带 /v1 都能用：拉模型会自动尝试两种地址；测试模型发送一个 16 token 的最小请求</p>
+          <p v-if="errors.base_url" class="text-xs text-red-600">{{ errors.base_url }}</p>
+        </div>
+      </div>
+
       <div class="grid grid-cols-[56px_minmax(0,1fr)] items-start gap-3">
         <p class="pt-2 text-xs font-medium text-zinc-500">模型</p>
         <div class="min-w-0 space-y-2">
@@ -560,28 +596,37 @@ function duplicate() {
           </template>
 
           <template v-else>
-            <p v-if="!provider" class="rounded-lg border border-dashed border-zinc-200 bg-zinc-50/60 px-3 py-4 text-center text-xs text-zinc-400">
-              先保存服务商，才能用它的密钥拉取上游模型列表
-            </p>
-            <p v-else-if="remoteLoading" class="px-1 py-3 text-xs text-zinc-400">正在拉取模型列表…</p>
+            <p v-if="remoteLoading" class="px-1 py-3 text-xs text-zinc-400">正在向上游询问模型列表…</p>
             <p v-else-if="remoteError" class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{{ remoteError }}</p>
             <p v-else-if="remoteLoaded && !remoteModels.length" class="rounded-lg border border-dashed border-zinc-200 bg-zinc-50/60 px-3 py-4 text-center text-xs text-zinc-400">上游没有返回任何模型</p>
-            <div v-else-if="remoteModels.length" class="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto pr-1">
-              <button
-                v-for="model in remoteModels"
-                :key="model.id"
-                type="button"
-                class="inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors"
-                :class="selected.has(model.id) ? 'border-zinc-300 bg-zinc-100 text-zinc-900' : 'border-zinc-200 bg-white text-zinc-500 hover:border-zinc-300 hover:text-zinc-900'"
-                :title="model.id"
-                @click="toggleModel(model.id)"
-              >
-                <Check v-if="selected.has(model.id)" class="h-3 w-3 shrink-0" />
-                <Plus v-else class="h-3 w-3 shrink-0 opacity-60" />
-                <span class="truncate">{{ model.name || model.id }}</span>
-              </button>
-            </div>
-            <p v-else class="px-1 py-3 text-xs text-zinc-400">点「重新获取模型」从上游读取模型列表</p>
+            <template v-else-if="remoteModels.length">
+              <div class="flex flex-wrap items-center gap-2">
+                <input
+                  v-if="remoteModels.length > 24"
+                  v-model="remoteFilter"
+                  class="block h-8 min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-2.5 text-xs outline-none transition-colors focus:border-zinc-900"
+                  :placeholder="`从 ${remoteModels.length} 个模型里找…`"
+                />
+                <span class="shrink-0 text-[11px] text-zinc-400">已勾选 {{ selected.size }} 个</span>
+              </div>
+              <div class="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto pr-1">
+                <button
+                  v-for="model in remoteShown"
+                  :key="model.id"
+                  type="button"
+                  class="inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors"
+                  :class="selected.has(model.id) ? 'border-zinc-300 bg-zinc-100 text-zinc-900' : 'border-zinc-200 bg-white text-zinc-500 hover:border-zinc-300 hover:text-zinc-900'"
+                  :title="model.id"
+                  @click="toggleModel(model.id)"
+                >
+                  <Check v-if="selected.has(model.id)" class="h-3 w-3 shrink-0" />
+                  <Plus v-else class="h-3 w-3 shrink-0 opacity-60" />
+                  <span class="truncate">{{ model.name || model.id }}</span>
+                </button>
+                <p v-if="!remoteShown.length" class="px-1 py-2 text-xs text-zinc-400">没有匹配「{{ remoteFilter }}」的模型</p>
+              </div>
+            </template>
+            <p v-else class="px-1 py-3 text-xs text-zinc-400">点「重新获取」用上面的地址与密钥向上游要一次列表，不用先保存</p>
           </template>
 
           <div class="flex flex-wrap items-center gap-2">
@@ -595,7 +640,7 @@ function duplicate() {
               <Button variant="outline" size="sm" @click="addManualModel">添加模型</Button>
             </div>
             <div class="flex flex-wrap items-center gap-1">
-              <Button variant="ghost" size="sm" class="px-2" :disabled="!provider || remoteLoading" @click="loadRemote(true)">
+              <Button variant="ghost" size="sm" class="px-2" :disabled="remoteLoading" @click="loadRemote(true)">
                 <RefreshCw class="h-3.5 w-3.5" :class="remoteLoading ? 'animate-spin' : ''" />重新获取
               </Button>
               <Button variant="ghost" size="sm" class="px-2" :disabled="!provider || saving" @click="probeSelected">
@@ -634,23 +679,6 @@ function duplicate() {
               </button>
             </div>
           </div>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-[56px_minmax(0,1fr)] items-start gap-3">
-        <p class="pt-2 text-xs font-medium text-zinc-500">端点</p>
-        <div class="min-w-0 space-y-2">
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="shrink-0 rounded-md border border-zinc-200/50 bg-zinc-100/80 px-2 py-1 text-[10px] font-medium text-zinc-600">OpenAI 兼容</span>
-            <input
-              v-model="draft.base_url"
-              class="block h-10 min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-3 font-mono text-xs outline-none transition-colors focus:border-zinc-900"
-              placeholder="https://api.deepseek.com/v1"
-            />
-            <Button variant="outline" size="sm" :disabled="!provider || saving" @click="probeSelected">测试</Button>
-          </div>
-          <p class="text-xs text-zinc-400">带不带 /v1 都能用：拉模型会自动尝试两种地址；测试模型发送一个 16 token 的最小请求</p>
-          <p v-if="errors.base_url" class="text-xs text-red-600">{{ errors.base_url }}</p>
         </div>
       </div>
 

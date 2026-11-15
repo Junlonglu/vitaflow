@@ -23,11 +23,9 @@ import {
   getAdminAiConfigsApi,
   getAdminPointRulesApi,
   getAdminRedeemCodesApi,
-  importAdminCatalogModelsApi,
   importAdminRedeemCodesApi,
   syncAdminCatalogProviderDevApi,
   updateAdminCatalogGroupApi,
-  updateAdminCatalogModelApi,
   updateAdminCatalogProviderApi,
   updateAdminRedeemCodeBatchPriceApi,
   updateAdminAiConfigApi,
@@ -333,42 +331,35 @@ async function refreshCatalog() {
 const savingCatalog = ref(false)
 
 /**
- * 一次保存 = 一串按依赖排序的写操作：
- * 建/改服务商 → 导入新增模型 → 更新模型资料 → 删除取消勾选的模型。
- * 删除放最后，被模型策略引用的模型会在这里失败，前面的新增/改名已经生效，
- * 失败后刷新目录让界面回到真实状态，卡片保留草稿方便就地重试。
+ * 一次保存 = 一次写请求：服务商的身份/端点/密钥，连同模型的勾选、资料与取消
+ * 勾选一起提交，由 AI 服务在一次 mutateCatalog 里落盘。
+ * 这样要么全成要么全不动 —— 以前是「建 → 导入 → 改 → 删」最多四次写盘，
+ * 中途失败会留下半套数据，只能刷新目录再让操作者重来。
  */
 async function submitCatalogProvider(payload: ProviderSavePayload) {
   savingCatalog.value = true
   error.value = ""
   try {
-    let data: AdminCatalog
-    if (payload.mode === "create") {
-      data = await createAdminCatalogProviderApi({
-        key: payload.key,
-        name: payload.name,
-        base_url: payload.base_url,
-        api_key: payload.api_key,
-        ...(payload.access_key_id ? { access_key_id: payload.access_key_id } : {}),
-        ...(payload.secret_access_key ? { secret_access_key: payload.secret_access_key } : {}),
-      })
-    } else {
-      data = await updateAdminCatalogProviderApi(payload.key, {
-        name: payload.name,
-        base_url: payload.base_url,
-        ...(payload.api_key ? { api_key: payload.api_key } : {}),
-        ...(payload.access_key_id ? { access_key_id: payload.access_key_id } : {}),
-        ...(payload.secret_access_key ? { secret_access_key: payload.secret_access_key } : {}),
-      })
-    }
-    if (payload.added.length) data = await importAdminCatalogModelsApi(payload.key, payload.added)
-    // 新模型要先导入才能更新资料，所以资料改动排在导入之后
-    for (const patch of payload.patches) {
-      data = await updateAdminCatalogModelApi(payload.key, patch.id, patch.data)
-    }
-    for (const id of payload.removed) {
-      data = await deleteAdminCatalogModelApi(payload.key, id)
-    }
+    const delta = { added: payload.added, removed: payload.removed, patches: payload.patches }
+    const data: AdminCatalog =
+      payload.mode === "create"
+        ? await createAdminCatalogProviderApi({
+            key: payload.key,
+            name: payload.name,
+            base_url: payload.base_url,
+            api_key: payload.api_key,
+            ...(payload.access_key_id ? { access_key_id: payload.access_key_id } : {}),
+            ...(payload.secret_access_key ? { secret_access_key: payload.secret_access_key } : {}),
+            models: delta,
+          })
+        : await updateAdminCatalogProviderApi(payload.key, {
+            name: payload.name,
+            base_url: payload.base_url,
+            ...(payload.api_key ? { api_key: payload.api_key } : {}),
+            ...(payload.access_key_id ? { access_key_id: payload.access_key_id } : {}),
+            ...(payload.secret_access_key ? { secret_access_key: payload.secret_access_key } : {}),
+            models: delta,
+          })
     catalog.value = data
     showGlobalToast(payload.mode === "create" ? `服务商 ${payload.key} 已接入` : "服务商已保存")
   } catch (err: any) {

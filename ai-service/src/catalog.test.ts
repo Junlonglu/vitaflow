@@ -5,14 +5,17 @@ import { join } from "node:path";
 import test from "node:test";
 import {
   CatalogError,
+  applyModelDelta,
   listApiKeyEnvNames,
   maskApiKey,
   mutateCatalog,
+  parseModelDelta,
   readCatalog,
   renderProviders,
   validateModelBody,
   validateProviderBody,
   validateProviderKey,
+  type CatalogModel,
 } from "./catalog.js";
 
 test("listApiKeyEnvNames returns sorted *_API_KEY names only, never values", () => {
@@ -116,4 +119,39 @@ test("maskApiKey never leaks the raw key", () => {
   assert.ok(masked!.startsWith("sk-"));
   assert.ok(masked!.endsWith("abcd"));
   assert.ok(!masked!.includes("1234567890"));
+});
+
+test("parseModelDelta + applyModelDelta write picks, edits and unpicks in one pass", () => {
+  const catalog: CatalogModel[] = [
+    { id: "keep", name: "Keep" },
+    { id: "edit", name: "Old name" },
+    { id: "drop", name: "Drop" },
+  ];
+  const delta = parseModelDelta({
+    models: {
+      added: ["new", "edit"],
+      removed: ["drop"],
+      patches: [
+        { id: "edit", data: { name: "New name", contextWindow: 128000 } },
+        { id: "new", data: { name: "Fresh", input: ["text", "image"] } },
+      ],
+    },
+  });
+  applyModelDelta({ baseUrl: "https://example.com", models: catalog } as never, delta);
+  assert.deepEqual(
+    catalog.map((m) => m.id),
+    ["keep", "edit", "new"],
+  );
+  assert.equal(catalog[1].name, "New name");
+  assert.equal(catalog[1].contextWindow, 128000);
+  // a new id carries the metadata typed for it, not just its name
+  assert.equal(catalog[2].name, "Fresh");
+  assert.deepEqual(catalog[2].input, ["text", "image"]);
+});
+
+test("parseModelDelta tolerates a provider write without models and rejects bad fields", () => {
+  const empty = parseModelDelta({ name: "x" });
+  assert.deepEqual(empty, { added: [], removed: [], patches: [] });
+  assert.throws(() => parseModelDelta({ models: { added: ["-bad"] } }), CatalogError);
+  assert.throws(() => parseModelDelta({ models: { patches: [{ id: "ok", data: { contextWindow: 0 } }] } }), CatalogError);
 });

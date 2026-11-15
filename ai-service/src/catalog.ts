@@ -354,3 +354,60 @@ export function validateModelBody(body: Record<string, unknown>): ModelBody {
   }
   return out;
 }
+
+export interface ModelDeltaPatch {
+  id: string;
+  data: ModelBody;
+}
+
+export interface ModelDelta {
+  added: string[];
+  removed: string[];
+  patches: ModelDeltaPatch[];
+}
+
+/**
+ * The model half of a provider write (magpie's provider/save carries `models`
+ * too): picks, metadata edits and unpicks arrive together with the provider, so
+ * one mutateCatalog applies all of it. Without it a card's save was 1–4 writes
+ * and a failure halfway left a provider saved with half its models.
+ */
+export function parseModelDelta(body: Record<string, unknown>): ModelDelta {
+  const raw = (body.models ?? {}) as Record<string, unknown>;
+  const ids = (value: unknown): string[] => (Array.isArray(value) ? value.map((id) => validateModelId(id)) : []);
+  const patches: ModelDeltaPatch[] = [];
+  if (Array.isArray(raw.patches)) {
+    for (const item of raw.patches) {
+      const entry = (item ?? {}) as Record<string, unknown>;
+      patches.push({
+        id: validateModelId(entry.id),
+        data: validateModelBody((entry.data ?? {}) as Record<string, unknown>),
+      });
+    }
+  }
+  return { added: ids(raw.added), removed: ids(raw.removed), patches };
+}
+
+/** Edits first, then the new ids (carrying their typed metadata), then the unpicked. */
+export function applyModelDelta(provider: CatalogProvider, delta: ModelDelta): void {
+  provider.models = provider.models || [];
+  const patchOf = new Map(delta.patches.map((patch) => [patch.id, patch.data]));
+  for (const model of provider.models) {
+    const data = patchOf.get(model.id);
+    if (data) Object.assign(model, data);
+  }
+  const existing = new Set(provider.models.map((model) => model.id));
+  for (const id of delta.added) {
+    if (existing.has(id)) continue;
+    const data = patchOf.get(id);
+    provider.models.push(data ? { ...data, id } : { id });
+    existing.add(id);
+  }
+  if (delta.removed.length) {
+    const gone = new Set(delta.removed);
+    // 就地删除：外面可能还拿着 provider.models 这个数组的引用
+    for (let index = provider.models.length - 1; index >= 0; index -= 1) {
+      if (gone.has(provider.models[index].id)) provider.models.splice(index, 1);
+    }
+  }
+}

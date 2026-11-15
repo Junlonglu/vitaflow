@@ -247,6 +247,13 @@ export interface AdminRoutingGroupWrite {
   members: string[]
 }
 
+/** 模型勾选/资料随服务商一起提交：AI 服务一次写盘，不会「服务商建好了模型没进来」。 */
+export interface AdminCatalogModelDelta {
+  added: string[]
+  removed: string[]
+  patches: { id: string; data: AdminCatalogModelWrite }[]
+}
+
 export interface AdminCatalogProviderWrite {
   key: string
   name: string
@@ -255,6 +262,7 @@ export interface AdminCatalogProviderWrite {
   /** Account access key pair, only for plan-type vendors (Ark/Token Plan). */
   access_key_id?: string
   secret_access_key?: string
+  models?: AdminCatalogModelDelta
 }
 
 export interface AdminCatalogModelWrite {
@@ -389,6 +397,7 @@ export interface AdminCatalogProviderPatch {
   api_key?: string
   access_key_id?: string
   secret_access_key?: string
+  models?: AdminCatalogModelDelta
 }
 export const updateAdminCatalogProviderApi = (key: string, data: AdminCatalogProviderPatch) =>
   request.put<AdminCatalog, AdminCatalog>(`/admin/ai-catalog/providers/${encodeURIComponent(key)}`, data)
@@ -405,10 +414,14 @@ export interface AdminRemoteModel {
   id: string
   name: string | null
 }
-export const getAdminRemoteModelsApi = (key: string) =>
-  request.get<{ models: AdminRemoteModel[] }, { models: AdminRemoteModel[] }>(
-    `/admin/ai-catalog/providers/${encodeURIComponent(key)}/remote-models`,
-  )
+/** 用卡片里当前填的地址/密钥拉列表（不落盘）：空值回落到 provider_key 已存的那份。 */
+export interface AdminRemoteModelsProbe {
+  base_url?: string
+  api_key?: string
+  provider_key?: string
+}
+export const probeAdminRemoteModelsApi = (data: AdminRemoteModelsProbe) =>
+  request.post<{ models: AdminRemoteModel[] }, { models: AdminRemoteModel[] }>("/admin/ai-catalog/remote-models", data)
 export const importAdminCatalogModelsApi = (key: string, ids: string[]) =>
   request.post<AdminCatalog, AdminCatalog>(`/admin/ai-catalog/providers/${encodeURIComponent(key)}/import-models`, { ids })
 export interface AdminProbeResult {

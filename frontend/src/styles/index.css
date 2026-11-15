@@ -379,3 +379,74 @@ a { color: inherit; text-decoration: none; }
 .wb-sh-arrow-right {
   right: 2px;
 }
+
+/* ------------------------------------------------------------------
+ * 全站 tooltip（§6.24）
+ *
+ * WorkBuddy 的提示气泡是「浮层」：明暗主题同色，所以这里写字面量，而不是
+ * 引 --wb-n-*（那套变量在暗色下会翻）。规格来自截图逐像素采样：底 #404040、
+ * 白字 13/18 medium、圆角 12、内边距 10×14、顶部等腰三角 10×5。
+ * 由 utils/tooltip.ts 全局委托驱动，组件侧不需要引用这个类。
+ * ------------------------------------------------------------------ */
+.wb-tooltip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  /* 75：高于 z-popover（70，Select 面板里的 tooltip 要能浮出来），
+     低于 z-toast（80，提示永远最上） */
+  z-index: 75;
+  max-width: 280px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #404040;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  text-align: center;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition:
+    opacity 100ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 100ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 放上方时从下方 2px 浮出，入场方向始终「朝向目标」 */
+.wb-tooltip[data-placement="top"] {
+  transform: translateY(2px);
+}
+
+.wb-tooltip[data-shown="true"] {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.wb-tooltip::before {
+  content: "";
+  position: absolute;
+  left: var(--wb-tip-arrow-x, 50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  transform: translateX(-50%);
+}
+
+/* 放下方 → 三角在气泡顶部朝上；放上方 → 三角在底部朝下 */
+.wb-tooltip[data-placement="bottom"]::before {
+  bottom: 100%;
+  border-bottom: 5px solid #404040;
+}
+
+.wb-tooltip[data-placement="top"]::before {
+  top: 100%;
+  border-top: 5px solid #404040;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-tooltip {
+    transition: none;
+  }
+}

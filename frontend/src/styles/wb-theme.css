@@ -315,7 +315,8 @@
 @utility z-drawer { z-index: 40; } /* 抽屉与侧面板 */
 @utility z-modal { z-index: 50; } /* 弹窗、全屏预览 */
 @utility z-overlay { z-index: 60; } /* 叠在弹窗之上的次级层：确认气泡、日期层、二级弹窗 */
-@utility z-popover { z-index: 70; } /* 下拉、tooltip、右键菜单 */
+@utility z-popover { z-index: 70; } /* 下拉、右键菜单 */
+@utility z-tip { z-index: 75; } /* 全站 tooltip（§6.24），必须高于弹窗与下拉、低于 toast */
 @utility z-toast { z-index: 80; } /* 全局提示，永远最上 */
 
 /* ------------------------------------------------------------------

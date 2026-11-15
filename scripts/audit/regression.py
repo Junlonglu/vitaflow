@@ -489,6 +489,162 @@ def check_tooltip(browser) -> list[str]:
     return bad
 
 
+def check_dead_utility_classes() -> list[str]:
+    """扫死类名（§6.25）。
+
+    tailwindcss-animate 不在依赖里，`animate-in` / `fade-in-0` / `zoom-in-95`
+    / `slide-in-from-*` 这一组看着像动画、实际一条 CSS 都没生成。它们比「没写动效」
+    更糟：review 时看着像做过了。所以宁可让审计失败，也不允许再混进来。
+    """
+    bad: list[str] = []
+    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "frontend", "src")
+    dead = ("animate-in", "animate-out", "fade-in-0", "fade-out-0",
+            "zoom-in-95", "zoom-out-95", "slide-in-from-", "slide-out-to-")
+    for dirpath, _, files in os.walk(root):
+        if "__tests__" in dirpath:
+            continue
+        for name in files:
+            if not name.endswith((".vue", ".ts")):
+                continue
+            path = os.path.join(dirpath, name)
+            with open(path, encoding="utf-8", errors="ignore") as fh:
+                src = fh.read()
+            hits = sorted({c for c in dead if c in src})
+            if hits:
+                bad.append(f"{os.path.relpath(path, root)} 含死类名 {', '.join(hits)}")
+    return bad
+
+
+MOTION_JS = """() => {
+  const pick = (sel) => document.querySelector(sel);
+  const read = (el) => {
+    if (!el) return null;
+    const cs = getComputedStyle(el);
+    return { anim: cs.animationName, dur: cs.animationDuration,
+             opacity: cs.opacity, transform: cs.transform,
+             translate: cs.translate, radius: cs.borderRadius, shadow: cs.boxShadow };
+  };
+  return { scrim: read(pick('.wb-anim-scrim')), panel: read(pick('.wb-anim-panel')) };
+}"""
+
+
+def check_motion_tokens(browser) -> list[str]:
+    """浮层动效与阴影分级（§6.25）。
+
+    矩阵量的是静态页面，量不到「打开瞬间各自动了什么」，所以单独起上下文：
+    亮/暗各开一次弹窗，再开一次用户菜单（下拉档），最后用 reduced_motion
+    模拟系统「减少动态效果」。
+    """
+    bad: list[str] = []
+
+    def open_dialog(page):
+        page.goto(BASE + "/workspace/resumes", wait_until="domcontentloaded", timeout=45000)
+        page.wait_for_timeout(1700)
+        btn = page.locator("button", has_text="新建简历")
+        if not btn.count():
+            return False
+        btn.first.click()
+        page.wait_for_timeout(350)
+        return True
+
+    def make_ctx(theme: str, reduced: bool = False):
+        ctx = browser.new_context(
+            viewport={"width": 1280, "height": 820},
+            reduced_motion="reduce" if reduced else "no-preference",
+        )
+        ctx.add_init_script(
+            "localStorage.setItem('vitaflow_token', " + json.dumps(TOKEN) + ");"
+            "localStorage.setItem('vitaflow-theme', " + json.dumps(theme) + ");"
+        )
+        return ctx
+
+    try:
+        # ---- 亮色：遮罩与面板各自动、阴影走模态档、关闭不被 fill 锁住 ----
+        ctx = make_ctx("light")
+        page = ctx.new_page()
+        if not open_dialog(page):
+            bad.append("找不到「新建简历」入口，无法验证弹窗动效")
+        else:
+            r = page.evaluate(MOTION_JS)
+            if not r["scrim"] or not r["panel"]:
+                bad.append("弹窗里没有 wb-anim-scrim / wb-anim-panel")
+            else:
+                if r["scrim"]["anim"] != "wb-scrim-in":
+                    bad.append(f"遮罩应播 wb-scrim-in，实得 {r['scrim']['anim']}")
+                if r["scrim"]["transform"] != "none":
+                    bad.append(f"遮罩不应整体位移，实得 transform={r['scrim']['transform']}")
+                if r["panel"]["anim"] != "wb-panel-in":
+                    bad.append(f"面板应播 wb-panel-in，实得 {r['panel']['anim']}")
+                if r["panel"]["dur"] != "0.2s":
+                    bad.append(f"面板入场应 200ms，实得 {r['panel']['dur']}")
+                if "48px" not in r["panel"]["shadow"]:
+                    bad.append("弹窗应使用模态档阴影（0 8px 48px），实得 " + r["panel"]["shadow"][:60])
+                if r["panel"]["radius"] != "16px":
+                    bad.append(f"弹窗圆角应为 16px，实得 {r['panel']['radius']}")
+
+            # 关闭：入场动画 fill:both 会把 opacity 钉在 1，必须被 .wb-leaving 摘掉
+            page.locator(".wb-anim-panel button[aria-label='关闭']").first.click()
+            page.wait_for_timeout(40)
+            mid = page.evaluate(
+                "() => { const e = document.querySelector('.wb-anim-panel');"
+                " return { anim: e ? getComputedStyle(e).animationName : null,"
+                " leaving: !!document.querySelector('.wb-leaving') }; }"
+            )
+            if mid["anim"] not in (None, "none"):
+                bad.append(f"离场时面板动画未被摘除（{mid['anim']}），淡出会被 fill 锁住")
+            page.wait_for_timeout(320)
+            if page.locator(".wb-anim-panel").count():
+                bad.append("关闭 360ms 后弹窗仍未移除")
+
+            # ---- 下拉档：用户菜单的阴影必须比模态轻 ----
+            page.goto(BASE + "/workspace", wait_until="domcontentloaded", timeout=45000)
+            page.wait_for_timeout(1700)
+            trigger = page.locator("button[aria-expanded]")
+            if trigger.count():
+                trigger.last.click()
+                page.wait_for_timeout(260)
+                dd = page.evaluate(
+                    "() => { const e = document.querySelector('.shadow-wb-dropdown');"
+                    " return e ? getComputedStyle(e).boxShadow : null; }"
+                )
+                if not dd:
+                    bad.append("用户菜单没有使用 shadow-wb-dropdown")
+                elif "48px" in dd:
+                    bad.append("下拉误用了模态档阴影（48px 扩散）")
+                elif "0.04" not in dd:
+                    bad.append("下拉阴影应走 4% 的轻档，实得 " + dd[:60])
+        ctx.close()
+
+        # ---- 暗色：同档阴影必须加重，否则深底上看不出浮层边界 ----
+        ctx = make_ctx("dark")
+        page = ctx.new_page()
+        if open_dialog(page):
+            r = page.evaluate(MOTION_JS)
+            if not r["panel"]:
+                bad.append("暗色下没取到弹窗面板")
+            elif "0.6" not in r["panel"]["shadow"]:
+                bad.append("暗色弹窗阴影未加重（应含 60% 黑），实得 " + r["panel"]["shadow"][:60])
+        else:
+            bad.append("暗色下找不到「新建简历」入口")
+        ctx.close()
+
+        # ---- 系统「减少动态效果」：动画整体退化为瞬时 ----
+        ctx = make_ctx("light", reduced=True)
+        page = ctx.new_page()
+        if open_dialog(page):
+            r = page.evaluate(MOTION_JS)
+            if r["panel"] and r["panel"]["anim"] != "none":
+                bad.append(f"prefers-reduced-motion 下面板仍在播动画（{r['panel']['anim']}）")
+            if r["scrim"] and r["scrim"]["anim"] != "none":
+                bad.append(f"prefers-reduced-motion 下遮罩仍在播动画（{r['scrim']['anim']}）")
+        else:
+            bad.append("reduced-motion 下找不到「新建简历」入口")
+        ctx.close()
+    except Exception as e:  # noqa: BLE001
+        bad.append(f"动效检查异常: {type(e).__name__}: {e}")
+    return bad
+
+
 def main() -> int:
     if not TOKEN:
         print("缺少 VITAFLOW_TOKEN。请设置登录态 JWT（只写 localStorage，不落盘）：\n"
@@ -563,24 +719,36 @@ def main() -> int:
         folding_bad = check_session_folding(browser)
         # 全站 tooltip（§6.24）：气泡只在悬停/聚焦时存在，静态矩阵量不到
         tooltip_bad = check_tooltip(browser)
+        # 浮层动效与阴影分级（§6.25）：只在「打开的一瞬间」成立，矩阵也量不到
+        motion_bad = check_motion_tokens(browser)
         browser.close()
+
+    # 静态扫描：死动画类名不依赖浏览器，放最后跑
+    dead_bad = check_dead_utility_classes()
 
     if AS_JSON:
         print(json.dumps({"base": BASE, "mode": mode, "cells": rows,
                           "runtime_failures": runtime_bad,
                           "folding_failures": folding_bad,
                           "tooltip_failures": tooltip_bad,
+                          "motion_failures": motion_bad,
+                          "dead_class_failures": dead_bad,
                           "failed_cells": len(failures)}, ensure_ascii=False, indent=2))
     else:
         print("─" * 62)
         print(f"运行时 light→dark（不刷新）: {'✓ 稳定' if not runtime_bad else '✗ ' + '; '.join(runtime_bad)}")
         print(f"侧栏轨位 + 折叠 5→8→5 + 激活保护: {'✓ 通过' if not folding_bad else '✗ ' + '; '.join(folding_bad)}")
         print(f"全站 tooltip 规格与 title 摘除/恢复: {'✓ 通过' if not tooltip_bad else '✗ ' + '; '.join(tooltip_bad)}")
+        print(f"浮层动效分层 + 阴影分档 + reduced-motion: {'✓ 通过' if not motion_bad else '✗ ' + '; '.join(motion_bad)}")
+        print(f"死动画类名静态扫描: {'✓ 干净' if not dead_bad else '✗ ' + '; '.join(dead_bad)}")
         print(f"合计 {len(rows)} 格 · 断言失败 {len(failures)} 格"
               + ("" if not runtime_bad else " · 运行时切换失败")
               + ("" if not folding_bad else " · 折叠检查失败")
-              + ("" if not tooltip_bad else " · tooltip 检查失败"))
-    return 1 if (failures or runtime_bad or folding_bad or tooltip_bad) else 0
+              + ("" if not tooltip_bad else " · tooltip 检查失败")
+              + ("" if not motion_bad else " · 动效检查失败")
+              + ("" if not dead_bad else " · 死类名残留"))
+    return 1 if (failures or runtime_bad or folding_bad or tooltip_bad
+                 or motion_bad or dead_bad) else 0
 
 
 if __name__ == "__main__":

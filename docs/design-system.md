@@ -14,7 +14,7 @@
 2. **灰阶只用 `zinc-*`**，禁止 `gray-*`/`slate-*`（存量 gray 见文末清单，遇到即改）。
 3. **主操作色是黑（`zinc-900`）**，不是蓝色；`blue-600` 只用于链接、强调、信息提示、选中焦点。
 4. 新 UI 组件先找 `src/components/ui/`，没有再用 shadcn-vue 生成后改造，禁止直接在业务组件里手写完整弹窗/下拉等复杂控件。
-5. 弹窗一律遵循 ConfirmDialog 结构模式（Teleport + 遮罩 `bg-wb-scrim/40 backdrop-blur-sm` + `rounded-2xl shadow-wb-popup` + 底部灰底按钮区；遮罩别再写 `bg-zinc-950/*`，暗色下会变白雾）。
+5. 弹窗一律遵循 ConfirmDialog 结构模式（Teleport + 遮罩 `bg-wb-scrim/40 backdrop-blur-sm` + `rounded-2xl shadow-wb-dialog` + 底部灰底按钮区；遮罩别再写 `bg-zinc-950/*`，暗色下会变白雾；入场用 `wb-anim-scrim` + `wb-anim-panel`，别让遮罩跟着面板一起位移，§6.25）。
 6. 图标只用 `lucide-vue-next`，默认尺寸 `h-4 w-4`。
 7. 轻提示用 `showGlobalToast()`（`src/utils/toast.ts`），不要自造 toast。
 8. **主题用 `<html data-theme="light|dark">` 单开关**：`dark:` 变体已接到这个开关（§6.11），不要再写 `prefers-color-scheme` 媒体查询或 `.dark` 类；颜色走 `zinc-*` / `bg-wb-scrim/*` 语义变量，别写字面量。
@@ -155,6 +155,8 @@ macOS 落 San Francisco + 苹方；**Windows 用 CDP `CSS.getPlatformFontsForNod
 | 遮罩 | `bg-wb-scrim/40 backdrop-blur-sm` | 弹窗背景。**不要用 `bg-zinc-950/40`**——它会随主题翻成白色雾 |
 | 吸顶条 | 必须带 `border-b border-zinc-200/60`（或 `ring-b`），滚动时内容从它下面穿过要有明确分界 | 不靠阴影区分——静态内容一律无阴影 |
 
+**阴影只属于浮层，且分 8 档**（§6.25）：`card` / `card-soft` / `card-hover` / `dropdown` / `dialog` / `dialog-md` / `drawer` / `elevated`，另保留 `popup` 作存量兜底。按「离用户多近」选档，不按大小；同一个组件换位置不换档。静态内容（列表行、输入框、开关滑块）仍然一律无阴影。
+
 ### 2.3 文字分级
 
 | 层级 | 类 | 用途 |
@@ -281,14 +283,14 @@ macOS 落 San Francisco + 苹方；**Windows 用 CDP `CSS.getPlatformFontsForNod
 
 ### 3.2 弹窗 — 统一外壳 `ui/dialog/AppDialog.vue`
 
-所有弹窗必须基于 `AppDialog`（Teleport + 遮罩 `bg-zinc-950/40 backdrop-blur-sm` + `rounded-2xl shadow-wb-popup max-h-[90vh]` + 头部/底部结构），通过 props 定制：`open`（v-model:open）、`title`/`description`（默认头部）、`maxWidthClass`、`bodyClass`/`headerClass`/`footerClass`、`showClose`/`overlayClose`；`#icon` 插槽加头部图标，`#header`/`#footer` 插槽全自定义。确认类弹窗用 `ConfirmDialog`（已构建于 AppDialog 之上）。默认头部 = title/description + 右上 X；默认底部容器 = `border-t border-zinc-100 bg-zinc-50 px-5 py-4`。
+所有弹窗必须基于 `AppDialog`（Teleport + 遮罩 `bg-wb-scrim/40 backdrop-blur-sm` + `rounded-2xl shadow-wb-dialog max-h-[90vh]` + 头部/底部结构），通过 props 定制：`open`（v-model:open）、`title`/`description`（默认头部）、`maxWidthClass`、`bodyClass`/`headerClass`/`footerClass`、`showClose`/`overlayClose`；`#icon` 插槽加头部图标，`#header`/`#footer` 插槽全自定义。确认类弹窗用 `ConfirmDialog`（已构建于 AppDialog 之上）。默认头部 = title/description + 右上 X；默认底部容器 = `border-t border-zinc-100 bg-zinc-50 px-5 py-4`。
 
 ```
 <Teleport to="body">
-  <Transition>                                   ← 200ms ease-out 进场，scale 95→100
+  <Transition>                                   ← 只管离场（opacity 100ms）
     <div 遮罩: fixed inset-0 z-modal flex items-center justify-center p-4
-              bg-zinc-950/40 backdrop-blur-sm @click.self=关>
-      <div 面板: bg-white rounded-2xl shadow-wb-popup w-full max-w-sm overflow-hidden>
+              wb-anim-scrim bg-wb-scrim/40 backdrop-blur-sm @click.self=关>
+      <div 面板: wb-anim-panel bg-white rounded-2xl shadow-wb-dialog w-full max-w-sm overflow-hidden>
         头部: px-5 py-4 flex gap-3
               左: w-10 h-10 rounded-full 图标圆底（破坏性 red-50/red-600，否则 blue-50/blue-600）
               中: 标题 text-zinc-900 font-semibold text-[16px] + 描述 text-sm text-zinc-500
@@ -552,9 +554,9 @@ macOS 落 San Francisco + 苹方；**Windows 用 CDP `CSS.getPlatformFontsForNod
 ### 6.2 写新 UI 时照这个来
 
 1. **主操作**：优先用 `<Button>`（默认档就是近黑）。内联时 `bg-zinc-900 hover:bg-zinc-800` 与 `bg-black/90 hover:bg-black/75` 等价可用（`zinc-900` 现已中性化为 `#171717`，与 WorkBuddy 的 `#000000e6` 同档）。主操作**不要**用 `blue-600`。
-2. **过渡**：不写 `transition-all`——按实际变化选 `transition-colors` / `transition-transform` / `transition-opacity`，混合动才用 `transition`；宽度动画（进度条、预览缩放）显式写 `transition-[width]`。时长只有两档：交互反馈默认 100ms（`--default-transition-duration` 已兜底，不必每个类都写），状态展开/淡入写 `duration-150`，进度条 `duration-300`。**只有消息入场允许回弹**，其余一律不弹。
+2. **过渡**：不写 `transition-all`——按实际变化选 `transition-colors` / `transition-transform` / `transition-opacity`，混合动才用 `transition`；宽度动画（进度条、预览缩放）显式写 `transition-[width]`。时长只有两档：交互反馈默认 100ms（`--default-transition-duration` 已兜底，不必每个类都写），状态展开/淡入写 `duration-150`，进度条 `duration-300`。**只有消息入场允许回弹**，其余一律不弹。**浮层入场不要手写 transition**：用 `.wb-anim-scrim`（遮罩）/ `.wb-anim-panel`（模态）/ `.wb-anim-popover`（下拉、气泡）/ `.wb-anim-rise`（就地展开）/ `.wb-anim-drawer-*`（抽屉），它们已按档位定好位移与曲线（§6.25）；`animate-in` / `zoom-in-95` 这套来自未安装的 `tailwindcss-animate`，写了也不生效，审计会直接判失败。
 3. **焦点**：靠 `focus:border-zinc-900` 加深描边，不写 `ring-*`、不加发光环。
-4. **阴影与浮动**：静态内容（卡片、行、列表）**不加阴影**，边界只靠 `border-zinc-200` / `ring-1 ring-zinc-200/70`；浮层（弹窗/下拉/抽屉/toast/tooltip）统一 `shadow-wb-popup`，它是两段小半径叠出来的轻投影，比 `shadow-xl` 弱得多。hover 只改描边（`hover:border-zinc-300` / `hover:ring-zinc-300`），**不做 `hover:-translate-y-*` 上浮**，也不加 `hover:shadow-*`。
+4. **阴影与浮动**：静态内容（卡片、行、列表）**不加阴影**，边界只靠 `border-zinc-200` / `ring-1 ring-zinc-200/70`；浮层按「离用户多近」选档（§6.25）——下拉/气泡 `shadow-wb-dropdown`、模态 `shadow-wb-dialog`、小模态 `shadow-wb-dialog-md`、抽屉 `shadow-wb-drawer`、toast `shadow-wb-elevated`、静态纸面 `shadow-wb-card`，`shadow-wb-popup` 只作存量兜底。它们都是两段小半径叠出来的轻投影，比 `shadow-xl` 弱得多。hover 只改描边（`hover:border-zinc-300` / `hover:ring-zinc-300`），**不做 `hover:-translate-y-*` 上浮**，也不加 `hover:shadow-*`（卡片悬停浮起请用 `shadow-wb-card-hover`，且只在确有拖拽/拾取语义时）。
 5. **灰阶**：只用 `zinc-*`（值已中性化）。不要再写 `#f7f8fb`、`#111827`、`#e4e4e7` 这类带蓝调的旧 hex。
 6. **按下反馈**：按钮已带 `active:scale-[.97]`，新组件沿用同一幅度，不要用 `.95` 那种明显位移。
 
@@ -936,7 +938,7 @@ VITAFLOW_TOKEN=<jwt> backend/.venv/Scripts/python.exe scripts/audit/regression.p
 
 **⑨ 的一个坑**：比较前必须先剥掉引号再压空白。浏览器计算值会把 `"微软雅黑"` 变成 `微软雅黑`，而自定义属性保留字面量 `"微软雅黑"`；直接比整串会让 30 格全部假失败（首版就是这么报的）。
 
-**矩阵之外再跑三段独立检查**：① **运行时 light→dark 不刷新**——箭头配色跟随、`data-sh` 状态不变、无新增横滚与裁剪；② **侧栏轨位 + 会话折叠（§6.23）**——矩阵各路由都没有展开态（`/workspace/79` 是历史 id，取不到会话），第 ⑩ 条会 30 格全空跑，所以单独用 Pinia 往内存注入 8 条会话（不落库），强制量文字 / 图标 / 时间戳轨，并验证 5 → 8 → 5 折叠与激活会话保护；③ **全站 tooltip（§6.24）**——气泡只在悬停/聚焦时存在，静态快照量不到，所以单开一段量计算样式（`#404040` / 白字 / 圆角 12 / 13px / 10×14 / 三角 10×5 / 间距 8）并验证 `title` 的摘除与恢复、键盘聚焦可弹出。每个独立检查失败都会单列进输出与退出码，`--json` 分别多 `folding_failures` / `tooltip_failures` 字段。
+**矩阵之外再跑四段独立检查 + 一段静态扫描**：① **运行时 light→dark 不刷新**——箭头配色跟随、`data-sh` 状态不变、无新增横滚与裁剪；② **侧栏轨位 + 会话折叠（§6.23）**——矩阵各路由都没有展开态（`/workspace/79` 是历史 id，取不到会话），第 ⑩ 条会 30 格全空跑，所以单独用 Pinia 往内存注入 8 条会话（不落库），强制量文字 / 图标 / 时间戳轨，并验证 5 → 8 → 5 折叠与激活会话保护；③ **全站 tooltip（§6.24）**——气泡只在悬停/聚焦时存在，静态快照量不到，所以单开一段量计算样式（`#404040` / 白字 / 圆角 12 / 13px / 10×14 / 三角 10×5 / 间距 8）并验证 `title` 的摘除与恢复、键盘聚焦可弹出；④ **浮层动效分层与阴影分档（§6.25）**——只在「打开的一瞬间」成立，矩阵同样量不到，所以起亮/暗/`reduced_motion=reduce` 三个上下文，断言遮罩与面板各播各的动画、阴影走对档位、关闭时入场动画不被 `fill` 锁住、系统省电模式退化为瞬时；⑤ **死动画类名静态扫描**——不依赖浏览器，直接扫 `frontend/src`，命中 `animate-in` / `zoom-in-95` / `slide-in-from-*` 即失败。每个检查失败都会单列进输出与退出码，`--json` 分别多 `folding_failures` / `tooltip_failures` / `motion_failures` / `dead_class_failures` 字段。
 
 **与 §6.19 的关系**：这个矩阵就是「主题 × 断点 × 布局状态」叠加规则的落地，`--quick` 取的正是「最窄容器 × 暗色」子集。以后每加一维，先往 `assert_cell()` 加断言、再扩 `CASES`，**不要另起临时脚本**——口径分散本身就是 §6.19 那次漏检的根因。
 
@@ -1125,6 +1127,77 @@ VITAFLOW_TOKEN=<jwt> backend/.venv/Scripts/python.exe scripts/audit/regression.p
 
 ---
 
+### 6.25 浮层动效与阴影分级（2026-11-15）
+
+用户让「扫描一下 WorkBuddy 还有哪些是本项目没有的」。做法是拆安装包：`app.asar` 里的 zh-CN 词典（12043 条文案 / 160 个功能域）、`tokens-*.css`（1999 个变量 / 78 个组件族），再加主窗口截图分区比对。结论里属于**视觉层**的两条最便宜也最普遍，本轮先补这两条。
+
+#### ① 两个硬指标：0 个关键帧、1 档阴影
+
+| 指标 | WorkBuddy | 本项目（改前） |
+| --- | --- | --- |
+| `@keyframes` | 12（dialog 内容/遮罩分离、toast 四向滑入、handle 淡入） | **0** |
+| 阴影 token | card / card-hover / card-soft / dialog / dialog-md / dropdown / drawer / elevated / error / focus | **1**（`shadow-wb-popup`） |
+
+0 个关键帧意味着所有浮层只是「透明度 + 位移」的 transition，弹窗、抽屉、下拉质感完全一样；1 档阴影意味着模态和气泡投影一样重，层级是塌的。
+
+顺手挖出一个更硬的坑：`CustomSectionForm`、`SectionListForm`、`DateTimePicker`、`Select`、`Login` 五个文件里写着 `animate-in` / `fade-in-0` / `zoom-in-95` / `slide-in-from-top-2` —— 这套类名来自 `tailwindcss-animate` 插件，**本项目没装**，一条 CSS 都没生成过。它们比「没写动效」更糟：review 时看着像做过了。
+
+#### ② 阴影按「离用户多近」分档，不按大小
+
+值逐项抄 WorkBuddy tokens 的 `--wb-shadow-*`，亮暗各一套：
+
+| 档位 | 用途 | 亮色 | 暗色 |
+| --- | --- | --- | --- |
+| `shadow-wb-card` | 静态纸面托底 | `0 1px 2px 4%` | `40%` |
+| `shadow-wb-card-soft` | 大块纸面（hero、预览） | `0 16px 32px -8px 3%` | `30%` |
+| `shadow-wb-card-hover` | 卡片悬停才浮起 | `0 8px 20px 12%` | `50%` |
+| `shadow-wb-dropdown` | 下拉、锚定气泡 | `0 6px 24px 4%, 0 4px 6px 4%` | `35% / 30%` |
+| `shadow-wb-dialog` | 模态 | `0 8px 48px -4px 12%, 0 6px 12px -4px 6%` | `60% / 30%` |
+| `shadow-wb-dialog-md` | 小模态（日期面板） | `0 8px 24px 8%` | `28%` |
+| `shadow-wb-drawer` | 贴边抽屉 | `-4px -2px 16px 6%, inset 1px 3%` | `40%, 白 8%` |
+| `shadow-wb-elevated` | 通用「更高一层」（toast） | `0 8px 24px 10%` | `30%` |
+
+`shadow-wb-popup` 保留不动（54 处存量引用），作为「还没归类的浮层」的兜底；新代码从上面挑，找不到再讨论。静态内容仍然无阴影，边界靠 border / ring-1。
+
+暗色的 `drawer` 内描边必须翻成白色，否则深底上贴着页面看不出边。
+
+#### ③ 动效层：遮罩与面板必须分开动
+
+改前的写法是遮罩和面板包在同一个 `<Transition>` 里、共用一套 `translate`，于是**整块全屏遮罩跟着面板一起位移**，像一张大灰纸在滑动。WorkBuddy 是两层：遮罩只淡入，面板自己淡入 + 上浮 + 微缩。
+
+`index.css` 新增一层语义化动画（`@layer components`）：
+
+| 类 | 关键帧 | 用途 |
+| --- | --- | --- |
+| `wb-anim-scrim` | `wb-scrim-in` 180ms | 遮罩，只动透明度 |
+| `wb-anim-panel` | `wb-panel-in` 200ms | 模态：`translate 0 8px` + `scale .97` |
+| `wb-anim-popover` | `wb-popover-in` 150ms | 下拉/气泡；`[data-side=top]` 自动翻成反向位移 |
+| `wb-anim-rise` | `wb-rise-in` 160ms | 就地展开的区块（新增模块表单），只上浮不缩放 |
+| `wb-anim-fade` | `wb-fade-in` 150ms | 纯淡入 |
+| `wb-anim-drawer-left/right` | `wb-drawer-in-*` 220ms | 抽屉，位移方向跟所在边一致 |
+| `wb-anim-toast` / `wb-toast-out` | `wb-toast-in/out` | toast 入场与退场 |
+
+三个实现约束，改之前先读：
+
+1. **位移与缩放用 `translate` / `scale` 两个独立属性，不写 `transform`**。面板普遍带 `-translate-x-1/2` 这类工具类，写进 `transform` 会被动画整个覆盖，定位当场错位。
+2. **入场动画带 `fill: both`，会把 `opacity` 钉在 1**。父级挂 `.wb-leaving` 时统一让子树面板动画失效（`.wb-leaving .wb-anim-panel { animation: none }`），否则关闭弹窗只有遮罩在淡出、面板「啪」地消失。这条是实测出来的：改前 60ms 时面板 `animationName` 仍是 `wb-panel-in`。
+3. **`prefers-reduced-motion: reduce` 下全部置 `animation: none`**，退化成瞬时出现。
+
+接入的浮层：`AppDialog`（遮罩 + 面板 + 离场）、`ConfirmPopover`、`Select` 下拉、`DateTimePicker`、`Login` 协议弹窗、`ResumeEditor` 右滑面板、`WorkspaceUserMenu`、全站 toast。`WorkspaceUserMenu` 原本就有一套正确的双向过渡（`opacity + translateY 6px`），只换阴影档，没动过渡。
+
+#### ④ 回归资产
+
+新增两段检查，`--json` 多两个字段：
+
+- `check_motion_tokens()`：起三个上下文（亮 / 暗 / `reduced_motion=reduce`）。断开简历弹窗后断言 —— 遮罩 `wb-scrim-in` 且 `transform: none`（不再整体位移）、面板 `wb-panel-in` / 200ms / 圆角 16 / 阴影含 `48px`（模态档）；关闭 40ms 时面板 `animationName` 必须是 `none`、360ms 后必须已移除；暗色下阴影必须含 `0.6`（翻档加重）；reduced-motion 下两者都必须是 `none`；再开一次用户菜单，断言下拉走 `0.04` 轻档且**不能**是 48px 模态档。字段 `motion_failures`。
+- `check_dead_utility_classes()`：静态扫 `frontend/src`，命中 `animate-in` / `fade-in-0` / `zoom-in-95` / `slide-in-from-*` 等就失败，防这套死类名再混进来。字段 `dead_class_failures`。
+
+实测：亮色遮罩 `wb-scrim-in` / 0.18s / `transform: none`，面板 `wb-panel-in` / 0.2s / 终态 `translate: 0px` + `scale: 1`；暗色阴影 `0.6 / 0.3`；reduced-motion 两者 `animationName: none`；关闭 40ms 时面板 `none`、360ms 后元素数为 0；用户菜单阴影 `0.04 / 0.04` 两段。`--quick` 8 格与完整 30 格均 0 失败。
+
+**口径同步**：§2.2 背景分层（阴影改成 8 档）、§3.2 弹窗外壳（入场结构）、§6.20 独立检查（三段 → 五段）、§7 清单与索引。
+
+---
+
 ## 7. 规范覆盖清单（全部收口）
 
 样式（颜色/圆角/阴影/层级）、字体、动效、间距密度、主题这六层已先行成文。2026-11-15 把下表原先「凭感觉」的八项维度逐项补齐，**清单已清空**；下表保留每项收口结论，供写新界面时反查：
@@ -1143,10 +1216,11 @@ VITAFLOW_TOKEN=<jwt> backend/.venv/Scripts/python.exe scripts/audit/regression.p
 | ~~**分组行层级**~~ | ✅ 已收口（§6.22）：标题独占一行无图标、图标下放条目；三级轨 20/40/48 后被 §6.23 修正为 20/40 | — |
 | ~~**侧栏条目对齐与会话折叠**~~ | ✅ 已收口（§6.23）：所有条目文字同落 40 轨、父子时间戳右缘对齐；>5 条对话折到「查看更多 (N)」，激活会话不被藏掉 | — |
 | ~~**全站 tooltip**~~ | ✅ 已收口（§6.24）：全局委托接管 150+ 处原生 `title`，深灰气泡 `#404040` + 白字 13/18 + 圆角 12 + 10×5 三角；静态保留 `title`，仅悬停期间临时摘除 | — |
+| ~~**浮层动效与阴影分级**~~ | ✅ 已收口（§6.25）：阴影从 1 档拆成 8 档、遮罩与面板分开入场、`prefers-reduced-motion` 退化；清掉 5 个文件里的死动画类名（`tailwindcss-animate` 从未安装） | — |
 
-收口章节索引：键盘焦点 §6.7、三态 §6.8、文案 §6.9、命中区 §6.10、暗色模式 §6.11、图标尺寸 §6.12、滚动 §6.13、文本溢出 §6.14、响应式 §6.15、内容行宽 §6.16、拖拽与选区 §6.17、两笔技术债清账 §6.18、交叉态体检 §6.19、回归审计资产化 §6.20、侧栏字形与图标色阶 §6.21、全站字体栈与分组行层级 §6.22、侧栏条目对齐与会话折叠 §6.23、全站 tooltip §6.24。
+收口章节索引：键盘焦点 §6.7、三态 §6.8、文案 §6.9、命中区 §6.10、暗色模式 §6.11、图标尺寸 §6.12、滚动 §6.13、文本溢出 §6.14、响应式 §6.15、内容行宽 §6.16、拖拽与选区 §6.17、两笔技术债清账 §6.18、交叉态体检 §6.19、回归审计资产化 §6.20、侧栏字形与图标色阶 §6.21、全站字体栈与分组行层级 §6.22、侧栏条目对齐与会话折叠 §6.23、全站 tooltip §6.24、浮层动效与阴影分级 §6.25。
 
-> 表格前八项是 2026-11-15 逐项补齐的「凭感觉」维度；第九、十项是 §6.21 对照截图后用户确认追加的（§6.22）；最后两项是用户再贴截图后追加的——侧栏对齐与折叠（§6.23）、WorkBuddy tooltip（§6.24）。
+> 表格前八项是 2026-11-15 逐项补齐的「凭感觉」维度；第九、十项是 §6.21 对照截图后用户确认追加的（§6.22）；随后是用户贴截图追加的侧栏对齐与折叠（§6.23）、tooltip（§6.24）；§6.25 则是用户要求「扫描 WorkBuddy 还有哪些是本项目没有的」之后，从安装包 CSS 与功能词典里比对出来的第一条视觉层缺口。
 
 **技术债清账**（§6.15 记下的两笔，在用户放宽前提后于 §6.18 修掉）：
 

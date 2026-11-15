@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Component } from "vue"
 import { RouterLink, useRoute, useRouter } from "vue-router"
 import {
+  ChevronDown,
   ChevronRight,
   Copy,
   Database,
@@ -73,6 +74,49 @@ function toggleExpanded(resumeId: number) {
   }
   expandedId.value = resumeId
   if (!chatStore.isLoaded(resumeId)) void chatStore.fetchSessions(resumeId).catch(() => undefined)
+}
+
+// —— 会话折叠 ——
+// 与 WorkBuddy 一致：一份简历默认只露出最近 5 条对话，其余折到「查看更多 (N)」。
+// 手风琴只保证「同时展开一份简历」，但那份简历下若有几十条对话，仍会把下面的
+// 简历挤出视口；这里再给单份简历的会话列表加一道上限。
+const SIDEBAR_SESSION_PREVIEW = 5
+const sessionOverflow = ref<Record<number, boolean>>({})
+
+type SessionPreview = {
+  list: AiChatSession[]
+  hidden: number
+  expanded: boolean
+  canToggle: boolean
+}
+
+function buildSessionPreview(resumeId: number): SessionPreview {
+  const list = chatStore.sessions(resumeId)
+  const active = chatStore.activeSessionId(resumeId)
+  const activeIndex = list.findIndex((item) => item.id === active)
+  // 正在看的对话若落在折叠段里，强制全展开——不能把用户当前打开的条目藏起来。
+  const forceAll = activeIndex >= SIDEBAR_SESSION_PREVIEW
+  const expanded = forceAll || Boolean(sessionOverflow.value[resumeId])
+  const canToggle = list.length > SIDEBAR_SESSION_PREVIEW && !forceAll
+  return {
+    list: expanded ? list : list.slice(0, SIDEBAR_SESSION_PREVIEW),
+    hidden: expanded ? 0 : list.length - SIDEBAR_SESSION_PREVIEW,
+    expanded,
+    canToggle,
+  }
+}
+
+/** 只给展开中的简历算预览，避免几十份简历每帧都做一遍 slice。 */
+const sessionPreviews = computed<Record<number, SessionPreview>>(() => {
+  const out: Record<number, SessionPreview> = {}
+  for (const item of store.resumeList) {
+    if (isExpanded(item.id)) out[item.id] = buildSessionPreview(item.id)
+  }
+  return out
+})
+
+function toggleSessionOverflow(resumeId: number) {
+  sessionOverflow.value = { ...sessionOverflow.value, [resumeId]: !sessionOverflow.value[resumeId] }
 }
 
 function isActiveSession(resumeId: number, sessionId: number) {
@@ -549,21 +593,21 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
 
         <!-- 会话列表不缩进容器，只缩进文字：选中底色和父行同宽；行间留空隙，选中块不跟邻居粘成一片 -->
         <div v-if="isExpanded(item.id)" class="mt-1.5 pb-1">
-          <div v-if="chatStore.loadingResumeId === item.id && !chatStore.sessions(item.id).length" class="py-1 pl-10">
+          <div v-if="chatStore.loadingResumeId === item.id && !chatStore.sessions(item.id).length" class="py-1 pl-8">
             <div class="h-6 w-32 animate-pulse rounded bg-zinc-200/60"></div>
           </div>
 
           <div
-            v-for="session in chatStore.sessions(item.id)"
+            v-for="session in sessionPreviews[item.id]?.list || []"
             :key="session.id"
             data-session-row
-            class="group/session mb-1 flex w-full cursor-pointer items-center gap-1.5 rounded-md py-1.5 pl-10 pr-2 text-left transition-colors"
+            class="group/session relative mb-1 flex w-full cursor-pointer items-center gap-1.5 rounded-md py-1.5 pl-8 pr-2 text-left transition-colors"
             :class="isActiveSession(item.id, session.id) ? 'bg-zinc-200/60 text-zinc-900' : 'text-zinc-600 hover:bg-zinc-200/40 hover:text-zinc-900'"
             :title="sessionSnippet(session)"
             @click="openSession(item.id, session.id)"
             @dblclick.stop="startRename(item.id, session.id, session.title)"
           >
-            <Pin v-if="session.is_pinned" class="h-3 w-3 shrink-0 text-amber-500" />
+            <Pin v-if="session.is_pinned" class="absolute left-3 top-1/2 h-3 w-3 -translate-y-1/2 text-amber-500" />
             <span class="min-w-0 flex-1">
               <input
                 v-if="editingSessionId === session.id"
@@ -583,6 +627,9 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
               >{{ session.title || "无标题对话" }}</span>
             </span>
             <span class="shrink-0 text-[11px] tabular-nums text-zinc-400 group-hover/session:hidden">{{ formatRelativeTime(session.update_time) }}</span>
+            <!-- 右侧 16px 槽 + 6px gap 抵消父行常驻展开箭头占的 22px：父子两行的时间戳右缘落在同一列。
+                 hover 时收起这个槽，让位给置顶 / 删除按钮，标题宽度变化反而比改前更小。 -->
+            <span class="w-4 shrink-0 group-hover/session:hidden" aria-hidden="true"></span>
             <!-- 两个按钮之间留 4px：正好等于 hit-area 两侧各外扩的 2px，命中区相切不重叠，误点不会落到「删除」上 -->
             <span class="flex shrink-0 items-center gap-1">
               <button
@@ -606,9 +653,22 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
             </span>
           </div>
 
+          <!-- 对话过多时只露前 5 条，其余折到「查看更多 (N)」；文字与父行、会话行同落 40 轨 -->
+          <button
+            v-if="sessionPreviews[item.id]?.canToggle"
+            type="button"
+            data-session-more
+            class="mb-1 flex w-full items-center gap-1.5 rounded-md py-1 pl-8 pr-2 text-left text-[12px] text-zinc-500 transition-colors hover:bg-zinc-200/40 hover:text-zinc-900"
+            :aria-expanded="Boolean(sessionPreviews[item.id]?.expanded)"
+            @click="toggleSessionOverflow(item.id)"
+          >
+            <span>{{ sessionPreviews[item.id]?.expanded ? "收起" : "查看更多 (" + sessionPreviews[item.id]?.hidden + ")" }}</span>
+            <ChevronDown class="h-3 w-3 shrink-0 transition-transform" :class="sessionPreviews[item.id]?.expanded ? 'rotate-180' : ''" />
+          </button>
+
           <button
             type="button"
-            class="flex w-full items-center gap-1.5 rounded-md py-1.5 pl-5 pr-2 text-left text-[12.5px] text-zinc-400 transition-colors hover:bg-zinc-200/40 hover:text-zinc-700 disabled:opacity-60"
+            class="flex w-full items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-left text-[12.5px] text-zinc-400 transition-colors hover:bg-zinc-200/40 hover:text-zinc-700 disabled:opacity-60"
             :disabled="creatingSessionFor === item.id"
             :title="`新建对话（${modLabel} + Alt + N）`"
             @click="newSession(item.id)"

@@ -129,7 +129,7 @@ const activeItem = computed(() => props.items.find(i => i.id === activeItemId.va
         </div>
 
         <!-- Inline Form (Narrow Mode) -->
-        <div v-if="!isWide && activeItemId === item.id" class="mt-2 rounded-2xl border border-zinc-200/80 bg-white overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
+        <div v-if="!isWide && activeItemId === item.id" class="mt-2 rounded-2xl border border-zinc-200/80 bg-white overflow-hidden wb-anim-rise">
           <SectionFields
             :item="item"
             :section-key="sectionKey"
@@ -154,7 +154,7 @@ const activeItem = computed(() => props.items.find(i => i.id === activeItemId.va
 
     <!-- Wide Mode Detail Column -->
     <div v-if="isWide" class="w-2/3 flex-1">
-      <div v-if="activeItem" class="rounded-2xl border border-zinc-200/80 bg-white overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150">
+      <div v-if="activeItem" class="rounded-2xl border border-zinc-200/80 bg-white overflow-hidden wb-anim-rise">
         <div class="px-6 py-4 border-b border-zinc-100 bg-zinc-50/50">
           <h3 class="text-sm font-semibold text-zinc-800 tracking-tight">编辑: {{ getItemTitle(activeItem) }}</h3>
         </div>

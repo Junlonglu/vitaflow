@@ -365,8 +365,8 @@ async function handleResetPassword() {
     </div>
 
     <!-- 用户协议弹窗 -->
-    <div v-if="showAgreementModal" class="fixed inset-0 z-modal flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm p-4 animate-in fade-in-0 duration-150">
-      <div class="relative w-full max-w-2xl rounded-2xl bg-white p-6 sm:p-8 shadow-wb-popup animate-in zoom-in-95 duration-150 flex flex-col max-h-[85vh]">
+    <div v-if="showAgreementModal" class="wb-anim-scrim fixed inset-0 z-modal flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm p-4">
+      <div class="wb-anim-panel relative w-full max-w-2xl rounded-2xl bg-white p-6 sm:p-8 shadow-wb-dialog flex flex-col max-h-[85vh]">
         <div class="flex items-center justify-between border-b border-zinc-100 pb-4 mb-4 shrink-0">
           <h3 class="text-lg font-semibold text-zinc-900">用户协议与隐私政策</h3>
           <button @click="showAgreementModal = false" class="rounded-lg p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 transition-colors focus:outline-none">

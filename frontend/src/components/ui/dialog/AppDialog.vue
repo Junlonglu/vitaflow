@@ -122,16 +122,13 @@ onBeforeUnmount(() => {
 
 <template>
   <Teleport to="body">
-    <Transition
-      enter-active-class="transition duration-150 ease-out"
-      enter-from-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-      enter-to-class="opacity-100 translate-y-0 sm:scale-100"
-      leave-active-class="transition duration-150 ease-in"
-      leave-from-class="opacity-100 translate-y-0 sm:scale-100"
-      leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-    >
-      <div v-if="open" class="fixed inset-0 z-modal flex items-center justify-center p-4 bg-wb-scrim/40 backdrop-blur-sm" role="dialog" aria-modal="true" :aria-label="title || undefined" @click.self="onOverlayClick">
-        <div ref="panelEl" tabindex="-1" class="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup transform transition outline-none" :class="[maxWidthClass, panelClass]">
+    <!-- 入场：遮罩与面板各播各的动画（§6.25），所以 Transition 不再管 enter。
+         离场：面板的入场动画带 fill:both，会把 opacity 锁在 1，只让外层淡出等于没动画。
+         所以 leave 时用 .wb-leaving 让后代面板的动画失效（见 index.css），
+         再靠外层 opacity 把整棵子树一起压淡。 -->
+    <Transition leave-active-class="wb-leaving transition-opacity duration-100 ease-in" leave-to-class="opacity-0">
+      <div v-if="open" class="wb-anim-scrim fixed inset-0 z-modal flex items-center justify-center p-4 bg-wb-scrim/40 backdrop-blur-sm" role="dialog" aria-modal="true" :aria-label="title || undefined" @click.self="onOverlayClick">
+        <div ref="panelEl" tabindex="-1" class="wb-anim-panel flex max-h-[90vh] w-full flex-col overflow-hidden rounded-2xl bg-white shadow-wb-dialog outline-none" :class="[maxWidthClass, panelClass]">
           <slot name="header">
             <div class="flex shrink-0 items-start justify-between gap-4 px-5 py-4" :class="headerClass">
               <div class="flex min-w-0 items-start gap-3">

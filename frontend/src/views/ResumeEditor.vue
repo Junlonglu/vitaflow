@@ -1037,7 +1037,7 @@ async function sendInitialPrompt() {
 
       <!-- Style remains a focused utility drawer. -->
       <Transition name="slide-panel">
-        <aside v-if="showStyle" class="absolute bottom-0 right-0 top-0 z-drawer flex w-full flex-col border-l border-zinc-200/80 bg-white/95 backdrop-blur-2xl shadow-wb-popup md:w-[420px]">
+        <aside v-if="showStyle" class="wb-anim-drawer-right absolute bottom-0 right-0 top-0 z-drawer flex w-full flex-col border-l border-zinc-200/80 bg-white/95 backdrop-blur-2xl shadow-wb-drawer md:w-[420px]">
           <div class="shrink-0 border-b border-zinc-100/80 px-4 py-2 md:px-5 md:py-3.5 bg-white/50">
             <div class="flex items-center justify-between gap-3">
               <h2 class="text-base md:text-lg font-semibold text-zinc-900 tracking-tight flex items-center gap-2">
@@ -1092,7 +1092,7 @@ async function sendInitialPrompt() {
 
       <!-- Template Selection Side Panel (Consistent with Style Panel) -->
       <Transition name="slide-panel">
-        <aside v-if="showTemplateModal" class="absolute bottom-0 right-0 top-0 z-drawer flex w-full flex-col border-l border-zinc-200/80 bg-white/95 backdrop-blur-2xl shadow-wb-popup md:w-[420px]">
+        <aside v-if="showTemplateModal" class="wb-anim-drawer-right absolute bottom-0 right-0 top-0 z-drawer flex w-full flex-col border-l border-zinc-200/80 bg-white/95 backdrop-blur-2xl shadow-wb-drawer md:w-[420px]">
           <div class="shrink-0 border-b border-zinc-100/80 px-4 py-2 md:px-5 md:py-3.5 bg-white/50">
             <div class="flex items-center justify-between gap-3">
               <h2 class="text-base md:text-lg font-semibold text-zinc-900 tracking-tight flex items-center gap-2">

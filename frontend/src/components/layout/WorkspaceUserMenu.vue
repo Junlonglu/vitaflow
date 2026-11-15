@@ -76,7 +76,7 @@ function logout() {
 
     <div v-if="open" class="fixed inset-0 z-scrim" @click="open = false"></div>
     <Transition name="user-menu">
-      <div v-if="open" class="thin-scrollbar absolute bottom-full left-2 right-2 z-popover mb-1 max-h-[70vh] space-y-1 overflow-y-auto rounded-xl border border-zinc-200 bg-white p-1 shadow-wb-popup">
+      <div v-if="open" class="thin-scrollbar absolute bottom-full left-2 right-2 z-popover mb-1 max-h-[70vh] space-y-1 overflow-y-auto rounded-xl border border-zinc-200 bg-white p-1 shadow-wb-dropdown">
         <RouterLink
           v-for="item in menuItems"
           :key="item.to"

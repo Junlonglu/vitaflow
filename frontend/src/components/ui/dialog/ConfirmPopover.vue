@@ -142,7 +142,7 @@ onBeforeUnmount(unbind)
     <div v-if="open" class="fixed inset-0 z-overlay" @mousedown.self="close" @contextmenu.prevent="close">
       <div
         ref="cardRef"
-        class="fixed rounded-xl border border-zinc-200 bg-white p-4 shadow-wb-popup"
+        class="wb-anim-popover fixed rounded-xl border border-zinc-200 bg-white p-4 shadow-wb-dropdown"
         :style="{ width: `${CARD_WIDTH}px`, left: `${pos.left}px`, top: `${pos.top}px`, visibility: ready ? 'visible' : 'hidden' }"
         role="dialog"
         aria-modal="true"

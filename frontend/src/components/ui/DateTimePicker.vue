@@ -163,7 +163,7 @@ const quickTimes = [
     <Teleport to="body">
       <Transition name="fade-scale">
         <div v-if="open" class="fixed inset-0 z-overlay flex items-center justify-center bg-wb-scrim/40 p-4 backdrop-blur-sm" @click.self="open = false">
-          <div class="w-full max-w-sm overflow-hidden rounded-2xl border border-zinc-200 bg-white p-5 shadow-wb-popup animate-in zoom-in-95 duration-150">
+          <div class="wb-anim-panel w-full max-w-sm overflow-hidden rounded-2xl border border-zinc-200 bg-white p-5 shadow-wb-dialog-md">
             <!-- Header Month Nav -->
             <div class="flex items-center justify-between mb-4">
               <span class="text-base font-bold tracking-tight text-zinc-900">{{ currentYear }}年 {{ currentMonth + 1 }}月</span>

@@ -450,3 +450,204 @@ a { color: inherit; text-decoration: none; }
     transition: none;
   }
 }
+
+/* ------------------------------------------------------------------
+ * 浮层动效层（§6.25）
+ *
+ * 改前的毛病：遮罩和面板包在同一个 <Transition> 里、共用一套 translate，
+ * 于是整块全屏遮罩跟着面板一起位移，视觉上像「一张大灰纸在滑动」。
+ * WorkBuddy 是两层分开动：遮罩只淡入，面板自己淡入 + 上浮 + 微缩。
+ *
+ * 用法：遮罩加 wb-anim-scrim，面板加 wb-anim-panel / -popover / -drawer-*。
+ * 只负责入场；退场交给外层 <Transition> 的 opacity，时长必须更短。
+ *
+ * 位移与缩放一律用 translate / scale 两个独立属性，不用 transform——
+ * 面板常带 -translate-x-1/2 这类工具类，写进 transform 会被动画整个覆盖掉。
+ * ------------------------------------------------------------------ */
+@layer components {
+  @keyframes wb-scrim-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* 模态：位移小、缩放小，靠扩散开的大阴影压场（见 shadow-wb-dialog） */
+  @keyframes wb-panel-in {
+    from {
+      opacity: 0;
+      translate: 0 8px;
+      scale: 0.97;
+    }
+    to {
+      opacity: 1;
+      translate: 0 0;
+      scale: 1;
+    }
+  }
+
+  /* 气泡/下拉：从锚点方向「张开」，所以只往上浮 4px，不缩放太多 */
+  @keyframes wb-popover-in {
+    from {
+      opacity: 0;
+      translate: 0 -4px;
+      scale: 0.985;
+    }
+    to {
+      opacity: 1;
+      translate: 0 0;
+      scale: 1;
+    }
+  }
+
+  /* 向上展开的下拉要有反向位移，否则看着像从锚点里「钻出来」 */
+  @keyframes wb-popover-in-up {
+    from {
+      opacity: 0;
+      translate: 0 4px;
+      scale: 0.985;
+    }
+    to {
+      opacity: 1;
+      translate: 0 0;
+      scale: 1;
+    }
+  }
+
+  /* 就地展开的区块（新增模块表单、筛选条）：只上浮，不缩放——
+     缩放会让里面的输入框文字跟着抖一下，很脏 */
+  @keyframes wb-rise-in {
+    from {
+      opacity: 0;
+      translate: 0 6px;
+    }
+    to {
+      opacity: 1;
+      translate: 0 0;
+    }
+  }
+
+  /* 纯淡入：遮罩、只换内容的容器 */
+  @keyframes wb-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* 抽屉：贴边滑出，位移方向必须和面板所在边一致，否则像从对面飞进来 */
+  @keyframes wb-drawer-in-left {
+    from {
+      opacity: 0;
+      translate: -12px 0;
+    }
+    to {
+      opacity: 1;
+      translate: 0 0;
+    }
+  }
+
+  @keyframes wb-drawer-in-right {
+    from {
+      opacity: 0;
+      translate: 12px 0;
+    }
+    to {
+      opacity: 1;
+      translate: 0 0;
+    }
+  }
+
+  /* toast 自带 left:50% + transform:translate(-50%) 做居中，动画只碰透明度与缩放 */
+  @keyframes wb-toast-in {
+    from {
+      opacity: 0;
+      scale: 0.96;
+    }
+    to {
+      opacity: 1;
+      scale: 1;
+    }
+  }
+
+  @keyframes wb-toast-out {
+    from {
+      opacity: 1;
+      scale: 1;
+    }
+    to {
+      opacity: 0;
+      scale: 0.96;
+    }
+  }
+
+  .wb-anim-scrim {
+    animation: wb-scrim-in 180ms var(--ease-wb-standard) both;
+  }
+
+  .wb-anim-panel {
+    animation: wb-panel-in 200ms var(--ease-wb-decelerate) both;
+  }
+
+  .wb-anim-popover {
+    animation: wb-popover-in 150ms var(--ease-wb-decelerate) both;
+  }
+
+  /* Radix 会按可用空间把下拉翻到锚点上方，位移方向跟着翻 */
+  .wb-anim-popover[data-side="top"] {
+    animation-name: wb-popover-in-up;
+  }
+
+  .wb-anim-rise {
+    animation: wb-rise-in 160ms var(--ease-wb-decelerate) both;
+  }
+
+  .wb-anim-fade {
+    animation: wb-fade-in 150ms var(--ease-wb-standard) both;
+  }
+
+  .wb-anim-drawer-left {
+    animation: wb-drawer-in-left 220ms var(--ease-wb-decelerate) both;
+  }
+
+  .wb-anim-drawer-right {
+    animation: wb-drawer-in-right 220ms var(--ease-wb-decelerate) both;
+  }
+
+  .wb-anim-toast {
+    animation: wb-toast-in 180ms var(--ease-wb-decelerate) both;
+  }
+
+  /* 退场由 utils/toast.ts 挂这个类触发；必须写在 .wb-anim-toast 之后才能覆盖它 */
+  .wb-toast-out {
+    animation: wb-toast-out 150ms var(--ease-wb-standard) both;
+  }
+
+  /* 离场兜底（§6.25）：入场动画都是 fill:both，动画结束后仍会把 opacity 钉在 1。
+     父级挂 wb-leaving 时让子树里的面板动画失效，外层 opacity 才能真正压淡整棵子树。
+     不这么做的话关闭弹窗只有遮罩在淡出、面板「啪」地消失。 */
+  .wb-leaving .wb-anim-panel,
+  .wb-leaving .wb-anim-popover,
+  .wb-leaving .wb-anim-drawer-left,
+  .wb-leaving .wb-anim-drawer-right {
+    animation: none;
+  }
+}
+
+/* 系统开了「减少动态效果」就整体退化成瞬时出现，只保留透明度切换 */
+@media (prefers-reduced-motion: reduce) {
+  .wb-anim-scrim,
+  .wb-anim-panel,
+  .wb-anim-popover,
+  .wb-anim-rise,
+  .wb-anim-fade,
+  .wb-anim-drawer-left,
+  .wb-anim-drawer-right,
+  .wb-anim-toast {
+    animation: none;
+  }
+}

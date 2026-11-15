@@ -6,11 +6,11 @@ import AiCatalogPanel from "@/components/admin/ai/AiCatalogPanel.vue"
 import AiModelSettingsPanel from "@/components/admin/ai/AiModelSettingsPanel.vue"
 import PointRulesSettingsPanel from "@/components/admin/ai/PointRulesSettingsPanel.vue"
 import RedeemCodesSettingsPanel from "@/components/admin/ai/RedeemCodesSettingsPanel.vue"
+import type { ProviderSavePayload } from "@/components/admin/ai/providerDraft"
 import { showGlobalToast } from "@/utils/toast"
 import {
   createAdminAiConfigApi,
   createAdminCatalogGroupApi,
-  createAdminCatalogModelApi,
   createAdminCatalogProviderApi,
   deleteAdminAiConfigApi,
   deleteAdminCatalogGroupApi,
@@ -36,8 +36,6 @@ import {
   updateAdminRedeemCodeStatusApi,
   type AdminAiConfig,
   type AdminCatalog,
-  type AdminCatalogProviderWrite,
-  type AdminCatalogModelWrite,
   type AdminPointRule,
   type AdminRedeemCode,
   type AdminRoutingGroupWrite,
@@ -332,44 +330,83 @@ async function refreshCatalog() {
   }
 }
 
-async function createCatalogProvider(data: AdminCatalogProviderWrite) {
+const savingCatalog = ref(false)
+
+/**
+ * 一次保存 = 一串按依赖排序的写操作：
+ * 建/改服务商 → 导入新增模型 → 更新模型资料 → 删除取消勾选的模型。
+ * 删除放最后，被模型策略引用的模型会在这里失败，前面的新增/改名已经生效，
+ * 失败后刷新目录让界面回到真实状态，卡片保留草稿方便就地重试。
+ */
+async function submitCatalogProvider(payload: ProviderSavePayload) {
+  savingCatalog.value = true
   error.value = ""
   try {
-    catalog.value = await createAdminCatalogProviderApi(data)
-    showGlobalToast("服务商已创建")
+    let data: AdminCatalog
+    if (payload.mode === "create") {
+      data = await createAdminCatalogProviderApi({
+        key: payload.key,
+        name: payload.name,
+        base_url: payload.base_url,
+        api_key: payload.api_key,
+        ...(payload.access_key_id ? { access_key_id: payload.access_key_id } : {}),
+        ...(payload.secret_access_key ? { secret_access_key: payload.secret_access_key } : {}),
+      })
+    } else {
+      data = await updateAdminCatalogProviderApi(payload.key, {
+        name: payload.name,
+        base_url: payload.base_url,
+        ...(payload.api_key ? { api_key: payload.api_key } : {}),
+        ...(payload.access_key_id ? { access_key_id: payload.access_key_id } : {}),
+        ...(payload.secret_access_key ? { secret_access_key: payload.secret_access_key } : {}),
+      })
+    }
+    if (payload.added.length) data = await importAdminCatalogModelsApi(payload.key, payload.added)
+    // 新模型要先导入才能更新资料，所以资料改动排在导入之后
+    for (const patch of payload.patches) {
+      data = await updateAdminCatalogModelApi(payload.key, patch.id, patch.data)
+    }
+    for (const id of payload.removed) {
+      data = await deleteAdminCatalogModelApi(payload.key, id)
+    }
+    catalog.value = data
+    showGlobalToast(payload.mode === "create" ? `服务商 ${payload.key} 已接入` : "服务商已保存")
   } catch (err: any) {
-    error.value = err.message || "服务商创建失败"
+    error.value = err.message || "服务商保存失败"
     showGlobalToast(error.value, "error")
+    await refreshCatalog()
+    throw err
+  } finally {
+    savingCatalog.value = false
   }
 }
 
-async function updateCatalogProvider(key: string, data: { name: string; base_url: string; api_key?: string; access_key_id?: string; secret_access_key?: string }) {
+async function removeCatalogProvider(key: string) {
+  const provider = catalog.value?.providers.find((item) => item.key === key)
+  if (!provider) return
+  const count = provider.models.length
+  const message = count
+    ? `确定移除服务商 ${provider.name}（${key}）吗？它下面的 ${count} 个模型会一起移除；被模型策略引用的模型会导致失败。`
+    : `确定移除服务商 ${provider.name}（${key}）吗？`
+  if (!window.confirm(message)) return
+  savingCatalog.value = true
   error.value = ""
   try {
-    catalog.value = await updateAdminCatalogProviderApi(key, data)
-    showGlobalToast("服务商已更新")
-  } catch (err: any) {
-    error.value = err.message || "服务商更新失败"
-    showGlobalToast(error.value, "error")
-  }
-}
-
-async function deleteCatalogProvider(key: string) {
-  if (!window.confirm(`确定删除服务商 ${key} 吗？`)) return
-  error.value = ""
-  try {
+    for (const model of provider.models) {
+      await deleteAdminCatalogModelApi(key, model.id)
+    }
     catalog.value = await deleteAdminCatalogProviderApi(key)
-    showGlobalToast("服务商已删除")
+    showGlobalToast("服务商已移除")
   } catch (err: any) {
-    error.value = err.message || "服务商删除失败"
+    error.value = err.message || "移除服务商失败"
     showGlobalToast(error.value, "error")
+    await refreshCatalog()
+  } finally {
+    savingCatalog.value = false
   }
 }
-
-const syncingDevKey = ref<string | null>(null)
 
 async function syncCatalogProviderDev(key: string) {
-  syncingDevKey.value = key
   error.value = ""
   try {
     const data = await syncAdminCatalogProviderDevApi(key)
@@ -382,54 +419,6 @@ async function syncCatalogProviderDev(key: string) {
     }
   } catch (err: any) {
     error.value = err.message || "同步模型资料失败"
-    showGlobalToast(error.value, "error")
-  } finally {
-    syncingDevKey.value = null
-  }
-}
-
-async function importCatalogModels(key: string, ids: string[]) {
-  error.value = ""
-  try {
-    const data = await importAdminCatalogModelsApi(key, ids)
-    catalog.value = data
-    showGlobalToast(`已导入 ${data.extra?.added ?? ids.length} 个模型，稍后可用「补全资料」填充上下文窗口与价格`)
-  } catch (err: any) {
-    error.value = err.message || "导入模型失败"
-    showGlobalToast(error.value, "error")
-  }
-}
-
-async function createCatalogModel(providerKey: string, data: AdminCatalogModelWrite) {
-  error.value = ""
-  try {
-    catalog.value = await createAdminCatalogModelApi(providerKey, data)
-    showGlobalToast("模型已创建")
-  } catch (err: any) {
-    error.value = err.message || "模型创建失败"
-    showGlobalToast(error.value, "error")
-  }
-}
-
-async function updateCatalogModel(providerKey: string, modelId: string, data: AdminCatalogModelWrite) {
-  error.value = ""
-  try {
-    catalog.value = await updateAdminCatalogModelApi(providerKey, modelId, data)
-    showGlobalToast("模型已更新")
-  } catch (err: any) {
-    error.value = err.message || "模型更新失败"
-    showGlobalToast(error.value, "error")
-  }
-}
-
-async function deleteCatalogModel(providerKey: string, modelId: string) {
-  if (!window.confirm(`确定删除模型 ${providerKey}/${modelId} 吗？若被模型策略引用将无法删除。`)) return
-  error.value = ""
-  try {
-    catalog.value = await deleteAdminCatalogModelApi(providerKey, modelId)
-    showGlobalToast("模型已删除")
-  } catch (err: any) {
-    error.value = err.message || "模型删除失败"
     showGlobalToast(error.value, "error")
   }
 }
@@ -725,17 +714,11 @@ watch(
         :providers="catalogProviders"
         :groups="catalogGroups"
         :provider-mode="catalogProviderMode"
-        :saving="savingConfig"
-        :syncing-dev-key="syncingDevKey"
-        @refresh="refreshCatalog"
-        @create-provider="createCatalogProvider"
-        @update-provider="updateCatalogProvider"
-        @delete-provider="deleteCatalogProvider"
-        @sync-dev="syncCatalogProviderDev"
-        @import-models="importCatalogModels"
-        @create-model="createCatalogModel"
-        @update-model="updateCatalogModel"
-        @delete-model="deleteCatalogModel"
+        :saving="savingConfig || savingCatalog"
+        :refresh-catalog="refreshCatalog"
+        :submit-provider="submitCatalogProvider"
+        :remove-provider="removeCatalogProvider"
+        :sync-models-dev="syncCatalogProviderDev"
         @create-group="createCatalogGroup"
         @update-group="updateCatalogGroup"
         @delete-group="deleteCatalogGroup"

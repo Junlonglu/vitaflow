@@ -302,7 +302,7 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
           <div v-for="item in dashboard.ai_breakdown" :key="item.task_type" class="min-w-0 overflow-hidden rounded-xl border border-zinc-100 bg-zinc-50 p-3 transition hover:bg-zinc-100/80 sm:p-4">
             <div class="flex items-center justify-between gap-1 overflow-hidden sm:gap-2">
               <div class="flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap sm:gap-2">
-                <span class="truncate text-xs font-semibold text-zinc-900 sm:text-sm">{{ taskTypeText(item.task_type) }}</span>
+                <span class="truncate text-xs font-semibold text-zinc-900 sm:text-sm" :title="taskTypeText(item.task_type)">{{ taskTypeText(item.task_type) }}</span>
                 <span class="shrink-0 text-[11px] font-medium text-zinc-500 sm:text-xs">· 共 {{ item.total }} 次</span>
               </div>
               <div class="flex shrink-0 items-center gap-1 whitespace-nowrap sm:gap-1.5">
@@ -333,7 +333,7 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
           <div v-for="item in dashboard.model_breakdown || []" :key="item.model_name" class="min-w-0 overflow-hidden rounded-xl border border-zinc-100 bg-zinc-50 p-3 transition hover:bg-zinc-100/80 sm:p-4">
             <div class="flex items-center justify-between gap-1 overflow-hidden sm:gap-2">
               <div class="flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap sm:gap-2">
-                <span class="truncate text-xs font-semibold text-zinc-900 sm:text-sm">{{ item.model_name }}</span>
+                <span class="truncate text-xs font-semibold text-zinc-900 sm:text-sm" :title="item.model_name">{{ item.model_name }}</span>
                 <span class="shrink-0 text-[11px] font-medium text-zinc-500 sm:text-xs">· 共 {{ item.total }} 次</span>
               </div>
               <div class="flex shrink-0 items-center gap-1 whitespace-nowrap sm:gap-1.5">

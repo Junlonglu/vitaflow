@@ -162,6 +162,23 @@
 
   /* 浮层投影：日间靠极轻的两段小半径叠层次 */
   --wb-popup-shadow: 0 6px 24px -4px rgb(0 0 0 / 4%), 0 4px 6px -2px rgb(0 0 0 / 6%);
+
+  /* 阴影分级（§6.25）：逐项抄 WorkBuddy tokens 的 --wb-shadow-*。
+     分档依据是「离用户多近」，不是「多大」——同档的组件换位置不会换阴影。
+       静态纸面  card / card-soft      0 位移 + 1px 描边感，几乎只用来托底
+       可悬停    card-hover            8/20 才真正浮起，只给 hover 态
+       弹出      dropdown / popup      4–8 位移，比 card 重一档
+       模态      dialog / dialog-md    48px 大扩散，靠尺寸而不是黑度压场
+       贴边      drawer                向左上投，配 1px 内描边防止融进页面
+       兜底      elevated              通用「明显更高一层」 */
+  --wb-card-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+  --wb-card-shadow-soft: 0 16px 32px -8px rgb(0 0 0 / 3%);
+  --wb-card-shadow-hover: 0 8px 20px rgb(0 0 0 / 12%);
+  --wb-dropdown-shadow: 0 6px 24px 0 rgb(0 0 0 / 4%), 0 4px 6px 0 rgb(0 0 0 / 4%);
+  --wb-dialog-shadow: 0 8px 48px -4px rgb(0 0 0 / 12%), 0 6px 12px -4px rgb(0 0 0 / 6%);
+  --wb-dialog-shadow-md: 0 8px 24px rgb(0 0 0 / 8%);
+  --wb-drawer-shadow: -4px -2px 16px rgb(0 0 0 / 6%), 0 0 0 1px rgb(0 0 0 / 3%);
+  --wb-elevated-shadow: 0 8px 24px rgb(15 23 42 / 10%);
 }
 
 [data-theme="dark"] {
@@ -193,6 +210,16 @@
 
   /* 深底上 4% 的黑投影等于没画，必须加重才看得出浮层边界 */
   --wb-popup-shadow: 0 6px 24px -4px rgb(0 0 0 / 45%), 0 4px 6px -2px rgb(0 0 0 / 40%);
+
+  /* 阴影分级同结构，暗色整体加重；drawer 的内描边翻成白，否则贴着深底看不出边 */
+  --wb-card-shadow: 0 1px 2px rgb(0 0 0 / 40%);
+  --wb-card-shadow-soft: 0 16px 32px -8px rgb(0 0 0 / 30%);
+  --wb-card-shadow-hover: 0 8px 20px rgb(0 0 0 / 50%);
+  --wb-dropdown-shadow: 0 6px 24px 0 rgb(0 0 0 / 35%), 0 4px 6px 0 rgb(0 0 0 / 30%);
+  --wb-dialog-shadow: 0 8px 48px -4px rgb(0 0 0 / 60%), 0 6px 12px -4px rgb(0 0 0 / 30%);
+  --wb-dialog-shadow-md: 0 8px 24px rgb(0 0 0 / 28%);
+  --wb-drawer-shadow: -4px -2px 16px rgb(0 0 0 / 40%), 0 0 0 1px rgb(255 255 255 / 8%);
+  --wb-elevated-shadow: 0 8px 24px rgb(0 0 0 / 30%);
 }
 
 /* 让 `dark:` 变体跟随 data-theme，而不是操作系统的 prefers-color-scheme
@@ -277,11 +304,19 @@
   --text-wb-display: 32px;
   --text-wb-display--line-height: 40px;
 
-  /* 全站唯一的一档「离开页面平面」的阴影，只给浮层（弹窗/下拉/抽屉/toast/tooltip）。
-     WorkBuddy 的浮层阴影极轻，靠两段小半径叠出层次，不像 Tailwind shadow-xl 那样一整块重投影。
-     静态内容（卡片/输入框/列表行/开关滑块）一律无阴影，边界靠 border 或 ring-1 ring-zinc-200/70。
-     画布内的纸面（首页 hero、模板预览、composer 输入区）允许就地写 shadow-[…]。 */
+  /* 阴影：按「离用户多近」分 8 档（§6.25），不再让弹窗/下拉/抽屉/toast 共用一档。
+     静态内容（列表行/开关滑块/输入框）仍然无阴影，边界靠 border 或 ring-1。
+     画布内的纸面（首页 hero、模板预览、composer 输入区）允许就地写 shadow-[…]，
+     因为它表达的是「这张纸浮在画布上」，不属于浮层语义。 */
   --shadow-wb-popup: var(--wb-popup-shadow);
+  --shadow-wb-card: var(--wb-card-shadow);
+  --shadow-wb-card-soft: var(--wb-card-shadow-soft);
+  --shadow-wb-card-hover: var(--wb-card-shadow-hover);
+  --shadow-wb-dropdown: var(--wb-dropdown-shadow);
+  --shadow-wb-dialog: var(--wb-dialog-shadow);
+  --shadow-wb-dialog-md: var(--wb-dialog-shadow-md);
+  --shadow-wb-drawer: var(--wb-drawer-shadow);
+  --shadow-wb-elevated: var(--wb-elevated-shadow);
 
   --ease-wb-standard: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-wb-decelerate: cubic-bezier(0, 0, 0.2, 1);

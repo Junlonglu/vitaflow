@@ -206,7 +206,7 @@ const navItems = [
             </nav>
 
             <!-- Mobile Navigation Menu -->
-            <div class="flex gap-2 overflow-x-auto lg:hidden pb-1">
+            <div v-scroll-hint class="flex gap-2 overflow-x-auto lg:hidden pb-1">
               <button 
                 v-for="item in navItems" 
                 :key="item.id"

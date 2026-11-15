@@ -87,7 +87,7 @@ function toggleGroup(label: string) {
 
       <main class="min-w-0 flex-1">
         <!-- 窄屏：二级导航降级为横向滚动条，与工作区的内容页同一套 chips -->
-        <div class="scrollbar-none -mx-1 mb-5 flex gap-1.5 overflow-x-auto px-1 pb-1 lg:hidden">
+        <div v-scroll-hint class="scrollbar-none -mx-1 mb-5 flex gap-1.5 overflow-x-auto px-1 pb-1 lg:hidden">
           <button
             v-for="item in flatItems"
             :key="item.id"

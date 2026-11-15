@@ -220,11 +220,46 @@ const leftPanelWidth = ref(560)
 const isWide = computed(() => !isMobile.value && leftPanelWidth.value >= 800)
 let resizeHandler: () => void
 
+const workspaceRef = ref<HTMLElement | null>(null)
+
+/**
+ * 「紧凑模式」按工作区实际可用宽度判断，不看视口：外层应用侧栏常驻
+ * 248px，视口 800 时主区只剩 552px，三栏（编辑 >=400 + 预览 >=380 +
+ * 分隔条 16）根本摆不下，硬挤会把预览压成一条。低于 900px 就切成
+ * 单栏 + 底部分段切换，与 §4「按容器而非视口判断」一致。
+ * isMobile 这个名字沿用历史，语义已是「紧凑模式」。
+ */
+const COMPACT_WIDTH = 900
+
+function applyCompact(compact: boolean) {
+  if (compact === isMobile.value) return
+  isMobile.value = compact
+  // 紧凑模式下底部分段把 mobileTab 与 mainMode 绑成一套状态，
+  // 进入时同步一次，避免出现「高亮编辑、内容却是 Agent」。
+  if (compact && mobileTab.value !== 'preview') {
+    mainMode.value = mobileTab.value === 'ai' ? 'ai' : 'edit'
+  }
+}
+
+// 根 div 带 v-if（等简历数据加载），onMounted 时 ref 可能还是 null。
+// 必须等它落地再挂 ResizeObserver，否则紧凑模式永远不会触发。
+watch(
+  workspaceRef,
+  (el, _prev, onCleanup) => {
+    if (!el) return
+    const ro = new ResizeObserver(([entry]) => {
+      applyCompact(entry.contentRect.width < COMPACT_WIDTH)
+    })
+    ro.observe(el)
+    applyCompact(el.clientWidth < COMPACT_WIDTH)
+    onCleanup(() => ro.disconnect())
+  },
+  { immediate: true, flush: "post" },
+)
+
 onMounted(() => {
-  isMobile.value = window.innerWidth < 768
   leftPanelWidth.value = savedPanelWidth() || preferredPanelWidth()
   resizeHandler = () => {
-    isMobile.value = window.innerWidth < 768
     if (!savedPanelWidth()) leftPanelWidth.value = preferredPanelWidth()
   }
   window.addEventListener('resize', resizeHandler)
@@ -807,12 +842,12 @@ async function sendInitialPrompt() {
           </Button>
         </div>
 
-        <div class="h-6 w-[1px] bg-zinc-200 hidden md:block mx-0.5 md:mx-1"></div>
+        <div v-if="!isMobile" class="h-6 w-[1px] bg-zinc-200 mx-0.5 md:mx-1"></div>
 
         <!-- Flow Points 账户余额展示（移动至右侧主功能区，支持点击保存并跳转） -->
         <div 
-          v-if="flowPointSummary" 
-          class="hidden md:flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-zinc-600 cursor-pointer transition-colors hover:bg-zinc-100 hover:text-zinc-900 active:scale-95"
+          v-if="flowPointSummary && !isMobile" 
+          class="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-zinc-600 cursor-pointer transition-colors hover:bg-zinc-100 hover:text-zinc-900 active:scale-95"
           title="点击保存并前往 Flow Points 兑换页"
           @click="saveAndGoToAiRecords"
         >
@@ -820,10 +855,10 @@ async function sendInitialPrompt() {
           <span>{{ flowPointSummary.balance }}</span>
         </div>
 
-        <div class="h-6 w-[1px] bg-zinc-200 hidden md:block mx-0.5 md:mx-1"></div>
+        <div v-if="!isMobile" class="h-6 w-[1px] bg-zinc-200 mx-0.5 md:mx-1"></div>
 
         <!-- Desktop Action Buttons -->
-        <div class="hidden md:flex items-center gap-2">
+        <div v-if="!isMobile" class="flex items-center gap-2">
           <Button size="sm" variant="outline" class="flex h-9 shrink-0 items-center justify-center border-zinc-200 px-3 text-[13px] font-medium text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900" @click="openTemplateModal" title="更换模板">
             <LayoutTemplate class="h-4 w-4 shrink-0 mr-1.5" /> <span>模板</span>
           </Button>
@@ -840,8 +875,9 @@ async function sendInitialPrompt() {
 
         <!-- Mobile Hamburger Button -->
         <button 
+          v-if="isMobile"
           @click="toggleMobileMenu" 
-          class="md:hidden p-2 rounded-lg text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 focus:outline-none transition-colors"
+          class="p-2 rounded-lg text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 focus:outline-none transition-colors"
           aria-label="Toggle Mobile Menu"
         >
           <Menu v-if="!mobileMenuOpen && !showStyle && !showTemplateModal" class="h-5 w-5" />
@@ -851,7 +887,7 @@ async function sendInitialPrompt() {
 
       <!-- Mobile Dropdown Menu -->
       <Transition name="modal-fade">
-        <div v-if="mobileMenuOpen" class="md:hidden absolute top-[calc(100%-4px)] right-2 z-popover w-40 space-y-0.5 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-wb-popup">
+        <div v-if="isMobile && mobileMenuOpen" class="absolute top-[calc(100%-4px)] right-2 z-popover w-40 space-y-0.5 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-wb-popup">
           <div v-if="flowPointSummary" class="flex items-center justify-between px-2.5 py-2 rounded-xl bg-zinc-100/70 text-zinc-700 text-xs font-medium mb-1 cursor-pointer hover:bg-zinc-200/50 transition-colors" @click="saveAndGoToAiRecords">
             <div class="flex items-center gap-1.5">
               <FlowPointIcon class="h-3.5 w-3.5 text-zinc-600" />
@@ -901,13 +937,13 @@ async function sendInitialPrompt() {
 
     <!-- Main Workspace -->
     <div class="relative flex min-h-0 flex-1 overflow-hidden pb-0">
-      <div class="workspace-surface flex min-w-0 flex-1">
+      <div ref="workspaceRef" class="workspace-surface flex min-w-0 flex-1">
         <!-- Left Unified Sidebar -->
         <!-- Left Unified Sidebar -->
-        <div :class="['flex-col h-full shrink-0 bg-white overflow-hidden transition-none relative z-raised', (mobileTab === 'edit' || mobileTab === 'ai') ? 'flex w-full' : 'hidden md:flex']" :style="{ width: isMobile ? '100%' : leftPanelWidth + 'px' }">
+        <div :class="['flex-col h-full shrink-0 bg-white overflow-hidden transition-none relative z-raised', (mobileTab === 'edit' || mobileTab === 'ai') ? 'flex w-full' : (isMobile ? 'hidden' : 'flex')]" :style="{ width: isMobile ? '100%' : leftPanelWidth + 'px' }">
           
           <!-- Mode Switcher -->
-          <div class="hidden shrink-0 items-center gap-1 border-b border-zinc-200/60 px-2 py-1.5 md:flex">
+          <div v-if="!isMobile" class="flex shrink-0 items-center gap-1 border-b border-zinc-200/60 px-2 py-1.5">
             <button
               class="inline-flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[13px] transition-colors"
               :class="mainMode === 'edit' ? 'bg-zinc-100 font-medium text-zinc-900' : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800'"
@@ -986,7 +1022,7 @@ async function sendInitialPrompt() {
         </div>
 
         <!-- Preview Canvas -->
-        <div ref="previewPaneRef" :class="['relative flex-1 bg-zinc-100/50 flex-col overflow-hidden', mobileTab === 'preview' ? 'flex' : 'hidden md:flex']">
+        <div ref="previewPaneRef" :class="['relative flex-1 bg-zinc-100/50 flex-col overflow-hidden', mobileTab === 'preview' ? 'flex' : (isMobile ? 'hidden' : 'flex')]">
           <A4Preview class="flex-1" :html="resumeStore.previewHtml" :scale="previewScale" :auto-fit="previewAutoFit" @zoom-in="zoomPreview(0.05)" @zoom-out="zoomPreview(-0.05)" @fit="editor.fitPreviewWidth()" />
           <div v-if="previewRefreshing" class="pointer-events-none absolute right-5 top-16 rounded-md border border-zinc-200/80 bg-white px-2.5 py-1 text-[11.5px] font-medium text-zinc-500">
             预览更新中
@@ -1121,7 +1157,7 @@ async function sendInitialPrompt() {
     </Transition>
 
     <!-- Mobile Bottom Nav -->
-    <div class="md:hidden fixed bottom-2.5 left-1/2 z-sticky w-[86%] max-w-[280px] -translate-x-1/2 rounded-lg border border-zinc-200 bg-white p-1 select-none" :class="drawerOpen ? 'hidden' : ''">
+    <div v-if="isMobile" class="fixed bottom-2.5 left-1/2 z-sticky w-[86%] max-w-[280px] -translate-x-1/2 rounded-lg border border-zinc-200 bg-white p-1 select-none" :class="drawerOpen ? 'hidden' : ''">
       <div class="flex w-full items-center gap-0.5">
         <button class="flex h-8 flex-1 items-center justify-center gap-1 rounded-md transition-colors" :class="mobileTab === 'edit' ? 'bg-zinc-100 text-zinc-900' : 'text-zinc-500'" @click="mobileTab = 'edit'; mainMode = 'edit'">
           <Edit3 class="h-3.5 w-3.5" />

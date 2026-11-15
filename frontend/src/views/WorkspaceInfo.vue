@@ -419,7 +419,7 @@ onUnmounted(() => window.clearTimeout(searchTimer))
           <span class="hidden shrink-0 text-[12px] text-zinc-400 sm:block">{{ activeCount }} 条</span>
         </div>
 
-        <div class="scrollbar-none -mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-0.5">
+        <div v-scroll-hint class="scrollbar-none -mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-0.5">
           <button
             type="button"
             class="h-8 shrink-0 rounded-lg px-2.5 text-[12.5px] font-medium transition-colors"

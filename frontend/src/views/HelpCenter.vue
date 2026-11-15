@@ -249,7 +249,7 @@ const faqs = [
       </section>
 
       <section class="mt-8 grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <nav class="flex overflow-x-auto gap-2 lg:flex-col lg:rounded-xl lg:border lg:border-zinc-200 lg:bg-white lg:p-3 lg:sticky lg:top-24 lg:self-start scrollbar-hide pb-2 lg:pb-3 -mx-4 px-4 sm:mx-0 sm:px-0">
+        <nav v-scroll-hint class="flex overflow-x-auto gap-2 lg:flex-col lg:rounded-xl lg:border lg:border-zinc-200 lg:bg-white lg:p-3 lg:sticky lg:top-24 lg:self-start scrollbar-hide pb-2 lg:pb-3 -mx-4 px-4 sm:mx-0 sm:px-0">
           <button
             v-for="topic in topics"
             :key="topic.id"

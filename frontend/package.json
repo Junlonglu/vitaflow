@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "audit:ui": "node ../scripts/audit/run.mjs"
   },
   "dependencies": {
     "@types/cropperjs": "^1.1.5",

@@ -14,15 +14,15 @@
 2. **灰阶只用 `zinc-*`**，禁止 `gray-*`/`slate-*`（存量 gray 见文末清单，遇到即改）。
 3. **主操作色是黑（`zinc-900`）**，不是蓝色；`blue-600` 只用于链接、强调、信息提示、选中焦点。
 4. 新 UI 组件先找 `src/components/ui/`，没有再用 shadcn-vue 生成后改造，禁止直接在业务组件里手写完整弹窗/下拉等复杂控件。
-5. 弹窗一律遵循 ConfirmDialog 结构模式（Teleport + 遮罩 `bg-zinc-950/40 backdrop-blur-sm` + `rounded-2xl shadow-wb-popup` + 底部灰底按钮区）。
+5. 弹窗一律遵循 ConfirmDialog 结构模式（Teleport + 遮罩 `bg-wb-scrim/40 backdrop-blur-sm` + `rounded-2xl shadow-wb-popup` + 底部灰底按钮区；遮罩别再写 `bg-zinc-950/*`，暗色下会变白雾）。
 6. 图标只用 `lucide-vue-next`，默认尺寸 `h-4 w-4`。
 7. 轻提示用 `showGlobalToast()`（`src/utils/toast.ts`），不要自造 toast。
-8. 不引入暗色模式、不使用 `dark:` 前缀——项目不支持。
+8. **主题用 `<html data-theme="light|dark">` 单开关**：`dark:` 变体已接到这个开关（§6.11），不要再写 `prefers-color-scheme` 媒体查询或 `.dark` 类；颜色走 `zinc-*` / `bg-wb-scrim/*` 语义变量，别写字面量。
 9. 语义色：成功 `emerald-600`、危险 `red-600`、警告 `amber-500`，不要换其他色相。
 10. 全局样式/浏览器兜底只能加在 `src/styles/index.css`，且需注释说明原因。
 11. **扁平优先**：静态内容不叠「边框 + 阴影 + 底色」三件套；选中/聚焦只给一处信号（浅灰底 `bg-zinc-100` 或描边），阴影只留给浮层（下拉、弹窗、抽屉）。
 12. **不用胶囊**：`rounded-full` 仅限头像、圆形图标按钮、圆点；分段控件、筛选标签、状态标记一律 `rounded-md`，选中态用 `bg-zinc-100`/`bg-zinc-200/70`，不用「黑底胶囊 + 内嵌白块 + 阴影」。圆角大小按 §1 圆角阶梯递进（行 6 / 控件 8 / 容器 12 / 大容器与弹窗 16），**不要把所有圆角统一压到 `rounded-md`**。
-13. 图标默认单色（`text-zinc-400`，选中 `text-zinc-500`），不做彩色图标底块与 hover 上浮动画。
+13. 图标默认单色（`text-zinc-400`，选中 `text-zinc-500`），不做彩色图标底块与 hover 上浮动画；**侧栏常驻图标例外**，统一 `text-zinc-600`（§3.4.1）。
 14. **预览类卡片只留一圈框**：缩略图（简历预览、模板预览）一律贴边由卡片自身的 `ring`/`border` 当唯一边框，预览组件用 `bare` 模式去掉自己的 `border`+`rounded`，底部用渐变过渡到白，不要再套「外层边框 + 内层描边 + 页面白底」三层，否则会出现明显的框中框。
 15. **弹窗交互由外壳负责**：所有基于 `AppDialog` 的弹窗自动获得 Esc 关闭、body 滚动锁（引用计数）、焦点进出、`role="dialog"`/`aria-modal`；业务侧不要再自己绑 keydown 或改 `body.style.overflow`。纯图标按钮必须有 `aria-label`（巡检脚本会把无名按钮计为缺陷）。
 16. **设置类页面**：内容列 `max-w-3xl` 居中，白卡各占一块（`rounded-xl border-zinc-200 p-5 sm:p-6`），标题行右放状态/操作，说明文字独占一行，底部仅一行浅灰边界说明；密集表单可降到 `h-9 + rounded-lg + text-[13px]`，但同一页面内高度必须一致。涉及密钥/隐私等敏感能力时，最后一张卡必须如实写出「存哪里 / 谁能看到 / 如何彻底删除 / 轮换策略」四项（`dt/dd` 两列，不新增彩色卡片），并配一个需二次确认的破坏性操作与「最近使用记录」列表；部署状态用 `rounded-md bg-zinc-100 text-[10.5px]` 小标记，异常态才允许 `bg-amber-50`。不要写「绝对安全」「零知识」这类与代理架构不符的承诺。
@@ -40,8 +40,9 @@
 | 样式 | Tailwind CSS **v4**（`@import "tailwindcss"` 于 `src/styles/index.css`），无 SCSS |
 | 无头组件 | radix-vue（shadcn-vue 模式，`components.json`：`cssVariables: false`） |
 | 图标 | lucide-vue-next（约 45+ 文件使用），个别自绘 SVG（BrandLogo、FlowAgentIcon、FlowPointIcon） |
-| 暗色模式 | **不支持**。全库无 `dark:`、`.dark`、`prefers-color-scheme` |
-| 全局样式 | 唯一入口 `src/styles/index.css`（同时 `@import` 了 `wb-theme.css`）：body 背景 `#f7f7f8`、文字 `#0a0a0a`、字体栈 Inter → PingFang SC → system-ui → "Microsoft YaHei"、开启字体平滑；`@theme` 覆盖了 zinc 灰阶（中性化）与 `--font-sans`；含 `.thin-scrollbar`、富文本重置、旧浏览器 oklch/color-mix 兜底变量 |
+| 暗色模式 | 支持，`<html data-theme="light\|dark">` 单开关 + 中性阶变量翻转（§6.11）；首屏有防闪脚本，`useTheme` 提供浅色 / 深色 / 跟随三档 |
+| 全局样式 | 唯一入口 `src/styles/index.css`（同时 `@import` 了 `wb-theme.css`）：body 背景 `#f7f7f8`（变量）、文字中性近黑、字体栈**逐字对齐 WorkBuddy 系统栈**（见 §2 字体栈）、开启字体平滑；`@theme` 覆盖了 zinc 灰阶（中性化）与 `--font-sans` / `--font-mono`；含 `.thin-scrollbar`、选区基线、富文本重置、旧浏览器 oklch/color-mix 兜底变量 |
+| 字体单一来源 | `src/styles/wb-theme.css` 的 `:root` → `--wb-font-sans` / `--wb-font-mono`；`@theme inline` 的 `--font-wb-*`、`index.css` 的 `--font-sans` / `--font-mono` 和 `body` 全部引用它。**不要在第二个文件里再写一份字面量** |
 | 注意 | Tailwind v4 **不使用 JS 配置文件**（原 `tailwind.config.js` 已删除）。没有自定义主题扩展，颜色直接用默认色阶（灰阶用 `zinc-*`）；不要在项目根新增 `tailwind.config.js`，v4 不会读取 |
 
 **并列可点击行**：同一列表里相邻行之间必须留 **4px**（容器 `space-y-1`，或行自身 `mb-1`），**不允许行与行直接相接**——两块 `bg-zinc-*` 贴上就成了一条，看起来像「整块被选中」，也会让鼠标划过时分辨不出高亮的是哪一行。树形列表的父子之间单独用 `mt-1.5`（6px）拉开层级。
@@ -58,12 +59,12 @@
 | 列表主文本（侧栏导航、简历行） | `text-[13.5px]` | 13.5 | `font-medium` + `zinc-700`（选中 `font-semibold` + `zinc-900`） |
 | 列表次级（会话行、菜单项、二级导航） | `text-[13px]` | 13 | 常规 + `zinc-600`（选中 `font-semibold` + `zinc-900`） |
 | 说明文字 | `text-[12.5px]` | 12.5 | 常规 + `zinc-500` |
-| 分组标签 | `text-[11.5px]` | 11.5 | `font-medium` + `tracking-wider` + `zinc-400` |
+| 分组标签 | `text-[11.5px]` | 11.5 | `font-medium` + `tracking-wider` + `zinc-400`（**侧栏分组标题例外**：不加 `tracking-wider`、用 `zinc-500`，见 §3.4.1 / §6.22） |
 | 元信息（时间戳、计数） | `text-[11px]` | 11 | 常规 + `zinc-400`，配 `tabular-nums` |
 
 规则：
 - **最小 11px**，禁止 `text-[10px]`——中文在这个尺寸下发虚。
-- **中文的 500 是假的**：字体栈是 微软雅黑/思源，只有 Regular 与 Bold 两档，`font-medium` 不产生视觉差异。要表达「选中/强调」必须用 `font-semibold`（600），并且字重变化只给选中态，不要给 hover（hover 只变底色）。
+- **中文的 500 是假的**：字体栈是系统雅黑（对齐 WorkBuddy 后仍是 `Microsoft YaHei`，结论不变），只有 Regular 与 Bold 两档，`font-medium` 不产生视觉差异。要表达「选中/强调」必须用 `font-semibold`（600），并且字重变化只给选中态，不要给 hover（hover 只变底色）。
 - 颜色承载层级：`zinc-900` 主 → `zinc-700` 常规 → `zinc-600` 次级 → `zinc-500` 说明 → `zinc-400` 元信息。**需要阅读的正文不许用 `zinc-500` 及更浅**。
 - 标题 `font-semibold tracking-tight`，`text-[14px]` 与 `text-sm` 等价，新代码优先写 `text-sm`。
 
@@ -76,7 +77,9 @@
 
 macOS 落 San Francisco + 苹方；**Windows 用 CDP `CSS.getPlatformFontsForNode` 实测：拉丁/数字 → `Arial`（25 字），中文 → `Microsoft YaHei` 微软雅黑（4 字）**，与「仅 `Arial, "Microsoft YaHei"`」的对照组结果完全一致。
 
-本项目 `--font-sans` 以 `Inter` 打头，但既没有 `@font-face` 引入、系统也未安装，**这个声明从未生效**；同一实测里整串（含拉丁与数字）都落到 `Microsoft YaHei UI`。中文观感接近，差异在拉丁/数字字形，以及「微软雅黑」与「微软雅黑 UI」是两套字体文件。`--font-wb-sans` 里存有一份 WorkBuddy 栈副本，但没有被 `--font-sans` 引用。**是否把全站字体栈对齐尚未决定**：改动是一行，但会改变全站所有拉丁与数字的字形，需单独确认（§6.21）。
+**全站已对齐（§6.22，2026-11-15）**：字体栈唯一来源是 `wb-theme.css` 的 `:root` → `--wb-font-sans` / `--wb-font-mono`（逐字抄上面这串声明 + WorkBuddy 等宽栈）；`@theme inline` 的 `--font-wb-*`、Tailwind 的 `--font-sans` / `--font-mono` 与 `body` 全部引用它，**不再有第二份字面量**。改后 CDP 复测：33 字探针里 31 字落 `Arial`、2 字落 `Microsoft YaHei`，与「仅 `Arial, "Microsoft YaHei"`」对照组逐字一致；等宽栈落 `Consolas`（中文回落 `NSimSun`）。回归审计每格都会断言这三处同源且不含 `Inter`。
+
+改前 `--font-sans` 以 `Inter` 打头，既没有 `@font-face` 引入、系统也未安装，**这个声明从未生效**——整串（含拉丁与数字）都落 `Microsoft YaHei UI`，与「微软雅黑」是两套字体文件。移除它是修正死声明，不是换一套字体设计。注意 `docs/design/workbuddy-visual-reference.md` 还记了聊天面 `--cr-font-family`（PingFang 打头）与 VS Code 继承的 body 栈：WorkBuddy 各区域确有多套栈，但 Windows 上落字同样是 Arial + 微软雅黑，本项目统一取上面实测的这一串。
 
 **圆角阶梯**（五档，按元素尺寸递进；勿随意新造）
 
@@ -188,10 +191,11 @@ macOS 落 San Francisco + 苹方；**Windows 用 CDP `CSS.getPlatformFontsForNod
 | 部位 | 位置 | 算法 |
 |---|---|---|
 | 行底色块 | 距面板左边 8 | 容器 `px-2` |
-| 一级文字 / 导航图标 | 距面板左边 20 | 8（容器）+ 12（行内 `px-3`） |
-| 二级文字（会话行、分组标题文字、搜索框文字） | 距面板左边 40 | 20 + 一个轨宽 |
+| 一级轨（导航图标、**分组标题文字**、简历条目图标） | 距面板左边 20 | 8（容器）+ 12（行内 `px-3`），或标题行直接 `px-5` |
+| 二级轨（简历条目标题、搜索结果条目标题） | 距面板左边 40 | 20 + 图标 14 + `gap-1.5` 6（搜索框文字 42 属同一带） |
+| 三级轨（会话行、骨架、新对话文字） | 距面板左边 48 | 行内 `pl-10`（40）+ 容器 8；「新对话」用 `pl-5` 让 + 图标吃掉前 20px，文字仍落 48 |
 
-判定口诀：**底色比文字轨多让 12px（左右各一），嵌套只加一个轨宽 20**。底色块与文字轨同宽会显得「文字被框顶住」，底色块再往外扩到面板边缘则会失去轻盈感。
+判定口诀：**底色比文字轨多让 12px（左右各一）；层级递进 20 → 40 → 48，最后一级只让 8px**——三级再让满 20 会把 248 宽的侧栏吃掉太多。分组标题独占一级轨、条目图标也在同一轨，上下对齐成一条竖线；「父级」由图标承担，不是靠把标题推到二级轨（改前正是这样，造成层级倒挂，见 §6.22）。底色块与文字轨同宽会显得「文字被框顶住」，往外扩到面板边缘则会失去轻盈感。
 
 **行与命中区**：
 
@@ -208,8 +212,8 @@ macOS 落 San Francisco + 苹方；**Windows 用 CDP `CSS.getPlatformFontsForNod
 
 | 角色 | 档 | 类 | 用在哪 |
 |---|---|---|---|
-| 交互图标 | 12 | `h-3 w-3` | 分组标题、时间戳、徽标内、pin、行内 chevron |
-| | 14 | `h-3.5 w-3.5` | 行内动作图标、输入框内图标、模型名前的小图标 |
+| 交互图标 | 12 | `h-3 w-3` | 时间戳、徽标内、pin、行内 chevron（分组标题**不带图标**，§6.22） |
+| | 14 | `h-3.5 w-3.5` | 行内动作图标、输入框内图标、**树形列表条目前置图标**、模型名前的小图标 |
 | | 16 | `h-4 w-4` | **默认档**：导航图标、按钮图标、工具条、表单前后缀 |
 | | 20 | `h-5 w-5` | 页面级操作（顶栏按钮）、侧栏导航、设置页行图标 |
 | 图标块 | 24 | `h-6 w-6` | 只在 48px 方块/圆形容器里用（`h-12 w-12` + 24 图标），如 hero 图标、导入进度头部 |
@@ -320,20 +324,23 @@ macOS 落 San Francisco + 苹方；**Windows 用 CDP `CSS.getPlatformFontsForNod
 | EmptyState | `common/EmptyState.vue` | 空状态统一入口 |
 | BrandLogo | `common/BrandLogo.vue` | 品牌标识 |
 
-### 3.4.1 树形列表行（侧栏「简历 → 会话」）
+### 3.4.1 树形列表行（侧栏「分组 → 简历 → 会话」）
 
-两层结构（`layout/WorkspaceSidebar.vue`）的层级只靠**文字缩进**表达，不缩进容器，否则选中底色会比父行短一截。
+三层结构（`layout/WorkspaceSidebar.vue`）：**分组标题独占一行且无图标，图标属于条目**。层级靠「轨位 + 图标」表达，不缩进容器，否则选中底色会比父行短一截。改前是「图标 + 简历 + 计数」合成一行、条目反而没有图标，分组标题文字（40 轨）比条目文字（20 轨）还靠右，层级是倒的（§6.22）。
 
 | 部位 | 规格 |
 |---|---|
-| 父行 | `h-8 rounded-md`，文字 `pl-3 pr-2`（距面板左边 20，见 §2.5）；未选中 `text-zinc-700 hover:bg-zinc-200/50`，独占选中 `bg-zinc-200/60 text-zinc-900`；标题固定 `font-medium`（父级不参与"选中加粗"，否则和子行抢重量） |
+| 分组标题行 | `mt-4 h-6 px-5`，**无图标**；标签 `text-[11.5px] font-medium text-zinc-500`（侧栏例外，不加 `tracking-wider`，中文加字距会散），计数 `tabular-nums text-zinc-400`；文字落在 20 轨，与下面条目的图标上下对齐。列表容器 `mt-1.5` |
+| 父行（简历条目） | `rounded-md`，行内 `pl-3 pr-2 gap-1.5`：前置 `FileText` 图标 `h-3.5 w-3.5 text-zinc-600` 落在 20 轨，标题落在 40 轨；未选中 `text-zinc-700 hover:bg-zinc-200/50`，独占选中 `bg-zinc-200/60 text-zinc-900`；标题固定 `font-medium`（父级不参与「选中加粗」，否则和子行抢重量）。文字右移一轨后长标题更易截断，由 `:title` 兜住（§6.14） |
 | 父行（子项选中时） | `bg-zinc-200/25 text-zinc-900` + `hover:bg-zinc-200/60`：静止态让位给子行，鼠标移上去立刻加深到与子行同档，父行永远有可点反馈 |
-| 子行 | 容器不缩进（`w-full` 与父行等宽），只把内容推进去 `pl-8 pr-2`（距面板左边 40 = 20 + 一个轨宽）；选中 `bg-zinc-200/60 text-zinc-900 font-semibold`，未选中 `text-zinc-600 hover:bg-zinc-200/40 hover:text-zinc-900` |
+| 子行（会话） | 容器不缩进（`w-full` 与父行等宽），只把内容推进去 `pl-10 pr-2`（距面板左边 48）；选中 `bg-zinc-200/60 text-zinc-900 font-semibold`，未选中 `text-zinc-600 hover:bg-zinc-200/40 hover:text-zinc-900` |
+| 「新对话」行动作 | `pl-5` + `Plus`(14) + `gap-1.5`：图标在 28、文字在 48，与会话行文字同轨。不要在 `pl-10` 上再叠一个图标宽，那样会缩进到 68 |
 | 行间距 | 父子之间 `mt-1.5`，兄弟行之间 `mb-1`（4px）——**不留空隙会让相邻两块底色粘成一条**，「新对话」这类行动作也走同一间距 |
 | 行内元信息 | 时间戳 `text-[11px] text-zinc-400`，hover 时整块换成操作图标（置顶 / 删除），不做常显 |
-| 分组标题行（例外） | 常驻图标 `text-zinc-600`（`#545454`）→ 标签 `text-zinc-500`（`#6e6e6e`）→ 计数 `text-zinc-400`（`#a3a3a3`），三档递减。比 §2 全站「分组标签 `zinc-400`」深一档：侧栏底色本就是浅灰，且要和 WorkBuddy 的近黑图标对齐（§6.21）。搜索结果里的「简历 / 对话」分组同规格。hover 才出现的操作图标、搜索框 placeholder 图标仍留 `zinc-400` |
+| 色阶（§6.21 沿用） | 条目常驻图标 `text-zinc-600`（`#545454`）→ 分组标签 `text-zinc-500`（`#6e6e6e`）→ 计数 `text-zinc-400`（`#a3a3a3`），三档递减。比 §2 全站「分组标签 `zinc-400`」深一档：侧栏底色本就是浅灰，且要和 WorkBuddy 的近黑图标对齐。hover 才出现的操作图标、搜索框 placeholder 图标、时间戳仍留 `zinc-400` |
+| 搜索结果分组 | 「简历 / 对话」两个标题同规格（无图标、`px-3` → 20 轨），条目已有 `Files` / `MessageSquare` 图标（`text-zinc-600`）→ 文字 40 轨；这是新层级的天然样板 |
 
-判定口诀：**底色按父行宽度拉满，层级交给 padding；选中靠加粗 + 底色，hover 只换底色**。
+判定口诀：**底色按父行宽度拉满，层级交给轨位与图标；分组标题不带图标，图标只属于条目**；选中靠加粗 + 底色，hover 只换底色。
 
 ### 3.5 Toast（轻提示）
 
@@ -535,7 +542,7 @@ macOS 落 San Francisco + 苹方；**Windows 用 CDP `CSS.getPlatformFontsForNod
 | 层 | 位置 | 内容 |
 | --- | --- | --- |
 | token | `src/styles/wb-theme.css` | `--wb-*` 色板/语义/尺度、窗口与骨架尺寸、`--shadow-wb-popup`；`@theme inline` 生成 `bg-wb-*` / `text-wb-*` / `shadow-wb-*` / `ease-wb-*` 等工具类 |
-| 主题覆盖 | `src/styles/index.css` 的 `@theme` | `--font-sans`（Inter 打头、PingFang SC 兜中文）、zinc 灰阶中性化 |
+| 主题覆盖 | `src/styles/index.css` 的 `@theme` | `--font-sans` / `--font-mono` 引用 `--wb-font-*`（逐字对齐 WorkBuddy 系统栈，§6.22）、zinc 灰阶中性化 |
 | 共享组件 | `ui/button/Button.vue`、`ui/input/Input.vue`、`ui/dialog/AppDialog.vue` | 按 WorkBuddy 的组件配方改类名，API 不变 |
 | 动效 | `wb-theme.css` 的 `--default-transition-duration: 100ms` + `ResumeAiChatPanel.vue` | 没写 `duration-*` 的过渡一律 100ms；面板/淡入显式写 `duration-150`；消息入场 `.32s cubic-bezier(.34,1.56,.64,1)` |
 
@@ -596,6 +603,8 @@ macOS 落 San Francisco + 苹方；**Windows 用 CDP `CSS.getPlatformFontsForNod
 验证：浏览器读 `getBoundingClientRect().left`，导航图标 20、简历标题 20、会话标题 40、分组标题文字 40、搜索图标 20，全部落在轨上；行高保持 32、行距 4 不变（布局未动）。
 
 为什么是 20/40 而不是更大：把 WorkBuddy 手机截图按面板宽度归一后，它的一级文字在 8.2%、二级在 16.8%，本项目收口后是 8.1% / 16.1%——比例本就接近。真正让人觉得「挤」的不是总缩进，而是**行底色与文字只差 10px、右侧只留 4px**，以及三条左缘不齐。所以这轮只补「底色比文字轨多让 12px」和「嵌套正好一个轨宽」，不整体放大内边距。
+
+**2026-11-15 后续修订（§6.22）**：分组行层级重构后，上表两条轨位**有意变化**——分组标题去掉图标、文字从 40 回到 20；简历条目加前置图标，文字从 20 移到 40；会话行再从 40 让到 48。这不是把 §6.6 的收口回退，而是层级语义变了：改前「分组标题文字 40 / 条目文字 20」是倒挂的，现在变成 20 → 40 → 48 单调递增，且分组标题与条目图标同轨。两条底色轨（8 / 12 让位）和行高、行距都没动。
 
 ### 6.7 键盘焦点收口（2026-11-15）
 
@@ -918,7 +927,9 @@ VITAFLOW_TOKEN=<jwt> backend/.venv/Scripts/python.exe scripts/audit/regression.p
 
 `VITAFLOW_BASE_URL` 可覆盖地址；退出码 `0` 全绿 / `1` 断言失败 / `2` 配置或依赖缺失。`--json` 要**直接调 Python**——经 npm 会把脚本头混进 stdout，破坏 JSON。JWT 只在运行时写进 `localStorage`，**不写进任何文件**。
 
-**每格 8 条断言**：① 主题生效；② 无页面横滚；③ 横向不可达控件 0（排除竖直方向、被祖先裁切、可横滚到达）；④ 无出口文本裁剪 0（自定义气泡按 `group/title` 特征豁免）；⑤ 可选中交互控件 0（表单控件排除，它们本就该能选字）；⑥ 正文段落 100% 可选（双向判定，防基线误伤）；⑦ 横滚箭头自洽——有溢出才 `opacity=1` 且 `data-sh-right=1`，不溢出必须隐藏；⑧ 布局自洽——主区 <900 走单栏（底部分段 + 汉堡 + 预览隐藏）、≥900 走三栏，统计卡容器 ≥672 排 4 列否则 2 列。矩阵之外再跑一段**运行时 light→dark 不刷新**检查：箭头配色跟随、`data-sh` 状态不变、无新增横滚与裁剪。
+**每格 9 条断言**：① 主题生效；② 无页面横滚；③ 横向不可达控件 0（排除竖直方向、被祖先裁切、可横滚到达）；④ 无出口文本裁剪 0（自定义气泡按 `group/title` 特征豁免）；⑤ 可选中交互控件 0（表单控件排除，它们本就该能选字）；⑥ 正文段落 100% 可选（双向判定，防基线误伤）；⑦ 横滚箭头自洽——有溢出才 `opacity=1` 且 `data-sh-right=1`，不溢出必须隐藏；⑧ 布局自洽——主区 <900 走单栏（底部分段 + 汉堡 + 预览隐藏）、≥900 走三栏，统计卡容器 ≥672 排 4 列否则 2 列；⑨ 字体栈自洽（§6.22）——`--font-sans` / `--wb-font-sans` / `body` 归一后必须同源，且不含 `Inter`、含 `-apple-system` 与 `Microsoft YaHei`，`--font-mono` 含 `Consolas`。
+
+**⑨ 的一个坑**：比较前必须先剥掉引号再压空白。浏览器计算值会把 `"微软雅黑"` 变成 `微软雅黑`，而自定义属性保留字面量 `"微软雅黑"`；直接比整串会让 30 格全部假失败（首版就是这么报的）。矩阵之外再跑一段**运行时 light→dark 不刷新**检查：箭头配色跟随、`data-sh` 状态不变、无新增横滚与裁剪。
 
 **与 §6.19 的关系**：这个矩阵就是「主题 × 断点 × 布局状态」叠加规则的落地，`--quick` 取的正是「最窄容器 × 暗色」子集。以后每加一维，先往 `assert_cell()` 加断言、再扩 `CASES`，**不要另起临时脚本**——口径分散本身就是 §6.19 那次漏检的根因。
 
@@ -930,7 +941,7 @@ VITAFLOW_TOKEN=<jwt> backend/.venv/Scripts/python.exe scripts/audit/regression.p
 
 | 观察 | 实测 | 处理 |
 | --- | --- | --- |
-| ①「文字在图标之后」 | WorkBuddy 的**分组标题「空间 (4)」独占一行、没有图标**；图标属于下面的项目条目 `vitaflow`，文字紧跟图标右侧。我们是「图标 + 简历 + 3」把分组标题和图标合成一行——**顺序一致，层级不同** | 顺序本来就是图标在前、文字在后，无需改；层级差异属结构调整，未动 |
+| ①「文字在图标之后」 | WorkBuddy 的**分组标题「空间 (4)」独占一行、没有图标**；图标属于下面的项目条目 `vitaflow`，文字紧跟图标右侧。我们是「图标 + 简历 + 3」把分组标题和图标合成一行——**顺序一致，层级不同** | 顺序本来就是图标在前、文字在后，无需改；层级差异属结构调整，本轮未动（**下一轮 §6.22 已重构**） |
 | ②「图标颜色深一点」 | WorkBuddy 文件夹图标 **24**（近黑），我们分组图标 **163**（`#a3a3a3`），差一整档 | ✅ 已改 |
 | ③「父文件夹的字体没我们这么淡」 | WorkBuddy 分组标题 **121**，我们 **169**。中文字体只有 Regular / Bold 两档（§2），所以「淡」是**颜色**不是字重 | ✅ 已改 |
 
@@ -944,12 +955,64 @@ VITAFLOW_TOKEN=<jwt> backend/.venv/Scripts/python.exe scripts/audit/regression.p
 
 改后亮色像素：图标 **84**（`#545454`）→ 标签 **110**（`#6e6e6e`）→ 计数 **163**，三档递减；暗色由中性阶自动翻成 `#a6a6af` / `#8f8f99` / `#83838d`，清晰但不过亮。规则已写进 §3.4.1。
 
-**两件没动、等确认**：
+**两件留到下一轮的事（用户随后确认，已在 §6.22 完成）**：
 
-1. **全站字体栈对齐**：把 `--font-sans` 换成 WorkBuddy 栈只有一行，但会改变全站所有拉丁与数字的字形（`vitaflow`、时间戳、计数、代码），属于全局视觉变化，不在这轮「图标调深」里擅自做。
-2. **分组行层级重构**：把分组标题独立成行、图标下放到条目级才与 WorkBuddy 结构完全一致，属于布局调整。
+1. **全站字体栈对齐**：改变全站所有拉丁与数字的字形（`vitaflow`、时间戳、计数、代码），属全局视觉变化，不在「图标调深」这轮擅自动。
+2. **分组行层级重构**：把分组标题独立成行、图标下放到条目级才与 WorkBuddy 结构完全一致，属布局调整。
 
 **验证**：`npm --prefix frontend run audit:ui` 30 格 0 失败、`vue-tsc --noEmit` / `vite build` 通过、亮/暗截图目视与像素复核。
+
+---
+
+### 6.22 全站字体栈与分组行层级（2026-11-15）
+
+用户确认把 §6.21 留下的两件一起做。这两件会互相放大影响：字体换栈改变字宽，图标下放又把条目标题从 20 轨推到 40 轨，所以**必须一起验证**，不能分两次各看一眼。
+
+#### ① 字体栈：单一来源，逐字对齐
+
+| 位置 | 改前 | 改后 |
+| --- | --- | --- |
+| `--wb-font-sans` / `--wb-font-mono` | 不存在（只有 `@theme inline` 里一份不完整的 `--font-wb-sans` 副本） | `wb-theme.css` 的 `:root` 上定义，逐字抄 WorkBuddy 声明 |
+| `--font-sans` | `Inter, "PingFang SC", ui-sans-serif, …`（`Inter` 是死声明） | `var(--wb-font-sans)` |
+| `--font-mono` | Tailwind 默认值（未对齐） | `var(--wb-font-mono)`（WorkBuddy 等宽栈） |
+| `--font-wb-sans` / `--font-wb-mono` | 另一份字面量副本，与 `--font-sans` 不同 | 引用同一个 `--wb-font-*` |
+
+**为什么只留一份字面量**：两份栈会各改各的慢慢漂移；`@theme inline` 与 `index.css` 的 `@theme` 都引用 `:root` 变量，构建产物里 `--font-sans: var(--wb-font-sans)`，运行时解析，改一处全站生效。实测 `vite build` 产物同时含 `--font-sans:var(--wb-font-sans)` 和 `--wb-font-sans:-apple-system, …`，接线没断。
+
+**CDP 落字复测**（`CSS.getPlatformFontsForNode`，33 字混合探针）：
+
+| 栈 | 结果 |
+| --- | --- |
+| `var(--font-sans)` 改后 | `Arial` 31 字 + `Microsoft YaHei` 2 字 |
+| 对照组 `Arial, "Microsoft YaHei"` | `Arial` 31 字 + `Microsoft YaHei` 2 字 |
+| 改前 `Microsoft YaHei UI` 对照 | `Microsoft YaHei UI` 33 字（整串） |
+| `var(--font-mono)` | `Consolas` 31 字 + `NSimSun` 2 字 |
+
+结论：**改后与 WorkBuddy 对照组逐字一致**；差异从「中文观感接近但拉丁字形不同、两套雅黑字体文件」变成完全一致。macOS 仍是 San Francisco + 苹方，不用自带中文 Web Font。
+
+#### ② 分组行层级：标题归标题，图标归条目
+
+| 部位 | 改前 | 改后 |
+| --- | --- | --- |
+| 分组标题 | `Files` 图标 +「简历」+ 计数挤在一行，文字 40 轨 | 独占一行、**无图标**，文字 20 轨；`h-6 px-5`，标签 `zinc-500`、计数 `tabular-nums zinc-400`，去掉 `tracking-wider` |
+| 简历条目 | 无图标，文字 20 轨 | `FileText` 图标（20 轨，`text-zinc-600`）+ 文字 40 轨 |
+| 会话行 | 文字 40 轨 | 文字 48 轨（`pl-10`），与父行文字拉开一档 |
+| 「新对话」 | 文字 60 轨 | 文字 48 轨（`pl-5` + `Plus` 图标吃掉前 20px），与会话行同轨 |
+| 搜索结果「简历 / 对话」 | 标题也带图标 | 标题无图标、20 轨；条目图标 `text-zinc-600` 统一（原来对话条目是 `zinc-400`） |
+
+浏览器实测 `getBoundingClientRect().left`：分组标题文字 **20**、条目图标 **20**、条目标题 **40**、分组标题内 svg 数 **0**；搜索态分组标题文字同为 20、无图标。三级轨单调递增，改前的倒挂消失。
+
+**取舍**：条目标题右移一轨后更容易截断（`卢俊隆_多模态算法` 在 248 宽侧栏会成 `卢俊隆_多模态…`）。这是 WorkBuddy 形态的必然代价——图标要占一档。按 §6.14 的规则，每行都有 `:title` 出口，审计判定「无出口裁剪」为 0；不为了让一个长名字完整显示而把时间戳做成 hover 才占位（那会让行宽在悬停时跳动）。
+
+![侧栏分组行层级与字体栈改前改后对比](assets/sidebar-hierarchy-font.png)
+
+#### ③ 验证
+
+- `vue-tsc --noEmit`、`vite build` 通过；`audit:ui` **30 格 0 失败**（含新增的字体栈第 ⑨ 条断言），运行时 light→dark 稳定。
+- **字体 A/B 扫描**：在同一页面注入旧栈量一次、移除后再量一次，5 个路由共 2197 个元素，**新增截断 0、新增换行 0**。中文标签换两行（§6.14 修过的「用户总/数」）没有回归；变化的只有拉丁/数字字形。
+- 亮色列表态、搜索态截图目视复核；改前改后对比图入库 `docs/assets/sidebar-hierarchy-font.png`。
+
+**口径同步**：§2 字体栈实测、§2.5 内容轨（20/40/48）、§3.4.1 树形列表行、§6.1 落点、§6.6 后续修订、§6.20 断言数、§6.21 待办状态全部更新。顺带修掉 §0 / §1 里「项目不支持暗色模式」这类早期基线残留。
 
 ---
 
@@ -967,8 +1030,12 @@ VITAFLOW_TOKEN=<jwt> backend/.venv/Scripts/python.exe scripts/audit/regression.p
 | ~~**响应式**~~ | ✅ 已收口（§6.15）：5 视口 × 11 路由无页面横滚、无横向不可达控件；分页移出横滚区，统计卡改用容器查询 | — |
 | ~~**内容行宽**~~ | ✅ 已核查（§6.16）：容器已收住，最宽 58 汉字/行；给出 `em` 而非 `ch` 的限宽规则与基线 | — |
 | ~~**拖拽与选区**~~ | ✅ 已收口（§6.17）：全局 `:where` 基线让控件不可选、正文仍可选；拖拽收尾补 `buttons===0` 与 `blur` 兜底 | — |
+| ~~**全站字体栈**~~ | ✅ 已收口（§6.22）：`--wb-font-*` 单一来源逐字对齐 WorkBuddy，移除死声明 `Inter`，CDP 落字与对照组一致 | — |
+| ~~**分组行层级**~~ | ✅ 已收口（§6.22）：标题独占一行无图标、图标下放条目，三级轨 20/40/48 单调递增 | — |
 
-收口章节索引：键盘焦点 §6.7、三态 §6.8、文案 §6.9、命中区 §6.10、暗色模式 §6.11、图标尺寸 §6.12、滚动 §6.13、文本溢出 §6.14、响应式 §6.15、内容行宽 §6.16、拖拽与选区 §6.17、两笔技术债清账 §6.18、交叉态体检 §6.19、回归审计资产化 §6.20、侧栏字形与图标色阶 §6.21。
+收口章节索引：键盘焦点 §6.7、三态 §6.8、文案 §6.9、命中区 §6.10、暗色模式 §6.11、图标尺寸 §6.12、滚动 §6.13、文本溢出 §6.14、响应式 §6.15、内容行宽 §6.16、拖拽与选区 §6.17、两笔技术债清账 §6.18、交叉态体检 §6.19、回归审计资产化 §6.20、侧栏字形与图标色阶 §6.21、全站字体栈与分组行层级 §6.22。
+
+> 表格前八项是 2026-11-15 逐项补齐的「凭感觉」维度；最后两项是 §6.21 对照截图后用户确认追加的，见 §6.22。
 
 **技术债清账**（§6.15 记下的两笔，在用户放宽前提后于 §6.18 修掉）：
 

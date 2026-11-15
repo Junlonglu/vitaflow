@@ -6,6 +6,7 @@ import {
   Copy,
   Database,
   Files,
+  FileText,
   FolderOpen,
   LayoutDashboard,
   LayoutTemplate,
@@ -502,13 +503,14 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
       </div>
     </div>
 
-    <div v-if="!isSearching" class="mt-4 flex shrink-0 items-center gap-2 px-5 text-[11.5px] font-medium tracking-wider text-zinc-500">
-      <Files class="h-3 w-3 text-zinc-600" />
+    <!-- 分组标题独占一行、不带图标：文字落在 20 轨，与下面条目的图标对齐；
+         图标属于条目而不是分组（WorkBuddy 的空间标题同样是无图标的一行）。 -->
+    <div v-if="!isSearching" class="mt-4 flex h-6 shrink-0 items-center gap-2 px-5 text-[11.5px] font-medium text-zinc-500">
       <span>简历</span>
-      <span v-if="store.resumeListTotal" class="text-zinc-400">{{ store.resumeListTotal }}</span>
+      <span v-if="store.resumeListTotal" class="tabular-nums text-zinc-400">{{ store.resumeListTotal }}</span>
     </div>
 
-    <div v-if="!isSearching" class="thin-scrollbar mt-1 min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+    <div v-if="!isSearching" class="thin-scrollbar mt-1.5 min-h-0 flex-1 overflow-y-auto px-2 pb-2">
       <div v-if="loading && !store.resumeList.length" class="space-y-1 px-1 pt-1">
         <div v-for="i in 4" :key="i" class="h-8 animate-pulse rounded-md bg-zinc-200/60"></div>
       </div>
@@ -523,7 +525,8 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
           :class="resumeRowClass(item.id)"
           @contextmenu.prevent.stop="openResumeMenu($event, item.id)"
         >
-          <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded-md py-1.5 pl-3 pr-2 text-left" @click="openResume(item.id)">
+          <button type="button" class="flex min-w-0 flex-1 items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-left" @click="openResume(item.id)">
+            <FileText class="h-3.5 w-3.5 shrink-0 text-zinc-600" />
             <span class="min-w-0 flex-1">
               <span class="block truncate text-[13.5px] font-medium leading-5" :title="item.title || '无标题简历'">{{ item.title || "无标题简历" }}</span>
             </span>
@@ -546,7 +549,7 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
 
         <!-- 会话列表不缩进容器，只缩进文字：选中底色和父行同宽；行间留空隙，选中块不跟邻居粘成一片 -->
         <div v-if="isExpanded(item.id)" class="mt-1.5 pb-1">
-          <div v-if="chatStore.loadingResumeId === item.id && !chatStore.sessions(item.id).length" class="py-1 pl-8">
+          <div v-if="chatStore.loadingResumeId === item.id && !chatStore.sessions(item.id).length" class="py-1 pl-10">
             <div class="h-6 w-32 animate-pulse rounded bg-zinc-200/60"></div>
           </div>
 
@@ -554,7 +557,7 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
             v-for="session in chatStore.sessions(item.id)"
             :key="session.id"
             data-session-row
-            class="group/session mb-1 flex w-full cursor-pointer items-center gap-1.5 rounded-md py-1.5 pl-8 pr-2 text-left transition-colors"
+            class="group/session mb-1 flex w-full cursor-pointer items-center gap-1.5 rounded-md py-1.5 pl-10 pr-2 text-left transition-colors"
             :class="isActiveSession(item.id, session.id) ? 'bg-zinc-200/60 text-zinc-900' : 'text-zinc-600 hover:bg-zinc-200/40 hover:text-zinc-900'"
             :title="sessionSnippet(session)"
             @click="openSession(item.id, session.id)"
@@ -605,7 +608,7 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
 
           <button
             type="button"
-            class="flex w-full items-center gap-1.5 rounded-md py-1.5 pl-8 pr-2 text-left text-[12.5px] text-zinc-400 transition-colors hover:bg-zinc-200/40 hover:text-zinc-700 disabled:opacity-60"
+            class="flex w-full items-center gap-1.5 rounded-md py-1.5 pl-5 pr-2 text-left text-[12.5px] text-zinc-400 transition-colors hover:bg-zinc-200/40 hover:text-zinc-700 disabled:opacity-60"
             :disabled="creatingSessionFor === item.id"
             :title="`新建对话（${modLabel} + Alt + N）`"
             @click="newSession(item.id)"
@@ -638,16 +641,15 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
       </p>
 
       <div v-if="matchedResumes.length" class="mb-3">
-        <div class="flex items-center gap-1.5 px-3 pb-1 text-[11.5px] font-medium tracking-wider text-zinc-500">
-          <Files class="h-3 w-3 text-zinc-600" />
+        <div class="flex items-center gap-2 px-3 pb-1 text-[11.5px] font-medium text-zinc-500">
           <span>简历</span>
-          <span class="text-zinc-400">{{ matchedResumes.length }}</span>
+          <span class="tabular-nums text-zinc-400">{{ matchedResumes.length }}</span>
         </div>
         <button
           v-for="item in matchedResumes"
           :key="item.id"
           type="button"
-          class="mb-1 flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-zinc-700 transition-colors hover:bg-zinc-200/50"
+          class="mb-1 flex w-full items-center gap-1.5 rounded-lg px-3 py-1.5 text-left text-zinc-700 transition-colors hover:bg-zinc-200/50"
           @click="openResume(item.id)"
         >
           <Files class="h-3.5 w-3.5 shrink-0 text-zinc-600" />
@@ -657,10 +659,9 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
       </div>
 
       <div>
-        <div class="flex items-center gap-1.5 px-3 pb-1 text-[11.5px] font-medium tracking-wider text-zinc-500">
-          <MessageSquare class="h-3 w-3 text-zinc-600" />
+        <div class="flex items-center gap-2 px-3 pb-1 text-[11.5px] font-medium text-zinc-500">
           <span>对话</span>
-          <span v-if="searchResults.length" class="text-zinc-400">{{ searchResults.length }}</span>
+          <span v-if="searchResults.length" class="tabular-nums text-zinc-400">{{ searchResults.length }}</span>
         </div>
 
         <div v-if="searchLoading" class="space-y-1 px-1">
@@ -672,11 +673,11 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
             v-for="item in searchResults"
             :key="`${item.resume_id}-${item.id}`"
             type="button"
-            class="mb-1 flex w-full items-start gap-2 rounded-lg px-3 py-1.5 text-left transition-colors hover:bg-zinc-200/50"
+            class="mb-1 flex w-full items-start gap-1.5 rounded-lg px-3 py-1.5 text-left transition-colors hover:bg-zinc-200/50"
             @click="openSearchSession(item)"
           >
             <Pin v-if="item.is_pinned" class="mt-0.5 h-3 w-3 shrink-0 text-amber-500" />
-            <MessageSquare v-else class="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-400" />
+            <MessageSquare v-else class="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-600" />
             <span class="min-w-0 flex-1">
               <span class="block truncate text-[13px] font-medium leading-4 text-zinc-800">{{ item.title || "无标题对话" }}</span>
               <span class="block truncate text-[11px] leading-4 text-zinc-400">{{ item.resume_title || "未知简历" }}</span>

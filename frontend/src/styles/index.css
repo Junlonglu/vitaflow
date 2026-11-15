@@ -18,10 +18,12 @@
  * 3. 动效 100ms：WorkBuddy 的按钮过渡是 0.1s 标准曲线，几乎瞬时、不弹。
  * ============================================================ */
 @theme {
-  /* 字体：拉丁与数字走 Inter（比 PingFang 的拉丁更紧凑），中文回落到
-     PingFang SC / 微软雅黑 —— 与 WorkBuddy 在 Windows 上的实际结果一致。 */
-  --font-sans: Inter, "PingFang SC", ui-sans-serif, system-ui, -apple-system,
-    BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+  /* 字体：逐字对齐 WorkBuddy 桌面端系统字体栈，唯一来源在 wb-theme.css 的
+     --wb-font-*（见该文件注释）。原先打头的 Inter 既没 @font-face 引入、
+     系统也没安装，是个从未生效的死声明；去掉后 Windows 上拉丁/数字由
+     Microsoft YaHei UI 改为 Arial、中文改为 Microsoft YaHei（§6.22）。 */
+  --font-sans: var(--wb-font-sans);
+  --font-mono: var(--wb-font-mono);
 
   /* 中性灰阶：值在 wb-theme.css 里按主题给（--wb-n-*）。
      这里只做「类名 → 变量」的接线，所以 zinc-* 类名在全站不用改一个字，

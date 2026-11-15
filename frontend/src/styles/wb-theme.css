@@ -199,6 +199,23 @@
    （Tailwind v4 的默认 dark 变体是媒体查询，切不了手动开关）。 */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
+/* ------------------------------------------------------------------
+ * 字体栈：全站唯一来源
+ *
+ * 逐字抄自 WorkBuddy 桌面端 renderer/assets/dist-eTnrGI8p.css（2026-11-15
+ * CDP CSS.getPlatformFontsForNode 实测）：Windows 拉丁/数字 → Arial，
+ * 中文 → Microsoft YaHei；macOS → San Francisco + 苹方。两种主题共用，
+ * 所以放在不受 data-theme 覆盖的 :root 上。
+ *
+ * 改这里会同时改 body / font-sans / font-wb-sans / font-mono，不要再在
+ * index.css 的 @theme 里另写一份字面量——两份栈会各改各的慢慢漂移。
+ * ------------------------------------------------------------------ */
+:root {
+  --wb-font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", Helvetica,
+    Arial, "Microsoft YaHei", "微软雅黑", "黑体", Heiti, sans-serif;
+  --wb-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
 /* 让 Tailwind 生成 bg-wb-* / text-wb-* / border-wb-* / rounded-wb-* 等工具类 */
 @theme inline {
   --color-wb-brand: var(--wb-brand-8);
@@ -241,9 +258,8 @@
   --radius-wb-3xl: 20px;
   --radius-wb-4xl: 24px;
 
-  --font-wb-sans: "PingFang SC", -apple-system, "Helvetica Neue", Arial,
-    "Microsoft Yahei", sans-serif;
-  --font-wb-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  --font-wb-sans: var(--wb-font-sans);
+  --font-wb-mono: var(--wb-font-mono);
 
   /* 字号 + 行高成对声明，text-wb-body 会同时带上行高 */
   --text-wb-caption: 12px;

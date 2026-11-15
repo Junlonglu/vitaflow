@@ -1,6 +1,6 @@
 """VitaFlow UI 回归审计（交叉态矩阵）
 
-把 design-system.md §6.10–§6.19 十一轮收口的结论变成可复跑的断言。
+把 design-system.md §6.10–§6.22 各轮收口的结论变成可复跑的断言。
 此前这些检查散落在临时目录，口径还会漏宽度带（§6.19：800 视口才暴露
 模型名截断），故合并为一个自包含脚本。
 
@@ -127,7 +127,20 @@ JS = r"""() => {
     clipped.push(el.textContent.trim().slice(0, 16));
   }
 
-  // 3) 选区基线：控件不可选，正文仍可选（§6.17 双向判定）
+  // 3) 字体栈（§6.22）：body / --font-sans / --wb-font-sans 必须同源，
+  //    且逐字是 WorkBuddy 系统栈。曾经 --font-sans 打头的 Inter 从未生效。
+  // 浏览器计算值会剥掉中文字体名的引号（"微软雅黑" → 微软雅黑），
+  // 自定义属性则保留字面量；比较前统一去引号 + 压空白，否则会假失败。
+  const norm = (s) => s.replace(/["']/g, "").replace(/\s+/g, " ").trim();
+  const rootCS = getComputedStyle(document.documentElement);
+  const font = {
+    body: norm(getComputedStyle(document.body).fontFamily),
+    sans: norm(rootCS.getPropertyValue("--font-sans")),
+    src: norm(rootCS.getPropertyValue("--wb-font-sans")),
+    mono: norm(rootCS.getPropertyValue("--font-mono")),
+  };
+
+  // 4) 选区基线：控件不可选，正文仍可选（§6.17 双向判定）
   // 表单控件（input/textarea/select）本来就允许选中文字，不进这条基线，
   // 否则会把「能输入」误报成「控件可选中」。
   const visibleControls = [...document.querySelectorAll(
@@ -141,7 +154,7 @@ JS = r"""() => {
   const paragraphs = [...document.querySelectorAll("p")].filter((p) => p.textContent.trim().length > 60);
   const paragraphsSelectable = paragraphs.filter((p) => getComputedStyle(p).userSelect !== "none").length;
 
-  // 4) 各轮新增控件的状态自洽性
+  // 5) 各轮新增控件的状态自洽性
   const sh = document.querySelector("[data-sh]");
   const wrap = sh ? sh.parentElement : null;
   const arrow = wrap ? wrap.querySelector(".wb-sh-arrow-right") : null;
@@ -156,7 +169,7 @@ JS = r"""() => {
   const containerW = gridHost ? Math.round(gridHost.parentElement.getBoundingClientRect().width) : null;
 
   return {
-    theme,
+    theme, font,
     hscroll: document.documentElement.scrollWidth > vw,
     unreachable, clipped, selectable,
     paragraphs: paragraphs.length, paragraphsSelectable,
@@ -188,6 +201,15 @@ def assert_cell(theme: str, width: int, route: str, r: dict) -> list[str]:
         bad.append(f"可选中交互控件 {len(r['selectable'])} {r['selectable'][:2]}")
     if r["paragraphs"] and r["paragraphsSelectable"] != r["paragraphs"]:
         bad.append(f"正文段落误伤 {r['paragraphsSelectable']}/{r['paragraphs']}")
+
+    # 字体栈：单一来源 + 逐字对齐 WorkBuddy（§6.22）
+    f = r["font"]
+    if f["sans"] != f["src"] or f["sans"] != f["body"]:
+        bad.append("字体栈未接单一来源（--font-sans / --wb-font-sans / body 不一致）")
+    if "Inter" in f["body"] or "-apple-system" not in f["body"] or "Microsoft YaHei" not in f["body"]:
+        bad.append(f"字体栈偏离 WorkBuddy: {f['body'][:72]}")
+    if "Consolas" not in f["mono"]:
+        bad.append(f"等宽栈偏离 WorkBuddy: {f['mono'][:72]}")
 
     # 横滚提示：溢出才有右箭头，不溢出必须隐藏
     sh = r["sh"]

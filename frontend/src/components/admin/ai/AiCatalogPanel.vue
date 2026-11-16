@@ -261,7 +261,7 @@ void loadEnvKeys()
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
         <h3 class="font-semibold text-zinc-900">服务商接入</h3>
-        <p class="mt-0.5 text-xs text-zinc-400">点一行展开成表单，改完再保存；目录由 AI 服务持有（models.json），模型策略从这里选择</p>
+        <p class="mt-0.5 text-xs text-zinc-400">点一行展开成表单，改完再保存；目录由 AI 服务持有（models.json），勾选要用的模型，价格在下面的「模型定价」里填</p>
       </div>
       <div class="flex shrink-0 items-center gap-2">
         <Button variant="outline" size="sm" class="shrink-0 whitespace-nowrap" :disabled="saving" @click="onRefresh"><RefreshCw class="mr-1.5 h-3.5 w-3.5" />刷新</Button>

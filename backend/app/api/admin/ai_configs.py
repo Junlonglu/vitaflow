@@ -10,10 +10,11 @@ from app.core.database import get_db
 from app.core.exceptions import AppException
 from app.core.response import success
 from app.core.security import get_current_admin
-from app.models.ai_config import AiModelConfig
+from app.models.ai_config import AiModelConfig, FlowPointRule
 from app.services.ai_config_service import invalidate_ai_config_cache, invalidate_catalog_capabilities_cache
 from app.services.ai_service_client import call_catalog
 from app.services.flow_points_service import point_amount, point_number
+from app.services.model_pricing import suggest_prices
 
 
 router = APIRouter(prefix="", tags=["admin"], dependencies=[Depends(get_current_admin)])
@@ -243,6 +244,239 @@ def delete_ai_config(config_id: int, db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
+# 模型定价表：目录里的每个模型 / 路由组自动成行，运营只填「一次起扣 / 输入 /
+# 输出」三格加两个开关。不再有「新建策略 → 选目录模型 → 起名 → 设排序」这一套，
+# 也不需要去「模型策略」里再选一次要上架的模型（那正是两层概念混淆的来源）。
+# ---------------------------------------------------------------------------
+
+
+def _config_brief(item: AiModelConfig | None) -> Optional[dict]:
+    if item is None:
+        return None
+    return {
+        "id": item.id,
+        "points_per_call": point_number(item.chat_points_per_call) if item.chat_points_per_call is not None else None,
+        "points_per_million_input_tokens": point_number(item.chat_points_per_million_input_tokens) if item.chat_points_per_million_input_tokens is not None else None,
+        "points_per_million_output_tokens": point_number(item.chat_points_per_million_output_tokens) if item.chat_points_per_million_output_tokens is not None else None,
+        "is_chat_selectable": bool(item.is_chat_selectable),
+        "is_active": bool(item.is_active),
+        "context_messages": int(item.context_messages or 12),
+        "sort_order": int(item.sort_order or 100),
+    }
+
+
+def _catalog_or_empty() -> tuple[dict, bool]:
+    """目录取不到时也要能打开这张表（否则 AI 服务抖一下后台就进不去）。"""
+    try:
+        return call_catalog("GET", "/v1/catalog"), True
+    except Exception:
+        return {"providers": [], "routing_groups": []}, False
+
+
+def _upstream_prices(price_input, price_output) -> Optional[dict]:
+    if price_input is None and price_output is None:
+        return None
+    return {"input": price_input, "output": price_output}
+
+
+def _pricing_payload(db: Session) -> dict:
+    catalog, catalog_ok = _catalog_or_empty()
+    configs = [
+        item
+        for item in db.scalars(select(AiModelConfig))
+        if (item.model_ref or "").strip()
+    ]
+    by_ref = {str(item.model_ref).strip(): item for item in configs}
+
+    providers = catalog.get("providers") or []
+    groups = catalog.get("routing_groups") or []
+    model_prices: dict[str, dict] = {}
+    for provider in providers:
+        for model in provider.get("models") or []:
+            ref = str(model.get("ref") or "").strip()
+            if ref:
+                model_prices[ref] = _upstream_prices(model.get("price_input"), model.get("price_output"))
+
+    items: list[dict] = []
+    seen_refs: set[str] = set()
+
+    for provider in providers:
+        for model in provider.get("models") or []:
+            ref = str(model.get("ref") or "").strip()
+            if not ref or ref in seen_refs:
+                continue
+            seen_refs.add(ref)
+            prices = model_prices.get(ref)
+            items.append(
+                {
+                    "ref": ref,
+                    "name": str(model.get("name") or model.get("id") or ref),
+                    "kind": "model",
+                    "provider_key": str(provider.get("key") or ""),
+                    "provider_name": str(provider.get("name") or provider.get("key") or ""),
+                    "multimodal": "image" in (model.get("input") or []),
+                    "context_window": model.get("context_window"),
+                    "member_count": 0,
+                    "missing": False,
+                    "upstream": prices,
+                    "suggested": suggest_prices(
+                        (prices or {}).get("input"), (prices or {}).get("output")
+                    ),
+                    "config": _config_brief(by_ref.pop(ref, None)),
+                }
+            )
+
+    for group in groups:
+        group_id = str(group.get("id") or "").strip()
+        ref = f"group/{group_id}"
+        if not group_id or ref in seen_refs:
+            continue
+        seen_refs.add(ref)
+        members = [str(member).strip() for member in group.get("members") or [] if str(member).strip()]
+        member_prices = [model_prices[member] for member in members if model_prices.get(member)]
+        # 组内任意成员都可能接这一轮请求，按最贵的那个定价，避免路由到旗舰时亏钱
+        inputs = [p["input"] for p in member_prices if p.get("input") is not None]
+        outputs = [p["output"] for p in member_prices if p.get("output") is not None]
+        prices = _upstream_prices(max(inputs) if inputs else None, max(outputs) if outputs else None)
+        items.append(
+            {
+                "ref": ref,
+                "name": f"路由组 {group_id}",
+                "kind": "group",
+                "provider_key": None,
+                "provider_name": "路由组",
+                "multimodal": False,
+                "context_window": None,
+                "member_count": len(members),
+                "missing": False,
+                "upstream": prices,
+                "suggested": suggest_prices((prices or {}).get("input"), (prices or {}).get("output")),
+                "config": _config_brief(by_ref.pop(ref, None)),
+            }
+        )
+
+    # 还有定价行、但模型已经从目录里消失（换提供商 / 取消勾选）：留着让运营自己决定
+    # 是补回来还是移除，不要静默消失。
+    for ref, item in by_ref.items():
+        items.append(
+            {
+                "ref": ref,
+                "name": item.name,
+                "kind": "group" if ref.startswith("group/") else "model",
+                "provider_key": ref.split("/", 1)[0],
+                "provider_name": "",
+                "multimodal": False,
+                "context_window": None,
+                "member_count": 0,
+                "missing": True,
+                "upstream": None,
+                "suggested": None,
+                "config": _config_brief(item),
+            }
+        )
+
+    def _rank(entry: dict) -> tuple[int, int]:
+        config = entry.get("config") or {}
+        return (0 if config.get("is_active") else 1, 0 if config.get("is_chat_selectable") else 1)
+
+    # 顺序只在保存后按「默认 → 已上架 → 其余」重排，编辑过程中不改行序
+    items.sort(key=_rank)
+
+    rule = db.scalar(select(FlowPointRule).where(FlowPointRule.feature_type == "ai_chat"))
+    return {
+        "items": items,
+        "defaults": {
+            "points_per_call": point_number(rule.points_per_call) if rule else None,
+            "points_per_million_input_tokens": point_number(rule.points_per_million_input_tokens) if rule else None,
+            "points_per_million_output_tokens": point_number(rule.points_per_million_output_tokens) if rule else None,
+        },
+        "catalog_available": catalog_ok,
+        "unbound_configs": len(
+            [item for item in db.scalars(select(AiModelConfig)) if not (item.model_ref or "").strip()]
+        ),
+    }
+
+
+@router.get("/model-pricing")
+def get_model_pricing(db: Session = Depends(get_db)):
+    return success(_pricing_payload(db))
+
+
+class ModelPricingWriteItem(BaseModel):
+    ref: str = Field(min_length=1, max_length=200)
+    name: Optional[str] = Field(default=None, max_length=200)
+    points_per_call: Optional[Decimal] = Field(default=None, ge=0)
+    points_per_million_input_tokens: Optional[Decimal] = Field(default=None, ge=0)
+    points_per_million_output_tokens: Optional[Decimal] = Field(default=None, ge=0)
+    is_chat_selectable: bool = False
+    is_active: bool = False
+    context_messages: int = Field(default=12, ge=1, le=40)
+    sort_order: int = Field(default=100, ge=0, le=9999)
+
+
+class ModelPricingWrite(BaseModel):
+    items: list[ModelPricingWriteItem] = Field(default_factory=list)
+
+
+@router.put("/model-pricing")
+def save_model_pricing(payload: ModelPricingWrite, db: Session = Depends(get_db)):
+    """整表覆盖：表里有什么就是什么，没出现的目录模型视为未上架（删掉定价行）。"""
+    items = payload.items
+    refs = [item.ref.strip() for item in items]
+    if len(refs) != len(set(refs)):
+        raise AppException("同一个模型出现了两行定价，请刷新后重试", 400)
+    defaults = [item for item in items if item.is_active]
+    if len(defaults) > 1:
+        raise AppException("只能有一个默认模型", 400)
+    if items and not defaults:
+        raise AppException("请指定一个默认模型：用户没有手选模型时按它发起对话", 400)
+    if not items:
+        catalog, _ = _catalog_or_empty()
+        if any(provider.get("models") for provider in catalog.get("providers") or []):
+            raise AppException("至少要上架一个模型，否则对话没有可用的默认模型", 400)
+
+    existing = {
+        str(item.model_ref).strip(): item
+        for item in db.scalars(select(AiModelConfig))
+        if (item.model_ref or "").strip()
+    }
+    keep = {item.ref.strip() for item in items}
+    for ref, item in list(existing.items()):
+        if ref not in keep:
+            db.delete(item)
+            existing.pop(ref)
+
+    for entry in items:
+        ref = entry.ref.strip()
+        item = existing.get(ref)
+        if item is None:
+            item = AiModelConfig(model_ref=ref, name=(entry.name or ref)[:80])
+            db.add(item)
+            existing[ref] = item
+        elif entry.name:
+            item.name = entry.name[:80]
+        # 默认模型必须能被用户选中，否则「默认」在人眼里就消失了
+        item.is_chat_selectable = bool(entry.is_chat_selectable or entry.is_active)
+        item.is_active = bool(entry.is_active)
+        item.context_messages = entry.context_messages
+        item.sort_order = entry.sort_order
+        item.chat_points_per_call = point_amount(entry.points_per_call) if entry.points_per_call is not None else None
+        item.chat_points_per_million_input_tokens = point_amount(entry.points_per_million_input_tokens) if entry.points_per_million_input_tokens is not None else None
+        item.chat_points_per_million_output_tokens = point_amount(entry.points_per_million_output_tokens) if entry.points_per_million_output_tokens is not None else None
+
+    # 老「模型策略」可能留下没绑定目录模型的行（model_ref 为空）：它们跑不了对话，
+    # 也不属于这张表，顺手清掉，避免默认模型被一条空行占着。
+    for item in db.scalars(select(AiModelConfig)):
+        if not (item.model_ref or "").strip():
+            db.delete(item)
+
+    db.commit()
+    invalidate_ai_config_cache()
+    invalidate_catalog_capabilities_cache()
+    return success(_pricing_payload(db), "模型定价已保存")
+
+
+# ---------------------------------------------------------------------------
 # Model catalog proxy (ticket 11, ADR-0005): the AI service owns models.json;
 # these routes relay admin CRUD to it. The frontend never reaches the Node
 # service directly (ADR-0003). Delete protection against in-use strategies
@@ -358,7 +592,7 @@ def delete_catalog_group(group_id: str, db: Session = Depends(get_db)):
         .first()
     )
     if in_use:
-        raise AppException(f"路由组 group/{group_id} 正被模型配置「{in_use.name}」使用，请先解除绑定", 409)
+        raise AppException(f"路由组 group/{group_id} 正被模型定价里的「{in_use.name}」使用，请先解除绑定", 409)
     result = success(call_catalog("DELETE", f"/v1/catalog/groups/{group_id}"))
     invalidate_catalog_capabilities_cache()
     return result
@@ -386,7 +620,7 @@ def update_catalog_provider(provider_key: str, payload: CatalogProviderUpdate, d
     for model_id in (payload.models.removed if payload.models else []):
         ref = f"{provider_key}/{model_id}"
         if _catalog_ref_in_use(db, ref):
-            raise AppException(f"模型 {ref} 正被模型策略使用，请先在模型策略中改选", 409)
+            raise AppException(f"模型 {ref} 正被模型定价使用，请先在「模型定价」里改掉", 409)
     body = {
         "key": provider_key,
         "name": payload.name.strip(),
@@ -422,7 +656,7 @@ def _assert_provider_models_unreferenced(db: Session, provider_key: str) -> None
         for model in provider.get("models") or []:
             ref = str(model.get("ref") or "")
             if _catalog_ref_in_use(db, ref):
-                raise AppException(f"模型 {ref} 正被模型策略使用，请先在模型策略中改选", 409)
+                raise AppException(f"模型 {ref} 正被模型定价使用，请先在「模型定价」里改掉", 409)
     return
 
 
@@ -461,7 +695,7 @@ def update_catalog_model(provider_key: str, model_id: str, payload: CatalogModel
 def delete_catalog_model(provider_key: str, model_id: str, db: Session = Depends(get_db)):
     ref = f"{provider_key}/{model_id}"
     if _catalog_ref_in_use(db, ref):
-        raise AppException(f"模型 {ref} 正被模型策略使用，请先在模型策略中改选", 409)
+        raise AppException(f"模型 {ref} 正被模型定价使用，请先在「模型定价」里改掉", 409)
     result = success(call_catalog("DELETE", f"/v1/catalog/providers/{provider_key}/models/{model_id}"))
     invalidate_catalog_capabilities_cache()
     return result

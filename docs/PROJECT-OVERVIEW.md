@@ -149,14 +149,14 @@ vitaflow/
 - `feedback.py`：`POST /feedback`、`GET /feedback`
 - `announcements.py`：`GET /announcements`、`GET /announcements/current`、`GET /announcements/{id}`、`POST /announcements/{id}/dismiss`
 - `resume_starters.py`：`GET /resume-starters`（按行业预置的简历起手式）
-- `admin.py`（约 2157 行，管理员专用）：公告 CRUD、仪表盘、站点设置、反馈处理与回信、积分批量发放/撤销、积分流水、用户管理、简历总览、AI 任务、AI 模型策略 CRUD、**模型目录代理**（`/ai-catalog*`，转发到 ai-service）、积分规则、兑换码（含导入/导出）、导出记录、模板管理、起手式与行业模板管理
+- `admin.py`（约 2157 行，管理员专用）：公告 CRUD、仪表盘、站点设置、反馈处理与回信、积分批量发放/撤销、积分流水、用户管理、简历总览、AI 任务、AI 模型定价（`/ai-configs`、`/model-pricing`）、**模型目录代理**（`/ai-catalog*`，转发到 ai-service）、积分规则、兑换码（含导入/导出）、导出记录、模板管理、起手式与行业模板管理
 
 ### 5.3 服务层职责
 
 | 服务 | 作用 |
 |---|---|
 | `ai_service_client.py` | 到 ai-service 的 HTTP 客户端：`/v1/chat` 与 `/v1/task`，解析 NDJSON 流并转成 SSE/回调；统一注入 `AI_SERVICE_TOKEN` |
-| `ai_chat_service.py` | 1218 行，AI 对话总控：会话/消息持久化、上下文构造、模型策略选择、工具结果校验、增量合并、变更决策、后台滚动摘要 |
+| `ai_chat_service.py` | 1218 行，AI 对话总控：会话/消息持久化、上下文构造、模型选择、工具结果校验、增量合并、变更决策、后台滚动摘要 |
 | `ai_task_service.py` | 一次性任务（生成简历、导入解析、摘要压缩）的调用与结果落库 |
 | `ai_config_service.py` | `ai_model_configs` 业务策略 CRUD，与 ai-service 模型目录做 `model_ref` 关联 |
 | `flow_points_service.py` | 积分账户、扣减、发放、流水、兑换码核销 |
@@ -289,7 +289,7 @@ createAgentSession({ cwd, sessionManager: SessionManager.inMemory(cwd), resource
   - `resume`：`id` / `title` / `data`（简历全文，模型直接看，不再需要「先读一遍」）
   - `resume_fields`：`schema_compact()` 的一行一模块字段清单
   - `context_summary`：滚动压缩摘要（超出窗口的旧消息）
-  - `history`：最近 N 条消息（N 取模型策略 `context_messages`，夹在 1..40）
+  - `history`：最近 N 条消息（N 取模型定价行 `context_messages`，夹在 1..40）
   - `pending_change`：是否存在待确认变更及其摘要
 - 长对话压缩：回合结束后 `asyncio.create_task` 起后台任务，调 `/v1/task` 的 `chat_summary` 增量合并旧消息进 `ai_chat_sessions.summary`。
 
@@ -571,7 +571,7 @@ docker compose --profile full up -d --build
 | 术语 | 含义 |
 |---|---|
 | 模型目录（catalog） | `ai-service/.pi-agent/models.json`，定义 provider/model 的能力与 Key 引用 |
-| 模型策略（model config） | MySQL `ai_model_configs` 一行，业务侧「启用哪个模型、多少钱、带几条上下文」 |
+| 模型定价（model pricing） | MySQL `ai_model_configs` 一行（`model_ref` 唯一），业务侧「这个模型多少钱、是否上架、是不是默认、带几条上下文」 |
 | 模型引用（model_ref） | 策略指向目录中的具体 `provider/model` 的字符串 |
 | 待确认变更（pending change） | AI 产出但未应用的简历修改，挂在 assistant 消息上，需用户确认 |
 | 原子信息（fragment） | 信息库里的一条事实（一段实习、一个项目、一个奖项…），属于用户而非简历，可被检索与导入 |
@@ -597,7 +597,7 @@ AI 子系统改造中的 5 个关键取舍，每条记录「被否决的方案�
 | 2 | **统一对话入口，取代 9 个独立功能 API** | **全部保留并 Agent 化**：单步结构化生成套 Agent 循环是负收益；**仅迁移 resume-chat 试点**：与「一次重写收敛所有入口」的目标不符。改为高频操作封装成对话内快捷指令（`/润色` `/翻译` `/优化` `/生成`），其余靠多模态自然对话触发；简历评分单次耗时 51s、独立价值低，直接移除 |
 | 3 | **MySQL 是会话事实源，Agent 会话按请求重建** | **pi SessionManager 落库 + 与现有表双写**：两份事实源需要同步协议，一致性与调试成本都高。改用 `SessionManager.inMemory()`，简历快照、历史消息、待确认变更由 FastAPI 按 `context_messages` 注入，请求结束即弃——多用户安全、UI 与决策流零改动、AI 服务可水平扩展；代价是每请求重建上下文，但上下文本就来自 DB 查询，与原先同构。pi 的跨请求记忆（compaction、历史压缩）因此不使用，长对话裁剪由 `context_messages` 上限控制 |
 | 4 | **section 级工具 + 回调 Python 校验** | **字段级工具**：粒度最细但轮次多，Agent 循环反而更慢；**纯提案制**（工具只返回提案、不落库）：延迟收益打折，且与现有 pending_change 决策流重复。旧链路让模型整份重发 `optimized_resume_data`（≈10KB JSON），延迟由输出 token 决定（实测 30~50s）；section 级把单次输出降到 KB 级、目标 ~5s，信任边界仍在服务端 |
-| 5 | **模型目录归 ai-service，模型策略留 MySQL** | **目录继续手工编辑文件**：改模型要登服务器改 `models.json`，与「后台全管 AI」的运维预期冲突；**Key 存环境变量**：新增 Key 要改容器环境变量并重启，无法热生效。改为后台通过目录 CRUD 全量管理、Key 明文写入 `models.json`（换 Key 即时生效，不进后端 DB 与 `.env`）；代价是密钥明文落盘，依赖部署环境对 `.pi-agent/` 目录的文件权限保护 |
+| 5 | **模型目录归 ai-service，定价留 MySQL** | **目录继续手工编辑文件**：改模型要登服务器改 `models.json`，与「后台全管 AI」的运维预期冲突；**Key 存环境变量**：新增 Key 要改容器环境变量并重启，无法热生效。改为后台通过目录 CRUD 全量管理、Key 明文写入 `models.json`（换 Key 即时生效，不进后端 DB 与 `.env`）；代价是密钥明文落盘，依赖部署环境对 `.pi-agent/` 目录的文件权限保护 |
 
 > 决策 4 的工具粒度后来被 [`ai/resume-agent.md`](./ai/resume-agent.md) 收敛为单一 `update_resume`，但「工具做增量、Python 做校验」的结论不变。
 

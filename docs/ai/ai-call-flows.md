@@ -25,11 +25,17 @@ backend (FastAPI, :8000)                      ai-service (Express+pi-agent, :830
 | 数据 | 存放位置 | 维护方式 | 说明 |
 |---|---|---|---|
 | 模型目录（provider/baseUrl/apiKey/模型列表） | `ai-service/.pi-agent/models.json`（volume 挂载） | 管理后台「服务商接入」经 backend 代理 CRUD | 纯 UI CRUD：frontend `AiCatalogPanel.vue`（列表容器 + 一次只开一张的展开控制）/ `AiProviderCard.vue`（摘要行 + 展开成表单）→ backend `admin/ai_configs.py` 的 `/admin/ai-catalog/*` → `call_catalog`（ai_service_client.py:255）→ ai-service `/v1/catalog*`（server.ts:133-256），写后 `rebuildRuntime()` 热生效，无需重启；一次保存只发一条写请求：provider 的 POST/PUT 带 `models { added, removed, patches }`，ai-service 在同一个 `mutateCatalog` 里改资料→加新 id→删取消勾选的（§6.27）；拉上游列表走 `POST /v1/catalog/remote-models`，用卡片里填的地址与密钥，不要求先保存；返回的每个模型都带 models.dev 的上下文窗口/最大输出/输入模态，卡片据此自动填好资料（§6.29） |
-| 模型策略（哪个 ref 启用、上下文条数、按模型定价） | MySQL `ai_model_configs` 表 | 管理后台「模型策略」 | `AiModelConfig`（backend/app/models/ai_config.py），运行时快照由 `get_active_ai_config`（ai_config_service.py:189）读取，Redis 缓存 |
+| 模型定价（每个 ref 的价格、是否上架、谁是默认、上下文条数） | MySQL `ai_model_configs` 表 | 管理后台「模型定价」 | `AiModelConfig`（backend/app/models/ai_config.py），**`model_ref` 唯一**（0041 迁移），一个目录模型一行；表由 `GET/PUT /admin/model-pricing`（admin/ai_configs.py）整表读写，目录里有几个模型就有几行，未定价的按兜底价；运行时快照由 `get_active_ai_config`（ai_config_service.py:189）读取，Redis 缓存 |
 | 计费规则（每功能兜底价） | MySQL `flow_point_rules` 表 | 管理后台「积分规则」 | 兜底价：生成 100 点/次、导入 50 点/次、对话 5 点/次+百万 token 费率（`DEFAULT_POINT_RULES`，flow_points_service.py:35） |
 | Provider 模式 | 环境变量 `PI_PROVIDER`（faux/real） | 根目录 .env → docker compose 注入 | faux=本地确定性演示模型；real=从 models.json 加载真实模型（real.ts） |
 
 定价优先级：**模型级定价（`ai_model_configs.chat_points_per_*`）逐键覆盖 `flow_point_rules`**，逻辑在 `calculate_points` 的 `pricing_override` 参数（flow_points_service.py:203-224），override 数据来自 `AiChatModelConfig.chat_billing_override()`（ai_config_service.py:44）。
+
+扣点公式（`calculate_points`）：`起扣点数 + 输入token × 输入单价/百万 + 输出token × 输出单价/百万`；三个价格字段都是**逐键**覆盖，留空的字段单独回落到兜底价（不是「填了一个就整套生效」）。
+
+`get_ai_config_by_model_ref`（ai_config_service.py:169）**曾经带 `is_active` 过滤**：`is_active` 语义是「默认对话模型」，全局只有一行，于是只有默认模型的自定义价格生效，用户在选型器里选的其他模型一律按兜底价扣——运营改完价、账单不变。§6.30 之后按 `model_ref` 唯一索引直取，不再看 `is_active`。
+
+建议价的折算口径在 `backend/app/services/model_pricing.py`：`点数/百万 = 上游美元价 × 7.2 × 3 ÷ 0.001`（即 ×21600，1 点 ≈ ¥0.001、加成 3 倍），起扣按一轮 6k token 系统提示折算并向上取整到 10 点；上游没有价格时**不给建议**，宁可让运营自己填。
 
 ## 2. 对话流程（AI 助手）
 
@@ -67,7 +73,7 @@ backend (FastAPI, :8000)                      ai-service (Express+pi-agent, :830
 ### 2.4 异步计费入账（ai.py:729-806）
 
 `/ai/service/usage` 收到按 `provider/model` 逐条的真实 usage 后：
-- `get_ai_config_by_model_ref` 找到策略（找不到则用 ai_chat 兜底规则）
+- `get_ai_config_by_model_ref` 找到该 ref 的定价行（找不到则整轮用 ai_chat 兜底规则）
 - 每条 usage **新建一条 ai_chat 类型 AiTask** 并 `finish_ai_task("success")`
 - `settle_task_flow_points`（flow_points_service.py:340）按模型级定价入账；若结算失败（如 402）任务落 failed 并退还预扣
 

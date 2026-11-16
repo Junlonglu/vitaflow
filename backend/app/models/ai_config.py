@@ -10,7 +10,14 @@ from app.core.database import Base
 
 
 class AiModelConfig(Base):
+    """一个目录模型（或路由组）一行：定价 + 是否上架 + 是否为默认。
+
+    以前叫「模型策略」，同一个模型可以建多条，只有排序最前的那条参与计费；
+    现在 ``model_ref`` 唯一（0041 迁移），一行就是一份定价。
+    """
+
     __tablename__ = "ai_model_configs"
+    __table_args__ = (UniqueConstraint("model_ref", name="uq_ai_model_configs_model_ref"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(80), default="默认模型")

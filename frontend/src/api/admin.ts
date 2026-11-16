@@ -387,6 +387,66 @@ export const getAdminAiConfigsApi = () => request.get<AdminAiConfig[], AdminAiCo
 export const createAdminAiConfigApi = (data: Partial<AdminAiConfig>) => request.post<AdminAiConfigSaveResult, AdminAiConfigSaveResult>("/admin/ai-configs", data)
 export const updateAdminAiConfigApi = (id: number, data: Partial<AdminAiConfig>) => request.put<AdminAiConfigSaveResult, AdminAiConfigSaveResult>(`/admin/ai-configs/${id}`, data)
 export const deleteAdminAiConfigApi = (id: number) => request.delete(`/admin/ai-configs/${id}`)
+
+/** 一个目录模型（或路由组）的定价行：目录里有什么就有什么，不需要先「新建策略」。 */
+export interface AdminModelPricingConfig {
+  id: number
+  points_per_call: number | null
+  points_per_million_input_tokens: number | null
+  points_per_million_output_tokens: number | null
+  is_chat_selectable: boolean
+  is_active: boolean
+  context_messages: number
+  sort_order: number
+}
+
+export interface AdminModelPricingItem {
+  ref: string
+  name: string
+  kind: "model" | "group"
+  provider_key: string | null
+  provider_name: string
+  multimodal: boolean
+  context_window: number | null
+  member_count: number
+  /** 定价行还在、目录里已经没这个模型了（换服务商 / 取消勾选）。 */
+  missing: boolean
+  /** 上游价（美元/百万 token），用来算建议价。 */
+  upstream: { input: number | null; output: number | null } | null
+  suggested: { points_per_call: number; points_per_million_input_tokens: number; points_per_million_output_tokens: number } | null
+  config: AdminModelPricingConfig | null
+}
+
+export interface AdminModelPricingDefaults {
+  points_per_call: number | null
+  points_per_million_input_tokens: number | null
+  points_per_million_output_tokens: number | null
+}
+
+export interface AdminModelPricing {
+  items: AdminModelPricingItem[]
+  /** 模型没单独定价时，回落到「点数规则」里的 AI 对话兜底价。 */
+  defaults: AdminModelPricingDefaults
+  catalog_available: boolean
+  /** 没绑定目录模型的历史策略行数（保存时会被清理）。 */
+  unbound_configs: number
+}
+
+export interface AdminModelPricingWriteItem {
+  ref: string
+  name?: string
+  points_per_call: number | null
+  points_per_million_input_tokens: number | null
+  points_per_million_output_tokens: number | null
+  is_chat_selectable: boolean
+  is_active: boolean
+  context_messages: number
+  sort_order: number
+}
+
+export const getAdminModelPricingApi = () => request.get<AdminModelPricing, AdminModelPricing>("/admin/model-pricing")
+export const saveAdminModelPricingApi = (items: AdminModelPricingWriteItem[]) =>
+  request.put<AdminModelPricing, AdminModelPricing>("/admin/model-pricing", { items })
 export const getAdminAiCatalogApi = () => request.get<AdminCatalog, AdminCatalog>("/admin/ai-catalog")
 export const getAdminCatalogEnvKeysApi = () => request.get<{ env_keys: string[] }, { env_keys: string[] }>("/admin/ai-catalog/env-keys")
 export const createAdminCatalogProviderApi = (data: AdminCatalogProviderWrite) => request.post<AdminCatalog, AdminCatalog>("/admin/ai-catalog/providers", data)

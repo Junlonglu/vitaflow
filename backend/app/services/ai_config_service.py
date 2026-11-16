@@ -173,16 +173,16 @@ def get_ai_config_by_model_ref(db: Session, model_ref: str) -> AiRuntimeConfig |
     config supplies the per-model chat rates. Unmapped refs return None and
     the caller falls back to the default ai_chat rule instead of losing the
     charge.
+
+    这里**不能**再过滤 ``is_active``：``is_active`` 的语义是「默认对话模型」，
+    全局只有一行；以前按它过滤，等于只有默认模型的自定义价格生效，用户在
+    选择器里选的其他模型一律按全局兜底价扣——运营改完价账单不变，原因就在这。
+    一个 ref 现在最多一行（0041 唯一索引），直接取即可。
     """
     ref = (model_ref or "").strip()
     if not ref:
         return None
-    item = db.scalar(
-        select(AiModelConfig)
-        .where(AiModelConfig.model_ref == ref, AiModelConfig.is_active == True)  # noqa: E712
-        .order_by(AiModelConfig.sort_order.asc(), AiModelConfig.id.desc())
-        .limit(1)
-    )
+    item = db.scalar(select(AiModelConfig).where(AiModelConfig.model_ref == ref).limit(1))
     return _from_model(item) if item else None
 
 

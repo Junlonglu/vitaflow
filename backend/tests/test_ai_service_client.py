@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -276,6 +277,47 @@ class AiServiceClientTest(unittest.TestCase):
         events = self._collect(httpx.MockTransport(handler))
         self.assertEqual(events[0]["type"], "error")
         self.assertIn("连接失败", events[0]["message"])
+
+
+class AttachmentReadOffloadTest(unittest.IsolatedAsyncioTestCase):
+    """附件读取必须离开事件循环线程。
+
+    流式回合是一个 async 生成器，里面直接做同步 MinIO/OSS 读取会把事件循环
+    卡住，首字延迟跟着这几秒一起涨。
+    """
+
+    async def test_storage_read_happens_off_the_event_loop_thread(self) -> None:
+        from app.services import ai_service_client as client
+
+        main_thread = threading.current_thread()
+        seen_threads: list[threading.Thread] = []
+
+        def fake_read(object_name: str):
+            seen_threads.append(threading.current_thread())
+            return b"image-bytes", "image/png"
+
+        with patch.object(client, "read_uploaded_file", fake_read):
+            blocks = await client._attachment_image_blocks(
+                [{"url": "/api/files/a.png", "content_type": "image/png", "object_name": "a.png"}],
+                {"a.png"},
+            )
+
+        self.assertEqual(len(blocks), 1)
+        self.assertIsNot(seen_threads[0], main_thread, "存储读应在线程池里完成")
+
+    async def test_unowned_attachment_is_dropped_without_reading(self) -> None:
+        from app.services import ai_service_client as client
+
+        def fake_read(object_name: str):  # pragma: no cover - 命中即失败
+            raise AssertionError(f"不该读取未归属的对象：{object_name}")
+
+        with patch.object(client, "read_uploaded_file", fake_read):
+            blocks = await client._attachment_image_blocks(
+                [{"url": "/api/files/b.png", "content_type": "image/png", "object_name": "b.png"}],
+                {"a.png"},
+            )
+
+        self.assertEqual(blocks, [])
 
 
 if __name__ == "__main__":

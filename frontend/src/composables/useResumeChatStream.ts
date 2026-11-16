@@ -4,6 +4,7 @@ import {
   clearResumeChatMessagesApi,
   decideResumeChatChangeApi,
   getResumeChatMessagesApi,
+  isSilentStreamError,
   regenerateResumeChatMessageStreamApi,
   sendResumeChatMessageStreamApi,
   type AiChatAttachment,
@@ -213,7 +214,7 @@ export function useResumeChatStream(options: ResumeChatStreamOptions) {
       if (assistant) assistant.streaming = false
       // 一个字都没吐出来就失败：整条气泡撤掉，避免留下一个空白回复。
       if (!assistant?.content) messages.value = messages.value.filter((item) => item.id !== pendingAssistant.id)
-      error.value = err.message === "SILENT_ERROR" ? "" : (err.message || "AI 对话失败")
+      error.value = isSilentStreamError(err) ? "" : (err.message || "AI 对话失败")
     } finally {
       loading.value = false
       sessionSwitchLock.value = false
@@ -289,7 +290,7 @@ export function useResumeChatStream(options: ResumeChatStreamOptions) {
     } catch (err: any) {
       // 重新生成会截断后续气泡，本地状态已不可信，直接以服务端为准重载。
       await load().catch(() => undefined)
-      error.value = err.message === "SILENT_ERROR" ? "" : (err.message || "重新发送失败")
+      error.value = isSilentStreamError(err) ? "" : (err.message || "重新发送失败")
     } finally {
       loading.value = false
       if (activeSessionId.value) {

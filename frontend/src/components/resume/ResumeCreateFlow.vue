@@ -7,7 +7,7 @@ import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
 import CreateResumeModal from "@/components/resume/CreateResumeModal.vue"
 import ResumeImportProgress from "@/components/resume/ResumeImportProgress.vue"
 import AiGenerateDialog from "@/components/ai/AiGenerateDialog.vue"
-import { generateResumeStreamApi, getFlowPointSummaryApi, type FlowPointSummary } from "@/api/ai"
+import { generateResumeStreamApi, getFlowPointSummaryApi, isSilentStreamError, type FlowPointSummary } from "@/api/ai"
 import { listTemplatesApi, type TemplateItem } from "@/api/template"
 import { importResumeFileApi } from "@/api/resume"
 import {
@@ -381,7 +381,7 @@ async function generateResume(payload: any) {
     showAiCreate.value = false
     emit("created", item.id)
   } catch (error: any) {
-    aiError.value = error.message === "SILENT_ERROR" ? "" : error.message || "AI 生成失败"
+    aiError.value = isSilentStreamError(error) ? "" : error.message || "AI 生成失败"
   } finally {
     aiLoading.value = false
     refreshPoints()

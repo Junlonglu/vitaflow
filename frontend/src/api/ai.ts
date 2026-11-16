@@ -146,6 +146,37 @@ import { showGlobalToast } from "@/utils/toast"
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api"
 
+/** 已经用全局 toast 提示过的错误：调用方不要再画一条行内错误。 */
+export class SilentStreamError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "SilentStreamError"
+  }
+}
+
+export function isSilentStreamError(error: unknown): boolean {
+  return error instanceof SilentStreamError
+}
+
+/** 后端错误体统一是 { message } / { detail } / { msg }，其余内容不猜。 */
+function readErrorMessage(raw: string): string {
+  if (!raw) return ""
+  try {
+    const body = JSON.parse(raw) as { message?: unknown; detail?: unknown; msg?: unknown } | null
+    const message = body?.message ?? body?.detail ?? body?.msg
+    return typeof message === "string" ? message.trim() : ""
+  } catch {
+    return ""
+  }
+}
+
+/** 网关的 HTML 错误页和空响应不该原样丢给用户。 */
+function fallbackMessage(raw: string): string {
+  const text = raw.trim()
+  if (!text || text.startsWith("<")) return "AI 请求失败"
+  return text
+}
+
 async function postAiStream<T = any>(path: string, data: any, callbacks: StreamCallbacks<T> = {}) {
   const token = localStorage.getItem("vitaflow_token")
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -164,34 +195,20 @@ async function postAiStream<T = any>(path: string, data: any, callbacks: StreamC
   }
   if (!response.ok || !response.body) {
     const raw = await response.text().catch(() => "")
-    let message = raw
-    if (raw) {
-      try {
-        const body = JSON.parse(raw)
-        message = body?.message || body?.detail || body?.msg || raw
-      } catch {
-        message = raw
-      }
+    const message = readErrorMessage(raw) || fallbackMessage(raw)
+    // 余额不足（402）已经在这里提示过，调用方不必再画一条行内错误。
+    if (response.status === 402) {
+      showGlobalToast(message, "error")
+      throw new SilentStreamError(message)
     }
-    throw new Error(message || "AI 请求失败")
+    throw new Error(message)
   }
 
   const contentType = response.headers.get("content-type") || ""
   if (contentType.includes("application/json")) {
+    // 200 + JSON 说明后端没能开流（如没有可用模型），一律按错误处理。
     const raw = await response.text()
-    try {
-      const body = JSON.parse(raw)
-      const msg = body?.message || body?.detail || body?.msg || "AI 请求失败"
-      if (msg.includes("Flow Points") || msg.includes("点数")) {
-        showGlobalToast(msg, "error")
-        throw new Error("SILENT_ERROR")
-      }
-      throw new Error(msg)
-    } catch (err: any) {
-      if (err.message === "SILENT_ERROR") throw err
-      if (err.message && !err.message.includes("JSON")) throw err
-      throw new Error(raw || "AI 请求失败")
-    }
+    throw new Error(readErrorMessage(raw) || fallbackMessage(raw))
   }
 
   callbacks.onConnected?.()

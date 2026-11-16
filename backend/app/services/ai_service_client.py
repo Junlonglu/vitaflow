@@ -19,6 +19,7 @@ import json
 from collections.abc import AsyncIterator
 from typing import Any
 
+import anyio
 import httpx
 
 from app.core.config import settings
@@ -46,7 +47,7 @@ def _http_timeout() -> httpx.Timeout:
     return httpx.Timeout(connect=5, read=180, write=10, pool=5)
 
 
-def _attachment_image_blocks(
+async def _attachment_image_blocks(
     attachments: list[dict[str, Any]] | None,
     allowed_object_names: set[str],
 ) -> list[dict[str, str]]:
@@ -77,8 +78,10 @@ def _attachment_image_blocks(
             continue
         # content_type is already guaranteed image/* above, so carry it through
         # unchanged; the storage-read content type is not needed.
+        # 存储读是同步 HTTP（MinIO/OSS）。这是 async 生成器内部，直接调用会把
+        # 事件循环卡在这几秒里，首字延迟跟着一起涨；丢到线程池当 IO 边界处理。
         try:
-            content, _ = read_uploaded_file(object_name)
+            content, _ = await anyio.to_thread.run_sync(read_uploaded_file, object_name)
         except Exception:
             continue
         blocks.append({"type": "image", "data": base64.b64encode(content).decode("ascii"), "mimeType": content_type})
@@ -131,7 +134,7 @@ async def ai_service_chat_events(
     # (ticket 06). Absent attachments, no "images" key is sent — text-only unchanged.
     # ``allowed_attachment_names`` is required-ish: omitting it means "nothing is
     # owned", so a forgotten call site drops images instead of leaking them.
-    image_blocks = _attachment_image_blocks(attachments, allowed_attachment_names or set())
+    image_blocks = await _attachment_image_blocks(attachments, allowed_attachment_names or set())
     if image_blocks:
         payload["images"] = image_blocks
     # pi model ref (ticket 07): routes the turn to the mapped model in the Node

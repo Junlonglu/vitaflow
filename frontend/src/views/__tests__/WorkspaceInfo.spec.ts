@@ -283,7 +283,10 @@ describe("WorkspaceInfo", () => {
     await flushPromises()
 
     const dialog = wrapper.find(".app-dialog")
-    expect(dialog.text()).toContain("boom")
+    // 传输层英文报错（如 "Network Error"）对用户没有意义，一律换成固定文案；
+    // 中文错误由后端给出，才会原样透传（见下一条用例）。
+    expect(dialog.text()).toContain("简历列表读取失败")
+    expect(dialog.text()).not.toContain("boom")
     expect(dialog.text()).toContain("重新读取")
     const run = dialog.findAll("button").find((button) => button.text().includes("开始提取"))
     expect(run!.attributes("disabled")).toBeDefined()
@@ -302,6 +305,19 @@ describe("WorkspaceInfo", () => {
     expect(dialog.text()).toContain("张三的简历")
     const enabledRun = dialog.findAll("button").find((button) => button.text().includes("开始提取"))
     expect(enabledRun!.attributes("disabled")).toBeUndefined()
+  })
+
+  it("keeps a Chinese error message from the API as-is", async () => {
+    const wrapper = await mountPage([])
+    resumeApi.listResumesApi.mockRejectedValue(new Error("当前账号已被停用"))
+    const extractButton = wrapper.findAll("button").find((button) => button.text().includes("从简历提取"))
+    await extractButton!.trigger("click")
+    await flushPromises()
+
+    const dialog = wrapper.find(".app-dialog")
+    // 后端的中文提示是给人看的，不能被回退文案盖掉。
+    expect(dialog.text()).toContain("当前账号已被停用")
+    expect(dialog.text()).not.toContain("简历列表读取失败")
   })
 
   it("requires confirmation before deleting", async () => {

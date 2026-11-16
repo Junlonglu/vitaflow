@@ -85,6 +85,7 @@ macOS 本地开发建议保持 `PDF_CHROMIUM_EXECUTABLE_PATH` 为空，让 Playw
 ## 关键设计
 
 - 所有接口以 `/api` 开头，统一响应 `{ code, message, data }`。
+  - 业务异常统一用 `AppException(message, code)`，**必须显式给 code**（`tests/test_app_exception_codes.py` 会扫描把关）：400 提交内容有问题、401/403 鉴权、402 点数不足、404 不存在、409 状态冲突、502 上游（AI 服务 / SMTP / OSS）返回不可用结果、503 依赖未配置或暂不可用；500 只留给真正的意外。
 - MySQL 表不使用物理外键，简历主体和模板配置使用 JSON 字段。
 - 注册验证码、发送限频和并发注册锁存储在 Redis，并通过 TTL 自动过期。
 - `preview_service` 用 Jinja2 渲染 HTML，预览和 PDF 导出共用该服务。

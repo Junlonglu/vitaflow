@@ -196,8 +196,19 @@ content, _ = read_uploaded_file(object_name)   # 同步 HTTP 打 MinIO/OSS
 | P2-4 | 流式请求支持 `AbortSignal`；`send` / `regenerate` 持有 controller，`reset()`（切简历）、`clear()`、卸载时中断，被中断的回合不再写 `error` | `frontend/src/api/ai.ts`、`composables/useResumeChatStream.ts`、`components/resume/ResumeCreateFlow.vue` | `composables/__tests__/useResumeChatStream.spec.ts`（4 条：卸载中断 / 切简历中断 / 正常回合不复用 controller） |
 | P2-12 | `/health` 只回 `{status:"ok"}`，运行模式走受令牌保护的 `/v1/catalog`（已有 `provider_mode`） | `ai-service/src/server.ts` | compose healthcheck 只看 `r.ok`，不受影响 |
 
-实跑基线：后端 395 passed（原 356）、前端 141 passed（原 130 + 1 红）、ai-service 172 passed、`vue-tsc` 0 错、`vite build` 通过。
+### 第三批（2026-11-16，已完成）
+
+| 编号 | 修复内容 | 改动文件 | 回归测试 |
+| --- | --- | --- | --- |
+| P2-7 | 27 处无码 `AppException` 按语义补码：400（导入解析失败/配置缺目录模型）、409（写入回读不一致）、502（AI 服务、SMTP、OSS 返回不可用结果）、503（模型/令牌/点数规则/OSS 未配置、验证码服务不可用）；500 只留真正的意外 | 10 个 service / api 文件 | `backend/tests/test_app_exception_codes.py`（ast 扫描，3 条） |
+| P2-5a | `_pdf_locks` 改为 `(锁, 持有+等待人数)` 记账，计数归零删除；计数含排队者，持有者退出时不会误删 | `backend/app/services/pdf_export_service.py` | `backend/tests/test_pdf_lock_and_redeem_query.py`（4 条，含「等待者仍持有时不删条目」） |
+| P2-5b | 兑换码查重只查本批候选：随机码分批生成 + `WHERE code IN (...)`，自定义码只查提交的那几个 | `backend/app/services/flow_points_service.py` | 同文件（4 条，查重语句必须带 WHERE） |
+| P2-9a | **新发现**：`_stream_cache_headers` 对所有对象都用 `public, immutable`，`ai-chat/` 是鉴权后响应却可被共享缓存转发；改为私有前缀 `private, no-store`，并补 `X-Content-Type-Options: nosniff` | `backend/app/services/storage/storage_service.py` | `backend/tests/test_upload_hardening.py`（10 条） |
+| P2-9b | 补公开分享链路测试：失效/过期/不存在收敛同一 404、超长 token 不打库、脱敏不就地改 ORM 对象、自定义 token 400/409 | — | `backend/tests/test_public_share.py`（19 条） |
+| P2-11 | `word_export_service.py`、`services/ai/__init__.py` 文件头写明下线原因与恢复条件 | 同左 | — |
+
+实跑基线：后端 435 passed（原 356，本批 +40）、前端 141 passed、ai-service 172 passed、`vue-tsc` 0 错、`vite build` 通过。
 
 ### 仍未处理
 
-P2-5（PDF 锁只增不减、兑换码全表读）、P2-7（30 处 `AppException` 未给 code）、P2-8（`Admin.vue` 拆分）、P2-9（shares / templates / files 等测试缺口）、P2-10（`any` 收敛）、P2-11（死代码标注恢复条件）。
+P2-8（`Admin.vue` 1599 行仍是巨型组件，需按 `Admin*Panel.vue` 拆分）、P2-9 其余缺口（`/api/templates/*`、`/api/auth/register`、`/api/auth/reset-password`、`/api/feedback`、`/api/resumes/{id}/export/pdf`）、P2-10（`any` 收敛：前端 184 处、`aiDiff.ts` 单文件 22 处）。

@@ -66,7 +66,7 @@
 
 | 文档 | 内容 |
 | --- | --- |
-| [`reviews/2026-11-16-code-review.md`](./reviews/2026-11-16-code-review.md) | 全仓审查（backend / frontend / ai-service）：P0 伪造 XFF 绕过限频、PDF 导出 SSRF、后台设置存储型 XSS、积分并发扣减等问题的证据、影响与修复建议；末尾附修复进度 |
+| [`reviews/2026-11-16-code-review.md`](./reviews/2026-11-16-code-review.md) | 全仓审查（backend / frontend / ai-service）：P0 伪造 XFF 绕过限频、PDF 导出 SSRF、后台设置存储型 XSS、积分并发扣减、私有图片可被共享缓存转发等问题的证据、影响与修复建议；末尾附三批修复进度 |
 
 ### `archive/`：已归档（1 篇）
 

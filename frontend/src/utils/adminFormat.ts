@@ -1,0 +1,110 @@
+/**
+ * 管理后台的展示型格式化。
+ *
+ * 这些函数原来只长在 `Admin.vue` 里，抽面板时必须共用同一份：`statusClass` 的
+ * 颜色档位、`statusText` 的文案一旦各写一遍，同一个状态在两个面板里就会显示成
+ * 不同颜色和不同措辞。
+ */
+import type { AdminAiTask } from "@/api/admin"
+
+export function formatDate(value: string): string {
+  return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value))
+}
+
+export function formatNumber(value?: number): string {
+  return Number(value || 0).toLocaleString()
+}
+
+export function formatCurrency(value?: number): string {
+  return `¥${Number(value || 0).toFixed(2)}`
+}
+
+export function formatTokenNumber(value?: number): string {
+  const num = Number(value || 0)
+  if (num >= 1000000) {
+    return (num / 1000000).toFixed(2) + "M"
+  }
+  if (num >= 1000) {
+    return (num / 1000).toFixed(2) + "K"
+  }
+  return num.toString()
+}
+
+export function tokenUsage(item: AdminAiTask): { total: number; input: number; output: number } {
+  const usage = item.input_data?.token_usage
+  const total = Number(usage?.total_tokens ?? item.tokens_used ?? 0)
+  const input = Number(usage?.input_tokens || item.input_data?.request_input_tokens || 0)
+  const output = Number(usage?.output_tokens ?? Math.max(total - input, 0))
+  return { total, input, output }
+}
+
+export function modelDisplay(item: {
+  model_name?: string | null
+  model_config_name?: string | null
+  model_raw_name?: string | null
+}): { display: string; raw: string } {
+  const display = item.model_name || item.model_config_name || item.model_raw_name || ""
+  const raw = item.model_raw_name && item.model_raw_name !== display ? item.model_raw_name : ""
+  return { display, raw }
+}
+
+export function statusText(value: string): string {
+  return (
+    { active: "正常", disabled: "已停用", success: "成功", failed: "失败", pending: "处理中" } as Record<string, string>
+  )[value] || value
+}
+
+export function taskTypeText(value: string): string {
+  return ({
+    generate_resume: "AI 智能生成",
+    import_resume: "导入简历",
+    resume_score: "简历诊断",
+    jd_optimize: "JD 优化",
+    resume_translate: "简历翻译",
+    section_optimize: "模块润色",
+    ai_chat: "AI 助手对话",
+    chat_summary: "对话 · 上下文摘要",
+  } as Record<string, string>)[value] || value
+}
+
+/** 对话回合（ai_chat）按 feature 显示具体指令；无 feature 的历史行归「AI 助手对话」。 */
+export function featureText(value?: string | null): string {
+  return ({
+    polish: "对话 · 润色",
+    translate: "对话 · 翻译",
+    diagnose: "对话 · 简历诊断",
+    match: "对话 · JD匹配",
+    rewrite: "对话 · 重写经历",
+    optimize: "对话 · JD优化",
+    generate: "对话 · 生成",
+    greeting: "对话 · 开场白",
+    chat: "对话 · 自由交流",
+  } as Record<string, string>)[value || ""] || "AI 助手对话"
+}
+
+export function feedbackStatusText(value: string): string {
+  return ({ open: "待处理", processing: "处理中", resolved: "已解决", closed: "已关闭" } as Record<string, string>)[value] || value
+}
+
+export function sectionText(value?: string): string {
+  return (
+    { basics: "基本信息", summary: "个人简介", education: "教育经历", skills: "专业技能", work: "工作经历", projects: "项目经历", awards: "荣誉奖项" } as Record<
+      string,
+      string
+    >
+  )[value || ""] || "自定义模块"
+}
+
+export function statusClass(value: string): string {
+  if (["active", "success"].includes(value)) return "bg-emerald-50 text-emerald-700 ring-emerald-600/20"
+  if (["disabled", "failed"].includes(value)) return "bg-red-50 text-red-700 ring-red-600/20"
+  return "bg-amber-50 text-amber-700 ring-amber-600/20"
+}
+
+/** 管理后台列表共用的每页条数档位。 */
+export const ADMIN_PAGE_SIZE_OPTIONS = [
+  { label: "10 条/页", value: 10 },
+  { label: "20 条/页", value: 20 },
+  { label: "50 条/页", value: 50 },
+  { label: "100 条/页", value: 100 },
+]

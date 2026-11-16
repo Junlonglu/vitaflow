@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from "vue"
 import {
   Activity, Bot, Download, FileText, LayoutDashboard, LayoutTemplate, Megaphone, DollarSign,
-  ArrowDown, ArrowUp, Briefcase, ChevronsUp, ChevronsDown, Eye, EyeOff, Gift, MessageSquare, Plus, RefreshCw, Search, Settings, ShieldCheck, SlidersHorizontal, Ticket, Users, Zap, X,
+  Briefcase, ChevronsUp, ChevronsDown, Eye, EyeOff, Gift, MessageSquare, Plus, RefreshCw, Search, Settings, ShieldCheck, SlidersHorizontal, Ticket, Users, Zap, X,
 } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
 import Select from "@/components/ui/select/Select.vue"
@@ -12,21 +12,36 @@ import PaginationFooter from "@/components/ui/pagination/PaginationFooter.vue"
 import FieldTip from "@/components/ui/tooltip/FieldTip.vue"
 import AdminShell from "@/components/admin/AdminShell.vue"
 import AdminDashboardPanel from "@/components/admin/AdminDashboardPanel.vue"
+import AdminUsersPanel from "@/components/admin/AdminUsersPanel.vue"
 import AnnouncementManager from "@/components/admin/AnnouncementManager.vue"
 import AiSettingsManager from "@/components/admin/AiSettingsManager.vue"
-import PointsAdjustModal from "@/components/admin/PointsAdjustModal.vue"
 import RichTextEditor from "@/components/admin/RichTextEditor.vue"
 import TemplatePreview from "@/components/templates/TemplatePreview.vue"
 import type { EChartsOption } from "echarts"
 import {
   getAdminAiTasksApi, getAdminDashboardApi, getAdminExportsApi, getAdminFeedbacksApi, getAdminResumesApi,
-  getAdminAiConfigsApi, getAdminFlowPointTransactionsApi, getAdminResumeStarterIndustriesApi, getAdminResumeStartersApi, getAdminSettingsApi, getAdminTemplatesApi, getAdminUsersApi, grantAllUsersFlowPointsApi,
-  revokeAllUsersFlowPointsGrantApi, sendAdminFeedbackEmailApi, updateAdminFeedbackApi, updateAdminResumeStarterApi, updateAdminSettingsApi, updateAdminTemplateApi, updateAdminUserFlowPointsApi, updateAdminUserStatusApi,
+  getAdminAiConfigsApi, getAdminFlowPointTransactionsApi, getAdminResumeStarterIndustriesApi, getAdminResumeStartersApi, getAdminSettingsApi, getAdminTemplatesApi,
+  revokeAllUsersFlowPointsGrantApi, sendAdminFeedbackEmailApi, updateAdminFeedbackApi, updateAdminResumeStarterApi, updateAdminSettingsApi, updateAdminTemplateApi,
   createAdminResumeStarterApi, deleteAdminResumeStarterApi,
-  type AdminAiConfig, type AdminAiTask, type AdminExport, type AdminFeedback, type AdminFlowPointTransaction, type AdminResume, type AdminResumeStarter, type AdminResumeStarterIndustry, type AdminTemplate, type AdminUser,
+  type AdminAiConfig, type AdminAiTask, type AdminExport, type AdminFeedback, type AdminFlowPointTransaction, type AdminResume, type AdminResumeStarter, type AdminResumeStarterIndustry, type AdminTemplate,
   type DashboardData, type PageData,
 } from "@/api/admin"
 import { sanitizeFeedbackHtml } from "@/lib/sanitize"
+import {
+  ADMIN_PAGE_SIZE_OPTIONS as pageSizeOptions,
+  featureText,
+  feedbackStatusText,
+  formatCurrency,
+  formatDate,
+  formatNumber,
+  formatTokenNumber,
+  modelDisplay,
+  sectionText,
+  statusClass,
+  statusText,
+  taskTypeText,
+  tokenUsage,
+} from "@/utils/adminFormat"
 import { showGlobalToast } from "@/utils/toast"
 
 type Section = "dashboard" | "announcements" | "users" | "resumes" | "ai" | "point-transactions" | "ai-models" | "point-rules" | "redeem-codes" | "system-settings" | "feedbacks" | "exports" | "templates" | "industry-templates"
@@ -41,11 +56,7 @@ const modelFilter = ref("")
 const starterIndustryFilter = ref("")
 const pageSize = ref(20)
 const otherModelFilterValue = "__other__"
-type UserSortKey = "username" | "role" | "resume_count" | "flow_points" | "status" | "create_time"
-const userSortBy = ref<UserSortKey>("create_time")
-const userSortOrder = ref<"asc" | "desc">("desc")
 const dashboard = ref<DashboardData | null>(null)
-const users = ref<PageData<AdminUser>>({ items: [], total: 0, page: 1, page_size: 20 })
 const resumes = ref<PageData<AdminResume>>({ items: [], total: 0, page: 1, page_size: 20 })
 const aiTasks = ref<PageData<AdminAiTask>>({ items: [], total: 0, page: 1, page_size: 20 })
 const exports = ref<PageData<AdminExport>>({ items: [], total: 0, page: 1, page_size: 20 })
@@ -56,7 +67,6 @@ const templateOptions = ref<AdminTemplate[]>([])
 const feedbacks = ref<PageData<AdminFeedback>>({ items: [], total: 0, page: 1, page_size: 20 })
 const pointTransactions = ref<PageData<AdminFlowPointTransaction>>({ items: [], total: 0, page: 1, page_size: 20 })
 
-const userPointTransactions = ref<PageData<AdminFlowPointTransaction>>({ items: [], total: 0, page: 1, page_size: 10 })
 const aiModelConfigs = ref<AdminAiConfig[]>([])
 const aiModelOptionsLoaded = ref(false)
 const settingsForm = ref({
@@ -67,13 +77,6 @@ const settingsForm = ref({
   user_agreement: "",
 })
 const savingSettings = ref(false)
-const showPointsModal = ref(false)
-const pointsModalMode = ref<"single" | "all">("single")
-const pointsTargetUser = ref<AdminUser | null>(null)
-const showUserPointTransactions = ref(false)
-const userPointTransactionsLoading = ref(false)
-const userPointTransactionsError = ref("")
-const userPointTransactionsTarget = ref<AdminUser | null>(null)
 
 const navGroups = [
   { label: null, items: [{ id: "dashboard", label: "数据看板", icon: LayoutDashboard }] },
@@ -115,7 +118,6 @@ const navItems = navGroups.flatMap((group) => group.items)
 
 const currentTitle = computed(() => navItems.find((item) => item.id === section.value)?.label || "管理后台")
 const currentPage = computed(() => {
-  if (section.value === "users") return users.value
   if (section.value === "resumes") return resumes.value
   if (section.value === "ai") return aiTasks.value
   if (section.value === "point-transactions") return pointTransactions.value
@@ -219,103 +221,10 @@ const dashboardCards = computed(() => {
   ]
 })
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value))
-}
-
-function formatNumber(value?: number) {
-  return Number(value || 0).toLocaleString()
-}
-
-function formatCurrency(value?: number) {
-  return `¥${Number(value || 0).toFixed(2)}`
-}
-
-function formatTokenNumber(value?: number) {
-  const num = Number(value || 0)
-  if (num >= 1000000) {
-    return (num / 1000000).toFixed(2) + "M"
-  }
-  if (num >= 1000) {
-    return (num / 1000).toFixed(2) + "K"
-  }
-  return num.toString()
-}
-
-function tokenUsage(item: AdminAiTask) {
-  const usage = item.input_data?.token_usage
-  const total = Number(usage?.total_tokens ?? item.tokens_used ?? 0)
-  const input = Number(usage?.input_tokens || item.input_data?.request_input_tokens || 0)
-  const output = Number(usage?.output_tokens ?? Math.max(total - input, 0))
-  return { total, input, output }
-}
-
-function modelDisplay(item: { model_name?: string | null; model_config_name?: string | null; model_raw_name?: string | null }) {
-  const display = item.model_name || item.model_config_name || item.model_raw_name || ""
-  const raw = item.model_raw_name && item.model_raw_name !== display ? item.model_raw_name : ""
-  return { display, raw }
-}
-
 async function ensureAiModelOptions() {
   if (aiModelOptionsLoaded.value) return
   aiModelConfigs.value = await getAdminAiConfigsApi()
   aiModelOptionsLoaded.value = true
-}
-
-function statusText(value: string) {
-  return ({ active: "正常", disabled: "已停用", success: "成功", failed: "失败", pending: "处理中" } as Record<string, string>)[value] || value
-}
-
-function taskTypeText(value: string) {
-  return ({
-    generate_resume: "AI 智能生成",
-    import_resume: "导入简历",
-    resume_score: "简历诊断",
-    jd_optimize: "JD 优化",
-    resume_translate: "简历翻译",
-    section_optimize: "模块润色",
-    ai_chat: "AI 助手对话",
-    chat_summary: "对话 · 上下文摘要",
-  } as Record<string, string>)[value] || value
-}
-
-// 对话回合（ai_chat）按 feature 显示具体指令；无 feature 的历史行归「AI 助手对话」
-function featureText(value?: string | null) {
-  return ({
-    polish: "对话 · 润色",
-    translate: "对话 · 翻译",
-    diagnose: "对话 · 简历诊断",
-    match: "对话 · JD匹配",
-    rewrite: "对话 · 重写经历",
-    optimize: "对话 · JD优化",
-    generate: "对话 · 生成",
-    greeting: "对话 · 开场白",
-    chat: "对话 · 自由交流",
-  } as Record<string, string>)[value || ""] || "AI 助手对话"
-}
-
-function feedbackStatusText(value: string) {
-  return ({ open: "待处理", processing: "处理中", resolved: "已解决", closed: "已关闭" } as Record<string, string>)[value] || value
-}
-
-function sectionText(value?: string) {
-  return ({ basics: "基本信息", summary: "个人简介", education: "教育经历", skills: "专业技能", work: "工作经历", projects: "项目经历", awards: "荣誉奖项" } as Record<string, string>)[value || ""] || "自定义模块"
-}
-
-function statusClass(value: string) {
-  if (["active", "success"].includes(value)) return "bg-emerald-50 text-emerald-700 ring-emerald-600/20"
-  if (["disabled", "failed"].includes(value)) return "bg-red-50 text-red-700 ring-red-600/20"
-  return "bg-amber-50 text-amber-700 ring-amber-600/20"
-}
-
-function toggleUserSort(key: UserSortKey) {
-  if (userSortBy.value === key) {
-    userSortOrder.value = userSortOrder.value === "asc" ? "desc" : "asc"
-  } else {
-    userSortBy.value = key
-    userSortOrder.value = ["username", "role", "status"].includes(key) ? "asc" : "desc"
-  }
-  load(1)
 }
 
 async function ensureTemplateOptions() {
@@ -330,7 +239,6 @@ async function load(page = 1) {
   try {
     if (["ai", "point-transactions"].includes(section.value)) await ensureAiModelOptions()
     if (section.value === "dashboard") dashboard.value = await getAdminDashboardApi()
-    if (section.value === "users") users.value = await getAdminUsersApi({ page, page_size: pageSize.value, keyword: keyword.value, status: statusFilter.value || undefined, sort_by: userSortBy.value, sort_order: userSortOrder.value })
     if (section.value === "resumes") {
       await ensureTemplateOptions()
       resumes.value = await getAdminResumesApi({ page, page_size: pageSize.value, keyword: keyword.value })
@@ -384,9 +292,6 @@ function handleShellSection(value: string) {
   switchSection(value as Section)
 }
 
-const showConfirm = ref(false)
-const confirmTarget = ref<AdminUser | null>(null)
-const confirmNextStatus = ref<"active" | "disabled">("active")
 const showRevokeGrantConfirm = ref(false)
 const revokeGrantTarget = ref<AdminFlowPointTransaction | null>(null)
 
@@ -413,59 +318,6 @@ function openFeedbackReply(item: AdminFeedback) {
 function closeFeedbackReply() {
   showFeedbackReply.value = false
   feedbackReplyTarget.value = null
-}
-
-function requestToggleUser(user: AdminUser) {
-  confirmNextStatus.value = user.status === "active" ? "disabled" : "active"
-  confirmTarget.value = user
-  showConfirm.value = true
-}
-
-async function loadUserPointTransactions(page = 1) {
-  const user = userPointTransactionsTarget.value
-  if (!user) return
-  userPointTransactionsLoading.value = true
-  userPointTransactionsError.value = ""
-  try {
-    userPointTransactions.value = await getAdminFlowPointTransactionsApi({
-      page,
-      page_size: userPointTransactions.value.page_size,
-      user_id: user.id,
-    })
-  } catch (err: any) {
-    userPointTransactionsError.value = err.message || "点数流水加载失败"
-  } finally {
-    userPointTransactionsLoading.value = false
-  }
-}
-
-function openUserPointTransactions(user: AdminUser) {
-  userPointTransactionsTarget.value = user
-  userPointTransactions.value = { items: [], total: 0, page: 1, page_size: userPointTransactions.value.page_size }
-  showUserPointTransactions.value = true
-  loadUserPointTransactions(1)
-}
-
-function closeUserPointTransactions() {
-  showUserPointTransactions.value = false
-  userPointTransactionsTarget.value = null
-  userPointTransactionsError.value = ""
-}
-
-async function executeToggleUser() {
-  const user = confirmTarget.value
-  const next = confirmNextStatus.value
-  if (!user) return
-  try {
-    await updateAdminUserStatusApi(user.id, next)
-    user.status = next
-    showGlobalToast(next === "active" ? "解禁成功" : "禁用成功")
-  } catch (err: any) {
-    showGlobalToast(err.message || "操作失败", "error")
-  } finally {
-    showConfirm.value = false
-    confirmTarget.value = null
-  }
 }
 
 function requestRevokeGrant(item: AdminFlowPointTransaction) {
@@ -806,39 +658,6 @@ async function executeDeleteStarter() {
   }
 }
 
-function adjustUserPoints(user: AdminUser) {
-  pointsTargetUser.value = user
-  pointsModalMode.value = "single"
-  showPointsModal.value = true
-}
-
-function grantAllPoints() {
-  pointsModalMode.value = "all"
-  showPointsModal.value = true
-}
-
-async function executePointsAdjust(points: number, description: string) {
-  showPointsModal.value = false
-  if (pointsModalMode.value === "all") {
-    try {
-      const result = await grantAllUsersFlowPointsApi({ points, description }) as any
-      showGlobalToast(`已分 ${result?.batches ?? 0} 批向 ${result?.count ?? 0} 个用户发放 ${points} 点`)
-      if (section.value === "users") await load(currentPage.value?.page || 1)
-    } catch (err: any) {
-      showGlobalToast(err.message || "全员发放失败", "error")
-    }
-  } else if (pointsTargetUser.value) {
-    const user = pointsTargetUser.value
-    try {
-      const updated = await updateAdminUserFlowPointsApi(user.id, { points_delta: points, description }) as any
-      user.flow_points = Number(updated?.flow_points ?? user.flow_points + points)
-      showGlobalToast("充值调整成功")
-    } catch (err: any) {
-      showGlobalToast(err.message || "Flow Points 调整失败", "error")
-    }
-  }
-}
-
 async function saveSettings() {
   savingSettings.value = true
   error.value = ""
@@ -912,13 +731,6 @@ async function sendFeedbackResultEmail() {
 }
 
 const statusOptions = computed(() => {
-  if (section.value === 'users') {
-    return [
-      { label: '全部状态', value: '' },
-      { label: '正常', value: 'active' },
-      { label: '已停用', value: 'disabled' },
-    ]
-  }
   if (section.value === 'feedbacks') {
     return [
       { label: '全部状态', value: '' },
@@ -989,13 +801,6 @@ const pointFeatureOptions = [
   { label: '全员发放', value: 'admin_grant_all' },
   { label: '全员发放撤回', value: 'admin_grant_all_revoke' },
   { label: '注册赠送', value: 'signup_gift' },
-]
-
-const pageSizeOptions = [
-  { label: '10 条/页', value: 10 },
-  { label: '20 条/页', value: 20 },
-  { label: '50 条/页', value: 50 },
-  { label: '100 条/页', value: 100 },
 ]
 
 onMounted(() => load())
@@ -1100,16 +905,18 @@ onMounted(() => load())
           </div>
         </template>
 
+        <AdminUsersPanel v-else-if="section === 'users'" />
+
         <template v-else>
-          <div v-if="['users', 'resumes', 'ai', 'point-transactions', 'feedbacks', 'exports', 'industry-templates'].includes(section)" class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div v-if="['users', 'resumes', 'point-transactions', 'industry-templates'].includes(section)" class="relative w-full sm:w-72">
+          <div v-if="['resumes', 'ai', 'point-transactions', 'feedbacks', 'exports', 'industry-templates'].includes(section)" class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div v-if="['resumes', 'point-transactions', 'industry-templates'].includes(section)" class="relative w-full sm:w-72">
               <Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
               <input v-model="keyword" class="h-10 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-zinc-400" :placeholder="section === 'point-transactions' ? '搜索用户、邮箱或说明' : section === 'industry-templates' ? '搜索行业、岗位或 ID' : '搜索用户名、邮箱或标题'" @keyup.enter="load(1)" />
             </div>
             <div v-if="section === 'industry-templates'" class="w-full sm:w-44">
               <Select v-model="starterIndustryFilter" :options="starterIndustryFilterOptions" placeholder="全部行业" class="h-10 w-full rounded-lg" @change="load(1)" />
             </div>
-            <div v-if="['users', 'ai', 'point-transactions', 'feedbacks', 'exports'].includes(section)" class="w-full sm:w-32">
+            <div v-if="['ai', 'point-transactions', 'feedbacks', 'exports'].includes(section)" class="w-full sm:w-32">
               <Select v-model="statusFilter" :options="statusOptions" placeholder="全部状态" class="h-10 w-full rounded-lg" @change="load(1)" />
             </div>
             <div v-if="['ai', 'point-transactions'].includes(section)" class="w-full sm:w-40">
@@ -1118,45 +925,13 @@ onMounted(() => load())
             <div v-if="['ai', 'point-transactions'].includes(section)" class="w-full sm:w-44">
               <Select v-model="modelFilter" :options="modelFilterOptions" placeholder="全部模型" class="h-10 w-full rounded-lg" @change="load(1)" />
             </div>
-            <Button v-if="['users', 'resumes', 'point-transactions', 'industry-templates'].includes(section)" class="w-full sm:w-auto" @click="load(1)">查询</Button>
-            <Button v-if="section === 'users'" variant="outline" class="w-full sm:w-auto" @click="grantAllPoints"><Gift class="h-4 w-4" />全员发放</Button>
+            <Button v-if="['resumes', 'point-transactions', 'industry-templates'].includes(section)" class="w-full sm:w-auto" @click="load(1)">查询</Button>
             <Button v-if="section === 'industry-templates'" variant="outline" class="w-full sm:w-auto" @click="openStarterCreator"><Plus class="h-4 w-4" />新增岗位预设</Button>
           </div>
 
           <div class="overflow-hidden rounded-xl border border-zinc-200 bg-white">
             <div v-if="loading" class="flex h-64 items-center justify-center text-sm text-zinc-400"><RefreshCw class="mr-2 h-4 w-4 animate-spin" />正在加载</div>
             <div v-else class="overflow-x-auto">
-              <table v-if="section === 'users'" class="w-full min-w-[900px] text-left text-sm">
-                <thead>
-                  <tr class="border-b bg-zinc-50 text-xs text-zinc-500">
-                    <th class="px-5 py-3"><button class="inline-flex items-center gap-1 font-semibold transition hover:text-zinc-900" @click="toggleUserSort('username')">用户<component :is="userSortBy === 'username' && userSortOrder === 'asc' ? ArrowUp : ArrowDown" class="h-3.5 w-3.5" :class="userSortBy === 'username' ? 'text-zinc-900' : 'text-zinc-300'" /></button></th>
-                    <th class="px-5 py-3"><button class="inline-flex items-center gap-1 font-semibold transition hover:text-zinc-900" @click="toggleUserSort('role')">角色<component :is="userSortBy === 'role' && userSortOrder === 'asc' ? ArrowUp : ArrowDown" class="h-3.5 w-3.5" :class="userSortBy === 'role' ? 'text-zinc-900' : 'text-zinc-300'" /></button></th>
-                    <th class="px-5 py-3"><button class="inline-flex items-center gap-1 font-semibold transition hover:text-zinc-900" @click="toggleUserSort('resume_count')">简历<component :is="userSortBy === 'resume_count' && userSortOrder === 'asc' ? ArrowUp : ArrowDown" class="h-3.5 w-3.5" :class="userSortBy === 'resume_count' ? 'text-zinc-900' : 'text-zinc-300'" /></button></th>
-                    <th class="px-5 py-3"><button class="inline-flex items-center gap-1 font-semibold transition hover:text-zinc-900" @click="toggleUserSort('flow_points')">Flow Points<component :is="userSortBy === 'flow_points' && userSortOrder === 'asc' ? ArrowUp : ArrowDown" class="h-3.5 w-3.5" :class="userSortBy === 'flow_points' ? 'text-zinc-900' : 'text-zinc-300'" /></button></th>
-                    <th class="px-5 py-3"><button class="inline-flex items-center gap-1 font-semibold transition hover:text-zinc-900" @click="toggleUserSort('status')">状态<component :is="userSortBy === 'status' && userSortOrder === 'asc' ? ArrowUp : ArrowDown" class="h-3.5 w-3.5" :class="userSortBy === 'status' ? 'text-zinc-900' : 'text-zinc-300'" /></button></th>
-                    <th class="px-5 py-3"><button class="inline-flex items-center gap-1 font-semibold transition hover:text-zinc-900" @click="toggleUserSort('create_time')">注册时间<component :is="userSortBy === 'create_time' && userSortOrder === 'asc' ? ArrowUp : ArrowDown" class="h-3.5 w-3.5" :class="userSortBy === 'create_time' ? 'text-zinc-900' : 'text-zinc-300'" /></button></th>
-                    <th class="px-5 py-3 text-right">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="item in users.items" :key="item.id" class="border-b border-zinc-100 last:border-0">
-                    <td class="px-5 py-4"><p class="font-medium text-zinc-900">{{ item.username }}</p><p class="mt-0.5 text-xs text-zinc-400">{{ item.email }}</p></td>
-                    <td class="px-5 py-4">{{ item.role === 'admin' ? '管理员' : '用户' }}</td>
-                    <td class="px-5 py-4">{{ item.resume_count }}</td>
-                    <td class="px-5 py-4"><button class="rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-900 hover:text-white" @click="adjustUserPoints(item)">{{ item.flow_points || 0 }}</button></td>
-                    <td class="px-5 py-4"><span class="rounded-full px-2 py-1 text-xs ring-1 ring-inset" :class="statusClass(item.status)">{{ statusText(item.status) }}</span></td>
-                    <td class="px-5 py-4 text-zinc-500">{{ formatDate(item.create_time) }}</td>
-                    <td class="px-5 py-4 text-right">
-                      <div class="flex justify-end gap-2 whitespace-nowrap text-xs font-medium">
-                        <button class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 hover:text-zinc-900 active:scale-95" @click="openUserPointTransactions(item)">流水</button>
-                        <button v-if="item.role !== 'admin'" class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition active:scale-95" :class="item.status === 'active' ? 'hover:border-red-200 hover:bg-red-50 hover:text-red-600' : 'hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700'" @click="requestToggleUser(item)">{{ item.status === 'active' ? '停用' : '恢复' }}</button>
-                        <span v-else class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-100 bg-zinc-50 px-2.5 py-1.5 text-xs font-medium text-zinc-400">受保护</span>
-                      </div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-
               <table v-if="section === 'resumes'" class="w-full min-w-[800px] text-left text-sm"><thead><tr class="border-b bg-zinc-50 text-xs text-zinc-500"><th class="px-5 py-3">简历</th><th class="px-5 py-3">所属用户</th><th class="px-5 py-3">模板</th><th class="px-5 py-3">语言</th><th class="px-5 py-3">更新时间</th></tr></thead><tbody><tr v-for="item in resumes.items" :key="item.id" class="border-b border-zinc-100 last:border-0"><td class="px-5 py-4"><p class="font-medium">{{ item.title }}</p><p class="text-xs text-zinc-400">#{{ item.id }}</p></td><td class="px-5 py-4"><p>{{ item.username }}</p><p class="text-xs text-zinc-400">{{ item.email }}</p></td><td class="px-5 py-4"><p class="font-medium text-zinc-900">{{ templateNameById(item.template_id) }}</p><p class="mt-0.5 text-xs text-zinc-400">{{ item.template_id }}</p></td><td class="px-5 py-4">{{ {'zh-CN': '简体中文', 'en': '英文'}[item.language] || item.language }}</td><td class="px-5 py-4 text-zinc-500">{{ formatDate(item.update_time) }}</td></tr></tbody></table>
 
               <table v-if="section === 'ai'" class="w-full min-w-[1200px] text-left text-sm"><thead><tr class="border-b bg-zinc-50 text-xs whitespace-nowrap text-zinc-500"><th class="px-5 py-3">AI 功能</th><th class="px-5 py-3">具体模块</th><th class="px-5 py-3">模型</th><th class="px-5 py-3">用户</th><th class="px-5 py-3">扣点 / Token</th><th class="px-5 py-3">简历 ID</th><th class="px-5 py-3">状态</th><th class="px-5 py-3">时间</th><th class="px-5 py-3">错误</th></tr></thead><tbody><tr v-for="item in aiTasks.items" :key="item.id" class="border-b border-zinc-100 last:border-0"><td class="px-5 py-4 font-medium whitespace-nowrap">{{ item.task_type === 'ai_chat' ? featureText(item.feature) : taskTypeText(item.task_type) }}</td><td class="px-5 py-4 text-zinc-500 whitespace-nowrap">{{ item.task_type === 'ai_chat' && item.input_data?.tool_calls ? `${item.input_data.tool_calls} 步工具` : item.task_type === 'section_optimize' ? sectionText(item.input_data?.section_type) : '—' }}</td><td class="px-5 py-4 whitespace-nowrap"><p class="font-medium text-zinc-800">{{ modelDisplay(item).display || '—' }}</p><p v-if="modelDisplay(item).raw" class="mt-0.5 text-[11px] text-zinc-400">{{ modelDisplay(item).raw }}</p></td><td class="px-5 py-4 whitespace-nowrap">{{ item.username }}</td><td class="px-5 py-4 whitespace-nowrap"><span class="whitespace-nowrap rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700">{{ item.points_used || 0 }} 点</span><p v-if="tokenUsage(item).total" class="mt-1 whitespace-nowrap text-[11px] text-zinc-500">{{ formatTokenNumber(tokenUsage(item).total) }} tokens</p><p v-if="tokenUsage(item).total" class="mt-0.5 whitespace-nowrap text-[11px] text-zinc-400">入 {{ formatTokenNumber(tokenUsage(item).input) }} · 出 {{ formatTokenNumber(tokenUsage(item).output) }}</p></td><td class="px-5 py-4 text-zinc-500">{{ item.resume_id || '—' }}</td><td class="px-5 py-4 whitespace-nowrap"><span class="whitespace-nowrap rounded-full px-2 py-1 text-xs ring-1 ring-inset" :class="statusClass(item.status)">{{ statusText(item.status) }}</span></td><td class="px-5 py-4 text-zinc-500 whitespace-nowrap">{{ formatDate(item.create_time) }}</td><td class="max-w-sm truncate px-5 py-4 text-xs text-red-600" :title="item.error_message">{{ item.error_message || '—' }}</td></tr></tbody></table>
@@ -1295,14 +1070,6 @@ onMounted(() => load())
           </div>
         </template>
     <ConfirmDialog
-      v-model:open="showConfirm"
-      :title="confirmNextStatus === 'disabled' ? '确认停用用户？' : '确认恢复用户？'"
-      :description="`你确定要${confirmNextStatus === 'disabled' ? '停用' : '恢复'}用户 “${confirmTarget?.username}” 吗？${confirmNextStatus === 'disabled' ? '停用后该用户将无法登录。' : ''}`"
-      :destructive="confirmNextStatus === 'disabled'"
-      @confirm="executeToggleUser"
-    />
-
-    <ConfirmDialog
       v-model:open="showRevokeGrantConfirm"
       title="确认撤回全员发放？"
       :description="`将撤回批次 ${revokeGrantTarget?.grant_batch_no || ''} 的全员发放。若用户余额不足，将扣到 0，并保留完整撤回流水。`"
@@ -1310,80 +1077,6 @@ onMounted(() => load())
       @confirm="executeRevokeGrant"
     />
 
-    <PointsAdjustModal
-      :open="showPointsModal"
-      :mode="pointsModalMode"
-      :username="pointsTargetUser?.username"
-      @close="showPointsModal = false"
-      @confirm="executePointsAdjust"
-    />
-
-    <Teleport to="body">
-      <Transition
-        enter-active-class="transition duration-150 ease-out"
-        enter-from-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-        enter-to-class="opacity-100 translate-y-0 sm:scale-100"
-        leave-active-class="transition duration-150 ease-in"
-        leave-from-class="opacity-100 translate-y-0 sm:scale-100"
-        leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-      >
-        <div v-if="showUserPointTransactions" class="fixed inset-0 z-overlay flex items-center justify-center bg-wb-scrim/40 p-4 backdrop-blur-sm" @click.self="closeUserPointTransactions">
-          <div class="flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup">
-            <div class="flex items-start justify-between gap-4 border-b border-zinc-100 px-6 py-4">
-              <div class="min-w-0">
-                <h3 class="text-base font-semibold text-zinc-900">点数流水</h3>
-                <p class="mt-1 truncate text-xs text-zinc-400">
-                  {{ userPointTransactionsTarget?.username }} · {{ userPointTransactionsTarget?.email }} · 当前 {{ formatNumber(userPointTransactionsTarget?.flow_points || 0) }} 点
-                </p>
-              </div>
-              <button class="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700" @click="closeUserPointTransactions">
-                <X class="h-5 w-5" />
-              </button>
-            </div>
-
-            <div v-if="userPointTransactionsError" class="mx-6 mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ userPointTransactionsError }}</div>
-            <div class="min-h-0 flex-1 overflow-auto">
-              <div v-if="userPointTransactionsLoading" class="flex h-56 items-center justify-center text-sm text-zinc-400"><RefreshCw class="mr-2 h-4 w-4 animate-spin" />正在加载流水</div>
-              <table v-else class="w-full min-w-[980px] text-left text-sm">
-                <thead>
-                  <tr class="border-b bg-zinc-50 text-xs text-zinc-500">
-                    <th class="px-5 py-3">类型</th>
-                    <th class="px-5 py-3">模型</th>
-                    <th class="px-5 py-3">变动</th>
-                    <th class="px-5 py-3">余额</th>
-                    <th class="px-5 py-3">Token</th>
-                    <th class="px-5 py-3">说明</th>
-                    <th class="px-5 py-3">时间</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="item in userPointTransactions.items" :key="item.id" class="border-b border-zinc-100 last:border-0">
-                    <td class="px-5 py-4 whitespace-nowrap"><span class="whitespace-nowrap rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-700">{{ item.feature_name }}</span></td>
-                    <td class="px-5 py-4 whitespace-nowrap"><p class="font-medium text-zinc-800">{{ modelDisplay(item).display || '—' }}</p><p v-if="modelDisplay(item).raw" class="mt-0.5 text-[11px] text-zinc-400">{{ modelDisplay(item).raw }}</p></td>
-                    <td class="px-5 py-4 whitespace-nowrap"><span class="font-semibold" :class="item.points_delta > 0 ? 'text-emerald-700' : 'text-red-600'">{{ item.points_delta > 0 ? '+' : '' }}{{ item.points_delta }}</span></td>
-                    <td class="px-5 py-4 text-zinc-700">{{ item.balance_after }}</td>
-                    <td class="px-5 py-4 text-zinc-500">{{ item.tokens_used ? formatTokenNumber(item.tokens_used) : '—' }}</td>
-                    <td class="max-w-md truncate px-5 py-4 text-zinc-600" :title="item.description">{{ item.description || '—' }}</td>
-                    <td class="px-5 py-4 text-zinc-500 whitespace-nowrap">{{ formatDate(item.create_time) }}</td>
-                  </tr>
-                </tbody>
-              </table>
-              <div v-if="!userPointTransactionsLoading && !userPointTransactions.items.length" class="flex h-48 items-center justify-center text-sm text-zinc-400">暂无点数流水</div>
-            </div>
-
-            <PaginationFooter
-              :page="userPointTransactions.page"
-              :total="userPointTransactions.total"
-              :page-size="userPointTransactions.page_size"
-              :page-size-options="pageSizeOptions"
-              @update:page="userPointTransactions.page = $event"
-              @update:page-size="userPointTransactions.page_size = $event"
-              @change="loadUserPointTransactions"
-            />
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
 
     <Teleport to="body">
       <Transition

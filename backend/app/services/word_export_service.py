@@ -1,3 +1,12 @@
+"""Word 导出实现（**当前下线，接口返回 410**）。
+
+``/api/resumes/{id}/export/word`` 现在直接回 410：本服务还没映射
+``template_config``（字体 / 主题色 / 页边距），导出的 docx 与预览、PDF 观感不一致。
+
+恢复条件见 ``api/exports.py::export_resume_word`` 的 docstring：补齐模板映射后，
+把路由函数体接回 ``export_word(...)`` 即可。**不要因为「没有调用方」删掉本文件**，
+它的排版逻辑是恢复导出的唯一实现。
+"""
 from pathlib import Path
 from typing import Any
 from uuid import uuid4

@@ -215,9 +215,10 @@ content, _ = read_uploaded_file(object_name)   # 同步 HTTP 打 MinIO/OSS
 | --- | --- | --- | --- |
 | P2-8a | 用户管理抽成 `AdminUsersPanel`：自带工具栏 / 表格 / 分页 / 三个弹窗，自己取数；展示型格式化函数上提到 `utils/adminFormat.ts` 供所有面板共用（否则 `statusClass` 的颜色档位会分叉） | `frontend/src/components/admin/AdminUsersPanel.vue`、`frontend/src/utils/adminFormat.ts`、`frontend/src/views/Admin.vue` | `components/admin/__tests__/AdminUsersPanel.spec.ts`（10 条） |
 | P2-8b | 简历管理、导出记录抽成 `AdminResumesPanel` / `AdminExportsPanel`；模板名改为面板内按需拉取，拉不到只退回 `template_id` | 两个新面板 + `Admin.vue` | `components/admin/__tests__/AdminListPanels.spec.ts`（8 条） |
+| P2-8c | 意见反馈抽成 `AdminFeedbacksPanel`：列表 + 状态筛选 + 处理弹窗（改状态 / 用户可见回复 / 内部备注 / 发结果邮件）。反馈状态→色档的折叠上提为 `feedbackStatusClass()`，原来列表行与弹窗各写一份三元。`AdminFeedbackUpdateResult` 给 PATCH / send-email 的回包定类型，替掉原来的 `as any` | `frontend/src/components/admin/AdminFeedbacksPanel.vue`、`frontend/src/utils/adminFormat.ts`、`frontend/src/api/admin.ts`、`Admin.vue` | `components/admin/__tests__/AdminFeedbacksPanel.spec.ts`（10 条） |
 
-`Admin.vue` 1595 → 1274 行。浏览器实测（真实后端 + dev server）四个分区均正常渲染、控制台 0 错误。前端单测 141 → **159 passed**。
+`Admin.vue` 1595 → 1119 行。浏览器实测（真实后端 + dev server，临时插了两条反馈后清掉）：八个分区均正常渲染、筛选命中、弹窗保存落库、控制台 0 错误。前端单测 141 → **169 passed**。
 
 ### 仍未处理
 
-P2-8 剩余三个分区（AI 任务、点数流水、意见反馈 / 岗位预设仍在 `Admin.vue` 的共享外壳里）、P2-9 其余缺口（`/api/templates/*`、`/api/auth/register`、`/api/auth/reset-password`、`/api/feedback`、`/api/resumes/{id}/export/pdf`）、P2-10（`any` 收敛：前端 184 处、`aiDiff.ts` 单文件 22 处）。
+P2-8 剩余两个分区（AI 任务、点数流水 / 岗位预设仍在 `Admin.vue` 的共享外壳里，`load()` 还有 5 个 `if` 分支）、P2-9 其余缺口（`/api/templates/*`、`/api/auth/register`、`/api/auth/reset-password`、`/api/feedback`、`/api/resumes/{id}/export/pdf`）、P2-10（`any` 收敛：前端 184 处、`aiDiff.ts` 单文件 22 处）。

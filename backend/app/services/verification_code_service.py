@@ -76,7 +76,7 @@ class VerificationCodeService:
                 ex=settings.email_code_send_interval_seconds,
             )
         except RedisError as exc:
-            raise AppException("验证码服务暂不可用，请稍后重试") from exc
+            raise AppException("验证码服务暂不可用，请稍后重试", 503) from exc
 
         if not acquired:
             try:
@@ -102,7 +102,7 @@ class VerificationCodeService:
                 pipe.execute()
         except RedisError as exc:
             self._delete_quietly(rate_key)
-            raise AppException("验证码服务暂不可用，请稍后重试") from exc
+            raise AppException("验证码服务暂不可用，请稍后重试", 503) from exc
 
         try:
             send_email(email, code)
@@ -122,7 +122,7 @@ class VerificationCodeService:
         try:
             valid = bool(self.client.exists(code_key))
         except RedisError as exc:
-            raise AppException("验证码服务暂不可用，请稍后重试") from exc
+            raise AppException("验证码服务暂不可用，请稍后重试", 503) from exc
         if not valid:
             self._record_verify_failure(email, purpose)
             raise AppException("验证码错误或已过期，请重新获取", 400)
@@ -139,7 +139,7 @@ class VerificationCodeService:
                 ex=settings.email_code_register_lock_seconds,
             )
         except RedisError as exc:
-            raise AppException("验证码服务暂不可用，请稍后重试") from exc
+            raise AppException("验证码服务暂不可用，请稍后重试", 503) from exc
         if not acquired:
             raise AppException(conflict_message, 409)
         return token

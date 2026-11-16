@@ -266,9 +266,9 @@ async def ai_service_task_result(
             data = event.get("data") or {}
             usage = event.get("usage") or []
         elif event_type == "error":
-            raise AppException(str(event.get("message") or "AI 任务失败"))
+            raise AppException(str(event.get("message") or "AI 任务失败"), 502)
     if data is None:
-        raise AppException("AI 服务未返回任务结果")
+        raise AppException("AI 服务未返回任务结果", 502)
     return data, usage
 
 
@@ -286,7 +286,7 @@ def _catalog_headers() -> dict[str, str]:
     if not settings.ai_service_token:
         from app.core.exceptions import AppException
 
-        raise AppException("AI 服务令牌未配置，无法访问模型目录")
+        raise AppException("AI 服务令牌未配置，无法访问模型目录", 503)
     return {"Authorization": f"Bearer {settings.ai_service_token}"}
 
 
@@ -305,7 +305,7 @@ def call_catalog(method: str, path: str, json_body: dict[str, Any] | None = None
     with httpx.Client(timeout=httpx.Timeout(connect=5, read=30, write=10, pool=5)) as client:
         resp = client.request(method, _catalog_url(path), json=json_body, headers=_catalog_headers())
     if resp.status_code >= 400:
-        raise AppException(_extract_error(resp.content) or f"模型目录请求失败（{resp.status_code}）")
+        raise AppException(_extract_error(resp.content) or f"模型目录请求失败（{resp.status_code}）", 502)
     return resp.json()
 
 
@@ -325,5 +325,5 @@ async def afetch_catalog_payload(*, transport: httpx.AsyncBaseTransport | None =
     if resp.status_code >= 400:
         from app.core.exceptions import AppException
 
-        raise AppException(_extract_error(resp.content) or f"模型目录请求失败（{resp.status_code}）")
+        raise AppException(_extract_error(resp.content) or f"模型目录请求失败（{resp.status_code}）", 502)
     return resp.json()

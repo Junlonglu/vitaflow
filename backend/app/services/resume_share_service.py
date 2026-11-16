@@ -52,7 +52,7 @@ def generate_share_token(db: Session) -> str:
         exists = db.scalar(select(Resume.id).where(Resume.share_token == token))
         if not exists:
             return token
-    raise AppException("分享链接生成失败，请稍后重试")
+    raise AppException("分享链接生成失败，请稍后重试", 500)
 
 
 def normalize_custom_share_token(db: Session, value: str | None, resume_id: int | None = None) -> str | None:

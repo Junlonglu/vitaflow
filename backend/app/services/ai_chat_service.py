@@ -1092,7 +1092,7 @@ def _unwrap_resume_data(value: dict[str, Any]) -> dict[str, Any]:
     candidate: Any = deepcopy(value)
     for _ in range(5):
         if not isinstance(candidate, dict):
-            raise AppException("AI 修改结果不是有效的简历数据")
+            raise AppException("AI 修改结果不是有效的简历数据", 502)
         if _RESUME_SECTION_KEYS.intersection(candidate):
             return candidate
         nested = next(
@@ -1106,7 +1106,7 @@ def _unwrap_resume_data(value: dict[str, Any]) -> dict[str, Any]:
         if nested is None:
             break
         candidate = nested
-    raise AppException("AI 修改结果缺少可写入的简历模块，请重新生成")
+    raise AppException("AI 修改结果缺少可写入的简历模块，请重新生成", 502)
 
 
 _NUMERIC_CLAIM_RE = re.compile(r"(?<![A-Za-z])\d+(?:\.\d+)?(?:%|\+)?")
@@ -1608,7 +1608,7 @@ def _persist_resume_change(
     persisted_data = deepcopy(resume.resume_data or {})
     if persisted_data != next_data:
         db.rollback()
-        raise AppException("修改写入校验失败，简历未发生变化，请重试")
+        raise AppException("修改写入校验失败，简历未发生变化，请重试", 409)
     return persisted_data
 
 

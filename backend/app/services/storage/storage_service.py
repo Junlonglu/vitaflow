@@ -64,7 +64,7 @@ def owned_object_names(db: Session, user_id: int, object_names: list[str]) -> se
 def _provider() -> str:
     provider = (settings.storage_provider or "minio").strip().lower()
     if provider not in {"minio", "aliyun_oss"}:
-        raise AppException("STORAGE_PROVIDER 只能配置为 minio 或 aliyun_oss")
+        raise AppException("STORAGE_PROVIDER 只能配置为 minio 或 aliyun_oss", 500)
     return provider
 
 
@@ -108,13 +108,13 @@ def get_minio_client() -> Minio:
 
 def get_aliyun_oss_bucket():
     if not settings.aliyun_oss_endpoint or not settings.aliyun_oss_bucket:
-        raise AppException("未配置阿里云 OSS Endpoint 或 Bucket")
+        raise AppException("未配置阿里云 OSS Endpoint 或 Bucket", 503)
     if not settings.aliyun_oss_access_key_id or not settings.aliyun_oss_access_key_secret:
-        raise AppException("未配置阿里云 OSS AccessKey")
+        raise AppException("未配置阿里云 OSS AccessKey", 503)
     try:
         import oss2
     except ImportError as exc:
-        raise AppException("未安装阿里云 OSS SDK，请执行 pip install oss2") from exc
+        raise AppException("未安装阿里云 OSS SDK，请执行 pip install oss2", 503) from exc
     auth = oss2.Auth(settings.aliyun_oss_access_key_id, settings.aliyun_oss_access_key_secret)
     endpoint = settings.aliyun_oss_endpoint.strip()
     if not endpoint.startswith(("http://", "https://")):
@@ -141,7 +141,7 @@ def _upload_aliyun_oss(object_name: str, content: bytes, content_type: str) -> N
     result = bucket.put_object(object_name, content, headers={"Content-Type": content_type, "Cache-Control": CACHE_CONTROL})
     status = getattr(result, "status", 0)
     if status < 200 or status >= 300:
-        raise AppException(f"阿里云 OSS 上传失败，状态码：{status}")
+        raise AppException(f"阿里云 OSS 上传失败，状态码：{status}", 502)
 
 
 def upload_avatar(db: Session, user_id: int, file: UploadFile) -> dict[str, str]:

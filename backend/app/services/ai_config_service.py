@@ -126,7 +126,7 @@ def get_ai_config_by_id(db: Session, config_id: int, *, require_chat_selectable:
 
 def _require_model_ref(config: AiRuntimeConfig) -> AiRuntimeConfig:
     if not config.model_ref:
-        raise AppException("该模型配置尚未选择目录模型，请在管理后台重新选择")
+        raise AppException("该模型配置尚未选择目录模型，请在管理后台重新选择", 400)
     return config
 
 
@@ -196,7 +196,7 @@ def get_active_ai_config(db: Session | None = None) -> AiRuntimeConfig:
     try:
         item = _select_active_config(session)
         if not item:
-            raise AppException("请先在管理后台配置 AI 模型")
+            raise AppException("请先在管理后台配置 AI 模型", 503)
         config = _from_model(item)
         _cache_config(config)
         return config

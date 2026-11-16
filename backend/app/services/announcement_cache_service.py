@@ -85,7 +85,7 @@ class AnnouncementCacheService:
         try:
             self.client.sadd(self.dismissed_key(user_id), str(announcement_id))
         except RedisError as exc:
-            raise AppException("公告偏好保存失败，请稍后重试") from exc
+            raise AppException("公告偏好保存失败，请稍后重试", 500) from exc
 
 
 announcement_cache_service = AnnouncementCacheService(redis_client)

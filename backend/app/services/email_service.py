@@ -14,7 +14,7 @@ from app.services.rich_text_service import sanitize_rich_text_html
 
 def _send_message(message: EmailMessage, fail_message: str) -> None:
     if not settings.smtp_host or not settings.smtp_from_email:
-        raise AppException("邮件服务尚未配置，请联系管理员")
+        raise AppException("邮件服务尚未配置，请联系管理员", 503)
     try:
         smtp_class = smtplib.SMTP_SSL if settings.smtp_use_ssl else smtplib.SMTP
         with smtp_class(settings.smtp_host, settings.smtp_port, timeout=settings.smtp_timeout) as server:
@@ -24,7 +24,7 @@ def _send_message(message: EmailMessage, fail_message: str) -> None:
                 server.login(settings.smtp_username, settings.smtp_password)
             server.send_message(message)
     except (OSError, smtplib.SMTPException) as exc:
-        raise AppException(fail_message) from exc
+        raise AppException(fail_message, 502) from exc
 
 
 def send_registration_code(email: str, code: str) -> None:

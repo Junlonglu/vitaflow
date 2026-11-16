@@ -145,17 +145,17 @@ def ensure_default_point_rules(db: Session) -> None:
 
 def get_point_rule(db: Session, feature_type: str) -> FlowPointRule:
     if feature_type not in ACTIVE_AI_FEATURE_TYPES:
-        raise AppException("AI 点数规则不存在，请在后台配置")
+        raise AppException("AI 点数规则不存在，请在后台配置", 503)
     ensure_default_point_rules(db)
     rule = db.scalar(select(FlowPointRule).where(FlowPointRule.feature_type == feature_type))
     if not rule:
-        raise AppException("AI 点数规则不存在，请在后台配置")
+        raise AppException("AI 点数规则不存在，请在后台配置", 503)
     return rule
 
 
 def get_point_rule_data(db: Session, feature_type: str) -> dict[str, Any]:
     if feature_type not in ACTIVE_AI_FEATURE_TYPES:
-        raise AppException("AI 点数规则不存在，请在后台配置")
+        raise AppException("AI 点数规则不存在，请在后台配置", 503)
     try:
         cached = redis_client.get(_cache_key(feature_type))
         if cached:
@@ -584,6 +584,26 @@ def _random_code(length: int = 12) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
+def _generate_unique_redeem_codes(db: Session, count: int) -> list[str]:
+    """批量生成未被占用的随机兑换码。
+
+    查重只针对「这一批候选」而不是整张表：``select(FlowPointRedeemCode.code)``
+    全量取回的含义随兑换码总量线性增长，生成 500 个码要先拉几十万行。
+    """
+    picked: set[str] = set()
+    while len(picked) < count:
+        # 多生成一批候选，撞车的丢掉，减少往返次数。
+        candidates = {_random_code() for _ in range(max((count - len(picked)) * 2, 2))}
+        candidates -= picked
+        if not candidates:
+            continue
+        taken = set(
+            db.scalars(select(FlowPointRedeemCode.code).where(FlowPointRedeemCode.code.in_(candidates))).all()
+        )
+        picked |= candidates - taken
+    return list(picked)[:count]
+
+
 def generate_redeem_codes(
     db: Session,
     *,
@@ -621,24 +641,19 @@ def generate_redeem_codes(
         raise AppException("每个兑换码可兑换人数必须大于 0", 400)
     batch_no = datetime.now().strftime(("CUS" if cleaned_custom else "FP") + "%Y%m%d%H%M%S")
     items: list[FlowPointRedeemCode] = []
-    existing = set(db.scalars(select(FlowPointRedeemCode.code)).all())
     if cleaned_custom:
-        duplicates = [item for item in cleaned_custom if item in existing]
+        # 只查这几个自定义码是否已存在，不把整列 code 拉进内存。
+        duplicates = db.scalars(
+            select(FlowPointRedeemCode.code).where(FlowPointRedeemCode.code.in_(cleaned_custom))
+        ).all()
         if duplicates:
-            preview = "、".join(duplicates[:5])
+            preview = "、".join(list(duplicates)[:5])
             suffix = "等" if len(duplicates) > 5 else ""
             raise AppException(f"自定义兑换码已存在：{preview}{suffix}", 409)
         codes = cleaned_custom
     else:
-        codes = []
-        for _ in range(count):
-            code = _random_code()
-            while code in existing:
-                code = _random_code()
-            codes.append(code)
-            existing.add(code)
+        codes = _generate_unique_redeem_codes(db, count)
     for code in codes:
-        existing.add(code)
         item = FlowPointRedeemCode(
             code=code,
             batch_no=batch_no,

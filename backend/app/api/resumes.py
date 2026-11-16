@@ -202,7 +202,7 @@ def import_resume_file(
     except Exception as exc:
         message = str(exc).strip() or "请稍后重试"
         _mark_import_task_failed(db, task, message)
-        raise AppException(f"简历导入失败：{message}") from exc
+        raise AppException(f"简历导入失败：{message}", 400) from exc
 
 
 @router.get("/{resume_id}")

@@ -576,7 +576,19 @@ export const exportAdminRedeemCodesApi = (params: Record<string, unknown> = {}) 
 export const getAdminSettingsApi = () => request.get<AdminSettings, AdminSettings>("/admin/settings")
 export const updateAdminSettingsApi = (data: { signup_gift_points: number; ai_records_hint: string; feedback_notify_email: string; redeem_daily_attempt_limit: number; user_agreement: string }) => request.put<AdminSettings, AdminSettings>("/admin/settings", data)
 export const getAdminFeedbacksApi = (params: Record<string, unknown>) => request.get<PageData<AdminFeedback>, PageData<AdminFeedback>>("/admin/feedbacks", { params })
+
+/** `PATCH /admin/feedbacks/{id}` 与 `POST .../send-email` 的回包：只回被改的字段，不是整行。 */
+export interface AdminFeedbackUpdateResult {
+  id: number
+  status: AdminFeedback["status"]
+  admin_note?: string | null
+  admin_reply?: string | null
+  reply_time?: string | null
+  update_time: string
+  email_sent?: boolean
+}
+
 export const updateAdminFeedbackApi = (id: number, data: { status: AdminFeedback["status"]; admin_note?: string; admin_reply?: string }) =>
-  request.patch(`/admin/feedbacks/${id}`, data)
+  request.patch<AdminFeedbackUpdateResult, AdminFeedbackUpdateResult>(`/admin/feedbacks/${id}`, data)
 export const sendAdminFeedbackEmailApi = (id: number, data: { status: AdminFeedback["status"]; admin_note?: string; admin_reply?: string }) =>
-  request.post(`/admin/feedbacks/${id}/send-email`, data)
+  request.post<AdminFeedbackUpdateResult, AdminFeedbackUpdateResult>(`/admin/feedbacks/${id}/send-email`, data)

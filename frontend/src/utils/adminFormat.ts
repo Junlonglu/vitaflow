@@ -101,6 +101,17 @@ export function statusClass(value: string): string {
   return "bg-amber-50 text-amber-700 ring-amber-600/20"
 }
 
+/**
+ * 反馈状态 → 胶囊色档。
+ *
+ * 反馈状态和后端通用状态不同名（`open`/`processing` 后端没有），所以要先折叠再
+ * 交给 `statusClass`。这段折叠原来在列表行与处理弹窗里各写一遍，一旦改档位就会
+ * 出现「列表里是黄的、弹窗里是灰的」。
+ */
+export function feedbackStatusClass(value?: string): string {
+  return statusClass(value === "resolved" ? "success" : value === "closed" ? "disabled" : "pending")
+}
+
 /** 管理后台列表共用的每页条数档位。 */
 export const ADMIN_PAGE_SIZE_OPTIONS = [
   { label: "10 条/页", value: 10 },

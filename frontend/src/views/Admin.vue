@@ -15,24 +15,23 @@ import AdminDashboardPanel from "@/components/admin/AdminDashboardPanel.vue"
 import AdminUsersPanel from "@/components/admin/AdminUsersPanel.vue"
 import AdminResumesPanel from "@/components/admin/AdminResumesPanel.vue"
 import AdminExportsPanel from "@/components/admin/AdminExportsPanel.vue"
+import AdminFeedbacksPanel from "@/components/admin/AdminFeedbacksPanel.vue"
 import AnnouncementManager from "@/components/admin/AnnouncementManager.vue"
 import AiSettingsManager from "@/components/admin/AiSettingsManager.vue"
 import RichTextEditor from "@/components/admin/RichTextEditor.vue"
 import TemplatePreview from "@/components/templates/TemplatePreview.vue"
 import type { EChartsOption } from "echarts"
 import {
-  getAdminAiTasksApi, getAdminDashboardApi, getAdminFeedbacksApi,
+  getAdminAiTasksApi, getAdminDashboardApi,
   getAdminAiConfigsApi, getAdminFlowPointTransactionsApi, getAdminResumeStarterIndustriesApi, getAdminResumeStartersApi, getAdminSettingsApi, getAdminTemplatesApi,
-  revokeAllUsersFlowPointsGrantApi, sendAdminFeedbackEmailApi, updateAdminFeedbackApi, updateAdminResumeStarterApi, updateAdminSettingsApi, updateAdminTemplateApi,
+  revokeAllUsersFlowPointsGrantApi, updateAdminResumeStarterApi, updateAdminSettingsApi, updateAdminTemplateApi,
   createAdminResumeStarterApi, deleteAdminResumeStarterApi,
-  type AdminAiConfig, type AdminAiTask, type AdminFeedback, type AdminFlowPointTransaction, type AdminResumeStarter, type AdminResumeStarterIndustry, type AdminTemplate,
+  type AdminAiConfig, type AdminAiTask, type AdminFlowPointTransaction, type AdminResumeStarter, type AdminResumeStarterIndustry, type AdminTemplate,
   type DashboardData, type PageData,
 } from "@/api/admin"
-import { sanitizeFeedbackHtml } from "@/lib/sanitize"
 import {
   ADMIN_PAGE_SIZE_OPTIONS as pageSizeOptions,
   featureText,
-  feedbackStatusText,
   formatCurrency,
   formatDate,
   formatNumber,
@@ -64,7 +63,6 @@ const templates = ref<PageData<AdminTemplate>>({ items: [], total: 0, page: 1, p
 const resumeStarters = ref<PageData<AdminResumeStarter>>({ items: [], total: 0, page: 1, page_size: 20 })
 const starterIndustries = ref<AdminResumeStarterIndustry[]>([])
 const templateOptions = ref<AdminTemplate[]>([])
-const feedbacks = ref<PageData<AdminFeedback>>({ items: [], total: 0, page: 1, page_size: 20 })
 const pointTransactions = ref<PageData<AdminFlowPointTransaction>>({ items: [], total: 0, page: 1, page_size: 20 })
 
 const aiModelConfigs = ref<AdminAiConfig[]>([])
@@ -120,7 +118,6 @@ const currentTitle = computed(() => navItems.find((item) => item.id === section.
 const currentPage = computed(() => {
   if (section.value === "ai") return aiTasks.value
   if (section.value === "point-transactions") return pointTransactions.value
-  if (section.value === "feedbacks") return feedbacks.value
   if (section.value === "templates") return templates.value
   if (section.value === "industry-templates") return resumeStarters.value
   return null
@@ -239,6 +236,7 @@ async function load(page = 1) {
     if (section.value === "dashboard") dashboard.value = await getAdminDashboardApi()
     if (section.value === "ai") aiTasks.value = await getAdminAiTasksApi({ page, page_size: pageSize.value, status: statusFilter.value || undefined, task_type: typeFilter.value || undefined, model: modelFilter.value || undefined })
     if (section.value === "point-transactions") pointTransactions.value = await getAdminFlowPointTransactionsApi({ page, page_size: pageSize.value, keyword: keyword.value, direction: statusFilter.value || undefined, feature_type: typeFilter.value || undefined, model: modelFilter.value || undefined })
+
     if (section.value === "system-settings") {
       const data = await getAdminSettingsApi()
       settingsForm.value = {
@@ -249,7 +247,6 @@ async function load(page = 1) {
         user_agreement: data.user_agreement || "",
       }
     }
-    if (section.value === "feedbacks") feedbacks.value = await getAdminFeedbacksApi({ page, page_size: pageSize.value, status: statusFilter.value || undefined })
     if (section.value === "templates") templates.value = await getAdminTemplatesApi({ page, page_size: pageSize.value })
     if (section.value === "industry-templates") {
       if (!starterIndustries.value.length) {
@@ -287,31 +284,6 @@ function handleShellSection(value: string) {
 
 const showRevokeGrantConfirm = ref(false)
 const revokeGrantTarget = ref<AdminFlowPointTransaction | null>(null)
-
-const showFeedbackReply = ref(false)
-const feedbackReplySaving = ref(false)
-const feedbackEmailSending = ref(false)
-const feedbackReplyTarget = ref<AdminFeedback | null>(null)
-const feedbackReplyForm = ref({
-  status: "processing" as AdminFeedback["status"],
-  admin_note: "",
-  admin_reply: "",
-})
-
-function openFeedbackReply(item: AdminFeedback) {
-  feedbackReplyTarget.value = item
-  feedbackReplyForm.value = {
-    status: item.status === "open" ? "processing" : item.status,
-    admin_note: item.admin_note || "",
-    admin_reply: item.admin_reply || "",
-  }
-  showFeedbackReply.value = true
-}
-
-function closeFeedbackReply() {
-  showFeedbackReply.value = false
-  feedbackReplyTarget.value = null
-}
 
 function requestRevokeGrant(item: AdminFlowPointTransaction) {
   if (!item.grant_batch_no) return
@@ -672,62 +644,7 @@ async function saveSettings() {
   }
 }
 
-async function saveFeedbackReply() {
-  const item = feedbackReplyTarget.value
-  if (!item || feedbackReplySaving.value) return
-  feedbackReplySaving.value = true
-  try {
-    const updated = await updateAdminFeedbackApi(item.id, {
-      status: feedbackReplyForm.value.status,
-      admin_note: feedbackReplyForm.value.admin_note,
-      admin_reply: feedbackReplyForm.value.admin_reply,
-    }) as any
-    item.status = updated?.status || feedbackReplyForm.value.status
-    item.admin_note = updated?.admin_note ?? feedbackReplyForm.value.admin_note
-    item.admin_reply = updated?.admin_reply ?? feedbackReplyForm.value.admin_reply
-    item.reply_time = updated?.reply_time ?? item.reply_time
-    closeFeedbackReply()
-    showGlobalToast("回复已保存")
-  } catch (err: any) {
-    showGlobalToast(err.message || "回复保存失败", "error")
-  } finally {
-    feedbackReplySaving.value = false
-  }
-}
-
-async function sendFeedbackResultEmail() {
-  const item = feedbackReplyTarget.value
-  const reply = feedbackReplyForm.value.admin_reply.trim()
-  if (!item || feedbackEmailSending.value || !reply) return
-  feedbackEmailSending.value = true
-  try {
-    const updated = await sendAdminFeedbackEmailApi(item.id, {
-      status: feedbackReplyForm.value.status,
-      admin_note: feedbackReplyForm.value.admin_note,
-      admin_reply: reply,
-    }) as any
-    item.status = updated?.status || feedbackReplyForm.value.status
-    item.admin_note = updated?.admin_note ?? feedbackReplyForm.value.admin_note
-    item.admin_reply = updated?.admin_reply ?? reply
-    item.reply_time = updated?.reply_time ?? item.reply_time
-    showGlobalToast("处理结果邮件已发送")
-  } catch (err: any) {
-    showGlobalToast(err.message || "处理结果邮件发送失败", "error")
-  } finally {
-    feedbackEmailSending.value = false
-  }
-}
-
 const statusOptions = computed(() => {
-  if (section.value === 'feedbacks') {
-    return [
-      { label: '全部状态', value: '' },
-      { label: '待处理', value: 'open' },
-      { label: '处理中', value: 'processing' },
-      { label: '已解决', value: 'resolved' },
-      { label: '已关闭', value: 'closed' },
-    ]
-  }
   if (section.value === 'point-transactions') {
     return [
       { label: '全部方向', value: '' },
@@ -742,13 +659,6 @@ const statusOptions = computed(() => {
     { label: '处理中', value: 'pending' },
   ]
 })
-
-const feedbackEditStatusOptions = [
-  { label: '待处理', value: 'open' },
-  { label: '处理中', value: 'processing' },
-  { label: '已解决', value: 'resolved' },
-  { label: '已关闭', value: 'closed' },
-]
 
 const modelFilterOptions = computed(() => {
   const seen = new Set<string>()
@@ -896,9 +806,10 @@ onMounted(() => load())
         <AdminUsersPanel v-else-if="section === 'users'" />
         <AdminResumesPanel v-else-if="section === 'resumes'" />
         <AdminExportsPanel v-else-if="section === 'exports'" />
+        <AdminFeedbacksPanel v-else-if="section === 'feedbacks'" />
 
         <template v-else>
-          <div v-if="['ai', 'point-transactions', 'feedbacks', 'industry-templates'].includes(section)" class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div v-if="['ai', 'point-transactions', 'industry-templates'].includes(section)" class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
             <div v-if="['point-transactions', 'industry-templates'].includes(section)" class="relative w-full sm:w-72">
               <Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
               <input v-model="keyword" class="h-10 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-zinc-400" :placeholder="section === 'point-transactions' ? '搜索用户、邮箱或说明' : section === 'industry-templates' ? '搜索行业、岗位或 ID' : '搜索用户名、邮箱或标题'" @keyup.enter="load(1)" />
@@ -906,7 +817,7 @@ onMounted(() => load())
             <div v-if="section === 'industry-templates'" class="w-full sm:w-44">
               <Select v-model="starterIndustryFilter" :options="starterIndustryFilterOptions" placeholder="全部行业" class="h-10 w-full rounded-lg" @change="load(1)" />
             </div>
-            <div v-if="['ai', 'point-transactions', 'feedbacks'].includes(section)" class="w-full sm:w-32">
+            <div v-if="['ai', 'point-transactions'].includes(section)" class="w-full sm:w-32">
               <Select v-model="statusFilter" :options="statusOptions" placeholder="全部状态" class="h-10 w-full rounded-lg" @change="load(1)" />
             </div>
             <div v-if="['ai', 'point-transactions'].includes(section)" class="w-full sm:w-40">
@@ -956,7 +867,6 @@ onMounted(() => load())
                 </tbody>
               </table>
 
-              <table v-if="section === 'feedbacks'" class="w-full min-w-[980px] text-left text-sm"><thead><tr class="border-b bg-zinc-50 text-xs text-zinc-500"><th class="px-5 py-3">所属模块</th><th class="px-5 py-3">用户</th><th class="px-5 py-3">联系方式</th><th class="px-5 py-3">状态</th><th class="px-5 py-3">时间</th><th class="px-5 py-3 text-right">操作</th></tr></thead><tbody><tr v-for="item in feedbacks.items" :key="item.id" class="border-b border-zinc-100 last:border-0"><td class="px-5 py-4"><p class="font-medium text-zinc-900">{{ item.category || '意见反馈' }}</p></td><td class="px-5 py-4"><p>{{ item.username }}</p><p class="mt-0.5 text-xs text-zinc-400">{{ item.email }}</p></td><td class="px-5 py-4 text-zinc-500">{{ item.contact || '—' }}</td><td class="px-5 py-4"><div class="flex flex-wrap items-center gap-2"><span class="rounded-full px-2 py-1 text-xs ring-1 ring-inset" :class="statusClass(item.status === 'resolved' ? 'success' : item.status === 'closed' ? 'disabled' : 'pending')">{{ feedbackStatusText(item.status) }}</span><span v-if="item.admin_reply" class="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">已回复</span></div></td><td class="px-5 py-4 text-zinc-500">{{ formatDate(item.create_time) }}</td><td class="px-5 py-4 text-right"><button class="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 hover:text-zinc-900 active:scale-95" @click="openFeedbackReply(item)">处理</button></td></tr></tbody></table>
 
               <div v-if="section === 'templates'" class="grid gap-5 p-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                 <article v-for="item in templates.items" :key="item.template_id" class="group relative flex flex-col rounded-xl bg-white p-4 border border-zinc-200/60 transition hover:border-zinc-300">
@@ -1205,70 +1115,5 @@ onMounted(() => load())
       destructive
       @confirm="executeDeleteStarter"
     />
-
-    <Teleport to="body">
-      <Transition
-        enter-active-class="transition duration-150 ease-out"
-        enter-from-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-        enter-to-class="opacity-100 translate-y-0 sm:scale-100"
-        leave-active-class="transition duration-150 ease-in"
-        leave-from-class="opacity-100 translate-y-0 sm:scale-100"
-        leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-      >
-        <div v-if="showFeedbackReply" class="fixed inset-0 z-overlay flex items-center justify-center p-4 bg-wb-scrim/40 backdrop-blur-sm" @click.self="closeFeedbackReply">
-          <div class="flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup transform transition">
-            <div class="px-6 py-4 flex items-center justify-between border-b border-zinc-100">
-              <div>
-                <h3 class="font-semibold text-zinc-900 text-base">处理反馈</h3>
-                <p class="mt-0.5 text-xs text-zinc-400">{{ feedbackReplyTarget?.username }} · {{ feedbackReplyTarget?.email }} · {{ feedbackReplyTarget?.category || '意见反馈' }}</p>
-              </div>
-              <button @click="closeFeedbackReply" class="p-2 text-zinc-400 hover:text-zinc-600 rounded-full hover:bg-zinc-100 transition-colors">
-                <X class="w-5 h-5" />
-              </button>
-            </div>
-
-            <div class="grid flex-1 gap-0 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_360px]">
-              <div class="border-b border-zinc-100 p-6 lg:border-b-0 lg:border-r">
-                <div class="mb-4 flex flex-wrap items-center gap-2">
-                  <span class="rounded-full px-2 py-1 text-xs ring-1 ring-inset" :class="statusClass(feedbackReplyTarget?.status === 'resolved' ? 'success' : feedbackReplyTarget?.status === 'closed' ? 'disabled' : 'pending')">{{ feedbackStatusText(feedbackReplyTarget?.status || '') }}</span>
-                  <span v-if="feedbackReplyTarget?.admin_reply" class="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">已回复</span>
-                  <span class="text-xs text-zinc-400">{{ feedbackReplyTarget?.create_time ? formatDate(feedbackReplyTarget.create_time) : '' }}</span>
-                </div>
-                <h4 class="mb-3 text-sm font-semibold text-zinc-900">反馈内容</h4>
-                <div class="prose prose-sm max-w-none prose-zinc text-zinc-700 [&_img]:my-2 [&_img]:max-w-full [&_img]:rounded-xl" v-html="sanitizeFeedbackHtml(feedbackReplyTarget?.content)"></div>
-              </div>
-
-              <div class="space-y-4 bg-zinc-50/40 p-6">
-                <div>
-                  <label class="mb-1.5 block text-xs font-medium text-zinc-600">处理状态</label>
-                  <Select v-model="feedbackReplyForm.status" :options="feedbackEditStatusOptions" class="h-10 w-full rounded-lg bg-white" />
-                </div>
-                <div>
-                  <label class="mb-1.5 block text-xs font-medium text-zinc-600">用户可见回复</label>
-                  <Textarea v-model="feedbackReplyForm.admin_reply" :rows="6" placeholder="写给用户看的处理结果或说明" />
-                  <p v-if="feedbackReplyTarget?.reply_time" class="mt-1.5 text-[11px] text-zinc-400">上次回复：{{ formatDate(feedbackReplyTarget.reply_time) }}</p>
-                </div>
-                <div>
-                  <label class="mb-1.5 block text-xs font-medium text-zinc-600">内部处理备注</label>
-                  <Textarea v-model="feedbackReplyForm.admin_note" :rows="4" placeholder="仅管理员后台可见，可留空" />
-                </div>
-              </div>
-            </div>
-
-            <div class="px-4 sm:px-6 py-4 bg-zinc-50/50 border-t border-zinc-100 flex flex-wrap justify-end gap-2">
-              <button @click="closeFeedbackReply" class="h-10 px-4 sm:px-5 rounded-xl font-medium text-sm border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 transition-colors whitespace-nowrap shrink-0">取消</button>
-              <button @click="sendFeedbackResultEmail" :disabled="feedbackEmailSending || feedbackReplySaving || !feedbackReplyForm.admin_reply.trim()" class="inline-flex h-10 items-center justify-center gap-1.5 sm:gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 sm:px-5 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 whitespace-nowrap shrink-0">
-                <RefreshCw v-if="feedbackEmailSending" class="h-4 w-4 animate-spin shrink-0" />
-                保存并发邮件
-              </button>
-              <button @click="saveFeedbackReply" :disabled="feedbackReplySaving || feedbackEmailSending" class="inline-flex h-10 items-center justify-center gap-1.5 sm:gap-2 rounded-xl bg-wb-primary px-5 sm:px-6 text-sm font-medium text-white transition-colors hover:bg-wb-primary-hover disabled:cursor-not-allowed disabled:opacity-60 whitespace-nowrap shrink-0">
-                <RefreshCw v-if="feedbackReplySaving" class="h-4 w-4 animate-spin shrink-0" />
-                保存处理
-              </button>
-            </div>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
   </AdminShell>
 </template>

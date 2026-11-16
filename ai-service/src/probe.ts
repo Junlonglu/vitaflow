@@ -65,6 +65,10 @@ async function authedFetch(
 export interface RemoteModel {
   id: string;
   name: string | null;
+  /** Filled by the caller from models.dev; null when the model was not found. */
+  context_window?: number | null;
+  max_tokens?: number | null;
+  input?: string[] | null;
 }
 
 /** Read the provider's model list (OpenAI-compatible GET /models). */

@@ -6,7 +6,7 @@
  * 一份草稿：身份、密钥、模型勾选、模型资料全在草稿里改，点保存才按 diff
  * 串行提交（建/改服务商 → 导入新增模型 → 更新资料 → 删除取消勾选的模型）。
  */
-import type { AdminCatalogModel, AdminCatalogModelWrite, AdminCatalogProvider } from "@/api/admin"
+import type { AdminCatalogModel, AdminCatalogModelWrite, AdminCatalogProvider, AdminRemoteModel } from "@/api/admin"
 
 export interface ProviderPreset {
   key: string
@@ -104,6 +104,27 @@ export function modelDraft(model: AdminCatalogModel): ModelDraft {
 /** 新勾选的模型先落一个裸条目：只带 id，其余等保存后补全。 */
 export function emptyModelDraft(id: string): ModelDraft {
   return { name: id, input: ["text"], context_window: "", max_tokens: "" }
+}
+
+/** 上游列表是否带回了可用资料（models.dev 没收录时只有 id）。 */
+export function hasRemoteMeta(model: AdminRemoteModel): boolean {
+  return model.context_window != null || model.max_tokens != null || Boolean(model.input?.length)
+}
+
+/**
+ * 上游列表带回的资料 → 模型草稿。
+ *
+ * 拉列表时 ai-service 已经用 models.dev 把上下文窗口、最大输出、图片支持
+ * 一起查回来了，勾选即得到一份填好的资料，不必再手抄厂商文档。
+ */
+export function remoteModelDraft(model: AdminRemoteModel): ModelDraft {
+  const input = model.input?.length ? [...model.input] : ["text"]
+  return {
+    name: model.name || model.id,
+    input: input.includes("text") ? input : ["text", ...input],
+    context_window: model.context_window != null ? String(model.context_window) : "",
+    max_tokens: model.max_tokens != null ? String(model.max_tokens) : "",
+  }
 }
 
 export function createProviderDraft(

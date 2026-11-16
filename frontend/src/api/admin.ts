@@ -413,6 +413,10 @@ export const syncAdminCatalogProviderDevApi = (key: string) =>
 export interface AdminRemoteModel {
   id: string
   name: string | null
+  /** models.dev 资料：拉列表时一起带回来，勾选即可自动填好模型资料。 */
+  context_window?: number | null
+  max_tokens?: number | null
+  input?: string[] | null
 }
 /** 用卡片里当前填的地址/密钥拉列表（不落盘）：空值回落到 provider_key 已存的那份。 */
 export interface AdminRemoteModelsProbe {

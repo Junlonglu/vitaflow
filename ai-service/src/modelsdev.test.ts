@@ -5,6 +5,7 @@ import {
   enrichCatalogFromModelsDev,
   enrichProviderFromModelsDev,
   fetchModelsDev,
+  guessModelsDevKey,
   resetModelsDevCache,
   type ModelsDevData,
 } from "./modelsdev.js";
@@ -126,4 +127,16 @@ test("fetchModelsDev caches responses and surfaces HTTP errors as Chinese messag
   }) as unknown as typeof fetch;
   await assert.rejects(() => fetchModelsDev(networkError), /无法访问模型资料库/);
   resetModelsDevCache();
+});
+
+test("guessModelsDevKey recognises vendor hosts and falls back to the first label", () => {
+  assert.equal(guessModelsDevKey("https://api.deepseek.com/v1"), "deepseek");
+  assert.equal(guessModelsDevKey("https://open.bigmodel.cn/api/paas/v4"), "zhipuai");
+  assert.equal(guessModelsDevKey("https://api.moonshot.cn/v1"), "moonshotai");
+  assert.equal(guessModelsDevKey("https://ark.cn-beijing.volces.com/api/v3"), "volcengine");
+  assert.equal(guessModelsDevKey("https://dashscope.aliyuncs.com/compatible-mode/v1"), "alibaba");
+  // unknown vendor: first label that is not api/www/open
+  assert.equal(guessModelsDevKey("https://api.acme-llm.dev/v1"), "acme-llm");
+  assert.equal(guessModelsDevKey(""), null);
+  assert.equal(guessModelsDevKey("not a url"), null);
 });

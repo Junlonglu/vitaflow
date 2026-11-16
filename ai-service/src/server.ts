@@ -37,9 +37,9 @@ import { runChat, runTask, type ChatRuntime, type ChatStreamEvent } from "./agen
 import { reportUsage } from "./billing.js";
 import { loadConfig } from "./config.js";
 import { createFauxRuntime } from "./faux.js";
-import { enrichProviderFromModelsDev, fetchModelsDev } from "./modelsdev.js";
+import { enrichProviderFromModelsDev, fetchModelsDev, guessModelsDevKey } from "./modelsdev.js";
 import { appendSkillsToPrompt, buildContextPrompt, DEFAULT_SYSTEM_PROMPT, parseSkills, type AiServiceContext } from "./prompt.js";
-import { fetchRemoteModels, probeCatalogModel } from "./probe.js";
+import { fetchRemoteModels, probeCatalogModel, type RemoteModel } from "./probe.js";
 import { queryPlanUsage } from "./planusage.js";
 import { noteRoutingFailure, noteRoutingSuccess, resolveRoutingGroup } from "./router.js";
 import { createRealRuntime, parseByokOverride, registerByokModel, type ThinkingLevelSetting } from "./real.js";
@@ -353,6 +353,41 @@ app.post("/v1/catalog/providers/:key/sync-dev", async (req, res) => {
 // model with a tiny completion. Import keeps existing models and their
 // metadata untouched; only new ids are appended with a bare { id } entry so
 // models.dev sync can fill the rest.
+/**
+ * 用 models.dev 的公开资料把上游模型列表补全成「可以直接勾选」的样子：
+ * 上下文窗口、最大输出、是否支持图片。管理后台据此自动填好模型资料，
+ * 操作者不必再去 models.dev 或厂商文档里逐个抄数字。
+ *
+ * 资料库不可用（离线 / 超时）时原样返回 id 列表——补全是附加信息，
+ * 不能让它挡住「拉列表」这件事本身。
+ */
+async function withModelMetadata(
+  providerKey: string,
+  provider: CatalogProvider,
+  models: RemoteModel[],
+): Promise<RemoteModel[]> {
+  if (!models.length) return models;
+  try {
+    const dev = await fetchModelsDev();
+    const matchKey = providerKey || guessModelsDevKey(provider.baseUrl || "") || "";
+    const temp = {
+      ...provider,
+      models: models.map((model) => ({ id: model.id })) as CatalogProvider["models"],
+    };
+    enrichProviderFromModelsDev(matchKey, temp, dev, new Date());
+    return temp.models.map((model, index) => ({
+      id: model.id,
+      name: models[index]?.name ?? null,
+      context_window: model.contextWindow ?? null,
+      max_tokens: model.maxTokens ?? null,
+      input: model.input ?? null,
+    }));
+  } catch (err) {
+    console.warn("[vitaflow-ai] models.dev enrichment skipped:", (err as Error).message);
+    return models;
+  }
+}
+
 app.get("/v1/catalog/providers/:key/remote-models", async (req, res) => {
   if (!authorize(req)) return void res.status(401).json({ type: "error", message: "未授权：需要有效的服务令牌" });
   if (config.provider === "faux") return void res.status(400).json({ type: "error", message: "faux 模式下不可操作真实服务商" });
@@ -360,7 +395,7 @@ app.get("/v1/catalog/providers/:key/remote-models", async (req, res) => {
     const key = validateProviderKey(req.params.key);
     const catalog = await readCatalog(AGENT_DIR);
     const provider = requireEditableProvider(catalog, key);
-    const models = await fetchRemoteModels(provider);
+    const models = await withModelMetadata(key, provider, await fetchRemoteModels(provider));
     res.json({ models });
   } catch (err) {
     if (err instanceof CatalogError) return handleCatalogError(res, err);
@@ -392,7 +427,7 @@ app.post("/v1/catalog/remote-models", async (req, res) => {
       api: saved?.api || "openai-completions",
       models: [],
     };
-    const models = await fetchRemoteModels(provider);
+    const models = await withModelMetadata(providerKey, provider, await fetchRemoteModels(provider));
     res.json({ models });
   } catch (err) {
     if (err instanceof CatalogError) return handleCatalogError(res, err);

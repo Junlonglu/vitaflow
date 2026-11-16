@@ -6,7 +6,9 @@ import {
   emptyModelDraft,
   formatContextWindow,
   groupUsingModel,
+  hasRemoteMeta,
   parsePositiveInt,
+  remoteModelDraft,
   type ProviderDraft,
 } from "@/components/admin/ai/providerDraft"
 
@@ -149,5 +151,57 @@ describe("小工具", () => {
     const groups = [{ id: "main", members: ["deepseek/deepseek-chat"] }]
     expect(groupUsingModel(groups, "deepseek", "deepseek-chat")).toBe("main")
     expect(groupUsingModel(groups, "deepseek", "deepseek-reasoner")).toBeNull()
+  })
+
+  it("remoteModelDraft 把上游带回的资料直接铺成草稿", () => {
+    const draft = remoteModelDraft({
+      id: "deepseek-flash",
+      name: null,
+      context_window: 1048576,
+      max_tokens: 393216,
+      input: ["text", "image"],
+    })
+    expect(draft).toEqual({
+      name: "deepseek-flash",
+      input: ["text", "image"],
+      context_window: "1048576",
+      max_tokens: "393216",
+    })
+    // 没有 name 时回落到 id；input 缺 text 时补上（目录只接受 text 打底的集合）
+    const bare = remoteModelDraft({ id: "m1", name: "", context_window: 64000, max_tokens: null, input: ["image"] })
+    expect(bare.name).toBe("m1")
+    expect(bare.input).toEqual(["text", "image"])
+    expect(bare.max_tokens).toBe("")
+  })
+
+  it("hasRemoteMeta 只有真带回读数时才算可覆盖", () => {
+    expect(hasRemoteMeta({ id: "a", name: null })).toBe(false)
+    expect(hasRemoteMeta({ id: "a", name: "A" })).toBe(false)
+    expect(hasRemoteMeta({ id: "a", name: null, context_window: 128000 })).toBe(true)
+    expect(hasRemoteMeta({ id: "a", name: null, max_tokens: 8192 })).toBe(true)
+    expect(hasRemoteMeta({ id: "a", name: null, input: ["text", "image"] })).toBe(true)
+  })
+
+  it("新勾选的模型带资料时，保存计划里直接提交这份资料", () => {
+    const base = createProviderDraft(provider({ models: [] }))
+    base.key = "deepseek"
+    base.name = "DeepSeek"
+    base.base_url = "https://api.deepseek.com"
+    base.modelIds = ["deepseek-flash"]
+    base.models["deepseek-flash"] = remoteModelDraft({
+      id: "deepseek-flash",
+      name: null,
+      context_window: 1048576,
+      max_tokens: 393216,
+      input: ["text", "image"],
+    })
+    const plan = buildProviderSavePlan(null, base)
+    expect(plan.payload.added).toEqual(["deepseek-flash"])
+    expect(plan.payload.patches[0].data).toMatchObject({
+      id: "deepseek-flash",
+      context_window: 1048576,
+      max_tokens: 393216,
+      input: ["text", "image"],
+    })
   })
 })

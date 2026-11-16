@@ -17,6 +17,40 @@ import type { CatalogFile } from "./catalog.js";
 
 export const MODELS_DEV_API_URL = "https://models.dev/api.json";
 
+/**
+ * Domain → models.dev provider id. Used when a card has no saved provider key
+ * yet (a brand-new provider whose base URL is already typed). Deliberately a
+ * fixed table: a wrong guess would attach the wrong context window, and pi's
+ * auto-compaction depends on that number.
+ */
+const HOST_TO_DEV_KEY: [string, string][] = [
+  ["deepseek.com", "deepseek"],
+  ["bigmodel.cn", "zhipuai"],
+  ["moonshot.cn", "moonshotai"],
+  ["siliconflow", "siliconflow"],
+  ["openrouter.ai", "openrouter"],
+  ["volces.com", "volcengine"],
+  ["aliyuncs.com", "alibaba"],
+  ["minimax", "minimax"],
+  ["x.ai", "xai"],
+  ["openai.com", "openai"],
+  ["anthropic.com", "anthropic"],
+  ["googleapis.com", "google"],
+];
+
+/** models.dev provider id implied by a base URL, or null when unknown. */
+export function guessModelsDevKey(baseUrl: string): string | null {
+  const url = (baseUrl || "").trim().toLowerCase();
+  if (!url) return null;
+  for (const [needle, key] of HOST_TO_DEV_KEY) {
+    if (url.includes(needle)) return key;
+  }
+  // api.deepseek.com → deepseek：兜底取主机名的首段（去掉 api/v1 一类前缀）
+  const host = url.replace(/^https?:\/\//, "").split("/")[0];
+  const parts = host.split(".").filter((part) => !["api", "www", "v1", "open"].includes(part));
+  return parts[0] && parts[0] !== host ? parts[0] : null;
+}
+
 export interface ModelsDevModel {
   id?: string;
   name?: string;

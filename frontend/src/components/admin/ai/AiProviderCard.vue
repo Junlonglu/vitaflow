@@ -45,7 +45,10 @@ import {
   emptyModelDraft,
   formatContextWindow,
   groupUsingModel,
+  hasRemoteMeta,
   parsePositiveInt,
+  remoteModelDraft,
+  type ModelDraft,
   type ProviderDraft,
   type ProviderPreset,
   type ProviderSavePayload,
@@ -83,7 +86,6 @@ const draft = ref<ProviderDraft>(createProviderDraft(props.provider, props.seed)
 const errors = ref({ key: "", name: "", base_url: "", models: "" })
 const showKey = ref(false)
 const keyResetting = ref(false)
-const advancedOpen = ref(false)
 const settingsOpen = ref(false)
 const savingLocal = ref(false)
 const syncing = ref(false)
@@ -110,14 +112,69 @@ const envKeyOptions = computed(() => [
 ])
 const canSave = computed(() => dirty.value && !saving.value)
 
-// 套餐型厂商的接口地址特征：Coding/Agent Plan 与两家 Token Plan 需要账号钥匙。
-const planVendorHint = computed(() => {
-  const base = draft.value.base_url.toLowerCase()
-  const pathed = `${base.replace(/\/+$/, "")}/`
-  if (/ark\.[a-z0-9-]+\.volces\.com/.test(base) && /\/api\/(coding|plan)\//.test(pathed)) return "火山方舟 Coding/Agent Plan"
-  if (base.includes("token-plan.") && base.includes("maas.aliyuncs.com")) return "阿里云百炼 Token Plan"
-  if (base.includes("tencentmaas.com") && base.includes("/plan")) return "腾讯云 Token Plan 企业版"
+/**
+ * 套餐型厂商才需要云账号访问密钥（只用来读套餐用量，不参与推理）。
+ *
+ * 字段名按厂商叫法区分——火山方舟叫 AccessKey ID / Secret Access Key，
+ * 阿里云百炼叫 AccessKey ID / AccessKey Secret，腾讯云叫 SecretId / SecretKey。
+ * 非套餐厂商的卡片里完全不出现这一块，避免「每个服务商都挂着两张用不上的框」。
+ */
+interface AccessKeySpec {
+  vendor: "volcengine" | "alibaba" | "tencent"
+  plan: string
+  idLabel: string
+  secretLabel: string
+  /** 各家的 ID 形如 AKLT… / LTAI… / AKID…，给个样子比重复标签有用。 */
+  idExample: string
+  hint: string
+}
+
+const ACCESS_KEY_SPECS: Record<AccessKeySpec["vendor"], Omit<AccessKeySpec, "vendor" | "plan">> = {
+  volcengine: {
+    idLabel: "AccessKey ID",
+    secretLabel: "Secret Access Key",
+    idExample: "AKLT…",
+    hint: "火山引擎控制台 → API 访问密钥；只用于读 Coding/Agent Plan 的用量，不随推理请求发送",
+  },
+  alibaba: {
+    idLabel: "AccessKey ID",
+    secretLabel: "AccessKey Secret",
+    idExample: "LTAI…",
+    hint: "阿里云控制台 → AccessKey（RAM 子账号可用）；只用于读 Token Plan 的用量，不随推理请求发送",
+  },
+  tencent: {
+    idLabel: "SecretId",
+    secretLabel: "SecretKey",
+    idExample: "AKID…",
+    hint: "腾讯云控制台 → 访问管理 → API 密钥；只用于读 Token Plan 企业版的用量，不随推理请求发送",
+  },
+}
+
+/** 与 ai-service 的 detectPlan 同口径，用于「新建卡还没保存」时也能提示要填什么。 */
+function detectPlanVendor(url: string): AccessKeySpec["vendor"] | null {
+  const value = (url || "").trim().toLowerCase()
+  if (!value) return null
+  let parsed: URL
+  try {
+    parsed = new URL(value)
+  } catch {
+    return null
+  }
+  const host = parsed.hostname
+  const path = `${parsed.pathname.replace(/\/+$/, "")}/`
+  if (host.startsWith("ark.") && host.endsWith(".volces.com") && (path.startsWith("/api/coding/") || path.startsWith("/api/plan/"))) {
+    return "volcengine"
+  }
+  if (/token-plan\.[a-z0-9-]+\.maas\.aliyuncs\.com/.test(host)) return "alibaba"
+  if (host.endsWith("tencentmaas.com") && path.startsWith("/plan/")) return "tencent"
   return null
+}
+
+/** 空 = 这家服务商不需要云账号凭证；非空才渲染那一块。 */
+const accessKeySpec = computed<AccessKeySpec | null>(() => {
+  const vendor = props.provider?.plan_vendor ?? detectPlanVendor(draft.value.base_url)
+  if (!vendor) return null
+  return { vendor, plan: props.provider?.plan_label || "", ...ACCESS_KEY_SPECS[vendor] }
 })
 
 const balanceLine = computed(() => {
@@ -143,7 +200,7 @@ const metaLine = computed(() => {
   const parts: string[] = []
   if (base) parts.push(hostOf(base))
   if (!ids.length) {
-    parts.push("还没有模型")
+    parts.push("还没有勾选模型")
   } else {
     const names = ids.map((id) => modelLabel(id))
     const head = names.slice(0, 3).join("、")
@@ -212,7 +269,7 @@ watch(
   () => draft.value.modelIds,
   (ids) => {
     for (const id of ids) {
-      if (!draft.value.models[id]) draft.value.models[id] = emptyModelDraft(id)
+      if (!draft.value.models[id]) draft.value.models[id] = draftFor(id)
     }
   },
   { flush: "sync" },
@@ -260,6 +317,12 @@ function contextLabel(id: string): string {
   return formatContextWindow(saved)
 }
 
+/** 勾选一个模型时用哪份资料：上游列表带回了就填好，否则先落裸条目。 */
+function draftFor(id: string): ModelDraft {
+  const meta = remoteModels.value.find((model) => model.id === id)
+  return meta && hasRemoteMeta(meta) ? remoteModelDraft(meta) : emptyModelDraft(id)
+}
+
 function toggleModel(id: string) {
   if (selected.value.has(id)) {
     const groupId = props.provider ? groupUsingModel(props.groups, props.provider.key, id) : null
@@ -272,14 +335,14 @@ function toggleModel(id: string) {
     return
   }
   draft.value.modelIds = [...draft.value.modelIds, id]
-  if (!draft.value.models[id]) draft.value.models[id] = emptyModelDraft(id)
+  if (!draft.value.models[id]) draft.value.models[id] = draftFor(id)
 }
 
 function selectAll() {
   for (const id of visibleIds.value) {
     if (!selected.value.has(id)) {
       draft.value.modelIds = [...draft.value.modelIds, id]
-      if (!draft.value.models[id]) draft.value.models[id] = emptyModelDraft(id)
+      if (!draft.value.models[id]) draft.value.models[id] = draftFor(id)
     }
   }
 }
@@ -306,7 +369,7 @@ function addManualModel() {
   modelInput.value = ""
   if (draft.value.modelIds.includes(id)) return
   draft.value.modelIds = [...draft.value.modelIds, id]
-  draft.value.models[id] = emptyModelDraft(id)
+  draft.value.models[id] = draftFor(id)
 }
 
 function toggleInput(id: string, kind: "text" | "image") {
@@ -326,6 +389,23 @@ function cancelKeyReplace() {
   keyResetting.value = false
   draft.value.keyMode = "keep"
   draft.value.api_key = ""
+}
+
+/**
+ * 拉到的资料直接落到已勾选的模型上（覆盖手填值）。
+ *
+ * 上游列表带回的是 models.dev 的权威读数，比手抄的上下文窗口可靠；覆盖后
+ * 仍要点保存才写盘，所以「拉错了」可以点取消回滚。
+ */
+function applyRemoteMetadata(): number {
+  let filled = 0
+  for (const id of draft.value.modelIds) {
+    const meta = remoteModels.value.find((model) => model.id === id)
+    if (!meta || !hasRemoteMeta(meta)) continue
+    draft.value.models[id] = remoteModelDraft(meta)
+    filled += 1
+  }
+  return filled
 }
 
 async function loadRemote(force = false) {
@@ -348,6 +428,8 @@ async function loadRemote(force = false) {
     })
     remoteModels.value = data.models || []
     remoteLoaded.value = true
+    const filled = applyRemoteMetadata()
+    if (filled) showGlobalToast(`已按上游资料补好 ${filled} 个模型的上下文窗口与最大输出`)
   } catch (err: any) {
     remoteError.value = err.message || "获取模型列表失败"
   } finally {
@@ -523,7 +605,7 @@ function duplicate() {
       </div>
 
       <div class="grid grid-cols-[56px_minmax(0,1fr)] items-start gap-3">
-        <p class="pt-2 text-xs font-medium text-zinc-500">账号</p>
+        <p class="pt-2 text-xs font-medium text-zinc-500">密钥</p>
         <div class="min-w-0 space-y-2">
           <template v-if="provider && !keyResetting">
             <div class="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50/60 px-3 py-2">
@@ -619,7 +701,7 @@ function duplicate() {
                 :class="tab === 'catalog' ? 'bg-zinc-100 text-zinc-900' : 'text-zinc-500 hover:bg-zinc-50'"
                 @click="switchTab('catalog')"
               >
-                已接入 {{ draft.modelIds.length }}
+                已勾选 {{ draft.modelIds.length }}
               </button>
               <button
                 type="button"
@@ -627,7 +709,7 @@ function duplicate() {
                 :class="tab === 'remote' ? 'bg-zinc-100 text-zinc-900' : 'text-zinc-500 hover:bg-zinc-50'"
                 @click="switchTab('remote')"
               >
-                供应商列表
+                所有模型
               </button>
             </div>
             <div class="flex items-center gap-1">
@@ -635,6 +717,7 @@ function duplicate() {
               <button type="button" class="rounded-md px-1.5 py-0.5 text-[11px] font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900" @click="selectNone">全不选</button>
             </div>
           </div>
+          <p class="text-[11px] text-zinc-400">勾选即决定 Agent 能用哪些模型：只有「已勾选」里的模型会出现在对话的选型列表里</p>
 
           <template v-if="tab === 'catalog'">
             <div v-if="draft.modelIds.length" class="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto pr-1">
@@ -657,7 +740,7 @@ function duplicate() {
               </button>
             </div>
             <p v-else class="rounded-lg border border-dashed border-zinc-200 bg-zinc-50/60 px-3 py-4 text-center text-xs text-zinc-400">
-              还没有接入任何模型：切到「供应商列表」勾选，或在下面手动添加 ID
+              还没有勾选任何模型：切到「所有模型」挑，或在下面手动添加 ID
             </p>
           </template>
 
@@ -722,74 +805,89 @@ function duplicate() {
           <p v-if="errors.models" class="text-xs text-red-600">{{ errors.models }}</p>
 
           <div v-if="settingsOpen" class="space-y-2 rounded-lg border border-zinc-200 bg-zinc-50/50 p-3">
-            <p class="text-[11px] font-medium text-zinc-500">模型资料：显示名称、上下文窗口（tokens）、最大输出（tokens）、是否支持图片；保存时一起提交</p>
-            <div v-for="id in draft.modelIds" :key="`meta-${id}`" class="flex flex-wrap items-center gap-2">
-              <input v-model="draft.models[id].name" class="block h-9 min-w-[140px] flex-1 rounded-lg border border-zinc-200 bg-white px-2.5 text-xs outline-none transition-colors focus:border-zinc-900" :placeholder="id" />
-              <input v-model="draft.models[id].context_window" inputmode="numeric" class="block h-9 w-20 rounded-lg border border-zinc-200 bg-white px-2.5 text-xs tabular-nums outline-none transition-colors focus:border-zinc-900" placeholder="上下文" />
-              <input v-model="draft.models[id].max_tokens" inputmode="numeric" class="block h-9 w-20 rounded-lg border border-zinc-200 bg-white px-2.5 text-xs tabular-nums outline-none transition-colors focus:border-zinc-900" placeholder="最大输出" />
-              <label class="flex cursor-pointer select-none items-center gap-1.5 text-[11px] text-zinc-600">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <p class="text-[11px] font-medium text-zinc-500">模型资料：显示名称、上下文窗口（tokens）、最大输出（tokens）、是否支持图片；保存时一起提交</p>
+              <Button v-if="provider" variant="outline" size="sm" class="shrink-0" :disabled="syncing" @click="syncDev">
+                <DatabaseZap class="h-3.5 w-3.5" :class="syncing ? 'animate-pulse' : ''" />补全空白资料
+              </Button>
+            </div>
+            <p v-if="provider" class="text-[11px] text-zinc-400">「补全空白资料」查 models.dev，只填没填过的项；拉取模型列表时会自动填，不用手动抄</p>
+            <div v-for="id in draft.modelIds" :key="`meta-${id}`" class="flex flex-wrap items-end gap-2">
+              <label class="flex min-w-[140px] flex-1 flex-col gap-1">
+                <span class="text-[10px] text-zinc-400">显示名称</span>
+                <input v-model="draft.models[id].name" class="block h-9 w-full rounded-lg border border-zinc-200 bg-white px-2.5 text-xs outline-none transition-colors focus:border-zinc-900" :placeholder="id" />
+              </label>
+              <label class="flex w-24 flex-col gap-1">
+                <span class="text-[10px] text-zinc-400">上下文</span>
+                <input v-model="draft.models[id].context_window" inputmode="numeric" class="block h-9 w-full rounded-lg border border-zinc-200 bg-white px-2.5 text-xs tabular-nums outline-none transition-colors focus:border-zinc-900" placeholder="128000" />
+              </label>
+              <label class="flex w-24 flex-col gap-1">
+                <span class="text-[10px] text-zinc-400">最大输出</span>
+                <input v-model="draft.models[id].max_tokens" inputmode="numeric" class="block h-9 w-full rounded-lg border border-zinc-200 bg-white px-2.5 text-xs tabular-nums outline-none transition-colors focus:border-zinc-900" placeholder="8192" />
+              </label>
+              <label class="flex h-9 cursor-pointer select-none items-center gap-1.5 text-[11px] text-zinc-600">
                 <span class="relative flex h-4 w-4 items-center justify-center rounded border border-zinc-300 bg-white" :class="{ '!border-zinc-900 !bg-zinc-900': draft.models[id].input.includes('image') }">
                   <Check v-if="draft.models[id].input.includes('image')" class="h-3 w-3 text-white stroke-[3]" />
                 </span>
                 <input type="checkbox" class="sr-only" :checked="draft.models[id].input.includes('image')" @change="toggleInput(id, 'image')" />
                 多模态
               </label>
-              <button
-                type="button"
-                class="rounded-md p-1.5 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-40"
-                :title="savedIds.has(id) ? '测试连通性' : '保存后可测试'"
-                :disabled="!savedIds.has(id)"
-                @click="probeOne(id)"
-              >
-                <Zap class="h-3.5 w-3.5" :class="probes[id]?.status === 'loading' ? 'animate-pulse' : ''" />
-              </button>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="grid grid-cols-[56px_minmax(0,1fr)] items-start gap-3">
-        <button type="button" class="flex items-center gap-1 pt-1.5 text-xs font-medium text-zinc-500 transition-colors hover:text-zinc-900" @click="advancedOpen = !advancedOpen">
-          <ChevronRight class="h-3.5 w-3.5 transition-transform" :class="advancedOpen ? 'rotate-90' : ''" />高级
-        </button>
-        <div v-if="advancedOpen" class="min-w-0 space-y-3 rounded-lg border border-zinc-200 bg-zinc-50/50 p-3">
-          <div class="space-y-1.5">
-            <p class="text-[11px] font-medium text-zinc-600">套餐账号钥匙<span class="ml-1 font-normal text-zinc-400">仅套餐型厂商查询用量需要</span></p>
-            <p v-if="planVendorHint" class="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700">当前地址属于 {{ planVendorHint }}：套餐用量只能用云账号钥匙查询</p>
-            <input v-model="draft.access_key_id" class="block h-8 w-full rounded-lg border border-zinc-200 bg-white px-2.5 text-xs outline-none transition-colors focus:border-zinc-900" placeholder="AccessKey ID / SecretId（可选）" />
-            <input v-model="draft.secret_access_key" type="password" autocomplete="off" class="block h-8 w-full rounded-lg border border-zinc-200 bg-white px-2.5 text-xs outline-none transition-colors focus:border-zinc-900" :placeholder="provider?.has_access_key ? '已保存，留空保持不变' : 'Secret / SecretKey（可选）'" />
-            <p class="text-[11px] text-zinc-400">只用于查询套餐用量，不会随推理请求发送</p>
+      <!-- 用量：只有套餐型厂商才需要云账号凭证，字段名按各家的叫法（火山方舟 / 阿里百炼 / 腾讯云） -->
+      <div v-if="accessKeySpec" class="grid grid-cols-[56px_minmax(0,1fr)] items-start gap-3">
+        <p class="pt-2 text-xs font-medium text-zinc-500">用量</p>
+        <div class="min-w-0 space-y-2 rounded-lg border border-zinc-200 bg-zinc-50/50 p-3">
+          <p class="text-[11px] font-medium text-zinc-600">
+            {{ accessKeySpec.plan ? `${accessKeySpec.plan} 用量` : "套餐用量" }}
+            <span class="ml-1 font-normal text-zinc-400">只能用一个云账号密钥读取，不参与推理</span>
+          </p>
+          <div class="grid gap-2 sm:grid-cols-2">
+            <label class="block space-y-1">
+              <span class="text-[11px] text-zinc-500">{{ accessKeySpec.idLabel }}</span>
+              <input
+                v-model="draft.access_key_id"
+                class="block h-9 w-full rounded-lg border border-zinc-200 bg-white px-2.5 text-xs outline-none transition-colors focus:border-zinc-900"
+                :placeholder="provider?.has_access_key ? '已保存，留空保持不变' : accessKeySpec.idExample"
+              />
+            </label>
+            <label class="block space-y-1">
+              <span class="text-[11px] text-zinc-500">{{ accessKeySpec.secretLabel }}</span>
+              <input
+                v-model="draft.secret_access_key"
+                type="password"
+                autocomplete="off"
+                class="block h-9 w-full rounded-lg border border-zinc-200 bg-white px-2.5 text-xs outline-none transition-colors focus:border-zinc-900"
+                :placeholder="provider?.has_access_key ? '已保存，留空保持不变' : '粘贴后不回显'"
+              />
+            </label>
           </div>
+          <p class="text-[11px] text-zinc-400">{{ accessKeySpec.hint }}</p>
 
-          <div v-if="provider" class="space-y-1.5">
-            <p class="text-[11px] font-medium text-zinc-600">资料与用量</p>
-            <div class="flex flex-wrap items-center gap-2">
-              <Button variant="outline" size="sm" :disabled="syncing" @click="syncDev">
-                <DatabaseZap class="h-3.5 w-3.5" :class="syncing ? 'animate-pulse' : ''" />从 models.dev 补全资料
-              </Button>
-              <span class="text-[11px] text-zinc-400">只填空白项，不覆盖手填值</span>
-            </div>
-            <p v-if="planLoading" class="text-[11px] text-zinc-400">套餐用量查询中…</p>
-            <div v-else-if="planUsage" class="space-y-2">
-              <p v-if="planUsage.needs_access_key" class="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700">
-                {{ planUsage.plan }}（{{ planUsage.region }}）的用量需要账号钥匙，请在上方填写
-              </p>
-              <p v-else-if="planUsage.error" class="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] text-red-700">{{ planUsage.error }}</p>
-              <div v-else class="space-y-2">
-                <div v-for="entry in planUsage.plans" :key="entry.name ?? 'plan'" class="space-y-1">
-                  <p class="text-[11px] font-medium text-zinc-700">
-                    {{ planUsage.plan }}<span v-if="entry.name && planUsage.plans.length > 1" class="text-zinc-400"> · {{ entry.name }}</span>
-                    <span v-if="entry.status_note" class="ml-1 rounded border border-amber-200 bg-amber-50 px-1 py-0.5 text-[10px] text-amber-700">{{ entry.status_note }}</span>
-                  </p>
-                  <p v-if="entry.error" class="text-[11px] text-red-600">{{ entry.error }}</p>
-                  <div v-for="win in entry.windows" :key="win.name" class="space-y-1">
-                    <div class="flex items-center justify-between gap-2 text-[11px] text-zinc-600">
-                      <span>{{ win.name }} 已用 <span class="font-semibold text-zinc-900">{{ win.used_percent.toFixed(0) }}%</span><span v-if="win.amount != null && win.limit != null">（{{ win.amount.toLocaleString() }} / {{ win.limit.toLocaleString() }} {{ win.unit }}）</span></span>
-                      <span class="text-zinc-400">{{ win.resets_at ? new Date(win.resets_at).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "" }}</span>
-                    </div>
-                    <div class="h-1.5 w-full overflow-hidden rounded-full bg-zinc-200">
-                      <div class="h-full rounded-full" :class="win.used_percent > 90 ? 'bg-red-500' : win.used_percent > 70 ? 'bg-amber-500' : 'bg-emerald-500'" :style="`width: ${Math.min(100, win.used_percent)}%`"></div>
-                    </div>
+          <p v-if="!provider" class="text-[11px] text-zinc-400">保存后会用这对密钥读一次用量</p>
+          <p v-else-if="planLoading" class="text-[11px] text-zinc-400">套餐用量查询中…</p>
+          <div v-else-if="planUsage" class="space-y-2">
+            <p v-if="planUsage.needs_access_key" class="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700">
+              {{ planUsage.plan }}（{{ planUsage.region }}）的用量需要上面这对密钥，填好保存即可查看
+            </p>
+            <p v-else-if="planUsage.error" class="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] text-red-700">{{ planUsage.error }}</p>
+            <div v-else class="space-y-2">
+              <div v-for="entry in planUsage.plans" :key="entry.name ?? 'plan'" class="space-y-1">
+                <p class="text-[11px] font-medium text-zinc-700">
+                  {{ planUsage.plan }}<span v-if="entry.name && planUsage.plans.length > 1" class="text-zinc-400"> · {{ entry.name }}</span>
+                  <span v-if="entry.status_note" class="ml-1 rounded border border-amber-200 bg-amber-50 px-1 py-0.5 text-[10px] text-amber-700">{{ entry.status_note }}</span>
+                </p>
+                <p v-if="entry.error" class="text-[11px] text-red-600">{{ entry.error }}</p>
+                <div v-for="win in entry.windows" :key="win.name" class="space-y-1">
+                  <div class="flex items-center justify-between gap-2 text-[11px] text-zinc-600">
+                    <span>{{ win.name }} 已用 <span class="font-semibold text-zinc-900">{{ win.used_percent.toFixed(0) }}%</span><span v-if="win.amount != null && win.limit != null">（{{ win.amount.toLocaleString() }} / {{ win.limit.toLocaleString() }} {{ win.unit }}）</span></span>
+                    <span class="text-zinc-400">{{ win.resets_at ? new Date(win.resets_at).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "" }}</span>
+                  </div>
+                  <div class="h-1.5 w-full overflow-hidden rounded-full bg-zinc-200">
+                    <div class="h-full rounded-full" :class="win.used_percent > 90 ? 'bg-red-500' : win.used_percent > 70 ? 'bg-amber-500' : 'bg-emerald-500'" :style="`width: ${Math.min(100, win.used_percent)}%`"></div>
                   </div>
                 </div>
               </div>

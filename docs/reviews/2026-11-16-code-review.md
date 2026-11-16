@@ -192,9 +192,12 @@ content, _ = read_uploaded_file(object_name)   # 同步 HTTP 打 MinIO/OSS
 | P2-1 | 红测试按组件现有语义改写，并补一条「中文错误原样透传」锁定 `errorMessage` | `frontend/src/views/__tests__/WorkspaceInfo.spec.ts` | 同文件 13 条 |
 | P2-2 | 402 改按状态码判定，去掉 `includes("Flow Points")` / `includes("JSON")` 嗅探；`SILENT_ERROR` 魔法字符串换成 `SilentStreamError` | `frontend/src/api/ai.ts`、`ResumeCreateFlow.vue`、`useResumeChatStream.ts` | `frontend/src/api/__tests__/ai.spec.ts`（5 条，含英文 402 也弹 toast） |
 | P2-6 | 补 `TRUSTED_PROXY_NETWORKS`、`AI_CHAT_CHANGE_TIMEOUT`、`AI_MODEL_IO_LOG_*` 到 `.env.example` 与根 README | `backend/.env.example`、`README.md` | — |
+| P2-3 | `errorMessage` 上提到 `utils/errorText.ts`（两处原实现语义还不一致），`sanitizeFeedbackHtml` 上提到 `lib/sanitize.ts`，API base 只由 `api/request.ts` 导出 `API_BASE_URL` | `frontend/src/utils/errorText.ts`、`frontend/src/lib/sanitize.ts`、`api/request.ts`、`WorkspaceInfo.vue`、`WorkspaceSettings.vue`、`Admin.vue`、`Profile.vue` | 现有用例覆盖（`WorkspaceInfo.spec.ts` 的中文透传断言） |
+| P2-4 | 流式请求支持 `AbortSignal`；`send` / `regenerate` 持有 controller，`reset()`（切简历）、`clear()`、卸载时中断，被中断的回合不再写 `error` | `frontend/src/api/ai.ts`、`composables/useResumeChatStream.ts`、`components/resume/ResumeCreateFlow.vue` | `composables/__tests__/useResumeChatStream.spec.ts`（4 条：卸载中断 / 切简历中断 / 正常回合不复用 controller） |
+| P2-12 | `/health` 只回 `{status:"ok"}`，运行模式走受令牌保护的 `/v1/catalog`（已有 `provider_mode`） | `ai-service/src/server.ts` | compose healthcheck 只看 `r.ok`，不受影响 |
 
-实跑基线：后端 395 passed（原 356）、前端 137 passed（原 130 + 1 红）、`vue-tsc` 0 错、`vite build` 通过。
+实跑基线：后端 395 passed（原 356）、前端 141 passed（原 130 + 1 红）、ai-service 172 passed、`vue-tsc` 0 错、`vite build` 通过。
 
 ### 仍未处理
 
-P2-3（重复实现上提）、P2-4（流式请求无 AbortController）、P2-5（PDF 锁与兑换码全表读）、P2-7（30 处 `AppException` 未给 code）、P2-8（`Admin.vue` 拆分）、P2-9（shares / templates / files 等测试缺口）、P2-10（`any` 收敛）、P2-11（死代码注释）、P2-12（`/health` 回显 provider）。
+P2-5（PDF 锁只增不减、兑换码全表读）、P2-7（30 处 `AppException` 未给 code）、P2-8（`Admin.vue` 拆分）、P2-9（shares / templates / files 等测试缺口）、P2-10（`any` 收敛）、P2-11（死代码标注恢复条件）。

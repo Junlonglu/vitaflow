@@ -209,7 +209,7 @@ content, _ = read_uploaded_file(object_name)   # 同步 HTTP 打 MinIO/OSS
 
 实跑基线：后端 435 passed（原 356，本批 +40）、前端 141 passed、ai-service 172 passed、`vue-tsc` 0 错、`vite build` 通过。
 
-### 第四批（2026-11-16，进行中）：P2-8 拆面板
+### 第四批（2026-11-16，已完成）：P2-8 拆面板
 
 | 切片 | 修复内容 | 改动文件 | 回归测试 |
 | --- | --- | --- | --- |
@@ -217,9 +217,10 @@ content, _ = read_uploaded_file(object_name)   # 同步 HTTP 打 MinIO/OSS
 | P2-8b | 简历管理、导出记录抽成 `AdminResumesPanel` / `AdminExportsPanel`；模板名改为面板内按需拉取，拉不到只退回 `template_id` | 两个新面板 + `Admin.vue` | `components/admin/__tests__/AdminListPanels.spec.ts`（8 条） |
 | P2-8c | 意见反馈抽成 `AdminFeedbacksPanel`：列表 + 状态筛选 + 处理弹窗（改状态 / 用户可见回复 / 内部备注 / 发结果邮件）。反馈状态→色档的折叠上提为 `feedbackStatusClass()`，原来列表行与弹窗各写一份三元。`AdminFeedbackUpdateResult` 给 PATCH / send-email 的回包定类型，替掉原来的 `as any` | `frontend/src/components/admin/AdminFeedbacksPanel.vue`、`frontend/src/utils/adminFormat.ts`、`frontend/src/api/admin.ts`、`Admin.vue` | `components/admin/__tests__/AdminFeedbacksPanel.spec.ts`（10 条） |
 | P2-8d | AI 任务、点数流水抽成 `AdminAiTasksPanel` / `AdminPointTransactionsPanel`。前者把模板里两列的嵌套三元上提为 `aiTaskFeatureText()` / `aiTaskModuleText()`；后者带撤回全员发放确认框，成功后重查当前页。模型清单改为共用 `useAdminModelFilter()`，拉不到只少几个筛选项 | 两个新面板、`composables/useAdminModelFilter.ts`、`utils/adminFormat.ts`、`api/admin.ts`（`AdminGrantRevokeResult`） | `AdminAiTasksPanel.spec.ts`（7 条）+ `AdminPointTransactionsPanel.spec.ts`（7 条） |
+| P2-8e | 岗位预设抽成 `AdminResumeStartersPanel`：列表 + 行业筛选 + 新增/编辑/删除，编辑器含十几个文本↔JSON 字段互转整块搬迁。行业/模板清单按需拉一次并缓存，拉不到只让下拉为空 | `frontend/src/components/admin/AdminResumeStartersPanel.vue`、`Admin.vue` | `components/admin/__tests__/AdminResumeStartersPanel.spec.ts`（11 条） |
 
-`Admin.vue` 1595 → 956 行。浏览器实测（真实后端 + dev server，临时插了两条反馈后清掉）：八个分区均正常渲染、筛选命中、弹窗保存落库、控制台 0 错误。前端单测 141 → **183 passed**。
+八个后台分区已全部抽成独立面板，`Admin.vue` 1595 → **449 行**，`load()` 只剩 dashboard / system-settings / templates 三分支，共享表格外壳仅剩模板设置一格。浏览器实测（真实后端 + dev server）：八分区正常渲染、岗位预设列表 20 行、编辑弹窗 11 个 textarea 全部回填、控制台 0 错误。前端单测 141 → **194 passed**，`vue-tsc` 0 错，`vite build` 通过。
 
 ### 仍未处理
 
-P2-8 剩余岗位预设一个分区（连同行预设编辑器弹窗仍在 `Admin.vue` 里，`load()` 还有 3 个 `if` 分支）、P2-9 其余缺口（`/api/templates/*`、`/api/auth/register`、`/api/auth/reset-password`、`/api/feedback`、`/api/resumes/{id}/export/pdf`）、P2-10（`any` 收敛：前端 184 处、`aiDiff.ts` 单文件 22 处）。
+P2-9 其余缺口（`/api/templates/*`、`/api/auth/register`、`/api/auth/reset-password`、`/api/feedback`、`/api/resumes/{id}/export/pdf`）、P2-10（`any` 收敛：前端 184 处、`aiDiff.ts` 单文件 22 处）。P2-8 已全部完成。

@@ -21,6 +21,7 @@ import {
   type CatalogProvider,
   fauxCatalog,
   listApiKeyEnvNames,
+  modelEffortOf,
   mutateCatalog,
   parseModelDelta,
   readCatalog,
@@ -152,6 +153,24 @@ async function resolveGroupRef(
     return null;
   }
   return resolved.ref;
+}
+
+/**
+ * 平台模型的默认推理强度（管理后台「模型资料」里那一栏）。
+ *
+ * models.json 是唯一真相源，所以每轮按 model ref 现读一次：目录写盘本来就
+ * 极少发生，读文件比在进程里缓存再同步失效简单得多。读不出来就按 agent 的
+ * 默认档位跑，不能让目录问题把这一轮对话拦掉。
+ */
+async function platformThinkingLevel(modelRef: string): Promise<ThinkingLevelSetting | undefined> {
+  try {
+    const catalog = await readCatalog(AGENT_DIR);
+    const effort = modelEffortOf(catalog, modelRef);
+    return effort && effort !== "auto" ? effort : undefined;
+  } catch (err) {
+    console.error("[vitaflow-ai] 读取模型推理强度失败：", err);
+    return undefined;
+  }
 }
 
 function handleCatalogError(res: express.Response, err: unknown): void {
@@ -629,6 +648,12 @@ app.post("/v1/chat", async (req, res) => {
     requestedRef = modelRef;
     modelRef = memberRef;
   }
+  // 平台模型：管理后台给这个模型配过推理强度就按它跑；BYOK 的档位来自用户
+  // 自己那份配置，这里不再覆盖。
+  if (!byok && !thinkingLevel && runtime.kind === "real" && modelRef) {
+    thinkingLevel = await platformThinkingLevel(modelRef);
+  }
+  console.log(`[vitaflow-ai] model=${modelRef ?? "-"} thinking=${thinkingLevel ?? "default"}`);
   const context: AiServiceContext | null =
     typeof req.body?.context === "object" && req.body.context !== null ? req.body.context : null;
   const userId = Number.isInteger(req.body?.user_id) ? req.body.user_id : 0;

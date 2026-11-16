@@ -7,6 +7,7 @@
  * 串行提交（建/改服务商 → 导入新增模型 → 更新资料 → 删除取消勾选的模型）。
  */
 import type { AdminCatalogModel, AdminCatalogModelWrite, AdminCatalogProvider, AdminRemoteModel } from "@/api/admin"
+import { isThinkingLevel, type ReasoningEffort } from "@/utils/reasoningEffort"
 
 // 预设与套餐既是后台接入卡的输入，也是用户端「自定义模型接入」的输入：
 // 定义搬到了 @/utils/modelProviders，这里原样再导出，免得调用方全改 import。
@@ -33,6 +34,8 @@ export interface ModelDraft {
   /** 字符串保存，空串表示留空（导入后由 models.dev 补全）。 */
   context_window: string
   max_tokens: string
+  /** 推理强度：英文档位原样下发，auto 表示跟随模型默认。 */
+  reasoning_effort: ReasoningEffort
 }
 
 export interface ProviderDraft {
@@ -90,12 +93,13 @@ export function modelDraft(model: AdminCatalogModel): ModelDraft {
     input: [...model.input],
     context_window: model.context_window != null ? String(model.context_window) : "",
     max_tokens: model.max_tokens != null ? String(model.max_tokens) : "",
+    reasoning_effort: model.reasoning_effort ?? "auto",
   }
 }
 
 /** 新勾选的模型先落一个裸条目：只带 id，其余等保存后补全。 */
 export function emptyModelDraft(id: string): ModelDraft {
-  return { name: id, input: ["text"], context_window: "", max_tokens: "" }
+  return { name: id, input: ["text"], context_window: "", max_tokens: "", reasoning_effort: "auto" }
 }
 
 /** 上游列表是否带回了可用资料（models.dev 没收录时只有 id）。 */
@@ -116,6 +120,7 @@ export function remoteModelDraft(model: AdminRemoteModel): ModelDraft {
     input: input.includes("text") ? input : ["text", ...input],
     context_window: model.context_window != null ? String(model.context_window) : "",
     max_tokens: model.max_tokens != null ? String(model.max_tokens) : "",
+    reasoning_effort: "auto",
   }
 }
 
@@ -169,12 +174,17 @@ function sameInput(left: string[], right: string[]): boolean {
 function desiredMeta(draft: ModelDraft, id: string): AdminCatalogModelWrite {
   const context = parsePositiveInt(draft.context_window)
   const max = parsePositiveInt(draft.max_tokens)
+  const effort = draft.reasoning_effort ?? "auto"
   return {
     id,
     name: draft.name.trim() || id,
     input: draft.input.length ? [...draft.input] : ["text"],
     context_window: context === "invalid" ? null : context,
     max_tokens: max === "invalid" ? null : max,
+    reasoning_effort: effort,
+    // 选了真实档位就顺带把模型标成推理模型：ai-service 也这么补，
+    // 但显式带上能让「模型资料」与运行时行为一致。
+    ...(isThinkingLevel(effort) ? { reasoning: true } : {}),
   }
 }
 
@@ -183,7 +193,8 @@ function metaDiffers(desired: AdminCatalogModelWrite, model: AdminCatalogModel):
     desired.name !== (model.name || model.id) ||
     !sameInput(desired.input ?? ["text"], model.input) ||
     (desired.context_window ?? null) !== model.context_window ||
-    (desired.max_tokens ?? null) !== model.max_tokens
+    (desired.max_tokens ?? null) !== model.max_tokens ||
+    (desired.reasoning_effort ?? "auto") !== (model.reasoning_effort ?? "auto")
   )
 }
 
@@ -193,7 +204,8 @@ function bareMetaDiffers(desired: AdminCatalogModelWrite, id: string): boolean {
     desired.name !== id ||
     !sameInput(desired.input ?? ["text"], ["text"]) ||
     desired.context_window != null ||
-    desired.max_tokens != null
+    desired.max_tokens != null ||
+    isThinkingLevel(desired.reasoning_effort)
   )
 }
 

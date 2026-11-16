@@ -12,6 +12,7 @@ from app.core.exceptions import AppException
 from app.core.response import success
 from app.core.security import get_current_admin
 from app.models.ai_config import AiModelConfig, FlowPointRule
+from app.schemas.user_ai import ReasoningEffort
 from app.services.ai_config_service import invalidate_ai_config_cache, invalidate_catalog_capabilities_cache
 from app.services.ai_service_client import call_catalog
 from app.services.flow_points_service import point_amount, point_number
@@ -71,6 +72,7 @@ _CATALOG_MODEL_FIELDS = {
     "input": "input",
     "context_window": "contextWindow",
     "max_tokens": "maxTokens",
+    "reasoning_effort": "reasoningEffort",
 }
 
 
@@ -110,6 +112,7 @@ class CatalogModelWrite(BaseModel):
     input: list[str] = Field(default=["text"])
     context_window: Optional[int] = Field(default=None, ge=1)
     max_tokens: Optional[int] = Field(default=None, ge=1)
+    reasoning_effort: Optional[ReasoningEffort] = None
 
 
 class CatalogModelPatch(BaseModel):
@@ -118,6 +121,7 @@ class CatalogModelPatch(BaseModel):
     input: Optional[list[str]] = None
     context_window: Optional[int] = Field(default=None, ge=1)
     max_tokens: Optional[int] = Field(default=None, ge=1)
+    reasoning_effort: Optional[ReasoningEffort] = None
 
 
 def ai_config_data(item: AiModelConfig) -> dict:
@@ -673,6 +677,7 @@ def create_catalog_model(provider_key: str, payload: CatalogModelWrite, db: Sess
         "input": payload.input or ["text"],
         "contextWindow": payload.context_window,
         "maxTokens": payload.max_tokens,
+        "reasoningEffort": payload.reasoning_effort,
     }
     body = {key: value for key, value in body.items() if value is not None}
     result = success(call_catalog("POST", f"/v1/catalog/providers/{provider_key}/models", body))
@@ -688,6 +693,7 @@ def update_catalog_model(provider_key: str, model_id: str, payload: CatalogModel
         "input": payload.input,
         "contextWindow": payload.context_window,
         "maxTokens": payload.max_tokens,
+        "reasoningEffort": payload.reasoning_effort,
     }
     body = {key: value for key, value in body.items() if value is not None}
     result = success(call_catalog("PUT", f"/v1/catalog/providers/{provider_key}/models/{model_id}", body))

@@ -1,17 +1,7 @@
 import request from "./request"
+import type { ReasoningEffort } from "@/utils/reasoningEffort"
 
-/** 推理强度：auto 跟随模型默认、off 不下发参数，其余映射为 reasoning_effort。 */
-export type ReasoningEffort = "auto" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh"
-
-export const REASONING_EFFORT_OPTIONS: { value: ReasoningEffort; label: string; hint: string }[] = [
-  { value: "auto", label: "跟随模型默认", hint: "不下发推理参数，兼容所有接入点" },
-  { value: "off", label: "关闭推理", hint: "不下发 reasoning_effort" },
-  { value: "minimal", label: "极简", hint: "最快，几乎不额外思考" },
-  { value: "low", label: "轻度", hint: "简单改写、快速问答" },
-  { value: "medium", label: "均衡", hint: "日常简历优化（推荐）" },
-  { value: "high", label: "深度", hint: "复杂经历重构、JD 匹配" },
-  { value: "xhigh", label: "最强", hint: "最长思考，消耗也最高" },
-]
+/** 推理强度的取值与文案见 `@/utils/reasoningEffort`（前后台共用一份）。 */
 
 /** 用户自带模型（BYOK）。接口永远只回掩码，明文密钥只写入库。 */
 export interface UserAiCredential {

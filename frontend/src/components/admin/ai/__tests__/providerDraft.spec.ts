@@ -34,6 +34,7 @@ function provider(overrides: Partial<AdminCatalogProvider> = {}): AdminCatalogPr
         input: ["text"],
         context_window: 128000,
         max_tokens: 8192,
+        reasoning_effort: null,
         price_input: 0.15,
         price_output: 0.6,
         dev_provider: "deepseek",
@@ -56,6 +57,7 @@ describe("createProviderDraft", () => {
       input: ["text"],
       context_window: "128000",
       max_tokens: "8192",
+      reasoning_effort: "auto",
     })
   })
 
@@ -112,12 +114,26 @@ describe("buildProviderSavePlan", () => {
   it("改模型资料 → patches 带上完整写入结构", () => {
     const data = provider()
     const draft = createProviderDraft(data)
-    draft.models["deepseek-chat"] = { name: "DeepSeek Chat V2", input: ["text", "image"], context_window: "64000", max_tokens: "4096" }
+    draft.models["deepseek-chat"] = { name: "DeepSeek Chat V2", input: ["text", "image"], context_window: "64000", max_tokens: "4096", reasoning_effort: "auto" }
     const plan = buildProviderSavePlan(data, draft)
     expect(plan.payload.patches).toEqual([
       {
         id: "deepseek-chat",
-        data: { id: "deepseek-chat", name: "DeepSeek Chat V2", input: ["text", "image"], context_window: 64000, max_tokens: 4096 },
+        data: { id: "deepseek-chat", name: "DeepSeek Chat V2", input: ["text", "image"], context_window: 64000, max_tokens: 4096, reasoning_effort: "auto" },
+      },
+    ])
+  })
+
+  it("改推理强度 → patch 带上档位，并把模型标成推理模型", () => {
+    const data = provider()
+    const draft = createProviderDraft(data)
+    draft.models["deepseek-chat"].reasoning_effort = "high"
+    const plan = buildProviderSavePlan(data, draft)
+    expect(plan.changed).toBe(true)
+    expect(plan.payload.patches).toEqual([
+      {
+        id: "deepseek-chat",
+        data: { id: "deepseek-chat", name: "DeepSeek Chat", input: ["text"], context_window: 128000, max_tokens: 8192, reasoning_effort: "high", reasoning: true },
       },
     ])
   })
@@ -125,7 +141,7 @@ describe("buildProviderSavePlan", () => {
   it("新建卡：服务商与模型一起提交，资料改动排进 patches", () => {
     const draft = createProviderDraft(null, { key: "openrouter", name: "OpenRouter", base_url: "https://openrouter.ai/api/v1" })
     draft.modelIds = ["openai/gpt-5"]
-    draft.models["openai/gpt-5"] = { name: "GPT-5", input: ["text"], context_window: "", max_tokens: "" }
+    draft.models["openai/gpt-5"] = { name: "GPT-5", input: ["text"], context_window: "", max_tokens: "", reasoning_effort: "auto" }
     const plan = buildProviderSavePlan(null, draft)
     expect(plan.payload.mode).toBe("create")
     expect(plan.changed).toBe(true)
@@ -169,6 +185,7 @@ describe("小工具", () => {
       input: ["text", "image"],
       context_window: "1048576",
       max_tokens: "393216",
+      reasoning_effort: "auto",
     })
     // 没有 name 时回落到 id；input 缺 text 时补上（目录只接受 text 打底的集合）
     const bare = remoteModelDraft({ id: "m1", name: "", context_window: 64000, max_tokens: null, input: ["image"] })

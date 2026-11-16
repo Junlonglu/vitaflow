@@ -8,6 +8,7 @@ import {
   applyModelDelta,
   listApiKeyEnvNames,
   maskApiKey,
+  modelEffortOf,
   mutateCatalog,
   parseModelDelta,
   readCatalog,
@@ -63,17 +64,19 @@ test("mutateCatalog round-trips providers and models atomically", async () => {
         baseUrl: "https://api.deepseek.com",
         apiKey: "sk-test",
         api: "openai-completions",
-        models: [{ id: "deepseek-chat", name: "DeepSeek Chat", contextWindow: 128000 }],
+        models: [{ id: "deepseek-chat", name: "DeepSeek Chat", contextWindow: 128000, reasoningEffort: "high" }],
       };
     });
     const raw = JSON.parse(await readFile(join(dir, "models.json"), "utf8"));
     assert.equal(raw.providers.deepseek.models[0].id, "deepseek-chat");
+    assert.equal(raw.providers.deepseek.models[0].reasoningEffort, "high");
 
     const views = renderProviders(await readCatalog(dir));
     assert.equal(views.length, 1);
     assert.equal(views[0].api_key_masked, "***");
     assert.equal(views[0].models[0].ref, "deepseek/deepseek-chat");
     assert.equal(views[0].models[0].context_window, 128000);
+    assert.equal(views[0].models[0].reasoning_effort, "high");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -109,6 +112,13 @@ test("validators enforce keys, base urls and model fields", () => {
   assert.deepEqual(model.input, ["text", "image"]);
   assert.throws(() => validateModelBody({ input: ["video"] }), CatalogError);
   assert.throws(() => validateModelBody({ contextWindow: -1 }), CatalogError);
+
+  // 推理强度用上游参数原词，选真实档位时把模型标成推理模型（否则 pi 会夹回 off）
+  const effort = validateModelBody({ reasoningEffort: "high" });
+  assert.equal(effort.reasoningEffort, "high");
+  assert.equal(effort.reasoning, true);
+  assert.equal(validateModelBody({ reasoningEffort: "auto" }).reasoning, undefined);
+  assert.throws(() => validateModelBody({ reasoningEffort: "deep" }), CatalogError);
 });
 
 test("maskApiKey never leaks the raw key", () => {
@@ -154,4 +164,23 @@ test("parseModelDelta tolerates a provider write without models and rejects bad 
   assert.deepEqual(empty, { added: [], removed: [], patches: [] });
   assert.throws(() => parseModelDelta({ models: { added: ["-bad"] } }), CatalogError);
   assert.throws(() => parseModelDelta({ models: { patches: [{ id: "ok", data: { contextWindow: 0 } }] } }), CatalogError);
+});
+
+test("modelEffortOf reads the per-model reasoning strength", async () => {
+  const dir = await tempAgentDir();
+  try {
+    await mutateCatalog(dir, (catalog) => {
+      catalog.providers["deepseek"] = {
+        baseUrl: "https://api.deepseek.com",
+        models: [{ id: "flash", reasoningEffort: "high" }, { id: "chat" }],
+      };
+    });
+    const catalog = await readCatalog(dir);
+    assert.equal(modelEffortOf(catalog, "deepseek/flash"), "high");
+    assert.equal(modelEffortOf(catalog, "deepseek/chat"), undefined);
+    assert.equal(modelEffortOf(catalog, "deepseek/missing"), undefined);
+    assert.equal(modelEffortOf(catalog, "deepseek"), undefined);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

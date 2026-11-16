@@ -13,11 +13,12 @@ MAX_SKILL_INSTRUCTIONS = 20_000
 MAX_MODELS_PER_USER = 10
 
 # auto = 不下发任何推理参数（跟随模型默认，兼容所有接入点）；
-# off  = 明确关闭；其余映射为 pi-agent thinkingLevel / reasoning_effort。
-ReasoningEffort = Literal["auto", "off", "minimal", "low", "medium", "high", "xhigh"]
-REASONING_EFFORTS: tuple[str, ...] = ("auto", "off", "minimal", "low", "medium", "high", "xhigh")
+# off  = 明确关闭；其余是 pi-agent 的 thinkingLevel，最终变成 reasoning_effort。
+# 档位用英文原词（magpie 同款 EFFORT_ORDER），中文只写在提示语里。
+ReasoningEffort = Literal["auto", "off", "minimal", "low", "medium", "high", "xhigh", "max"]
+REASONING_EFFORTS: tuple[str, ...] = ("auto", "off", "minimal", "low", "medium", "high", "xhigh", "max")
 # 需要真正给模型下发 reasoning_effort 的档位。
-REASONING_LEVELS: frozenset[str] = frozenset({"minimal", "low", "medium", "high", "xhigh"})
+REASONING_LEVELS: frozenset[str] = frozenset({"minimal", "low", "medium", "high", "xhigh", "max"})
 
 
 def _normalize_base_url(value: str) -> str:

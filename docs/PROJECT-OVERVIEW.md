@@ -137,7 +137,7 @@ vitaflow/
 
 **用户自带模型与技能 `user_ai.py`**（Ticket 17 / 18）
 - **多模型配置**：`GET|POST /user-ai/models`、`PUT|DELETE /user-ai/models/{id}`、`POST /user-ai/models/{id}/default`（设为默认）、`POST /user-ai/models/{id}/test` 与 `POST /user-ai/models/test`（未保存配置探活）、`POST /user-ai/models/remote-models`（按地址与密钥拉上游 `/models`，带 models.dev 资料，不落盘；页面用它做「选模型」而不是「手填模型名」）。每用户最多 10 条，任意时刻恰好一条默认项；删除/停用默认项会自动补位。对话请求可带 `user_model_id`（正数指定某条自带模型、`0` 明确使用平台模型、省略则按服务端默认解析），在编辑器模型选择器里与平台模型同列展示。
-- **推理强度**：每条配置存 `reasoning_effort`（`auto/off/minimal/low/medium/high/xhigh`）；非 auto 档透传到 ai-service，注册模型时置 `reasoning=true` + `compat.supportsReasoningEffort`，并把 thinkingLevel 交给 `createAgentSession`，最终映射为 OpenAI 兼容端点的 `reasoning_effort`。
+- **推理强度**：档位是上游参数原词 `auto/off/minimal/low/medium/high/xhigh/max`（`auto` 即界面的 `default`）。用户端每条 BYOK 配置存 `reasoning_effort`，非 auto 档透传到 ai-service，注册模型时置 `reasoning=true` + `compat.supportsReasoningEffort`，把 thinkingLevel 交给 `createAgentSession`；平台模型则在 `models.json` 里存同名字段（后台「模型资料 · 推理强度」），ai-service 每轮按 model ref 读它当 thinkingLevel，没有就保持默认（推理模型 medium、其它 off）。两条路最终都映射为 OpenAI 兼容端点的 `reasoning_effort`。
 - **技能**：`GET|POST /user-ai/skills`、`PATCH|DELETE /user-ai/skills/{id}`（含启用开关）、`POST /user-ai/skills/import`（单个 .md/.txt/.zip）、`POST /user-ai/skills/import-package`（ZIP 或 `webkitdirectory` 文件夹，多文件按 `SKILL.md` 分组，附属文本拼为「参考资料」）。
 - **密钥与隐私**：`GET /user-ai/security`（部署加密状态与存储说明）、`GET /user-ai/audit-logs?limit=20`（当前用户使用记录，上限 50）、`DELETE /user-ai/keys`（删除全部模型配置与密钥，不可恢复）。CRUD、设为默认、测试连接、对话使用、密文轮换都会写审计。
 - 旧接口 `GET|PUT|DELETE /user-ai/credential`、`POST /user-ai/credential/test` 保留兼容，语义落在「默认配置」上。读接口只回掩码；所有查询带 `user_id`，跨用户访问返回 404。
@@ -385,6 +385,8 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 - **可验证的控制权**：`user_ai_audit_logs` 记录谁在何时添加 / 修改 / 测试 / 使用 / 清除了哪条配置（不存任何密钥材料，配置删除后记录仍在）；`GET /user-ai/security` 返回真实部署状态（独立密钥 / 开发回退），`GET /user-ai/audit-logs` 只返回当前用户记录，`DELETE /user-ai/keys` 一键删除全部模型配置与密钥。设置页「密钥与隐私」卡如实写明「服务端代理 ⇒ 服务端必须能解密」，不承诺零知识，并给出存储位置、可见范围、彻底删除方式与轮换策略。
 - **多模型**：默认项由 `is_default` 唯一确定；前端模型选择器用 `p:<平台模型id>` / `u:<自带模型id>` 作值，选平台模型时下发 `user_model_id=0` 明确关闭 BYOK，选自带模型时下发对应 id，不改默认项。
 - **推理强度**：`auto` 不下发任何推理参数（兼容所有接入点），`off` 关闭，其余档位映射到 pi-agent thinkingLevel。强度参与 provider id 哈希，切换时不会与在途请求串配置。
+
+平台侧同理：`models.json` 的模型可带 `reasoningEffort`（后台模型资料里的「推理强度」），`GET /v1/catalog` 回 `reasoning_effort`；`/v1/chat` 在路由组解析之后用 `modelEffortOf()` 读这一档，作为本轮 `thinkingLevel`，读不到就走默认。`xhigh`/`max` 只有模型声明支持才真正下发，否则 pi 退到 `high`。
 - **SSRF**：`core/url_guard.py` 分两级——schema 校验只查字面量（不联网，每轮对话也用得上），点「测试连接」才做 DNS 解析后校验；默认拒绝回环/私网/链路本地/云元数据地址。部署方可设 `BYOK_ALLOW_PRIVATE_NETWORK=true` 放开本机 Ollama，自行承担风险。
 - **多用户隔离**：ai-service 用 `owner + sha256(base_url|model|key|effort)` 作 providerId，改配置注册新 id 而不是覆盖旧 id，避免并发请求串 Key；注册上限 200 个，LRU 淘汰。
 - **技能包**：只读取 `.md/.markdown/.txt` 文本，ZIP 与文件夹都做路径穿越、符号链接、文件数（200）、压缩后总量（2 MB）、单文件（128 KB）、技能数（20）限制；按每个目录下的 `SKILL.md` 拆成独立技能，附属资料拼进正文，不执行任何脚本。

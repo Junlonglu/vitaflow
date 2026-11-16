@@ -36,6 +36,7 @@ import {
   type AdminRoutingGroup,
 } from "@/api/admin"
 import { showGlobalToast } from "@/utils/toast"
+import { REASONING_EFFORT_OPTIONS } from "@/utils/reasoningEffort"
 import {
   MODEL_ID_RE,
   PROVIDER_KEY_RE,
@@ -859,12 +860,13 @@ function duplicate() {
 
           <div v-if="settingsOpen" class="space-y-2 rounded-lg border border-zinc-200 bg-zinc-50/50 p-3">
             <div class="flex flex-wrap items-center justify-between gap-2">
-              <p class="text-[11px] font-medium text-zinc-500">模型资料：显示名称、上下文窗口（tokens）、最大输出（tokens）、是否支持图片；保存时一起提交</p>
+              <p class="text-[11px] font-medium text-zinc-500">模型资料：显示名称、上下文窗口（tokens）、最大输出（tokens）、推理强度（reasoning_effort）、是否支持图片；保存时一起提交</p>
               <Button v-if="provider" variant="outline" size="sm" class="shrink-0" :disabled="syncing" @click="syncDev">
                 <DatabaseZap class="h-3.5 w-3.5" :class="syncing ? 'animate-pulse' : ''" />补全空白资料
               </Button>
             </div>
             <p v-if="provider" class="text-[11px] text-zinc-400">「补全空白资料」查 models.dev，只填没填过的项；拉取模型列表时会自动填，不用手动抄</p>
+            <p class="text-[11px] text-zinc-400">推理强度用上游参数原词（low / high / max）；default 不下发 reasoning_effort，选了具体档位会把这个模型标成推理模型</p>
             <div v-for="id in draft.modelIds" :key="`meta-${id}`" class="flex flex-wrap items-end gap-2">
               <label class="flex min-w-[140px] flex-1 flex-col gap-1">
                 <span class="text-[10px] text-zinc-400">显示名称</span>
@@ -877,6 +879,15 @@ function duplicate() {
               <label class="flex w-24 flex-col gap-1">
                 <span class="text-[10px] text-zinc-400">最大输出</span>
                 <input v-model="draft.models[id].max_tokens" inputmode="numeric" class="block h-9 w-full rounded-lg border border-zinc-200 bg-white px-2.5 text-xs tabular-nums outline-none transition-colors focus:border-zinc-900" placeholder="8192" />
+              </label>
+              <label class="flex w-[104px] flex-col gap-1">
+                <span class="text-[10px] text-zinc-400">推理强度</span>
+                <Select
+                  v-model="draft.models[id].reasoning_effort"
+                  :options="REASONING_EFFORT_OPTIONS"
+                  aria-label="推理强度"
+                  class="!h-9 !text-xs"
+                />
               </label>
               <label class="flex h-9 cursor-pointer select-none items-center gap-1.5 text-[11px] text-zinc-600">
                 <span class="relative flex h-4 w-4 items-center justify-center rounded border border-zinc-300 bg-white" :class="{ '!border-zinc-900 !bg-zinc-900': draft.models[id].input.includes('image') }">

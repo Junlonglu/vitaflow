@@ -78,11 +78,11 @@ export interface ByokOverride {
   reasoning_effort?: ReasoningEffort;
 }
 
-/** Mirrors backend REASONING_EFFORTS. Unknown values are treated as "auto". */
-export type ReasoningEffort = "auto" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
-/** Only real thinking levels can be forwarded to createAgentSession. */
-export type ThinkingLevelSetting = Exclude<ReasoningEffort, "auto" | "off">;
-const REASONING_LEVELS: readonly ReasoningEffort[] = ["minimal", "low", "medium", "high", "xhigh"];
+/** Mirrors backend REASONING_EFFORTS and catalog MODEL_EFFORTS; junk falls back to "auto". */
+export type ReasoningEffort = "auto" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+/** Anything but "auto" is a level we hand to createAgentSession ("off" included). */
+export type ThinkingLevelSetting = Exclude<ReasoningEffort, "auto">;
+const REASONING_LEVELS: readonly ReasoningEffort[] = ["minimal", "low", "medium", "high", "xhigh", "max"];
 
 export function normalizeReasoningEffort(value: unknown): ReasoningEffort {
   return typeof value === "string" && (["auto", "off", ...REASONING_LEVELS] as string[]).includes(value)

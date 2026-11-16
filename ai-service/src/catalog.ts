@@ -28,6 +28,24 @@ export interface CatalogModelMeta {
   models_dev?: { provider: string; updated_at: string | null; synced_at: string };
 }
 
+/**
+ * Reasoning strength written per model, in the same spelling the provider gets
+ * (`reasoning_effort`) — magpie's effort tokens, lowest first. "auto" keeps the
+ * runtime default (medium for reasoning models, off otherwise), which is what
+ * models without this field do.
+ */
+export const MODEL_EFFORTS = ["auto", "off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+export type ModelEffort = (typeof MODEL_EFFORTS)[number];
+/** Effort that actually reaches the provider as a thinking level. */
+export const MODEL_THINKING_EFFORTS: readonly ModelEffort[] = MODEL_EFFORTS.filter(
+  (effort) => effort !== "auto",
+);
+
+export function normalizeModelEffort(value: unknown): ModelEffort | undefined {
+  const trimmed = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return (MODEL_EFFORTS as readonly string[]).includes(trimmed) ? (trimmed as ModelEffort) : undefined;
+}
+
 export interface CatalogModel {
   id: string;
   name?: string;
@@ -35,6 +53,8 @@ export interface CatalogModel {
   input?: string[];
   contextWindow?: number;
   maxTokens?: number;
+  /** 推理强度；缺省等于 auto（跟随模型默认）。 */
+  reasoningEffort?: ModelEffort;
   cost?: CatalogModelCost;
   meta?: CatalogModelMeta;
 }
@@ -91,6 +111,8 @@ export interface CatalogProviderView {
     input: string[];
     context_window: number | null;
     max_tokens: number | null;
+    /** 推理强度；null = 没设过（等同 auto）。 */
+    reasoning_effort: ModelEffort | null;
     price_input: number | null;
     price_output: number | null;
     dev_provider: string | null;
@@ -129,6 +151,7 @@ export function fauxCatalog(): CatalogProviderView[] {
           input: ["text", "image"],
           context_window: 32000,
           max_tokens: 4096,
+          reasoning_effort: null,
           price_input: null,
           price_output: null,
           dev_provider: null,
@@ -212,6 +235,20 @@ export function listApiKeyEnvNames(env: NodeJS.ProcessEnv = process.env): string
     .sort();
 }
 
+/**
+ * 某个模型在目录里配的推理强度（`provider/model`）。
+ *
+ * 不在目录里、或没配过，都返回 undefined：调用方据此保持运行时默认档位。
+ */
+export function modelEffortOf(catalog: CatalogFile, modelRef: string | undefined): ModelEffort | undefined {
+  const ref = (modelRef ?? "").trim();
+  const slash = ref.indexOf("/");
+  if (slash <= 0) return undefined;
+  const provider = catalog.providers?.[ref.slice(0, slash)];
+  const model = provider?.models?.find((entry) => entry.id === ref.slice(slash + 1));
+  return normalizeModelEffort(model?.reasoningEffort);
+}
+
 export function renderProviders(catalog: CatalogFile): CatalogProviderView[] {
   return Object.entries(catalog.providers || {}).map(([key, provider]) => {
     const plan = detectPlan(provider);
@@ -232,6 +269,7 @@ export function renderProviders(catalog: CatalogFile): CatalogProviderView[] {
         input: Array.isArray(model.input) ? model.input : ["text"],
         context_window: typeof model.contextWindow === "number" ? model.contextWindow : null,
         max_tokens: typeof model.maxTokens === "number" ? model.maxTokens : null,
+        reasoning_effort: normalizeModelEffort(model.reasoningEffort) ?? null,
         price_input: typeof model.cost?.input === "number" ? model.cost.input : null,
         price_output: typeof model.cost?.output === "number" ? model.cost.output : null,
         dev_provider: model.meta?.models_dev?.provider ?? null,
@@ -327,6 +365,7 @@ export interface ModelBody {
   input?: string[];
   contextWindow?: number;
   maxTokens?: number;
+  reasoningEffort?: ModelEffort;
 }
 
 export function validateModelBody(body: Record<string, unknown>): ModelBody {
@@ -337,6 +376,14 @@ export function validateModelBody(body: Record<string, unknown>): ModelBody {
     out.name = name;
   }
   if (body.reasoning !== undefined) out.reasoning = Boolean(body.reasoning);
+  if (body.reasoningEffort !== undefined) {
+    // 只有 "auto" 能清空：显式选档位时顺带把模型标成推理模型，
+    // 否则 pi 的 getSupportedThinkingLevels 会把档位夹回 off。
+    const effort = normalizeModelEffort(body.reasoningEffort);
+    if (!effort) throw new CatalogError(`reasoningEffort 仅支持 ${MODEL_EFFORTS.join("/")}`);
+    out.reasoningEffort = effort;
+    if (effort !== "auto") out.reasoning = true;
+  }
   if (body.input !== undefined) {
     if (!Array.isArray(body.input)) throw new CatalogError("input 必须是数组");
     const input = body.input.map(String);

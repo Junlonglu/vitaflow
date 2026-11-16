@@ -15,8 +15,8 @@ import {
   type ProviderPlan,
   type ProviderPreset,
 } from "@/utils/modelProviders"
+import { REASONING_EFFORT_OPTIONS, effortLabel } from "@/utils/reasoningEffort"
 import {
-  REASONING_EFFORT_OPTIONS,
   clearUserAiKeysApi,
   createUserSkillApi,
   createUserAiModelApi,
@@ -35,7 +35,6 @@ import {
   updateUserAiModelApi,
   updateUserSkillApi,
   type CredentialTestResult,
-  type ReasoningEffort,
   type RemoteModelOption,
   type SkillPackageResult,
   type UserAiAuditLog,
@@ -71,7 +70,6 @@ const loading = ref(true)
 const models = ref<UserAiCredential[]>([])
 const defaultModelId = ref<number | null>(null)
 const activeModelCount = computed(() => models.value.filter((item) => item.enabled).length)
-const effortLabel = (value: ReasoningEffort) => REASONING_EFFORT_OPTIONS.find((item) => item.value === value)?.label || "跟随模型默认"
 
 // 模型编辑区（内联卡片，避免弹窗套弹窗）
 const modelEditorOpen = ref(false)
@@ -736,7 +734,7 @@ async function handleSkillFolder(event: Event) {
                 <span class="mb-1.5 block text-[12px] font-medium text-zinc-700">推理强度</span>
                 <Select v-model="form.reasoning_effort" :options="REASONING_EFFORT_OPTIONS" placeholder="推理强度" aria-label="推理强度" />
                 <span class="mt-1.5 block text-[11.5px] leading-relaxed text-zinc-400">
-                  {{ REASONING_EFFORT_OPTIONS.find((option) => option.value === form.reasoning_effort)?.hint }}。开启后会向兼容端点下发 reasoning_effort；「跟随模型默认」兼容所有接入点。
+                  {{ REASONING_EFFORT_OPTIONS.find((option) => option.value === form.reasoning_effort)?.hint }}。档位原样交给接入点，是否认这个档位由上游决定。
                 </span>
               </div>
             </div>

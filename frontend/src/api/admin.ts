@@ -1,4 +1,5 @@
 import request from "./request"
+import type { ReasoningEffort } from "@/utils/reasoningEffort"
 
 export interface PageData<T> {
   items: T[]
@@ -204,6 +205,8 @@ export interface AdminCatalogModel {
   input: string[]
   context_window: number | null
   max_tokens: number | null
+  /** 推理强度；null = 没设过（等同 auto，运行时按模型默认）。 */
+  reasoning_effort: ReasoningEffort | null
   /** $ / million tokens, filled from models.dev when absent in models.json. */
   price_input: number | null
   price_output: number | null
@@ -272,6 +275,7 @@ export interface AdminCatalogModelWrite {
   input?: string[]
   context_window?: number | null
   max_tokens?: number | null
+  reasoning_effort?: ReasoningEffort | null
 }
 
 export interface AdminPointRule {

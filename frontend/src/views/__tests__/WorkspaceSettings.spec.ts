@@ -2,18 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
 import type { UserAiAuditLog, UserAiCredential, UserAiSecurityInfo, UserSkill } from "@/api/userAi"
 
-const EFFORT_OPTIONS = [
-  { value: "auto", label: "跟随模型默认", hint: "不下发推理参数" },
-  { value: "off", label: "关闭推理", hint: "不下发" },
-  { value: "minimal", label: "极简", hint: "最快" },
-  { value: "low", label: "轻度", hint: "简单" },
-  { value: "medium", label: "均衡", hint: "日常" },
-  { value: "high", label: "深度", hint: "复杂" },
-  { value: "xhigh", label: "最强", hint: "最长" },
-]
-
 const api = vi.hoisted(() => ({
-  REASONING_EFFORT_OPTIONS: [],
   listUserAiModelsApi: vi.fn(),
   listUserAiRemoteModelsApi: vi.fn(),
   createUserAiModelApi: vi.fn(),
@@ -125,7 +114,6 @@ async function mountPage(
   skills: UserSkill[] = [skill],
   options: { security?: UserAiSecurityInfo; logs?: UserAiAuditLog[] } = {},
 ) {
-  api.REASONING_EFFORT_OPTIONS = EFFORT_OPTIONS as never
   api.listUserAiModelsApi.mockResolvedValue(modelList(models))
   api.listUserSkillsApi.mockResolvedValue({ items: skills, total: skills.length, active: skills.filter((s) => s.enabled).length })
   api.getUserAiSecurityApi.mockResolvedValue(options.security ?? securityInfo)
@@ -143,7 +131,6 @@ function buttonByText(wrapper: PageWrapper, text: string) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  api.REASONING_EFFORT_OPTIONS = EFFORT_OPTIONS as never
 })
 
 describe("WorkspaceSettings · 多模型配置", () => {
@@ -151,7 +138,7 @@ describe("WorkspaceSettings · 多模型配置", () => {
     const wrapper = await mountPage()
     expect(wrapper.text()).toContain("自定义模型接入")
     expect(wrapper.text()).toContain("DeepSeek")
-    expect(wrapper.text()).toContain("推理 均衡")
+    expect(wrapper.text()).toContain("推理 medium")
     expect(wrapper.text()).toContain("默认")
     expect(wrapper.text()).toContain("量化成果")
     expect(wrapper.text()).toContain("1 / 1 启用")

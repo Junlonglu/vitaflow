@@ -271,6 +271,11 @@ class CredentialServiceTest(unittest.TestCase):
         self.assertEqual(override["credential_id"], row.id)
         self.assertEqual(svc.create_credential(self.db, 2, _credential()).reasoning_effort, "auto")
 
+    def test_max_effort_is_a_valid_token(self):
+        """档位是上游参数原词，max 与 magpie 同口径；不能只认到 xhigh。"""
+        svc.create_credential(self.db, 1, _credential(reasoning_effort="max"))
+        self.assertEqual(svc.resolve_model_override(self.db, 1)["reasoning_effort"], "max")
+
     def test_override_selects_explicit_model_and_platform_escape(self):
         a = svc.create_credential(self.db, 1, _credential())
         b = svc.create_credential(self.db, 1, _credential(model="deepseek-chat", base_url="https://api.deepseek.com/v1"))

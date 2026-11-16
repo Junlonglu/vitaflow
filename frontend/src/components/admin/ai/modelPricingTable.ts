@@ -41,7 +41,11 @@ function priceText(value: number | null | undefined): string {
   return value == null ? "" : String(value)
 }
 
-export function rowFromItem(item: AdminModelPricingItem): PricingRow {
+/**
+ * 目录里有、但还没配过定价的模型：条数取后端给的全局默认（`defaults.context_messages`），
+ * 不在前端写死 12——写死的话 env 改了它还是 12，保存一次就把 12 拍成每个模型的值。
+ */
+export function rowFromItem(item: AdminModelPricingItem, fallbackContextMessages = 12): PricingRow {
   const config = item.config
   return {
     ref: item.ref,
@@ -59,14 +63,14 @@ export function rowFromItem(item: AdminModelPricingItem): PricingRow {
     call: priceText(config?.points_per_call),
     input: priceText(config?.points_per_million_input_tokens),
     output: priceText(config?.points_per_million_output_tokens),
-    contextMessages: config?.context_messages ?? 12,
+    contextMessages: config?.context_messages ?? fallbackContextMessages,
     sortOrder: config?.sort_order ?? 100,
     more: false,
   }
 }
 
-export function rowsFromItems(items: AdminModelPricingItem[]): PricingRow[] {
-  return items.map(rowFromItem)
+export function rowsFromItems(items: AdminModelPricingItem[], fallbackContextMessages = 12): PricingRow[] {
+  return items.map((item) => rowFromItem(item, fallbackContextMessages))
 }
 
 /** 空串 → null（不单独定价）；带千分位的 "3,240" 也认；非数字返回 NaN 交给校验拦下。 */
@@ -174,6 +178,14 @@ export function validateRows(rows: PricingRow[]): string | null {
       if (parsed != null && (Number.isNaN(parsed) || parsed < 0)) {
         return `${row.name} 的价格只能填非负数字`
       }
+    }
+    // 「更多」里那两格是裸 input：清空时 v-model.number 给的是空串，
+    // 直接发给后端只会换回一句 int 解析失败的 422，得在这里变成人话。
+    if (!Number.isInteger(row.contextMessages) || row.contextMessages < 1 || row.contextMessages > 40) {
+      return `${row.name} 的历史消息条数只能填 1–40 的整数`
+    }
+    if (!Number.isInteger(row.sortOrder) || row.sortOrder < 0 || row.sortOrder > 9999) {
+      return `${row.name} 的排序值只能填 0–9999 的整数`
     }
   }
   if (rows.length && !rows.some((row) => row.isDefault)) {

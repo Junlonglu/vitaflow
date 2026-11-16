@@ -421,6 +421,8 @@ export interface AdminModelPricingDefaults {
   points_per_call: number | null
   points_per_million_input_tokens: number | null
   points_per_million_output_tokens: number | null
+  /** 没单独配过的模型行初始注入条数（后端全局默认，夹在 1..40）。 */
+  context_messages: number
 }
 
 export interface AdminModelPricing {

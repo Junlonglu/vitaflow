@@ -18,6 +18,7 @@ const DEFAULTS = {
   points_per_call: 5,
   points_per_million_input_tokens: 1000,
   points_per_million_output_tokens: 1000,
+  context_messages: 12,
 }
 
 function item(overrides: Partial<AdminModelPricingItem> = {}): AdminModelPricingItem {
@@ -72,6 +73,25 @@ describe("modelPricingTable", () => {
     expect(row.contextMessages).toBe(15)
   })
 
+  it("未定价模型的条数跟后端全局默认走，不是硬编码 12", () => {
+    expect(rowFromItem(item()).contextMessages).toBe(12)
+    expect(rowFromItem(item(), 20).contextMessages).toBe(20)
+    // 已经配过的行不受兜底值影响
+    expect(rowFromItem(priced(), 20).contextMessages).toBe(15)
+    // 同一批行一起铺的时候也要带上
+    expect(rowsFromItems([item(), priced()], 20).map((row) => row.contextMessages)).toEqual([20, 15])
+  })
+
+  it("条数或排序值被清空时报人话，不打到后端换 422", () => {
+    const cleared = { ...rowFromItem(priced()), contextMessages: "" as unknown as number }
+    expect(validateRows([cleared])).toBe("DeepSeek-V4.1-Flash 的历史消息条数只能填 1–40 的整数")
+    const tooMany = { ...rowFromItem(priced()), contextMessages: 41 }
+    expect(validateRows([tooMany])).toBe("DeepSeek-V4.1-Flash 的历史消息条数只能填 1–40 的整数")
+    const noSort = { ...rowFromItem(priced()), sortOrder: "" as unknown as number }
+    expect(validateRows([noSort])).toBe("DeepSeek-V4.1-Flash 的排序值只能填 0–9999 的整数")
+    expect(validateRows([rowFromItem(priced())])).toBeNull()
+  })
+
   it("默认模型即便被关掉上架，提交时也会被拉回上架", () => {
     const row = { ...rowFromItem(priced()), visible: false }
     const [payload] = toWriteItems([row])
@@ -103,6 +123,7 @@ describe("modelPricingTable", () => {
         points_per_call: null,
         points_per_million_input_tokens: null,
         points_per_million_output_tokens: null,
+        context_messages: 12,
       }),
     ).toBeNull()
   })

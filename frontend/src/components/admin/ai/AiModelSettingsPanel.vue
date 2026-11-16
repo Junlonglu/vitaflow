@@ -46,16 +46,24 @@ const error = ref("")
 watch(
   () => props.pricing,
   (value) => {
-    const next = value ? rowsFromItems(value.items) : []
+    // 未定价模型的条数取后端全局默认，前端不再假装是 12
+    const fallback = value ? value.defaults.context_messages : 12
+    const next = value ? rowsFromItems(value.items, fallback) : []
     rows.value = next
-    saved.value = value ? rowsFromItems(value.items) : []
+    saved.value = value ? rowsFromItems(value.items, fallback) : []
     error.value = ""
   },
   { immediate: true },
 )
 
 const defaults = computed<AdminModelPricingDefaults>(
-  () => props.pricing?.defaults ?? { points_per_call: null, points_per_million_input_tokens: null, points_per_million_output_tokens: null },
+  () =>
+    props.pricing?.defaults ?? {
+      points_per_call: null,
+      points_per_million_input_tokens: null,
+      points_per_million_output_tokens: null,
+      context_messages: 12,
+    },
 )
 const dirty = computed(() => isDirty(rows.value, saved.value))
 const suggestionCount = computed(() => rows.value.filter((row) => row.suggested && !hasOwnPrice(row)).length)
@@ -271,7 +279,7 @@ function submit() {
                 <div class="flex flex-wrap items-end gap-4">
                   <label class="space-y-1 text-xs font-medium text-zinc-500">
                     <span class="flex items-center gap-1">历史消息条数<FieldTip text="每轮注入模型的历史消息条数上限（用户与助手消息合计），超出部分模型不可见；简历正文经工具按需读取，不受此限制。" /></span>
-                    <input v-model.number="row.contextMessages" type="number" min="1" max="40" :disabled="saving" class="block h-8 w-24 rounded-md border border-zinc-200 bg-white px-2 text-right text-sm tabular-nums outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
+                    <input v-model.number="row.contextMessages" type="number" min="1" max="40" :disabled="saving" placeholder="1–40" class="block h-8 w-24 rounded-md border border-zinc-200 bg-white px-2 text-right text-sm tabular-nums outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
                   </label>
                   <label class="space-y-1 text-xs font-medium text-zinc-500">
                     <span class="flex items-center gap-1">排序值<FieldTip text="数字越小越靠前：模型选择器里按它升序排列。" /></span>

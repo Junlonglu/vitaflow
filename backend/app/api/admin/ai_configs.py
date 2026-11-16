@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.exceptions import AppException
 from app.core.response import success
@@ -389,6 +390,9 @@ def _pricing_payload(db: Session) -> dict:
             "points_per_call": point_number(rule.points_per_call) if rule else None,
             "points_per_million_input_tokens": point_number(rule.points_per_million_input_tokens) if rule else None,
             "points_per_million_output_tokens": point_number(rule.points_per_million_output_tokens) if rule else None,
+            # 还没定价的模型行要有个初始条数；取全局默认而不是前端硬编码 12，
+            # 否则 env 一改，新行还是 12，且保存后把 12 写死成每模型的值。
+            "context_messages": max(1, min(int(settings.ai_service_context_messages or 12), 40)),
         },
         "catalog_available": catalog_ok,
         "unbound_configs": len(

@@ -22,10 +22,10 @@ import WorkflowSection from "@/components/home/WorkflowSection.vue"
         </a>
       </div>
       <p class="text-sm text-zinc-500 mb-3 font-medium">
-        VitaFlow 简历流 · 你的经历，值得更好的表达。
+        ResumeFlow 简历流 · 你的经历，值得更好的表达。
       </p>
       <div class="text-xs text-zinc-400 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-3">
-        <span>&copy; 2026 <a href="https://github.com/cgz233/vitaflow" target="_blank" rel="noopener noreferrer" class="hover:text-zinc-600 transition-colors">VitaFlow</a></span>
+        <span>&copy; 2026 <a href="https://github.com/cgz233/vitaflow" target="_blank" rel="noopener noreferrer" class="hover:text-zinc-600 transition-colors">ResumeFlow</a></span>
         <span class="hidden sm:inline">|</span>
         <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" class="hover:text-zinc-600 transition-colors">
           鲁ICP备2023002307号-2

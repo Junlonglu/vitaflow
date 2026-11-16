@@ -11,4 +11,4 @@ Supported file names:
 - LXGWWenKai-Regular.woff2
 - LXGWWenKai-Bold.woff2
 
-If a file is missing, VitaFlow falls back to system fonts automatically.
+If a file is missing, ResumeFlow falls back to system fonts automatically.

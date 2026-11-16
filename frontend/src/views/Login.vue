@@ -224,7 +224,7 @@ async function handleResetPassword() {
       </div>
       
       <div class="relative z-base flex flex-col gap-1">
-        <p class="text-sm text-zinc-600">&copy; 2026 <a href="https://github.com/cgz233/vitaflow" target="_blank" rel="noopener noreferrer" class="hover:text-zinc-400 transition-colors">VitaFlow</a></p>
+        <p class="text-sm text-zinc-600">&copy; 2026 <a href="https://github.com/cgz233/vitaflow" target="_blank" rel="noopener noreferrer" class="hover:text-zinc-400 transition-colors">ResumeFlow</a></p>
         <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" class="text-xs text-zinc-500 hover:text-zinc-400 transition-colors">
           鲁ICP备2023002307号-2
         </a>

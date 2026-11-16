@@ -1,6 +1,6 @@
-# VitaFlow 简历流
+# ResumeFlow 简历流
 
-VitaFlow 是一个面向求职者的智能简历生成与优化平台，提供在线简历编辑、AI 对话式优化、JD 匹配优化、多模板预览、分享，以及 PDF 导出能力。项目采用前后端分离架构，后端基于 FastAPI，前端基于 Vue 3 + Vite。
+ResumeFlow 是一个面向求职者的智能简历生成与优化平台，提供在线简历编辑、AI 对话式优化、JD 匹配优化、多模板预览、分享，以及 PDF 导出能力。项目采用前后端分离架构，后端基于 FastAPI，前端基于 Vue 3 + Vite。
 
 **线上体验：[https://vitaflow.vip](https://vitaflow.vip)**
 

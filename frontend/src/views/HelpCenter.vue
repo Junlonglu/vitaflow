@@ -61,7 +61,7 @@ const topics: HelpTopic[] = [
   {
     id: "start",
     title: "快速开始",
-    description: "适合第一次使用 VitaFlow 的用户，从模板到第一份简历只需要几步。",
+    description: "适合第一次使用 ResumeFlow 的用户，从模板到第一份简历只需要几步。",
     icon: Sparkles,
     accent: "bg-zinc-950 text-white",
     steps: [
@@ -191,14 +191,14 @@ const faqs = [
               <div class="mt-6 sm:mt-8">
                 <h3 class="mb-3 flex items-center gap-2.5 text-base sm:text-lg font-semibold text-zinc-900">
                   <div class="h-4 w-1.5 rounded-full bg-zinc-800"></div>
-                  什么是 VitaFlow？
+                  什么是 ResumeFlow？
                 </h3>
                 <div class="space-y-4 text-sm sm:text-[15px] leading-relaxed text-zinc-500">
                   <p class="text-[15px] font-medium leading-relaxed text-zinc-800 sm:text-base">
-                    <span class="font-bold text-zinc-900">Elliot:</span> “VitaFlow 简历流是面向现代求职者的次世代智能简历生成与优化平台。我们将前沿的生成式 AI 技术与极简高级的美学排版深度结合，帮助您在激烈的职场竞争中脱颖而出。”
+                    <span class="font-bold text-zinc-900">Elliot:</span> “ResumeFlow 简历流是面向现代求职者的次世代智能简历生成与优化平台。我们将前沿的生成式 AI 技术与极简高级的美学排版深度结合，帮助您在激烈的职场竞争中脱颖而出。”
                   </p>
                   <p>
-                    <strong class="font-medium text-zinc-700">创作理念：</strong>我们坚信，一份优秀的简历不应只是枯燥的信息堆砌，而是展现个人专业度与审美格调的绝佳媒介。VitaFlow 致力于消除所有繁琐的格式排版，让求职者能将 100% 的精力聚焦于自身价值的表达——因为，“你的经历，值得更好的表达。”
+                    <strong class="font-medium text-zinc-700">创作理念：</strong>我们坚信，一份优秀的简历不应只是枯燥的信息堆砌，而是展现个人专业度与审美格调的绝佳媒介。ResumeFlow 致力于消除所有繁琐的格式排版，让求职者能将 100% 的精力聚焦于自身价值的表达——因为，“你的经历，值得更好的表达。”
                   </p>
                 </div>
               </div>

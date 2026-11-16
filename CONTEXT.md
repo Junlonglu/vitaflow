@@ -1,4 +1,4 @@
-# VitaFlow
+# ResumeFlow
 
 智能简历生成与优化平台。本文档定义 AI 模块重构（pi-agent 化）讨论中的统一术语。
 

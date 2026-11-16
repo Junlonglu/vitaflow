@@ -159,7 +159,7 @@ onBeforeUnmount(() => {
     <footer v-if="sharedResume && !loading && !error" class="border-t border-zinc-200/80 bg-white py-6 sm:py-8">
       <div class="mx-auto flex max-w-5xl flex-col items-center justify-between gap-4 px-4 sm:flex-row sm:px-6">
         <div class="flex flex-col items-center sm:items-start text-center sm:text-left">
-          <span class="text-sm font-bold tracking-tight text-zinc-900">VitaFlow 简历流</span>
+          <span class="text-sm font-bold tracking-tight text-zinc-900">ResumeFlow 简历流</span>
         </div>
         <a href="/" target="_blank" class="inline-flex h-10 items-center justify-center rounded-lg bg-wb-primary px-5 text-xs font-medium !text-white transition duration-100 hover:bg-wb-primary-hover active:scale-95">
           免费制作同款简历 &rarr;

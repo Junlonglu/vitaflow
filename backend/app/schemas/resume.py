@@ -64,7 +64,7 @@ def default_resume_data() -> dict[str, Any]:
         "projects": [
             {
                 "id": "project_1",
-                "name": "VitaFlow 智能简历生成与优化系统",
+                "name": "ResumeFlow 智能简历生成与优化系统",
                 "role": "全栈开发",
                 "start_date": "2026.03",
                 "end_date": "2026.06",

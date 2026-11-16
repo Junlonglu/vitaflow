@@ -1,4 +1,4 @@
-# VitaFlow AI 模块重构设计：pi-agent 化
+# ResumeFlow AI 模块重构设计：pi-agent 化
 
 > status: accepted · 2026-09-01
 > 决策记录见 [`../PROJECT-OVERVIEW.md`](../PROJECT-OVERVIEW.md) §14（代码注释中的 `ADR-000N` 对应表中第 N 条），术语表见 `CONTEXT.md`

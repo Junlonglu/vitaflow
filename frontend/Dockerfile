@@ -1,4 +1,4 @@
-# VitaFlow 前端镜像：Vue/Vite 构建产物由 Nginx 托管，并把 /api 反代到后端。
+# ResumeFlow 前端镜像：Vue/Vite 构建产物由 Nginx 托管，并把 /api 反代到后端。
 FROM node:22-alpine AS build
 
 WORKDIR /app

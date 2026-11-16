@@ -1,4 +1,4 @@
-"""VitaFlow UI 回归审计（交叉态矩阵）
+"""ResumeFlow UI 回归审计（交叉态矩阵）
 
 把 design-system.md §6.10–§6.22 各轮收口的结论变成可复跑的断言。
 此前这些检查散落在临时目录，口径还会漏宽度带（§6.19：800 视口才暴露
@@ -659,7 +659,7 @@ def main() -> int:
 
     mode = "quick" if QUICK else "full"
     if not AS_JSON:
-        print(f"VitaFlow UI 回归审计  base={BASE}  mode={mode}  "
+        print(f"ResumeFlow UI 回归审计  base={BASE}  mode={mode}  "
               f"矩阵={len(CASES)}×{len(ROUTE_SET)}={len(CASES) * len(ROUTE_SET)} 格")
 
     rows, failures = [], []

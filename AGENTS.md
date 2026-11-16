@@ -1,10 +1,10 @@
 # AGENTS.md
 
-本文件约束在 VitaFlow 仓库中工作的代码代理。除非用户明确说明，以下规则适用于整个仓库。
+本文件约束在 ResumeFlow 仓库中工作的代码代理。除非用户明确说明，以下规则适用于整个仓库。
 
 ## 项目认知
 
-- VitaFlow 是前后端分离的智能简历平台。
+- ResumeFlow 是前后端分离的智能简历平台。
 - 后端位于 `backend/`，使用 FastAPI、SQLAlchemy、Alembic、MySQL、Redis、Jinja2、Playwright/WeasyPrint、python-docx。
 - 前端位于 `frontend/`，使用 Vue 3、TypeScript、Vite、Vue Router、Pinia、Tailwind CSS。
 - AI 服务位于 `ai-service/`，是承载 pi-agent 运行时的 Node 旁路服务（`@earendil-works/pi-coding-agent@0.83.0` 锁版）。FastAPI 通过 HTTP/SSE 代理调用它，认证、数据库、计费仍归 FastAPI。详见 `docs/architecture/pi-agent重构设计.md`。

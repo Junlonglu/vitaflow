@@ -1,4 +1,4 @@
-# VitaFlow 后端镜像：FastAPI + MySQL + Chromium/WeasyPrint + 中文 OCR。
+# ResumeFlow 后端镜像：FastAPI + MySQL + Chromium/WeasyPrint + 中文 OCR。
 # PDF 导出默认走 Playwright 自带 Chromium；WeasyPrint 作为 auto 模式兜底。
 FROM python:3.11.10-slim-bookworm
 

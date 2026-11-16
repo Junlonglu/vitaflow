@@ -1,4 +1,4 @@
-# VitaFlow AI 服务
+# ResumeFlow AI 服务
 
 承载 pi-agent 运行时的 Node.js 旁路服务。FastAPI 通过 HTTP/SSE 调用它，并保留认证、数据库、计费（见 `docs/architecture/pi-agent重构设计.md`）。
 

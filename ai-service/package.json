@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Node sidecar service hosting the pi-agent runtime for VitaFlow. Proxied by the FastAPI backend.",
+  "description": "Node sidecar service hosting the pi-agent runtime for ResumeFlow. Proxied by the FastAPI backend.",
   "engines": {
     "node": ">=22"
   },

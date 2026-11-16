@@ -74,7 +74,7 @@ async function submit() {
         </div>
         <RouterLink to="/workspace/resumes" class="select-none text-[12px] font-medium text-zinc-600">全部简历</RouterLink>
       </div>
-      <h1 class="text-[22px] font-semibold tracking-tight text-zinc-950 sm:text-[26px]">VitaFlow，帮你写好一份简历</h1>
+      <h1 class="text-[22px] font-semibold tracking-tight text-zinc-950 sm:text-[26px]">ResumeFlow，帮你写好一份简历</h1>
 
       <div class="mt-4 flex flex-wrap gap-0.5">
         <button

@@ -1,5 +1,5 @@
 /**
- * VitaFlow AI service HTTP entry point.
+ * ResumeFlow AI service HTTP entry point.
  *
  * A thin, single-purpose sidecar: it authenticates the FastAPI proxy with a
  * static token, runs one pi-agent session per request, and streams NDJSON

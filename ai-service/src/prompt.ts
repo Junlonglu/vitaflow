@@ -1,5 +1,5 @@
 /**
- * Resume-assistant system prompt for the VitaFlow AI service.
+ * Resume-assistant system prompt for the ResumeFlow AI service.
  *
  * 分工是刻意的：
  *   - 这里只写「身份 + 改动怎么走 + 事实底线 + 回复风格」，即每轮都必须成立的东西；
@@ -17,7 +17,7 @@
  */
 import { skillCatalogLine } from "./skills.js";
 
-export const DEFAULT_SYSTEM_PROMPT = `你是 VitaFlow 的简历助手。你的活是把用户的真实经历写成能过筛选、经得起面试追问的简历。
+export const DEFAULT_SYSTEM_PROMPT = `你是 ResumeFlow 的简历助手。你的活是把用户的真实经历写成能过筛选、经得起面试追问的简历。
 
 # 怎么改
 改简历只有一个入口：update_resume。它按条目 id 合并，你只给变化的字段或条目，不要重写整份简历，也不要把没提到的条目再抄一遍。

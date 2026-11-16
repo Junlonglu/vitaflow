@@ -1,6 +1,6 @@
 # WorkBuddy 界面复刻参考（v2）
 
-对 WorkBuddy 桌面端（`@genie/workbuddy-desktop@5.9.3`，Electron 37.10.3-43，2026-10-27 构建，commit `e3708861`）的拆解，用于在 VitaFlow 中复刻它的视觉语言与交互习惯。**本文只描述观察到的实现，不代表设计意图**；实施时结合 [`../design-system.md`](../design-system.md) 的既有约定取舍。
+对 WorkBuddy 桌面端（`@genie/workbuddy-desktop@5.9.3`，Electron 37.10.3-43，2026-10-27 构建，commit `e3708861`）的拆解，用于在 ResumeFlow 中复刻它的视觉语言与交互习惯。**本文只描述观察到的实现，不代表设计意图**；实施时结合 [`../design-system.md`](../design-system.md) 的既有约定取舍。
 
 > v2 相对 v1 的变化：接入 REA 静态应用图，新增**窗口层**（主进程 BrowserWindow 配置）、**JS 里的布局常量**（侧栏/详情面板的真实夹紧区间）、**骨架屏规格**、**依赖与技术栈**；修正标题栏高度的三级来源；上一版"侧栏宽度未知"的结论已被证伪。
 
@@ -32,7 +32,7 @@
 - **聊天面有独立 `--cr-*` 主题层**，输入框、消息列表、工具卡都在这一层，不跟随 `--wb-*` 改动。
 - 命名规律：`--wb-<组件>-<属性>-<状态>`，状态后缀 `-hover/-active/-disabled/-focus`。
 
-复刻含义：**不要抄单色值，抄层结构**。换品牌只改 palette 与 semantic 两层，组件层不动。VitaFlow 没有 VS Code 主题系统，可以直接把"基色桥"这一层折叠进 semantic 层。
+复刻含义：**不要抄单色值，抄层结构**。换品牌只改 palette 与 semantic 两层，组件层不动。ResumeFlow 没有 VS Code 主题系统，可以直接把"基色桥"这一层折叠进 semantic 层。
 
 ## 2. 窗口层：主进程先决定了外观
 
@@ -62,7 +62,7 @@
 
 | 项 | 值 | 复刻含义 |
 | --- | --- | --- |
-| 最小窗口 | 800 × 600 | 低于这个尺寸布局会崩；VitaFlow 若做桌面壳应沿用 |
+| 最小窗口 | 800 × 600 | 低于这个尺寸布局会崩；ResumeFlow 若做桌面壳应沿用 |
 | 窗口底色 | `#ffffff` / `#1e1e1e` | 比页面底 `#f2f2f2` 更亮，是"窗口纸面"而非"工作区" |
 | Windows 原生按钮区 | `titleBarOverlay` 高 **30**（子窗 48） | 顶栏不是纯自绘：Windows 用 WCO，系统按钮浮在渲染层之上 |
 | macOS | `hiddenInset` + 红绿灯内缩、`vibrancy:'under-window'` | 侧栏的半透明灰感来自**窗口级毛玻璃**，不是 `backdrop-filter` 描出来的 |
@@ -350,11 +350,11 @@ easing    standard  cubic-bezier(.4,0,.2,1)
 | 编辑器 | Monaco（`editor.api2-*.js` 3.9 MB）、`ts.worker` |
 | 其他 | jszip（导出）、mitt（事件总线）、classnames/clsx、i18n（`useI18n` + 按语言分包 `zh-cn-*` / `ja-jp-*` / `ko-kr-*`） |
 | 源码组织 | monorepo：`packages/agent-ui`（UI 组件与 welcome 页）、`packages/workbuddy-app`（`window-manager.ts`、`shared/account-snapshot.ts`、`title-bar-overlay.ts`） |
-| 路由面 | 静态只有 1 条候选 `/experts` → **单壳应用**，页面切换靠内部状态而非路由（VitaFlow 用 vue-router 时不必照搬） |
+| 路由面 | 静态只有 1 条候选 `/experts` → **单壳应用**，页面切换靠内部状态而非路由（ResumeFlow 用 vue-router 时不必照搬） |
 
-## 11. 在 VitaFlow 里怎么落地
+## 11. 在 ResumeFlow 里怎么落地
 
-VitaFlow 现状：Vue 3 + Tailwind **v4**（`@import "tailwindcss"`，无 config 文件）+ radix-vue + lucide。与 WorkBuddy 的 TDesign 不同，但 token 层可以一比一移植。
+ResumeFlow 现状：Vue 3 + Tailwind **v4**（`@import "tailwindcss"`，无 config 文件）+ radix-vue + lucide。与 WorkBuddy 的 TDesign 不同，但 token 层可以一比一移植。
 
 **建议四层推进**：
 
@@ -375,7 +375,7 @@ VitaFlow 现状：Vue 3 + Tailwind **v4**（`@import "tailwindcss"`，无 config
 - `#00c29a` 在白底上对比度约 2.4:1，**只能用于图形与状态点，不能当正文链接色**（WorkBuddy 自己也把链接色设成 `#1470b4`）。
 - 若沿用现有 `--color-brand-*` 变量名，注意与 Tailwind v4 `@theme` 命名空间冲突，建议统一加 `wb-` 前缀。
 - 深色模式色阶（`#141414` / `#1a1b1e` / `#2a2c31`）与浅色不是同一套 L 值，直接反相会脏。
-- macOS 的"高级灰"很大程度来自 `vibrancy:'under-window'` 毛玻璃。VitaFlow 是 Web，**用 `backdrop-filter` 只能近似**，且会显著增加滚动掉帧风险。
+- macOS 的"高级灰"很大程度来自 `vibrancy:'under-window'` 毛玻璃。ResumeFlow 是 Web，**用 `backdrop-filter` 只能近似**，且会显著增加滚动掉帧风险。
 
 ## 12. 未确认项
 

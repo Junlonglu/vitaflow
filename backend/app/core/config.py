@@ -12,7 +12,7 @@ PRODUCTION_ENVS = frozenset({"production", "prod", "staging"})
 
 
 class Settings(BaseSettings):
-    app_name: str = "VitaFlow"
+    app_name: str = "ResumeFlow"
     app_cn_name: str = "简历流"
     app_env: str = "development"
     app_host: str = "0.0.0.0"
@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     smtp_username: str = ""
     smtp_password: str = ""
     smtp_from_email: str = ""
-    smtp_from_name: str = "VitaFlow"
+    smtp_from_name: str = "ResumeFlow"
     smtp_use_ssl: bool = True
     smtp_use_tls: bool = False
     smtp_timeout: int = 10

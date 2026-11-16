@@ -40,7 +40,7 @@ const iconAccent = computed(() => "#2563eb")
 
 <template>
   <span class="inline-flex items-center gap-3" :class="sizeClass">
-    <svg :class="iconClass" viewBox="0 0 48 48" role="img" aria-label="VitaFlow 简历流标志">
+    <svg :class="iconClass" viewBox="0 0 48 48" role="img" aria-label="ResumeFlow 简历流标志">
       <rect x="8" y="5" width="32" height="38" rx="7" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5" />
       <path d="M15 14h13" stroke="#111827" stroke-width="3.2" stroke-linecap="round" />
       <path d="M15 21h10" :stroke="iconAccent" stroke-width="3" stroke-linecap="round" />
@@ -49,7 +49,7 @@ const iconAccent = computed(() => "#2563eb")
       <circle cx="34" cy="35.2" r="2.2" :fill="iconAccent" />
     </svg>
     <span v-if="showText" class="leading-none">
-      <span class="block font-semibold tracking-normal" :class="[titleClass, textToneClass]">VitaFlow</span>
+      <span class="block font-semibold tracking-normal" :class="[titleClass, textToneClass]">ResumeFlow</span>
       <span class="mt-1 block font-medium tracking-normal" :class="[subtitleClass, subToneClass]">简历流</span>
     </span>
   </span>

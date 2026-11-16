@@ -74,7 +74,7 @@ function replyFactory(systemPrompt: string) {
     const text = contentText(lastUser?.content as unknown);
     return fauxAssistantMessage(
       `我已收到你的提问：「${text || "（空）"}」\n\n` +
-        `这是 VitaFlow 简历 AI 助手的回复。当前处于 Faux Provider 演示模式，未接入真实模型，` +
+        `这是 ResumeFlow 简历 AI 助手的回复。当前处于 Faux Provider 演示模式，未接入真实模型，` +
         `以上为确定性占位回复。整条「请求 → agent 会话 → 流式事件 → 回传」链路已经打通，` +
         `后续接入真实模型后即为真实回答。`,
     );

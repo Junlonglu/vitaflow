@@ -1,4 +1,4 @@
-# VitaFlow Backend
+# ResumeFlow Backend
 
 FastAPI 后端提供认证、简历管理、HTML 预览、PDF 导出、头像上传和 AI 对话代理接口。
 

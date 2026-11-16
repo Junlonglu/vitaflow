@@ -359,7 +359,7 @@
  *
  * 这些数值在 WorkBuddy 里分布在两处：窗口底色/标题栏高度来自主进程
  * （BrowserWindow 配置 + loadQuery 注入），侧栏与面板的夹紧区间来自
- * renderer 的布局模块常量。VitaFlow 是 Web 应用，合并为一份 CSS 变量。
+ * renderer 的布局模块常量。ResumeFlow 是 Web 应用，合并为一份 CSS 变量。
  * 用法示例：style="width: var(--wb-sidebar-width)"
  * 详见 docs/design/workbuddy-visual-reference.md §2 / §6.1
  * ------------------------------------------------------------------ */

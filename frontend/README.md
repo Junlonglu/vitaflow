@@ -1,4 +1,4 @@
-# VitaFlow Frontend
+# ResumeFlow Frontend
 
 Vue3 + TypeScript + Vite 前端。界面以工作区外壳（`/workspace/*`）为主：左侧是简历与会话入口，中间是工作区首页 / 模板中心 / 编辑器，右侧是 A4 预览。公开访问的只有首页、登录页、模板页和分享页。
 

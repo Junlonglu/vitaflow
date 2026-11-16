@@ -41,7 +41,7 @@ const shareLink = computed(() => config.value?.token ? `${window.location.origin
 const shareText = computed(() => {
   const title = props.resumeTitle.trim()
   const resumeName = title && title !== "未命名简历" ? `「${title}」` : "个人简历"
-  return `您好，我通过 VitaFlow 向您分享了一份${resumeName}在线简历，期待与您进一步沟通。\n查看链接：${shareLink.value}`
+  return `您好，我通过 ResumeFlow 向您分享了一份${resumeName}在线简历，期待与您进一步沟通。\n查看链接：${shareLink.value}`
 })
 const statusText = computed(() => {
   if (!config.value?.enabled) return "分享未开启"

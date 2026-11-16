@@ -205,9 +205,10 @@ content, _ = read_uploaded_file(object_name)   # 同步 HTTP 打 MinIO/OSS
 | P2-5b | 兑换码查重只查本批候选：随机码分批生成 + `WHERE code IN (...)`，自定义码只查提交的那几个 | `backend/app/services/flow_points_service.py` | 同文件（4 条，查重语句必须带 WHERE） |
 | P2-9a | **新发现**：`_stream_cache_headers` 对所有对象都用 `public, immutable`，`ai-chat/` 是鉴权后响应却可被共享缓存转发；改为私有前缀 `private, no-store`，并补 `X-Content-Type-Options: nosniff` | `backend/app/services/storage/storage_service.py` | `backend/tests/test_upload_hardening.py`（10 条） |
 | P2-9b | 补公开分享链路测试：失效/过期/不存在收敛同一 404、超长 token 不打库、脱敏不就地改 ORM 对象、自定义 token 400/409 | — | `backend/tests/test_public_share.py`（19 条） |
+| P2-9c | 补五组接口的 HTTP 层测试（此前只有底层工具函数的局部断言）：模板匿名可读/详情 404/内置模板 GET 写库且幂等、反馈鉴权+净化入库+邮件失败吞噬+分页隔离、注册查重/赠送积分/锁释放、重置密码同原密码 400、PDF FileResponse+越权 404+export_records 写库+缓存命中 | — | `test_user_templates.py`（6）+ `test_feedback_endpoints.py`（9）+ `test_auth_register_reset.py`（15）+ `test_pdf_export_route.py`（5），共 35 条 |
 | P2-11 | `word_export_service.py`、`services/ai/__init__.py` 文件头写明下线原因与恢复条件 | 同左 | — |
 
-实跑基线：后端 435 passed（原 356，本批 +40）、前端 141 passed、ai-service 172 passed、`vue-tsc` 0 错、`vite build` 通过。
+实跑基线：后端 **470 passed**（原 356；第三批 +40，P2-9c +35）、前端 141 passed、ai-service 172 passed、`vue-tsc` 0 错、`vite build` 通过。
 
 ### 第四批（2026-11-16，已完成）：P2-8 拆面板
 
@@ -223,4 +224,4 @@ content, _ = read_uploaded_file(object_name)   # 同步 HTTP 打 MinIO/OSS
 
 ### 仍未处理
 
-P2-9 其余缺口（`/api/templates/*`、`/api/auth/register`、`/api/auth/reset-password`、`/api/feedback`、`/api/resumes/{id}/export/pdf`）、P2-10（`any` 收敛：前端 184 处、`aiDiff.ts` 单文件 22 处）。P2-8 已全部完成。
+P2-10（`any` 收敛：前端 184 处、`aiDiff.ts` 单文件 22 处）。P2-8 已全部完成；P2-9 测试覆盖缺口已补齐（上传、分享、模板、注册/重置、反馈、PDF 导出均已有 HTTP 层测试）。

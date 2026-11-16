@@ -40,6 +40,7 @@ import {
   MODEL_ID_RE,
   PROVIDER_KEY_RE,
   PROVIDER_PRESETS,
+  arkPlanOf,
   buildProviderSavePlan,
   createProviderDraft,
   emptyModelDraft,
@@ -47,9 +48,11 @@ import {
   groupUsingModel,
   hasRemoteMeta,
   parsePositiveInt,
+  plansFor,
   remoteModelDraft,
   type ModelDraft,
   type ProviderDraft,
+  type ProviderPlan,
   type ProviderPreset,
   type ProviderSavePayload,
   type ProviderSeed,
@@ -162,19 +165,45 @@ function detectPlanVendor(url: string): AccessKeySpec["vendor"] | null {
   }
   const host = parsed.hostname
   const path = `${parsed.pathname.replace(/\/+$/, "")}/`
-  if (host.startsWith("ark.") && host.endsWith(".volces.com") && (path.startsWith("/api/coding/") || path.startsWith("/api/plan/"))) {
-    return "volcengine"
-  }
+  // 火山按量付费（/api/v3）也挂这块：账号侧余额与套餐用量共用同一对密钥，
+  // 只在「按量付费」时把 hint 说清楚，别让人以为填了就能看到套餐额度。
+  if (host.startsWith("ark.") && host.endsWith(".volces.com")) return "volcengine"
   if (/token-plan\.[a-z0-9-]+\.maas\.aliyuncs\.com/.test(host)) return "alibaba"
   if (host.endsWith("tencentmaas.com") && path.startsWith("/plan/")) return "tencent"
   return null
+}
+
+/** 端点上方那排套餐；只有套餐型厂商有（目前是火山方舟）。 */
+const plans = computed<ProviderPlan[] | null>(() => plansFor(draft.value.base_url))
+const activePlan = computed<ProviderPlan | null>(() => arkPlanOf(draft.value.base_url))
+
+/** 切套餐就是换地址：额度只在对应 Base URL 下抵扣，手填反而容易填错。 */
+function applyPlan(plan: ProviderPlan) {
+  draft.value.base_url = plan.base_url
 }
 
 /** 空 = 这家服务商不需要云账号凭证；非空才渲染那一块。 */
 const accessKeySpec = computed<AccessKeySpec | null>(() => {
   const vendor = props.provider?.plan_vendor ?? detectPlanVendor(draft.value.base_url)
   if (!vendor) return null
-  return { vendor, plan: props.provider?.plan_label || "", ...ACCESS_KEY_SPECS[vendor] }
+  const label = activePlan.value?.label || props.provider?.plan_label || ""
+  return { vendor, plan: label, ...ACCESS_KEY_SPECS[vendor] }
+})
+
+/** 按量付费时这对密钥读不到套餐用量，得在 hint 里说清楚，否则填完一脸问号。 */
+const accessKeyHint = computed(() => {
+  const spec = accessKeySpec.value
+  if (!spec) return ""
+  if (spec.vendor === "volcengine" && activePlan.value?.key === "payg") {
+    return "按量付费用不上这对密钥；切到 Coding Plan / Agent Plan 才用它读套餐额度。它不参与推理，只是账号级只读凭证"
+  }
+  return spec.hint
+})
+
+/** 标题跟着套餐走：按量付费没有套餐额度可读，别写「按量付费 用量」。 */
+const accessKeyTitle = computed(() => {
+  const plan = accessKeySpec.value?.plan ?? ""
+  return plan && plan !== "按量付费" ? `${plan} 用量` : "云账号密钥"
 })
 
 const balanceLine = computed(() => {
@@ -547,6 +576,8 @@ function duplicate() {
           <span class="truncate text-sm font-semibold text-zinc-900">{{ draft.name || "新增服务商" }}</span>
           <span v-if="provider" class="shrink-0 rounded-md border border-zinc-200/50 bg-zinc-100/80 px-2 py-0.5 text-[10px] font-medium text-zinc-600">{{ provider.key }}</span>
           <span v-else class="shrink-0 rounded-md border border-dashed border-zinc-300 px-2 py-0.5 text-[10px] font-medium text-zinc-500">草稿</span>
+          <!-- 同名域名下三家火山（Coding / Agent / 按量）在收起状态也能分开 -->
+          <span v-if="activePlan && activePlan.key !== 'payg'" class="shrink-0 rounded-md border border-zinc-200/50 bg-zinc-50 px-2 py-0.5 text-[10px] font-medium text-zinc-500">{{ activePlan.label }}</span>
           <span v-if="provider && dirty" class="shrink-0 text-[11px] font-medium text-amber-600">未保存的改动</span>
           <span v-else-if="provider && !provider.api_key_masked" class="shrink-0 text-[11px] font-medium text-amber-600">未配置密钥</span>
         </div>
@@ -669,6 +700,28 @@ function duplicate() {
               {{ draft.keyMode === "env" ? "引用 AI 服务进程的环境变量（$VAR），密钥不落盘" : "明文写入模型目录文件 models.json，不进后端数据库" }}
             </p>
           </template>
+        </div>
+      </div>
+
+      <!-- 套餐：同一家厂商的几档订阅各有各的 Base URL，额度也只在那一个地址上抵扣 -->
+      <div v-if="plans" class="grid grid-cols-[56px_minmax(0,1fr)] items-center gap-3">
+        <p class="text-xs font-medium text-zinc-500">套餐</p>
+        <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <span class="flex shrink-0 gap-0.5 rounded-lg bg-zinc-100 p-0.5 text-[11px] font-medium">
+            <button
+              v-for="plan in plans"
+              :key="plan.key"
+              type="button"
+              class="rounded-md px-2.5 py-1 transition-colors"
+              :class="activePlan?.key === plan.key ? 'bg-white text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'"
+              @click="applyPlan(plan)"
+            >
+              {{ plan.label }}
+            </button>
+          </span>
+          <span class="min-w-0 text-[11px] leading-snug text-zinc-400">
+            {{ activePlan?.note || "当前地址不是上面三档之一：套餐额度不会抵扣，按量计费照常扣" }}
+          </span>
         </div>
       </div>
 
@@ -842,8 +895,8 @@ function duplicate() {
         <p class="pt-2 text-xs font-medium text-zinc-500">用量</p>
         <div class="min-w-0 space-y-2 rounded-lg border border-zinc-200 bg-zinc-50/50 p-3">
           <p class="text-[11px] font-medium text-zinc-600">
-            {{ accessKeySpec.plan ? `${accessKeySpec.plan} 用量` : "套餐用量" }}
-            <span class="ml-1 font-normal text-zinc-400">只能用一个云账号密钥读取，不参与推理</span>
+            {{ accessKeyTitle }}
+            <span class="ml-1 font-normal text-zinc-400">账号级只读凭证，不参与推理</span>
           </p>
           <div class="grid gap-2 sm:grid-cols-2">
             <label class="block space-y-1">
@@ -865,9 +918,11 @@ function duplicate() {
               />
             </label>
           </div>
-          <p class="text-[11px] text-zinc-400">{{ accessKeySpec.hint }}</p>
+          <p class="text-[11px] text-zinc-400">{{ accessKeyHint }}</p>
 
-          <p v-if="!provider" class="text-[11px] text-zinc-400">保存后会用这对密钥读一次用量</p>
+          <p v-if="!provider" class="text-[11px] text-zinc-400">
+            {{ activePlan?.key === "payg" ? "按量付费不需要填；切到套餐再填才会读用量" : "保存后会用这对密钥读一次用量" }}
+          </p>
           <p v-else-if="planLoading" class="text-[11px] text-zinc-400">套餐用量查询中…</p>
           <div v-else-if="planUsage" class="space-y-2">
             <p v-if="planUsage.needs_access_key" class="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700">

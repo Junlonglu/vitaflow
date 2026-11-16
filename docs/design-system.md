@@ -465,8 +465,9 @@ macOS 落 San Francisco + 苹方；**Windows 用 CDP `CSS.getPlatformFontsForNod
 | 摘要行 | 整行是一个按钮（`aria-expanded`）：第一行 `Server` 图标 + 名称 + 标识徽标 + 状态标记（`未保存的改动` / `未配置密钥`，琥珀色 11px）；第二行缩进 24px 的灰字 = `域名 · N 个子项 · 前三个名称`（超过 3 个补「等」），整体 `truncate`。右侧读数（余额 / 套餐用量）+ 尾部 `ChevronRight`，展开时 `rotate-90` |
 | 收起/展开 | 收起 = 只留摘要行，表单 `v-if` 不渲染（DOM 里没有输入框）× **收起即放弃草稿**；展开态由父级 `expanded` 决定，**Boolean prop 缺席会被 Vue 转成 `false`**，新增卡要显式传 `true` |
 | 一次只开一张 | 父级持 `openKey`；点另一行、点「新增」、复制、收起自己都要过同一道 `requestOpen()`。当前卡有未保存改动时挂起意图并弹 `ConfirmDialog`（「放弃未保存的改动？」/ `放弃改动` · `继续编辑`），确认后才切换 |
-| 顺序 | 身份（名称/ID）→ **密钥** → **端点** → 子项（模型）→ 用量。端点必须排在子项之前：拉取/测试子项都要用上面刚填的地址与密钥，顺序颠倒会让操作者回头找。标签写「密钥」不写「账号」——它就是一个 API Key，不是登录凭据 |
-| 用量凭证 | **只对识别出套餐的厂商渲染**（火山方舟 Coding/Agent Plan、阿里百炼与腾讯云 Token Plan），字段名按各家叫法：火山方舟 `AccessKey ID` / `Secret Access Key`，阿里百炼 `AccessKey ID` / `AccessKey Secret`，腾讯云 `SecretId` / `SecretKey`；一句提示写清「只用来读套餐用量，不参与推理」。非套餐厂商的卡片里**不出现这一块**，也不再有「高级」折叠（原来的通用「套餐账号钥匙」是所有卡都挂着两个用不上的框） |
+| 顺序 | 身份（名称/ID）→ **密钥** → 套餐（仅套餐型厂商）→ **端点** → 子项（模型）→ 用量。端点必须排在子项之前：拉取/测试子项都要用上面刚填的地址与密钥，顺序颠倒会让操作者回头找。标签写「密钥」不写「账号」——它就是一个 API Key，不是登录凭据 |
+| 套餐 | 套餐型厂商在端点上方多一行 `套餐`：分段按钮 `按量付费` / `Coding Plan` / `Agent Plan`（样式同模型标签页，`bg-zinc-100` 底 + 选中项 `bg-white`），右侧灰字写当前那一档的含义。**切套餐就是换 Base URL**——额度只在那一个地址上抵扣，让操作者手抄地址必然抄错。地址认不出来时三档都不高亮，灰字换成「当前地址不是上面三档之一：套餐额度不会抵扣，按量计费照常扣」 |
+| 用量凭证 | **按厂商渲染**（火山方舟 `ark.*.volces.com` 任意路径、阿里百炼 `token-plan.*`、腾讯云 `tencentmaas.com/plan`），字段名按各家叫法：火山 `AccessKey ID` / `Secret Access Key`，阿里 `AccessKey ID` / `AccessKey Secret`，腾讯 `SecretId` / `SecretKey`。火山的**按量付费也算在内**——同一个控制台同一对密钥，只是那时读不到套餐额度，标题写「云账号密钥」、提示写明「用不上，切到套餐才用它读额度」，别让人以为填了就有数。非这类厂商的卡片里**不出现这一块**，也没有「高级」折叠 |
 | 标签轨 | 两列栅格 `grid-cols-[56px_minmax(0,1fr)] items-start gap-3`；标签 `pt-2 text-xs font-medium text-zinc-500`，内容列自成一列，长错误/说明缩进在同一列 |
 | 控件 | 行内输入统一 `h-10 rounded-lg`；密集子面板（模型资料）可降到 `h-9`，同面板内保持一致 |
 | 子项多选 | 两个标签页写「已勾选 N」与「所有模型」——**勾选就是 Agent 可见集合**，不要起「已接入 / 供应商列表」这类要猜意思的名字；一行提示写明「只有已勾选的会出现在对话选型里」。芯片：选中 = `rounded-md border-zinc-300 bg-zinc-100 text-zinc-900` + `Check`，未选 = `border-zinc-200 bg-white text-zinc-500`。**不用胶囊**（§0-12） |
@@ -1401,7 +1402,7 @@ VITAFLOW_TOKEN=<jwt> backend/.venv/Scripts/python.exe scripts/audit/regression.p
 - **资料从哪来**：`POST/GET /v1/catalog/*remote-models` 拉完上游 id 后调 `withModelMetadata()`——用 `fetchModelsDev()` 拉公开目录，把 id 映射成临时 `CatalogProvider` 交给 `enrichProviderFromModelsDev()`，再把 `contextWindow / maxTokens / input` 塞回响应。models.dev 不可用时**静默返回 id 列表**（补全是附加信息，不能挡住拉列表本身）。
 - **匹配键的选择**：已保存的服务商直接用 `provider_key`；新建卡还没有 key，用 `guessModelsDevKey(baseUrl)`（`modelsdev.ts` 里一张固定的域名表：`deepseek.com → deepseek`、`bigmodel.cn → zhipuai`、`moonshot.cn → moonshotai`、`volces.com → volcengine`、`aliyuncs.com → alibaba` …，兜底取主机名里第一个不是 `api/www/open` 的段）。**故意不做模糊匹配**——上下文窗口填错会让 pi 的自动压缩行为失常。
 - **覆盖而不是只填空白**：勾选时 `draftFor(id)` 直接取上游资料建草稿；`loadRemote()` 成功后 `applyRemoteMetadata()` 把资料盖到已勾选的模型上，并 toast 告知覆盖了几个。写盘仍要点保存，所以「拉错了」点取消即可回滚。
-- **厂商判据不要在前端另写一套**：已保存的记录用后端返回的 `plan_vendor`（`detectPlan()` 的结论）；只有新建卡（还没保存）才用本地 `detectPlanVendor(baseUrl)` 兜底，判据与 `planusage.ts` 的 `volcPlanOf / aliPlanSite / tencentPlanRegion` 对齐。
+- **厂商判据不要在前端另写一套**：已保存的记录用后端返回的 `plan_vendor`（`detectPlan()` 的结论）；只有新建卡（还没保存）才用本地 `detectPlanVendor(baseUrl)` 兜底，判据与 `planusage.ts` 的 `volcPlanOf / aliPlanSite / tencentPlanRegion` 对齐。（§6.31 调整：厂商与套餐要分开判——火山改成 `ark.*.volces.com` 就算这家（按量付费也要显示凭证块），套餐再按路径细分；`plan_vendor` 只在套餐地址上才有值，拿它当「要不要显示凭证」的唯一判据会让按量付费的卡整块消失）
 - **删掉折叠而不是条件渲染折叠里的内容**：「高级」原本装了两件事（凭证 + models.dev 补全），凭证要按厂商条件渲染、补全属于模型资料，两件事都不该待在同一个折叠里。折叠一空就把它删了。
 
 #### ③ 实测（真后端 + Playwright，1440/900）
@@ -1473,6 +1474,52 @@ VITAFLOW_TOKEN=<jwt> backend/.venv/Scripts/python.exe scripts/audit/regression.p
 
 ---
 
+### 6.31 火山方舟按套餐分地址（2026-11-16）
+
+用户贴了 magpie 的火山方舟卡与我们的卡对比：「火山方舟有不同的套餐，对应着不同的地址，当前的只有一种，且没有 AccessKey ID Secret Access Key」。
+
+#### ① 差在哪
+
+火山的订阅不是一个入口：Coding Plan、Agent Plan、按量付费各有一个 Base URL，**额度只在那一个地址上抵扣**。官方文档原话是「请勿使用 `/api/v3`：该 Base URL 不会消耗您的 Coding Plan 额度，而是会产生额外费用」。我们的预设只有一个 `/api/v3`，等于把套餐用户推向按量计费。
+
+第二个问题更隐蔽：`accessKeySpec` 的判据是 `props.provider?.plan_vendor ?? detectPlanVendor(base_url)`，而 `detectPlanVendor` 只认 `/api/coding/` 与 `/api/plan/`。按量付费地址 → 认不出 → **整块凭证不渲染**。于是用户看到的火山卡里根本没有那两个框，也就无从填。
+
+#### ② 改法
+
+| 位置 | 改前 | 改后 |
+| --- | --- | --- |
+| 端点 | 一个输入框，地址靠手抄 | 上方多一行 `套餐`：`按量付费` / `Coding Plan` / `Agent Plan`，点了直接换 Base URL |
+| 判据 | 路径前缀（`/api/coding`、`/api/plan`） | 地址说话：`ark.<region>.volces.com` 出现套餐行；路径认套餐；认不出时三档不高亮 + 灰字提醒「套餐额度不会抵扣」 |
+| 凭证 | 只对套餐地址渲染 | 按厂商渲染（火山任意路径，含按量付费） |
+| 标题 | 固定「套餐用量」 | 跟着套餐走：`Coding Plan 用量` / `Agent Plan 用量`；按量付费写「云账号密钥」 |
+| 摘要行 | 只有 `key` 徽标 | 非按量付费时追加套餐徽标（同名域名下三家火山在收起状态也能分开） |
+
+地址表（与火山文档的 OpenAI 兼容协议一列一致，也对应 `planusage.ts` 的 `volcPlanOf()`）：
+
+```
+按量付费    https://ark.cn-beijing.volces.com/api/v3
+Coding Plan https://ark.cn-beijing.volces.com/api/coding/v3
+Agent Plan  https://ark.cn-beijing.volces.com/api/plan/v3
+```
+
+#### ③ 为什么不让操作者自己填地址
+
+地址只差一个路径段，抄错不报错——接口照样响应，只是悄悄按量计费。这种「静默扣错钱」的失败模式在后台里必须被消灭掉，所以套餐做成按钮而不是下拉里的提示文字。反过来若用户手填了别的路径（比如自建代理），三档都不高亮、灰字写清后果，不硬套一档骗他。
+
+#### ④ 实测
+
+- 新建卡点「火山方舟」→ 套餐行出现、按量付费高亮、`AccessKey ID` / `Secret Access Key` 两个框在（改前完全没有）；点 Coding Plan → 地址变 `/api/coding/v3`、说明变「额度只在这个地址抵扣」，用量标题变「Coding Plan 用量」。
+- `POST /admin/ai-catalog/providers` 建档（`/api/coding/v3` + 一对测试密钥）→ 目录返回 `plan_vendor=volcengine`、`plan_label=Coding Plan`、`has_access_key=true`；`PUT` 改成 `/api/plan/v3` → `plan_label` 变 `Agent Plan`，`GET plan-usage` 走的是 `GetAFPUsage` 而不是 `GetCodingPlanUsage`（假密钥回 `InvalidAccessKey`，说明链路选对了接口）。
+- 手填 `/api/other` → 三档都不选中，灰字切到「当前地址不是上面三档之一」。
+- 暗色 / 1440 下无溢出；测试服务商已删除，目录回到只剩 `deepseek`。
+
+#### ⑤ 没做的
+
+- **多协议端点并列**（magpie 会把 OpenAI / Responses / Anthropic 三个地址都列出来）：本项目 provider 的 `api` 固定 `openai-completions`，列出用不上的地址只会误导。等真要接 Anthropic 协议时连 `api` 字段一起做。
+- **按套餐过滤模型**：Coding / Agent Plan 支持的模型清单不同，现在是切完套餐后点「重新获取」自己看；不做硬编码白名单（厂商随时改）。
+
+---
+
 ## 7. 规范覆盖清单（全部收口）
 
 样式（颜色/圆角/阴影/层级）、字体、动效、间距密度、主题这六层已先行成文。2026-11-15 把下表原先「凭感觉」的八项维度逐项补齐，**清单已清空**；下表保留每项收口结论，供写新界面时反查：
@@ -1497,8 +1544,9 @@ VITAFLOW_TOKEN=<jwt> backend/.venv/Scripts/python.exe scripts/audit/regression.p
 | ~~**服务商列表密度**~~ | ✅ 已收口（§6.28）：每张卡收成一行摘要（域名 · 子项数 · 前三个子项名 + 余额/用量），点开才展开成表单，一次只开一张；收起/切换前确认丢弃草稿，保存后自动收起 | — |
 | ~~**接入卡用词与字段归位**~~ | ✅ 已收口（§6.29）：「密钥」不再叫「账号」；子项标签页写「已勾选 / 所有模型」；拉列表即带回 models.dev 资料并覆盖手填；「高级」折叠删除，套餐用量凭证只在对应厂商出现且字段名按各家叫法；单模型连通测试移除 | — |
 | ~~**模型策略改按模型扣点**~~ | ✅ 已收口（§6.30）：`model_ref` 唯一（0041 迁移合并历史重复行），定价表按目录自动成行，行内填起扣/输入/输出 + 上架/默认，整表一次写盘；顺带修掉「非默认模型的自定义价格不生效」 | — |
+| ~~**火山方舟按套餐分地址**~~ | ✅ 已收口（§6.31）：接入卡多一行「套餐」三档，点了直接换 Base URL（Coding `/api/coding/v3`、Agent `/api/plan/v3`、按量 `/api/v3`）；云账号密钥改为按厂商渲染，按量付费也可见并在提示里说明用不上 | — |
 
-收口章节索引：键盘焦点 §6.7、三态 §6.8、文案 §6.9、命中区 §6.10、暗色模式 §6.11、图标尺寸 §6.12、滚动 §6.13、文本溢出 §6.14、响应式 §6.15、内容行宽 §6.16、拖拽与选区 §6.17、两笔技术债清账 §6.18、交叉态体检 §6.19、回归审计资产化 §6.20、侧栏字形与图标色阶 §6.21、全站字体栈与分组行层级 §6.22、侧栏条目对齐与会话折叠 §6.23、全站 tooltip §6.24、浮层动效与阴影分级 §6.25、服务商接入收成一张卡 §6.26、接入链路对齐 magpie §6.27、服务商列表收成摘要行 §6.28、接入卡用词与字段归位 §6.29、模型策略改按模型扣点 §6.30。
+收口章节索引：键盘焦点 §6.7、三态 §6.8、文案 §6.9、命中区 §6.10、暗色模式 §6.11、图标尺寸 §6.12、滚动 §6.13、文本溢出 §6.14、响应式 §6.15、内容行宽 §6.16、拖拽与选区 §6.17、两笔技术债清账 §6.18、交叉态体检 §6.19、回归审计资产化 §6.20、侧栏字形与图标色阶 §6.21、全站字体栈与分组行层级 §6.22、侧栏条目对齐与会话折叠 §6.23、全站 tooltip §6.24、浮层动效与阴影分级 §6.25、服务商接入收成一张卡 §6.26、接入链路对齐 magpie §6.27、服务商列表收成摘要行 §6.28、接入卡用词与字段归位 §6.29、模型策略改按模型扣点 §6.30、火山方舟按套餐分地址 §6.31。
 
 > 表格前八项是 2026-11-15 逐项补齐的「凭感觉」维度；第九、十项是 §6.21 对照截图后用户确认追加的（§6.22）；随后是用户贴截图追加的侧栏对齐与折叠（§6.23）、tooltip（§6.24）；§6.25 则是用户要求「扫描 WorkBuddy 还有哪些是本项目没有的」之后，从安装包 CSS 与功能词典里比对出来的第一条视觉层缺口。§6.26–§6.30 是同一张接入卡截图引出的连续五轮，最后一轮把后台的「模型策略」整体换成按模型定价。
 

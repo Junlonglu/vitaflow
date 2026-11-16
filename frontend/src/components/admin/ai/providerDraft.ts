@@ -32,6 +32,84 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
 export const PROVIDER_KEY_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/
 export const MODEL_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/
 
+/**
+ * 套餐型厂商：同一家的几档订阅各有一个 Base URL，路径不同、额度也分开算。
+ *
+ * 火山方舟是典型：Coding Plan 与 Agent Plan 的额度**只**在各自地址上抵扣，
+ * 拿 `/api/v3` 调会按量计费；反过来按量付费的账号也不该被引导去填套餐密钥。
+ * 地址与火山官方文档一致（OpenAI 兼容协议那一列），ai-service 的
+ * `volcPlanOf()` 按同一套路径前缀判套餐，两边必须同步改。
+ */
+export type ProviderPlanKey = "payg" | "coding" | "agent"
+
+export interface ProviderPlan {
+  key: ProviderPlanKey
+  label: string
+  base_url: string
+  /** 选中套餐后写进端点提示行的一句话。 */
+  note: string
+}
+
+export const PROVIDER_PLANS: Record<string, ProviderPlan[]> = {
+  volcengine: [
+    {
+      key: "payg",
+      label: "按量付费",
+      base_url: "https://ark.cn-beijing.volces.com/api/v3",
+      note: "按量付费地址：用多少扣多少，任意方舟 API Key 都能用",
+    },
+    {
+      key: "coding",
+      label: "Coding Plan",
+      base_url: "https://ark.cn-beijing.volces.com/api/coding/v3",
+      note: "Coding Plan 额度只在这个地址抵扣；换回 /api/v3 会改成按量计费",
+    },
+    {
+      key: "agent",
+      label: "Agent Plan",
+      base_url: "https://ark.cn-beijing.volces.com/api/plan/v3",
+      note: "Agent Plan 要专属 API Key，普通方舟 Key 用不了；额度只在这个地址抵扣",
+    },
+  ],
+}
+
+function arkHost(url: string): string {
+  let parsed: URL
+  try {
+    parsed = new URL((url || "").trim())
+  } catch {
+    return ""
+  }
+  const host = parsed.hostname.toLowerCase()
+  return host.startsWith("ark.") && host.endsWith(".volces.com") ? host : ""
+}
+
+/** 这家的地址是否属于套餐型厂商（火山方舟）。 */
+export function plansFor(baseUrl: string): ProviderPlan[] | null {
+  return arkHost(baseUrl) ? PROVIDER_PLANS.volcengine : null
+}
+
+/**
+ * 地址 → 当前套餐；认不出来返回 null（用户手填了别的路径，不硬套一档）。
+ *
+ * 只看路径前缀，因为 region 会变（cn-beijing / ap-southeast），而
+ * `/api/coding/v3`、`/api/plan`、`/api/coding` 这几种写法都要认。
+ */
+export function arkPlanOf(baseUrl: string): ProviderPlan | null {
+  if (!arkHost(baseUrl)) return null
+  let path: string
+  try {
+    path = new URL((baseUrl || "").trim()).pathname.toLowerCase()
+  } catch {
+    return null
+  }
+  const plans = PROVIDER_PLANS.volcengine
+  if (path.startsWith("/api/coding")) return plans.find((plan) => plan.key === "coding") ?? null
+  if (path.startsWith("/api/plan")) return plans.find((plan) => plan.key === "agent") ?? null
+  if (path.startsWith("/api/v3")) return plans.find((plan) => plan.key === "payg") ?? null
+  return null
+}
+
 /** 已保存的服务商不会回显密钥，草稿只表达「这次要怎么写」。 */
 export type KeyMode = "keep" | "env" | "plain"
 

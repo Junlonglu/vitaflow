@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 import type { AdminCatalogProvider } from "@/api/admin"
 import {
+  PROVIDER_PLANS,
+  arkPlanOf,
   buildProviderSavePlan,
   createProviderDraft,
   emptyModelDraft,
@@ -8,6 +10,7 @@ import {
   groupUsingModel,
   hasRemoteMeta,
   parsePositiveInt,
+  plansFor,
   remoteModelDraft,
   type ProviderDraft,
 } from "@/components/admin/ai/providerDraft"
@@ -203,5 +206,43 @@ describe("小工具", () => {
       max_tokens: 393216,
       input: ["text", "image"],
     })
+  })
+})
+
+describe("火山方舟套餐", () => {
+  it("三档套餐各有自己的地址，且都在 ark 域名下", () => {
+    const plans = plansFor("https://ark.cn-beijing.volces.com/api/v3")
+    expect(plans?.map((plan) => plan.key)).toEqual(["payg", "coding", "agent"])
+    expect(plans?.map((plan) => plan.base_url)).toEqual([
+      "https://ark.cn-beijing.volces.com/api/v3",
+      "https://ark.cn-beijing.volces.com/api/coding/v3",
+      "https://ark.cn-beijing.volces.com/api/plan/v3",
+    ])
+  })
+
+  it("按路径认套餐，带尾斜杠也认", () => {
+    expect(arkPlanOf("https://ark.cn-beijing.volces.com/api/v3")?.key).toBe("payg")
+    expect(arkPlanOf("https://ark.cn-beijing.volces.com/api/coding/v3")?.key).toBe("coding")
+    expect(arkPlanOf("https://ark.cn-beijing.volces.com/api/coding/")?.key).toBe("coding")
+    expect(arkPlanOf("https://ark.cn-beijing.volces.com/api/plan")?.key).toBe("agent")
+    expect(arkPlanOf("https://ark.cn-beijing.volces.com/api/plan/v3/")?.key).toBe("agent")
+  })
+
+  it("region 会变，判据只看 ark.<region>.volces.com", () => {
+    expect(arkPlanOf("https://ark.ap-southeast.volces.com/api/coding/v3")?.key).toBe("coding")
+  })
+
+  it("非火山域名不套套餐，也不误判成按量付费", () => {
+    expect(plansFor("https://api.deepseek.com")).toBeNull()
+    expect(arkPlanOf("https://api.deepseek.com/api/v3")).toBeNull()
+    // 火山域名但路径是自定义的：有套餐 tab，但没有哪一档被选中
+    expect(plansFor("https://ark.cn-beijing.volces.com/api/other")).not.toBeNull()
+    expect(arkPlanOf("https://ark.cn-beijing.volces.com/api/other")).toBeNull()
+  })
+
+  it("地址是空串或非法 URL 时安静返回 null", () => {
+    expect(plansFor("")).toBeNull()
+    expect(arkPlanOf("ark.cn-beijing.volces.com/api/coding/v3")).toBeNull()
+    expect(PROVIDER_PLANS.volcengine).toHaveLength(3)
   })
 })

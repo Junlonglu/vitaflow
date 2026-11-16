@@ -91,9 +91,16 @@ def _file_url(object_name: str) -> str:
 
 def _stream_cache_headers(object_name: str) -> dict[str, str]:
     safe_etag = object_name.replace('"', "")
+    # 私有对象（对话图片）是「先鉴权再返回」的响应。带 public 出去，中间任何
+    # 共享缓存/CDN 都可能把这一份发给下一个没带令牌的请求，等于绕过上面的
+    # 归属校验，所以这里降级成 private + no-store。
+    cache_control = "private, max-age=0, no-store" if is_private_object_name(object_name) else CACHE_CONTROL
     return {
-        "Cache-Control": CACHE_CONTROL,
+        "Cache-Control": cache_control,
         "ETag": f'"{safe_etag}"',
+        # 存的是用户上传的字节，类型只按上传时声明的 content_type 回放；
+        # 禁掉浏览器嗅探，避免「声明 image/png 的 HTML」被当页面执行。
+        "X-Content-Type-Options": "nosniff",
     }
 
 

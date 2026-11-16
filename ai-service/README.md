@@ -60,7 +60,7 @@ FastAPI 侧按 `pi_model_ref` 反查 `AiModelConfig` 取该模型的 chat 计费
 
 | 功能 | 端点 | 说明 |
 |------|------|------|
-| 获取上游模型 | `POST /v1/catalog/remote-models`（卡片里填的地址/密钥，空值回落到 `provider_key` 已存的那份）· `GET /v1/catalog/providers/:key/remote-models`（按已存配置） | 拉上游 `/v1/models`，勾选后随服务商一起提交，**不需要先保存服务商** |
+| 获取上游模型 | `POST /v1/catalog/remote-models`（卡片里填的地址/密钥，空值回落到 `provider_key` 已存的那份）· `GET /v1/catalog/providers/:key/remote-models`（按已存配置） | 拉上游 `/v1/models`，并用 models.dev 补上 `context_window` / `max_tokens` / `input`（资料库不可用时只返回 id）；勾选后随服务商一起提交，**不需要先保存服务商** |
 | 保存服务商 | `POST/PUT /v1/catalog/providers`（body 可带 `models { added, removed, patches }`） | 服务商与模型增删改在同一次 `mutateCatalog` 落盘，不会出现「服务商建好了模型没进来」 |
 | 补全模型资料 | `POST /v1/catalog/providers/:key/sync-dev` | 从 models.dev 填充上下文窗口/最大输出/多模态/价格（**只填空白，不覆盖手填值**）；服务商标识用 models.dev 官方 id（如 `deepseek`）即可匹配 |
 | 测试连通性 | `POST /v1/catalog/providers/:key/probe` | 16-token 最小请求，返回时延或错误 |

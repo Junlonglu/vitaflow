@@ -13,17 +13,19 @@ import FieldTip from "@/components/ui/tooltip/FieldTip.vue"
 import AdminShell from "@/components/admin/AdminShell.vue"
 import AdminDashboardPanel from "@/components/admin/AdminDashboardPanel.vue"
 import AdminUsersPanel from "@/components/admin/AdminUsersPanel.vue"
+import AdminResumesPanel from "@/components/admin/AdminResumesPanel.vue"
+import AdminExportsPanel from "@/components/admin/AdminExportsPanel.vue"
 import AnnouncementManager from "@/components/admin/AnnouncementManager.vue"
 import AiSettingsManager from "@/components/admin/AiSettingsManager.vue"
 import RichTextEditor from "@/components/admin/RichTextEditor.vue"
 import TemplatePreview from "@/components/templates/TemplatePreview.vue"
 import type { EChartsOption } from "echarts"
 import {
-  getAdminAiTasksApi, getAdminDashboardApi, getAdminExportsApi, getAdminFeedbacksApi, getAdminResumesApi,
+  getAdminAiTasksApi, getAdminDashboardApi, getAdminFeedbacksApi,
   getAdminAiConfigsApi, getAdminFlowPointTransactionsApi, getAdminResumeStarterIndustriesApi, getAdminResumeStartersApi, getAdminSettingsApi, getAdminTemplatesApi,
   revokeAllUsersFlowPointsGrantApi, sendAdminFeedbackEmailApi, updateAdminFeedbackApi, updateAdminResumeStarterApi, updateAdminSettingsApi, updateAdminTemplateApi,
   createAdminResumeStarterApi, deleteAdminResumeStarterApi,
-  type AdminAiConfig, type AdminAiTask, type AdminExport, type AdminFeedback, type AdminFlowPointTransaction, type AdminResume, type AdminResumeStarter, type AdminResumeStarterIndustry, type AdminTemplate,
+  type AdminAiConfig, type AdminAiTask, type AdminFeedback, type AdminFlowPointTransaction, type AdminResumeStarter, type AdminResumeStarterIndustry, type AdminTemplate,
   type DashboardData, type PageData,
 } from "@/api/admin"
 import { sanitizeFeedbackHtml } from "@/lib/sanitize"
@@ -57,9 +59,7 @@ const starterIndustryFilter = ref("")
 const pageSize = ref(20)
 const otherModelFilterValue = "__other__"
 const dashboard = ref<DashboardData | null>(null)
-const resumes = ref<PageData<AdminResume>>({ items: [], total: 0, page: 1, page_size: 20 })
 const aiTasks = ref<PageData<AdminAiTask>>({ items: [], total: 0, page: 1, page_size: 20 })
-const exports = ref<PageData<AdminExport>>({ items: [], total: 0, page: 1, page_size: 20 })
 const templates = ref<PageData<AdminTemplate>>({ items: [], total: 0, page: 1, page_size: 20 })
 const resumeStarters = ref<PageData<AdminResumeStarter>>({ items: [], total: 0, page: 1, page_size: 20 })
 const starterIndustries = ref<AdminResumeStarterIndustry[]>([])
@@ -118,11 +118,9 @@ const navItems = navGroups.flatMap((group) => group.items)
 
 const currentTitle = computed(() => navItems.find((item) => item.id === section.value)?.label || "管理后台")
 const currentPage = computed(() => {
-  if (section.value === "resumes") return resumes.value
   if (section.value === "ai") return aiTasks.value
   if (section.value === "point-transactions") return pointTransactions.value
   if (section.value === "feedbacks") return feedbacks.value
-  if (section.value === "exports") return exports.value
   if (section.value === "templates") return templates.value
   if (section.value === "industry-templates") return resumeStarters.value
   return null
@@ -239,10 +237,6 @@ async function load(page = 1) {
   try {
     if (["ai", "point-transactions"].includes(section.value)) await ensureAiModelOptions()
     if (section.value === "dashboard") dashboard.value = await getAdminDashboardApi()
-    if (section.value === "resumes") {
-      await ensureTemplateOptions()
-      resumes.value = await getAdminResumesApi({ page, page_size: pageSize.value, keyword: keyword.value })
-    }
     if (section.value === "ai") aiTasks.value = await getAdminAiTasksApi({ page, page_size: pageSize.value, status: statusFilter.value || undefined, task_type: typeFilter.value || undefined, model: modelFilter.value || undefined })
     if (section.value === "point-transactions") pointTransactions.value = await getAdminFlowPointTransactionsApi({ page, page_size: pageSize.value, keyword: keyword.value, direction: statusFilter.value || undefined, feature_type: typeFilter.value || undefined, model: modelFilter.value || undefined })
     if (section.value === "system-settings") {
@@ -256,7 +250,6 @@ async function load(page = 1) {
       }
     }
     if (section.value === "feedbacks") feedbacks.value = await getAdminFeedbacksApi({ page, page_size: pageSize.value, status: statusFilter.value || undefined })
-    if (section.value === "exports") exports.value = await getAdminExportsApi({ page, page_size: pageSize.value, status: statusFilter.value || undefined })
     if (section.value === "templates") templates.value = await getAdminTemplatesApi({ page, page_size: pageSize.value })
     if (section.value === "industry-templates") {
       if (!starterIndustries.value.length) {
@@ -419,11 +412,6 @@ const starterForm = ref({
 })
 const showStarterDeleteConfirm = ref(false)
 const starterDeleteTarget = ref<AdminResumeStarter | null>(null)
-
-function templateNameById(templateId?: string) {
-  if (!templateId) return "未设置"
-  return templateOptions.value.find((item) => item.template_id === templateId)?.name || templateId
-}
 
 function starterModuleSummary(item: AdminResumeStarter) {
   const modules = Array.isArray(item.content?.modules) ? item.content.modules : []
@@ -906,17 +894,19 @@ onMounted(() => load())
         </template>
 
         <AdminUsersPanel v-else-if="section === 'users'" />
+        <AdminResumesPanel v-else-if="section === 'resumes'" />
+        <AdminExportsPanel v-else-if="section === 'exports'" />
 
         <template v-else>
-          <div v-if="['resumes', 'ai', 'point-transactions', 'feedbacks', 'exports', 'industry-templates'].includes(section)" class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div v-if="['resumes', 'point-transactions', 'industry-templates'].includes(section)" class="relative w-full sm:w-72">
+          <div v-if="['ai', 'point-transactions', 'feedbacks', 'industry-templates'].includes(section)" class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div v-if="['point-transactions', 'industry-templates'].includes(section)" class="relative w-full sm:w-72">
               <Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
               <input v-model="keyword" class="h-10 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-zinc-400" :placeholder="section === 'point-transactions' ? '搜索用户、邮箱或说明' : section === 'industry-templates' ? '搜索行业、岗位或 ID' : '搜索用户名、邮箱或标题'" @keyup.enter="load(1)" />
             </div>
             <div v-if="section === 'industry-templates'" class="w-full sm:w-44">
               <Select v-model="starterIndustryFilter" :options="starterIndustryFilterOptions" placeholder="全部行业" class="h-10 w-full rounded-lg" @change="load(1)" />
             </div>
-            <div v-if="['ai', 'point-transactions', 'feedbacks', 'exports'].includes(section)" class="w-full sm:w-32">
+            <div v-if="['ai', 'point-transactions', 'feedbacks'].includes(section)" class="w-full sm:w-32">
               <Select v-model="statusFilter" :options="statusOptions" placeholder="全部状态" class="h-10 w-full rounded-lg" @change="load(1)" />
             </div>
             <div v-if="['ai', 'point-transactions'].includes(section)" class="w-full sm:w-40">
@@ -925,15 +915,13 @@ onMounted(() => load())
             <div v-if="['ai', 'point-transactions'].includes(section)" class="w-full sm:w-44">
               <Select v-model="modelFilter" :options="modelFilterOptions" placeholder="全部模型" class="h-10 w-full rounded-lg" @change="load(1)" />
             </div>
-            <Button v-if="['resumes', 'point-transactions', 'industry-templates'].includes(section)" class="w-full sm:w-auto" @click="load(1)">查询</Button>
+            <Button v-if="['point-transactions', 'industry-templates'].includes(section)" class="w-full sm:w-auto" @click="load(1)">查询</Button>
             <Button v-if="section === 'industry-templates'" variant="outline" class="w-full sm:w-auto" @click="openStarterCreator"><Plus class="h-4 w-4" />新增岗位预设</Button>
           </div>
 
           <div class="overflow-hidden rounded-xl border border-zinc-200 bg-white">
             <div v-if="loading" class="flex h-64 items-center justify-center text-sm text-zinc-400"><RefreshCw class="mr-2 h-4 w-4 animate-spin" />正在加载</div>
             <div v-else class="overflow-x-auto">
-              <table v-if="section === 'resumes'" class="w-full min-w-[800px] text-left text-sm"><thead><tr class="border-b bg-zinc-50 text-xs text-zinc-500"><th class="px-5 py-3">简历</th><th class="px-5 py-3">所属用户</th><th class="px-5 py-3">模板</th><th class="px-5 py-3">语言</th><th class="px-5 py-3">更新时间</th></tr></thead><tbody><tr v-for="item in resumes.items" :key="item.id" class="border-b border-zinc-100 last:border-0"><td class="px-5 py-4"><p class="font-medium">{{ item.title }}</p><p class="text-xs text-zinc-400">#{{ item.id }}</p></td><td class="px-5 py-4"><p>{{ item.username }}</p><p class="text-xs text-zinc-400">{{ item.email }}</p></td><td class="px-5 py-4"><p class="font-medium text-zinc-900">{{ templateNameById(item.template_id) }}</p><p class="mt-0.5 text-xs text-zinc-400">{{ item.template_id }}</p></td><td class="px-5 py-4">{{ {'zh-CN': '简体中文', 'en': '英文'}[item.language] || item.language }}</td><td class="px-5 py-4 text-zinc-500">{{ formatDate(item.update_time) }}</td></tr></tbody></table>
-
               <table v-if="section === 'ai'" class="w-full min-w-[1200px] text-left text-sm"><thead><tr class="border-b bg-zinc-50 text-xs whitespace-nowrap text-zinc-500"><th class="px-5 py-3">AI 功能</th><th class="px-5 py-3">具体模块</th><th class="px-5 py-3">模型</th><th class="px-5 py-3">用户</th><th class="px-5 py-3">扣点 / Token</th><th class="px-5 py-3">简历 ID</th><th class="px-5 py-3">状态</th><th class="px-5 py-3">时间</th><th class="px-5 py-3">错误</th></tr></thead><tbody><tr v-for="item in aiTasks.items" :key="item.id" class="border-b border-zinc-100 last:border-0"><td class="px-5 py-4 font-medium whitespace-nowrap">{{ item.task_type === 'ai_chat' ? featureText(item.feature) : taskTypeText(item.task_type) }}</td><td class="px-5 py-4 text-zinc-500 whitespace-nowrap">{{ item.task_type === 'ai_chat' && item.input_data?.tool_calls ? `${item.input_data.tool_calls} 步工具` : item.task_type === 'section_optimize' ? sectionText(item.input_data?.section_type) : '—' }}</td><td class="px-5 py-4 whitespace-nowrap"><p class="font-medium text-zinc-800">{{ modelDisplay(item).display || '—' }}</p><p v-if="modelDisplay(item).raw" class="mt-0.5 text-[11px] text-zinc-400">{{ modelDisplay(item).raw }}</p></td><td class="px-5 py-4 whitespace-nowrap">{{ item.username }}</td><td class="px-5 py-4 whitespace-nowrap"><span class="whitespace-nowrap rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700">{{ item.points_used || 0 }} 点</span><p v-if="tokenUsage(item).total" class="mt-1 whitespace-nowrap text-[11px] text-zinc-500">{{ formatTokenNumber(tokenUsage(item).total) }} tokens</p><p v-if="tokenUsage(item).total" class="mt-0.5 whitespace-nowrap text-[11px] text-zinc-400">入 {{ formatTokenNumber(tokenUsage(item).input) }} · 出 {{ formatTokenNumber(tokenUsage(item).output) }}</p></td><td class="px-5 py-4 text-zinc-500">{{ item.resume_id || '—' }}</td><td class="px-5 py-4 whitespace-nowrap"><span class="whitespace-nowrap rounded-full px-2 py-1 text-xs ring-1 ring-inset" :class="statusClass(item.status)">{{ statusText(item.status) }}</span></td><td class="px-5 py-4 text-zinc-500 whitespace-nowrap">{{ formatDate(item.create_time) }}</td><td class="max-w-sm truncate px-5 py-4 text-xs text-red-600" :title="item.error_message">{{ item.error_message || '—' }}</td></tr></tbody></table>
 
               <table v-if="section === 'point-transactions'" class="w-full min-w-[1240px] text-left text-sm">
@@ -969,8 +957,6 @@ onMounted(() => load())
               </table>
 
               <table v-if="section === 'feedbacks'" class="w-full min-w-[980px] text-left text-sm"><thead><tr class="border-b bg-zinc-50 text-xs text-zinc-500"><th class="px-5 py-3">所属模块</th><th class="px-5 py-3">用户</th><th class="px-5 py-3">联系方式</th><th class="px-5 py-3">状态</th><th class="px-5 py-3">时间</th><th class="px-5 py-3 text-right">操作</th></tr></thead><tbody><tr v-for="item in feedbacks.items" :key="item.id" class="border-b border-zinc-100 last:border-0"><td class="px-5 py-4"><p class="font-medium text-zinc-900">{{ item.category || '意见反馈' }}</p></td><td class="px-5 py-4"><p>{{ item.username }}</p><p class="mt-0.5 text-xs text-zinc-400">{{ item.email }}</p></td><td class="px-5 py-4 text-zinc-500">{{ item.contact || '—' }}</td><td class="px-5 py-4"><div class="flex flex-wrap items-center gap-2"><span class="rounded-full px-2 py-1 text-xs ring-1 ring-inset" :class="statusClass(item.status === 'resolved' ? 'success' : item.status === 'closed' ? 'disabled' : 'pending')">{{ feedbackStatusText(item.status) }}</span><span v-if="item.admin_reply" class="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">已回复</span></div></td><td class="px-5 py-4 text-zinc-500">{{ formatDate(item.create_time) }}</td><td class="px-5 py-4 text-right"><button class="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 hover:text-zinc-900 active:scale-95" @click="openFeedbackReply(item)">处理</button></td></tr></tbody></table>
-
-              <table v-if="section === 'exports'" class="w-full min-w-[800px] text-left text-sm"><thead><tr class="border-b bg-zinc-50 text-xs text-zinc-500"><th class="px-5 py-3">文件</th><th class="px-5 py-3">用户</th><th class="px-5 py-3">格式</th><th class="px-5 py-3">简历 ID</th><th class="px-5 py-3">状态</th><th class="px-5 py-3">时间</th></tr></thead><tbody><tr v-for="item in exports.items" :key="item.id" class="border-b border-zinc-100 last:border-0"><td class="max-w-64 truncate px-5 py-4 font-medium" :title="item.file_name">{{ item.file_name }}</td><td class="px-5 py-4">{{ item.username }}</td><td class="px-5 py-4 uppercase">{{ item.file_type }}</td><td class="px-5 py-4">{{ item.resume_id }}</td><td class="px-5 py-4"><span class="rounded-full px-2 py-1 text-xs ring-1 ring-inset" :class="statusClass(item.status)">{{ statusText(item.status) }}</span></td><td class="px-5 py-4 text-zinc-500">{{ formatDate(item.create_time) }}</td></tr></tbody></table>
 
               <div v-if="section === 'templates'" class="grid gap-5 p-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                 <article v-for="item in templates.items" :key="item.template_id" class="group relative flex flex-col rounded-xl bg-white p-4 border border-zinc-200/60 transition hover:border-zinc-300">

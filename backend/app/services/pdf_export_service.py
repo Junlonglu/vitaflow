@@ -5,10 +5,12 @@ import hashlib
 import importlib.metadata
 import json
 import logging
+from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
 from threading import Lock
 from urllib.parse import unquote, urlparse
+from typing import Iterator
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -30,8 +32,32 @@ PDF_DEPENDENCY_MESSAGE = (
 )
 PDF_CACHE_VERSION = "2026-06-27-1"
 PDF_RESOURCE_TIMEOUT = 3
-_pdf_locks: dict[str, Lock] = {}
+
+
+# 每份简历一把渲染锁：两个人同时导出同一份简历时只渲染一次。
+# 记账用 (锁, 持有+等待人数)，归零就把条目删掉——只放一个 Lock 的话，每份
+# 被导出过的简历都会在进程里永久留一条，长期运行只增不减。
+_pdf_locks: dict[str, tuple[Lock, int]] = {}
 _pdf_locks_guard = Lock()
+
+
+@contextmanager
+def _pdf_lock(key: str) -> Iterator[None]:
+    with _pdf_locks_guard:
+        lock, users = _pdf_locks.get(key, (Lock(), 0))
+        _pdf_locks[key] = (lock, users + 1)
+    lock.acquire()
+    try:
+        yield
+    finally:
+        lock.release()
+        # 计数包含还在等待的人，所以这里读到 1 才代表「没人持有也没人排队」。
+        with _pdf_locks_guard:
+            current, users = _pdf_locks.get(key, (lock, 1))
+            if users <= 1:
+                _pdf_locks.pop(key, None)
+            else:
+                _pdf_locks[key] = (current, users - 1)
 
 # 被拒绝的资源返回 1x1 透明 PNG，而不是抛异常：一张外链头像被挡不该让整份
 # 简历导出失败。WeasyPrint 的 url_fetcher 抛错会中止整个渲染。
@@ -489,15 +515,6 @@ def _cache_path(resume: Resume, renderer: str) -> Path:
     return _cache_dir() / f"resume_{resume.id}_{renderer}_{fingerprint}.pdf"
 
 
-def _get_pdf_lock(key: str) -> Lock:
-    with _pdf_locks_guard:
-        lock = _pdf_locks.get(key)
-        if lock is None:
-            lock = Lock()
-            _pdf_locks[key] = lock
-        return lock
-
-
 def _cleanup_old_cached_pdfs(resume_id: int, keep_path: Path) -> None:
     for path in _cache_dir().glob(f"resume_{resume_id}_*.pdf"):
         if path != keep_path:
@@ -565,7 +582,7 @@ def get_pdf_path(resume: Resume) -> Path:
             return file_path
 
     lock_key = f"resume-{resume.id}"
-    with _get_pdf_lock(lock_key):
+    with _pdf_lock(lock_key):
         for _, file_path in candidates:
             if file_path.exists() and file_path.stat().st_size > 0:
                 return file_path

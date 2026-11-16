@@ -1,8 +1,15 @@
 import axios from "axios"
 import type { ApiResponse } from "@/types/api"
 
+/**
+ * 后端地址的唯一来源。流式接口（fetch + NDJSON）不能走 axios，但必须和
+ * axios 实例用同一个 base，否则漏配 VITE_API_BASE_URL 时会一半打线上、
+ * 一半静默打 127.0.0.1:8000。
+ */
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api"
+
 const request = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api",
+  baseURL: API_BASE_URL,
   timeout: 30000,
 })
 

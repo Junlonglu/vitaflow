@@ -37,4 +37,6 @@ npm test          # vitest 单元测试
 - `components/`：按领域拆分——`editor/`（表单与模块侧栏）、`preview/`（A4 / HTML / PDF 预览）、`ai/`（对话面板、思考过程、变更确认）、`resume/`（列表、创建、导入、分享）、`templates/`（模板缩略预览）、`workspace/`（工作区各面板）、`admin/`、`ui/`（基础控件）
 - `composables/`：有状态逻辑与浏览器能力封装，统一 `useXxx` 命名
 - `stores/`：跨组件共享状态
-- `api/`：每个业务域一个文件，`request.ts` 是统一封装
+- `api/`：每个业务域一个文件，`request.ts` 是统一封装；后端地址只从 `request.ts` 导出的 `API_BASE_URL` 取（流式 fetch 也一样）
+- `utils/`：无副作用的纯函数（`errorText.ts` 统一错误文案口径，中文提示透传、英文传输层报错换兜底文案）
+- `lib/`：带第三方依赖的能力封装（`markdown.ts` 渲染、`sanitize.ts` 富文本白名单）

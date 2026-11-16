@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from "vue"
-import DOMPurify from "dompurify"
 import { useRoute } from "vue-router"
 import WorkspacePage from "@/components/workspace/WorkspacePage.vue"
 import Button from "@/components/ui/button/Button.vue"
@@ -12,6 +11,7 @@ import { changePasswordApi, updateProfileApi } from "@/api/auth"
 import { getMyFeedbacksApi, submitFeedbackApi, type FeedbackItem, type FeedbackPageData } from "@/api/feedback"
 import { useUserStore } from "@/stores/user"
 import { Inbox, Loader2, Lock, MessageSquare, RefreshCw, Send, ShieldCheck, User, X } from "lucide-vue-next"
+import { sanitizeFeedbackHtml } from "@/lib/sanitize"
 import { showGlobalToast } from "@/utils/toast"
 
 const user = useUserStore()
@@ -41,10 +41,6 @@ const feedbackView = ref<"submit" | "history">("submit")
 const myFeedbacks = ref<FeedbackPageData<FeedbackItem>>({ items: [], total: 0, page: 1, page_size: 10 })
 const feedbackDialog = ref<"preview" | "reply" | null>(null)
 const selectedFeedback = ref<FeedbackItem | null>(null)
-
-function sanitizeFeedbackHtml(content?: string | null) {
-  return DOMPurify.sanitize(content || "")
-}
 
 onMounted(async () => {
   if (!user.userInfo) await user.getUserInfo()

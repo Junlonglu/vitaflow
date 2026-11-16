@@ -1,4 +1,5 @@
-import request from "./request"
+import request, { API_BASE_URL } from "./request"
+import { showGlobalToast } from "@/utils/toast"
 
 export type AiChatAttachment = { url: string; name?: string; content_type?: string; object_name?: string }
 export type AiChatModelOption = {
@@ -140,11 +141,9 @@ type StreamCallbacks<T = any> = {
   onThinking?: (text: string) => void
   onTool?: (step: ToolStep) => void
   onResult?: (data: T) => void
+  /** 取消信号：切简历 / 关面板时中断请求，reader 不再往 store 里写。 */
+  signal?: AbortSignal
 }
-
-import { showGlobalToast } from "@/utils/toast"
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api"
 
 /** 已经用全局 toast 提示过的错误：调用方不要再画一条行内错误。 */
 export class SilentStreamError extends Error {
@@ -186,6 +185,7 @@ async function postAiStream<T = any>(path: string, data: any, callbacks: StreamC
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify(data),
+    signal: callbacks.signal,
   })
 
   if (response.status === 401) {

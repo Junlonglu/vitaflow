@@ -16,6 +16,7 @@ import {
   type ProviderPlan,
   type ProviderPreset,
 } from "@/utils/modelProviders"
+import { errorMessage } from "@/utils/errorText"
 import { REASONING_EFFORT_OPTIONS, effortLabel } from "@/utils/reasoningEffort"
 import {
   clearUserAiKeysApi,
@@ -212,10 +213,6 @@ const securityInfo = ref<UserAiSecurityInfo | null>(null)
 const auditLogs = ref<UserAiAuditLog[]>([])
 const clearKeysOpen = ref(false)
 const clearingKeys = ref(false)
-
-function errorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback
-}
 
 function formatAuditTime(value: string | null) {
   if (!value) return "—"

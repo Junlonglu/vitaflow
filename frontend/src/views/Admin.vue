@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue"
-import DOMPurify from "dompurify"
 import {
   Activity, Bot, Download, FileText, LayoutDashboard, LayoutTemplate, Megaphone, DollarSign,
   ArrowDown, ArrowUp, Briefcase, ChevronsUp, ChevronsDown, Eye, EyeOff, Gift, MessageSquare, Plus, RefreshCw, Search, Settings, ShieldCheck, SlidersHorizontal, Ticket, Users, Zap, X,
@@ -27,6 +26,7 @@ import {
   type AdminAiConfig, type AdminAiTask, type AdminExport, type AdminFeedback, type AdminFlowPointTransaction, type AdminResume, type AdminResumeStarter, type AdminResumeStarterIndustry, type AdminTemplate, type AdminUser,
   type DashboardData, type PageData,
 } from "@/api/admin"
+import { sanitizeFeedbackHtml } from "@/lib/sanitize"
 import { showGlobalToast } from "@/utils/toast"
 
 type Section = "dashboard" | "announcements" | "users" | "resumes" | "ai" | "point-transactions" | "ai-models" | "point-rules" | "redeem-codes" | "system-settings" | "feedbacks" | "exports" | "templates" | "industry-templates"
@@ -55,10 +55,6 @@ const starterIndustries = ref<AdminResumeStarterIndustry[]>([])
 const templateOptions = ref<AdminTemplate[]>([])
 const feedbacks = ref<PageData<AdminFeedback>>({ items: [], total: 0, page: 1, page_size: 20 })
 const pointTransactions = ref<PageData<AdminFlowPointTransaction>>({ items: [], total: 0, page: 1, page_size: 20 })
-
-function sanitizeFeedbackHtml(content?: string | null) {
-  return DOMPurify.sanitize(content || "")
-}
 
 const userPointTransactions = ref<PageData<AdminFlowPointTransaction>>({ items: [], total: 0, page: 1, page_size: 10 })
 const aiModelConfigs = ref<AdminAiConfig[]>([])

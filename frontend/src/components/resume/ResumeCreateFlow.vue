@@ -8,6 +8,7 @@ import CreateResumeModal from "@/components/resume/CreateResumeModal.vue"
 import ResumeImportProgress from "@/components/resume/ResumeImportProgress.vue"
 import AiGenerateDialog from "@/components/ai/AiGenerateDialog.vue"
 import { generateResumeStreamApi, getFlowPointSummaryApi, isSilentStreamError, type FlowPointSummary } from "@/api/ai"
+import { errorMessage, isAbortError } from "@/utils/errorText"
 import { listTemplatesApi, type TemplateItem } from "@/api/template"
 import { importResumeFileApi } from "@/api/resume"
 import {
@@ -365,13 +366,27 @@ async function createResume(templateId: string) {
 
 /* ---------- AI 生成 ---------- */
 
+/** 生成中的请求：对话框关闭或组件卸载时中断，别让 reader 继续往已关闭的面板里写。 */
+let generateController: AbortController | null = null
+
+function cancelGenerate() {
+  generateController?.abort()
+  generateController = null
+}
+
+onBeforeUnmount(cancelGenerate)
+
 async function generateResume(payload: any) {
   aiLoading.value = true
   aiError.value = ""
   aiStreamText.value = ""
+  cancelGenerate()
+  generateController = new AbortController()
+  const controller = generateController
   try {
     const result = await generateResumeStreamApi(payload, {
       onDelta: (text) => (aiStreamText.value += text),
+      signal: controller.signal,
     })
     if (payload.template_id) {
       result.template_id = payload.template_id
@@ -381,8 +396,9 @@ async function generateResume(payload: any) {
     showAiCreate.value = false
     emit("created", item.id)
   } catch (error: any) {
-    aiError.value = isSilentStreamError(error) ? "" : error.message || "AI 生成失败"
+    aiError.value = isSilentStreamError(error) || isAbortError(error) ? "" : errorMessage(error, "AI 生成失败")
   } finally {
+    if (generateController === controller) generateController = null
     aiLoading.value = false
     refreshPoints()
   }
@@ -583,7 +599,7 @@ onBeforeUnmount(() => {
           ? 'min-h-0 flex-1 overflow-hidden p-4 sm:p-6 thin-scrollbar'
           : 'min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 thin-scrollbar'
       "
-      @update:open="(value) => (showAiCreate = value)"
+      @update:open="(value) => { showAiCreate = value; if (!value) cancelGenerate() }"
     >
       <template #icon>
         <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700">

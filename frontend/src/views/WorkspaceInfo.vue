@@ -14,6 +14,7 @@ import {
   Upload,
   X,
 } from "lucide-vue-next"
+import { errorMessage } from "@/utils/errorText"
 import { formatRelativeTime } from "@/utils/time"
 import { toPlainText } from "@/utils/text"
 import WorkspacePage from "@/components/workspace/WorkspacePage.vue"
@@ -118,13 +119,6 @@ async function reloadList() {
   } finally {
     loading.value = false
   }
-}
-
-function errorMessage(error: unknown, fallback: string) {
-  const raw = error instanceof Error ? error.message : ""
-  // 接口的中文提示原样透传；axios 的英文传输层报错换成用户能懂的话
-  if (!raw) return fallback
-  return /[\u4e00-\u9fa5]/.test(raw) ? raw : fallback
 }
 
 // ---------------------------------------------------------------------------

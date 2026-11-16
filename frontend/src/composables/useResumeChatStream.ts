@@ -1,4 +1,4 @@
-import { computed, ref, type ComputedRef } from "vue"
+import { computed, onBeforeUnmount, ref, type ComputedRef } from "vue"
 
 import {
   clearResumeChatMessagesApi,
@@ -12,6 +12,7 @@ import {
   type ToolStep,
 } from "@/api/ai"
 import { useChatStore } from "@/stores/chat"
+import { errorMessage, isAbortError } from "@/utils/errorText"
 import type { ChatMessage } from "@/types/chat"
 
 /** 回合种类：首轮发送与重新生成共享同一套流式处理，只有文案与收尾分支不同。 */
@@ -63,6 +64,27 @@ export function useResumeChatStream(options: ResumeChatStreamOptions) {
   const sessionSwitchLock = ref(false)
   /** 本条消息是 /JD优化 触发时，回合结束后需要引导用户另存。 */
   const jdOptimizeArmed = ref(false)
+  /**
+   * 当前正在跑的流式回合。切简历或卸载时中断它：否则 reader 会继续把
+   * 增量事件写进已经换掉的会话/已经销毁的组件。
+   */
+  let activeTurn: AbortController | null = null
+
+  function beginTurn() {
+    // 同一时刻只允许一个回合：旧的先断，避免两路 delta 交错。
+    activeTurn?.abort()
+    const controller = new AbortController()
+    activeTurn = controller
+    return controller
+  }
+
+  /** 中断进行中的回合；状态清理交给调用方（reset 自己会清）。 */
+  function cancelTurn() {
+    activeTurn?.abort()
+    activeTurn = null
+  }
+
+  onBeforeUnmount(cancelTurn)
 
   const activeSessionId = computed(() => chatStore.activeSessionId(options.resumeId.value))
 
@@ -164,7 +186,7 @@ export function useResumeChatStream(options: ResumeChatStreamOptions) {
       loaded.value = true
       jdOptimizeArmed.value = false
     } catch (err: any) {
-      error.value = err.message || "对话记录加载失败"
+      error.value = errorMessage(err, "对话记录加载失败")
     }
   }
 
@@ -184,13 +206,14 @@ export function useResumeChatStream(options: ResumeChatStreamOptions) {
         sessionId = (await chatStore.ensureSession(options.resumeId.value)).id
       } catch (err: any) {
         sessionSwitchLock.value = false
-        error.value = err?.message || "创建对话失败，请重试"
+        error.value = errorMessage(err, "创建对话失败，请重试")
         return
       }
     }
 
     loading.value = true
     error.value = ""
+    const controller = beginTurn()
     if (content.trim().startsWith("/JD优化")) jdOptimizeArmed.value = true
 
     const stamp = Date.now()
@@ -207,23 +230,28 @@ export function useResumeChatStream(options: ResumeChatStreamOptions) {
         model_config_id: options.modelConfigId.value,
         user_model_id: options.userModelId.value,
         session_id: sessionId,
-      }, streamHandlers(assistantIndex))
+      }, { ...streamHandlers(assistantIndex), signal: controller.signal })
       await settleTurn(response, messages.value[assistantIndex], "chat", stamp)
     } catch (err: any) {
+      if (isAbortError(err)) return
       const assistant = messages.value[assistantIndex]
       if (assistant) assistant.streaming = false
       // 一个字都没吐出来就失败：整条气泡撤掉，避免留下一个空白回复。
       if (!assistant?.content) messages.value = messages.value.filter((item) => item.id !== pendingAssistant.id)
-      error.value = isSilentStreamError(err) ? "" : (err.message || "AI 对话失败")
+      error.value = isSilentStreamError(err) ? "" : errorMessage(err, "AI 对话失败")
     } finally {
-      loading.value = false
-      sessionSwitchLock.value = false
-      if (sessionId) {
-        // 会话标题/预览/排序由后端维护（首条消息自动命名），回合结束后同步一次。
-        chatStore.touchSession(options.resumeId.value, sessionId)
-        chatStore.fetchSessions(options.resumeId.value, { force: true }).catch(() => undefined)
+      // 被新一轮或切简历中断时，收尾交给接管方，别覆盖它的状态。
+      if (activeTurn === controller) {
+        activeTurn = null
+        loading.value = false
+        sessionSwitchLock.value = false
+        if (sessionId) {
+          // 会话标题/预览/排序由后端维护（首条消息自动命名），回合结束后同步一次。
+          chatStore.touchSession(options.resumeId.value, sessionId)
+          chatStore.fetchSessions(options.resumeId.value, { force: true }).catch(() => undefined)
+        }
+        options.onTurnEnd(sessionId)
       }
-      options.onTurnEnd(sessionId)
     }
   }
 
@@ -267,6 +295,7 @@ export function useResumeChatStream(options: ResumeChatStreamOptions) {
     options.flushHistory()
     loading.value = true
     error.value = ""
+    const controller = beginTurn()
     if (content.trim().startsWith("/JD优化")) jdOptimizeArmed.value = true
     userMessage.content = content || "请结合我上传的图片分析简历。"
     userMessage.attachments = attachments
@@ -285,18 +314,22 @@ export function useResumeChatStream(options: ResumeChatStreamOptions) {
         model_config_id: options.modelConfigId.value,
         user_model_id: options.userModelId.value,
         session_id: activeSessionId.value,
-      }, streamHandlers(assistantIndex))
+      }, { ...streamHandlers(assistantIndex), signal: controller.signal })
       await settleTurn(response, messages.value[assistantIndex], "regenerate", startedAt)
     } catch (err: any) {
+      if (isAbortError(err)) return
       // 重新生成会截断后续气泡，本地状态已不可信，直接以服务端为准重载。
       await load().catch(() => undefined)
-      error.value = isSilentStreamError(err) ? "" : (err.message || "重新发送失败")
+      error.value = isSilentStreamError(err) ? "" : errorMessage(err, "重新发送失败")
     } finally {
-      loading.value = false
-      if (activeSessionId.value) {
-        chatStore.fetchSessions(options.resumeId.value, { force: true }).catch(() => undefined)
+      if (activeTurn === controller) {
+        activeTurn = null
+        loading.value = false
+        if (activeSessionId.value) {
+          chatStore.fetchSessions(options.resumeId.value, { force: true }).catch(() => undefined)
+        }
+        options.onTurnEnd(activeSessionId.value)
       }
-      options.onTurnEnd(activeSessionId.value)
     }
   }
 
@@ -319,13 +352,16 @@ export function useResumeChatStream(options: ResumeChatStreamOptions) {
       options.onDecisionApplied?.(message, action, response)
     } catch (err: any) {
       message.action_status = previousStatus
-      error.value = err.message || (action === "apply" ? "修改写入失败" : "取消修改失败")
+      error.value = errorMessage(err, action === "apply" ? "修改写入失败" : "取消修改失败")
     } finally {
       decisionLoadingId.value = null
     }
   }
 
   async function clear() {
+    // 清空时先断流：否则被清掉的那条气泡还会继续接收 delta。
+    cancelTurn()
+    loading.value = false
     error.value = ""
     const sessionId = activeSessionId.value
     if (!sessionId) {
@@ -339,7 +375,7 @@ export function useResumeChatStream(options: ResumeChatStreamOptions) {
       loaded.value = true
       chatStore.fetchSessions(options.resumeId.value, { force: true }).catch(() => undefined)
     } catch (err: any) {
-      error.value = err.message || "清除对话记录失败"
+      error.value = errorMessage(err, "清除对话记录失败")
     }
   }
 
@@ -352,12 +388,14 @@ export function useResumeChatStream(options: ResumeChatStreamOptions) {
       messages.value = []
       loaded.value = true
     } catch (err: any) {
-      error.value = err?.message || "新建对话失败，请重试"
+      error.value = errorMessage(err, "新建对话失败，请重试")
     }
   }
 
   /** 切换到另一份简历时清空本地状态（组件不会重新挂载）。 */
   function reset() {
+    // 先断流：否则进行中的回合会把增量写进刚清空的消息列表。
+    cancelTurn()
     messages.value = []
     loading.value = false
     loaded.value = false

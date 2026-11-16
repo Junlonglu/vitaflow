@@ -10,7 +10,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
 
 from redis.exceptions import RedisError
-from sqlalchemy import func, select
+from sqlalchemy import case, func, inspect as sa_inspect, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -296,6 +296,43 @@ def precheck_flow_points(
     return points
 
 
+def _apply_balance_delta(
+    db: Session,
+    user_id: int,
+    delta: Decimal,
+    *,
+    allow_overdraft_to_zero: bool,
+) -> Decimal | None:
+    """把余额变更交给数据库，返回变更后的真实余额；余额不足时返回 None。
+
+    「读余额 → 加减 → 写回」在两个并发回合里会互相覆盖：两边都读到 100，各扣 5，
+    最后只扣了一次。这里改成一条以 DB 当前值为基准的条件 UPDATE——扣费不足时
+    ``rowcount`` 为 0，由调用方决定怎么报错。
+
+    注意调用方**不要**再把结果赋回 ``user.flow_points``：那会在 flush 时用旧值
+    覆盖掉并发事务在这之后写入的余额。
+    """
+    if delta == 0:
+        return point_amount(db.scalar(select(User.flow_points).where(User.id == user_id)))
+
+    raw_new_value = User.flow_points + delta
+    if allow_overdraft_to_zero:
+        # 允许透支到 0：不设 WHERE 条件，余额负数时钳到 0。
+        stmt = update(User).where(User.id == user_id).values(
+            flow_points=case((raw_new_value < 0, POINT_ZERO), else_=raw_new_value)
+        )
+    else:
+        stmt = (
+            update(User)
+            .where(User.id == user_id, raw_new_value >= 0)
+            .values(flow_points=raw_new_value)
+        )
+    result = db.execute(stmt.execution_options(synchronize_session=False))
+    if result.rowcount == 0:
+        return None
+    return point_amount(db.scalar(select(User.flow_points).where(User.id == user_id)))
+
+
 def add_point_transaction(
     db: Session,
     user: User,
@@ -306,28 +343,32 @@ def add_point_transaction(
     tokens_used: int = 0,
     allow_overdraft_to_zero: bool = False,
 ) -> FlowPointTransaction:
-    current_balance = point_amount(user.flow_points)
     points_delta = point_amount(points_delta)
-    next_balance = point_amount(current_balance + points_delta)
-    if next_balance < 0 and allow_overdraft_to_zero and points_delta < 0:
-        user.flow_points = POINT_ZERO
-    else:
-        user.flow_points = next_balance
-    if user.flow_points < 0:
+    balance_after = _apply_balance_delta(
+        db,
+        user.id,
+        points_delta,
+        allow_overdraft_to_zero=allow_overdraft_to_zero,
+    )
+    if balance_after is None:
+        current_balance = point_amount(db.scalar(select(User.flow_points).where(User.id == user.id)))
         raise AppException(
             f"Flow Points 不足：本次至少需要 {_point_text(abs(points_delta))} 点，当前余额 {_point_text(current_balance)} 点。请先兑换或联系管理员充值。",
             402,
         )
+    # 内存对象里的余额已经过期：重新读一次，别让 flush 把它写回旧值。
+    state = sa_inspect(user, raiseerr=False)
+    if state is not None and state.persistent:
+        db.expire(user, ["flow_points"])
     txn = FlowPointTransaction(
         user_id=user.id,
         task_id=task.id if task else None,
         feature_type=feature_type,
         points_delta=points_delta,
-        balance_after=user.flow_points,
+        balance_after=balance_after,
         tokens_used=tokens_used,
         description=description,
     )
-    db.add(user)
     db.add(txn)
     if task:
         _set_task_usage_from_net_points(db, task, points_delta)

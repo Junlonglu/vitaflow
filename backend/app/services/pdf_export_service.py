@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import importlib.metadata
 import json
+import logging
 from functools import lru_cache
 from pathlib import Path
 from threading import Lock
@@ -13,11 +15,14 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.url_guard import probe_public_url
 from app.models.export_record import ExportRecord
 from app.models.resume import Resume
 from app.services.preview_service import render_resume_html
 from app.services.storage.storage_service import read_uploaded_file
 
+
+logger = logging.getLogger(__name__)
 
 PDF_DEPENDENCY_MESSAGE = (
     "PDF preview/export requires WeasyPrint system libraries. "
@@ -27,6 +32,15 @@ PDF_CACHE_VERSION = "2026-06-27-1"
 PDF_RESOURCE_TIMEOUT = 3
 _pdf_locks: dict[str, Lock] = {}
 _pdf_locks_guard = Lock()
+
+# 被拒绝的资源返回 1x1 透明 PNG，而不是抛异常：一张外链头像被挡不该让整份
+# 简历导出失败。WeasyPrint 的 url_fetcher 抛错会中止整个渲染。
+_BLANK_IMAGE = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
+# 不需要走网络的内部 scheme：data URI 是内联内容，about/blob 由浏览器自处理。
+_OFFLINE_SCHEMES = frozenset({"data", "about", "blob"})
+
 PAGINATION_SCRIPT = r"""
 () => {
   function pageHeightPx() {
@@ -337,6 +351,46 @@ def _fetch_external_url(url: str, default_url_fetcher):
         return default_url_fetcher(url)
 
 
+def _is_renderable_asset(url: str) -> bool:
+    """PDF 渲染允许取哪些 URL。
+
+    简历里的 ``basics.avatar`` 是用户可写字段（schema 只限了长度），渲染时后端
+    会替用户发请求，等于把出站能力开放给简历内容。这里只放行三类：
+
+    * 内联 scheme（``data:`` / ``about:`` / ``blob:``）——不走网络；
+    * 我们自己的上传对象——由存储直读，见 ``_get_uploaded_object_name``；
+    * 公网 http(s) 地址——过 DNS 校验，且**不受** ``BYOK_ALLOW_PRIVATE_NETWORK``
+      影响（那个开关是给自建网关用的，不该顺带放开简历外链）。
+    """
+    try:
+        scheme = urlparse((url or "").strip()).scheme
+    except ValueError:
+        # 畸形 URL（如未闭合的 IPv6 括号）在 urlparse 里就会抛，按不可渲染处理。
+        return False
+    if scheme in _OFFLINE_SCHEMES:
+        return True
+    if scheme not in ("http", "https"):
+        return False
+    try:
+        allowed, _ = probe_public_url(url, allow_private=False)
+    except ValueError:
+        return False
+    return allowed
+
+
+def _reject_asset(url: str) -> None:
+    try:
+        parsed = urlparse(url)
+        logger.warning("PDF 渲染拒绝外部资源：%s://%s", parsed.scheme, parsed.hostname or "")
+    except ValueError:
+        logger.warning("PDF 渲染拒绝外部资源（URL 无法解析）")
+
+
+def _blank_image(url: str) -> dict:
+    _reject_asset(url)
+    return {"string": _BLANK_IMAGE, "mime_type": "image/png", "redirected_url": url}
+
+
 def _pdf_url_fetcher(url: str):
     _, default_url_fetcher = _get_weasyprint()
     object_name = _get_uploaded_object_name(url)
@@ -345,20 +399,31 @@ def _pdf_url_fetcher(url: str):
             content, content_type = read_uploaded_file(object_name)
             return {"string": content, "mime_type": content_type, "redirected_url": url}
         except Exception:
-            return _fetch_external_url(url, default_url_fetcher)
+            # 这里不能再兜回真实请求：pdf_base_url 常是内网地址，读失败就发请求
+            # 等于把 SSRF 从另一个口子放回来。
+            logger.warning("PDF 渲染读取上传对象失败：%s", object_name, exc_info=True)
+            return _blank_image(url)
+    if not _is_renderable_asset(url):
+        return _blank_image(url)
     return _fetch_external_url(url, default_url_fetcher)
 
 
 def _fulfill_uploaded_file_route(route) -> None:
-    object_name = _get_uploaded_object_name(route.request.url)
+    url = route.request.url
+    object_name = _get_uploaded_object_name(url)
     if not object_name:
-        route.continue_()
+        if _is_renderable_asset(url):
+            route.continue_()
+        else:
+            _reject_asset(url)
+            route.abort()
         return
     try:
         content, content_type = read_uploaded_file(object_name)
         route.fulfill(status=200, body=content, content_type=content_type)
     except Exception:
-        route.continue_()
+        logger.warning("PDF 渲染读取上传对象失败：%s", object_name, exc_info=True)
+        route.abort()
 
 
 def _hash_directory(path: Path) -> str:

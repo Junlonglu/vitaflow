@@ -188,6 +188,7 @@ npm run dev
 | --- | --- |
 | `APP_ENV`、`APP_DEBUG` | 应用环境与调试模式 |
 | `CORS_ORIGINS` | 允许访问后端的前端地址 |
+| `TRUSTED_PROXY_NETWORKS` | 采信 `X-Forwarded-For` 的反向代理网段，默认回环 + Docker 私网。超范围时一律以 TCP 对端地址为准 |
 | `DB_*` | MySQL 连接 |
 | `REDIS_URL`、`REDIS_KEY_PREFIX` | Redis 连接、验证码、限频、缓存和并发锁 |
 | `JWT_SECRET_KEY`、`JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | 登录令牌签名与过期时间 |

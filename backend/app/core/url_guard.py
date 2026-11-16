@@ -38,9 +38,15 @@ def _public_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     )
 
 
-def literal_public_url(url: str) -> tuple[bool, str]:
-    """只检查字面量，不做 DNS 查询。返回 (是否允许, 拒绝原因)。"""
-    if settings.byok_allow_private_network:
+def literal_public_url(url: str, *, allow_private: bool | None = None) -> tuple[bool, str]:
+    """只检查字面量，不做 DNS 查询。返回 (是否允许, 拒绝原因)。
+
+    ``allow_private`` 为 None 时跟随 ``BYOK_ALLOW_PRIVATE_NETWORK``；PDF 导出等
+    「用户内容触发的出站请求」传 False，不受该 BYOK 开关影响。
+    """
+    if allow_private is None:
+        allow_private = settings.byok_allow_private_network
+    if allow_private:
         return True, ""
     parsed = urlparse((url or "").strip())
     if parsed.scheme not in ("http", "https"):
@@ -60,11 +66,13 @@ def literal_public_url(url: str) -> tuple[bool, str]:
     return True, ""
 
 
-def probe_public_url(url: str) -> tuple[bool, str]:
+def probe_public_url(url: str, *, allow_private: bool | None = None) -> tuple[bool, str]:
     """解析 DNS 后再校验，防域名指向内网；解析失败一律拒绝。"""
-    if settings.byok_allow_private_network:
+    if allow_private is None:
+        allow_private = settings.byok_allow_private_network
+    if allow_private:
         return True, ""
-    ok, reason = literal_public_url(url)
+    ok, reason = literal_public_url(url, allow_private=allow_private)
     if not ok:
         return ok, reason
     parsed = urlparse(url.strip())

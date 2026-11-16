@@ -32,6 +32,14 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
+    # 反向代理网段：只有直连对端落在这些网段时，才采信 X-Forwarded-For 等代理头。
+    # 默认覆盖回环与 Docker 私网——超出这个范围还直接采信，等于把限频与审计
+    # 交给请求方自己填。若前置了 CDN，请把 CDN 回源网段加进来，并让最外层代理
+    # 用 $remote_addr 覆盖 XFF（见 frontend/nginx.conf）。
+    trusted_proxy_networks: str = (
+        "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+    )
+
     db_host: str = "127.0.0.1"
     db_port: int = 3306
     db_user: str = "root"

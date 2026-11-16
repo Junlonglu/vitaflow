@@ -6,9 +6,28 @@ from pathlib import Path
 from fastapi import UploadFile
 
 from app.core.exceptions import AppException
+from app.services.resume_locale import normalize_resume_language
 
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md", ".png", ".jpg", ".jpeg", ".webp", ".bmp"}
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
+
+
+def derive_imported_resume_title(resume_data: dict, filename: str = "", language: str = "zh-CN") -> str:
+    """导入后没给标题时的兜底：优先「姓名 - 目标岗位」，其次姓名，最后文件名。
+
+    PDF/Word 导入（抽文本 → AI 结构化）和 JSON 导入（原样回填）共用一个实现，
+    避免两条链路各自拼标题。
+    """
+    basics = resume_data.get("basics") if isinstance(resume_data, dict) else {}
+    basics = basics if isinstance(basics, dict) else {}
+    name = str(basics.get("name") or "").strip()
+    title = str(basics.get("title") or "").strip()
+    if name and title:
+        return f"{name} - {title}"[:80]
+    if name:
+        return (f"{name}'s Resume" if normalize_resume_language(language) == "en" else f"{name}的简历")[:80]
+    stem = Path(filename or "导入简历").stem.strip() or "导入简历"
+    return stem[:80]
 
 
 def _clean_text(text: str) -> str:
@@ -101,7 +120,7 @@ def extract_resume_text_from_upload(file: UploadFile) -> str:
     filename = file.filename or "resume"
     suffix = _file_suffix(file)
     if suffix not in SUPPORTED_EXTENSIONS:
-        raise AppException("仅支持 PDF、Word(.docx)、图片、TXT/Markdown 简历导入", 400)
+        raise AppException("仅支持 PDF、Word(.docx)、图片、TXT/Markdown，或 ResumeFlow 导出的 .json 简历导入", 400)
 
     data = file.file.read()
     if not data:

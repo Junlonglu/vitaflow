@@ -113,11 +113,11 @@ const topics: HelpTopic[] = [
   {
     id: "export",
     title: "导出与分享",
-    description: "完成排版后，可以导出 PDF/Word，也可以生成公开分享链接。",
+    description: "完成排版后，可以导出 PDF 或 JSON，也可以生成公开分享链接。",
     icon: Download,
     accent: "bg-amber-50 text-amber-700 ring-1 ring-amber-100",
     steps: [
-      "PDF 更适合投递和打印，Word 更适合继续交给他人编辑。",
+      "PDF 适合投递和打印；JSON 是完整数据快照，换账号或备份后可重新导入，导入不消耗点数。",
       "导出前检查头像、联系方式、分页和重点经历是否展示完整。",
       "公开分享链接适合在线预览，发送前请确认没有不希望公开的信息。",
       "如遇导出样式异常，先刷新预览并重试，仍有问题可提交反馈。",

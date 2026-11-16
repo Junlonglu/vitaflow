@@ -23,7 +23,8 @@ from app.services.resume_normalization import normalize_resume_data
 from app.services.flow_points_service import POINT_ZERO, precheck_flow_points, settle_task_flow_points
 from app.services.preview_service import render_resume_html
 from app.services.pdf_export_service import get_pdf_path
-from app.services.resume_import_service import extract_resume_text_from_uploads
+from app.services.resume_import_service import derive_imported_resume_title, extract_resume_text_from_uploads
+from app.services.resume_json_export import import_resume_from_json
 from app.services.resume_locale import detect_resume_language, normalize_resume_language
 from app.services.resume_service import (
     DEFAULT_RESUME_SORT,
@@ -45,19 +46,6 @@ from app.services.resume_share_service import (
 )
 
 router = APIRouter(prefix="/resumes", tags=["resumes"])
-
-
-def _imported_resume_title(resume_data: dict[str, Any], filename: str, language: str = "zh-CN") -> str:
-    basics = resume_data.get("basics") if isinstance(resume_data, dict) else {}
-    basics = basics if isinstance(basics, dict) else {}
-    name = str(basics.get("name") or "").strip()
-    title = str(basics.get("title") or "").strip()
-    if name and title:
-        return f"{name} - {title}"[:80]
-    if name:
-        return (f"{name}'s Resume" if normalize_resume_language(language) == "en" else f"{name}的简历")[:80]
-    stem = Path(filename or "导入简历").stem.strip() or "导入简历"
-    return stem[:80]
 
 
 def _mark_import_task_failed(db: Session, task: AiTask | None, message: str) -> None:
@@ -118,6 +106,17 @@ def import_resume_file(
     task: AiTask | None = None
     try:
         upload_files = files if isinstance(files, list) else [files]
+        # 导出的 JSON 本身已是结构化简历，直接回填：不走 AI 解析、不预检积分、不建 AiTask。
+        single = upload_files[0] if len(upload_files) == 1 else None
+        if single is not None and Path(single.filename or "").suffix.lower() == ".json":
+            resume = import_resume_from_json(
+                db,
+                current_user.id,
+                single.file.read(),
+                single.filename or "导入简历",
+                template_id,
+            )
+            return success(ResumeOut.model_validate(resume).model_dump(), "导入成功")
         text = extract_resume_text_from_uploads(upload_files)
         filenames = [item.filename or "resume" for item in upload_files]
         display_filename = filenames[0] if len(filenames) == 1 else f"{filenames[0]} 等 {len(filenames)} 张图片"
@@ -178,7 +177,7 @@ def import_resume_file(
             db,
             current_user.id,
             ResumeCreate(
-                title=_imported_resume_title(result["resume_data"], display_filename or "导入简历", result_language),
+                title=derive_imported_resume_title(result["resume_data"], display_filename or "导入简历", result_language),
                 language=result_language,
                 template_id=template_id,
                 resume_data=result["resume_data"],

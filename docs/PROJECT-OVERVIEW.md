@@ -8,7 +8,7 @@
 
 ## 1. 项目定位
 
-ResumeFlow（中文名「简历流」）是一个面向求职者的**智能简历平台**：在线编辑简历 → AI 对话式优化 → 多模板预览 → 导出 PDF / Word → 生成分享链接。
+ResumeFlow（中文名「简历流」）是一个面向求职者的**智能简历平台**：在线编辑简历 → AI 对话式优化 → 多模板预览 → 导出 PDF / JSON → 生成分享链接。
 
 核心特征：
 
@@ -115,10 +115,10 @@ vitaflow/
 `GET /user-agreement`、`POST /verification-code`、`POST /password-reset-code`、`POST /register`、`POST /login`、`POST /reset-password`、`GET /me`、`PUT /profile`、`PUT /password`
 
 **简历 `resumes.py`**
-`GET /resumes`（支持 `page` / `page_size` / `keyword` 标题模糊搜索，LIKE 通配符转义 / `sort=updated|created|title`，非法值回落默认）、`POST /resumes`、`POST /resumes/from-starter`、`POST /resumes/import-file`（上传 docx/pdf 解析成简历）、`GET|PUT|DELETE /resumes/{id}`、`POST /resumes/{id}/duplicate`、`POST /resumes/{id}/versions`（存版本快照）、`GET|PUT /resumes/{id}/share`（开关与 token）、`GET|POST /resumes/{id}/preview-html`（HTML 预览，POST 支持传入未保存的草稿）、`GET /resumes/{id}/preview-pdf`
+`GET /resumes`（支持 `page` / `page_size` / `keyword` 标题模糊搜索，LIKE 通配符转义 / `sort=updated|created|title`，非法值回落默认）、`POST /resumes`、`POST /resumes/from-starter`、`POST /resumes/import-file`（上传 docx/pdf/图片/txt/md 走 AI 结构化；上传导出过的 `.json` 直接回填，不调模型、不扣积分）、`GET|PUT|DELETE /resumes/{id}`、`POST /resumes/{id}/duplicate`、`POST /resumes/{id}/versions`（存版本快照）、`GET|PUT /resumes/{id}/share`（开关与 token）、`GET|POST /resumes/{id}/preview-html`（HTML 预览，POST 支持传入未保存的草稿）、`GET /resumes/{id}/preview-pdf`
 
 **导出 `exports.py`**
-`POST /exports/{resume_id}/export/pdf`、`POST /exports/{resume_id}/export/word`
+`POST /resumes/{id}/export/pdf`、`POST /resumes/{id}/export/json`（结构化快照，流式返回不落盘）、`POST /resumes/{id}/export/word`（已下线，返回 410）
 
 **AI `ai.py`（最核心，约 900 行）**
 - 能力与记录：`GET /ai/capability`、`GET /ai/records`、`GET /ai/histories`
@@ -507,9 +507,15 @@ resume_data + template_id + template_config
         ├─► preview_service   ─ Jinja2 + backend/app/templates/resume/{id}.html → HTML
         │        ├─► 浏览器预览（iframe / 新窗口）
         │        ├─► 分享页 SharedResume（同源 HTML）
-        │        └─► pdf_export_service ─ Playwright Chromium → PDF（带缓存指纹）
+        │        └─► pdf_export_service ─ Playwright Chromium → PDF（带缓存指纹，落盘）
+        ├─► resume_json_export ─ json.dumps → .json（完整快照：标题/语言/模板/样式配置 + resume_data）
+        │        └─► 回填：POST /resumes/import-file 上传同一个 .json → 直接建新简历，不走 AI、不扣积分
         └─► word_export_service ─ python-docx → .docx（独立实现，需人工对齐模板内容）
 ```
+
+PDF 与 JSON 是两条形态完全不同的导出：**PDF 落盘并带缓存指纹**（Chromium 渲染贵，同一份内容重复导出要复用）；**JSON 不落盘、流式返回**（纯序列化，没有渲染成本也没有复用价值，缓存只会留下垃圾文件）。因此 JSON 的 `export_records.file_path` 写占位值 `inline:json`，表示后台这条记录没有可下载文件。
+
+JSON 快照**故意不含** `id` / `user_id` / `share_token` / `create_time`：导入是新建一份简历，带 id 会冲突，带分享 token 等于把凭证塞进一个会被转发的文件。回填时 `template_id` 若已被删除则回落 `tech`，`template_config` 过白名单收敛（它会被插进 `<style>`），`resume_data` 仍走 `normalize_resume_document` 补 id 与 schema 版本。
 
 12 套模板：`classic`、`tech`、`modern`、`modern_clean`、`minimal_light`、`minimal_mono`、`blue_timeline`、`elegant_line`、`editorial_serif`、`executive_panel`、`portfolio_cards`、`compact_matrix`，共用 `style-base.css` 与 `partials/`。
 

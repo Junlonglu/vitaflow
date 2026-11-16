@@ -1,6 +1,6 @@
 # ResumeFlow 简历流
 
-ResumeFlow 是一个面向求职者的智能简历生成与优化平台，提供在线简历编辑、AI 对话式优化、JD 匹配优化、多模板预览、分享，以及 PDF 导出能力。项目采用前后端分离架构，后端基于 FastAPI，前端基于 Vue 3 + Vite。
+ResumeFlow 是一个面向求职者的智能简历生成与优化平台，提供在线简历编辑、AI 对话式优化、JD 匹配优化、多模板预览、分享，以及 PDF / JSON 导出能力。项目采用前后端分离架构，后端基于 FastAPI，前端基于 Vue 3 + Vite。
 
 **线上体验：[https://vitaflow.vip](https://vitaflow.vip)**
 
@@ -15,6 +15,7 @@ ResumeFlow 是一个面向求职者的智能简历生成与优化平台，提供
 - 简历中英互译：自动识别原文语言，保持模块结构与富文本格式，翻译记录可在 AI 记录中查看并单独计费
 - Flow Points 点数、AI 使用记录、兑换码与点数流水
 - PDF 导出，默认使用 Playwright + Chromium，支持 WeasyPrint 兜底（Word 导出已下线，见下文）
+- JSON 导出：完整快照（标题、语言、模板与样式配置、简历数据），可再导入回填成一份新简历，不消耗点数
 - MinIO / 阿里云 OSS 对象存储，支持代理访问或公开 URL
 - 用户反馈、站内公告、模板管理和管理后台
 
@@ -247,6 +248,30 @@ PDF_BASE_URL=http://127.0.0.1:8000
 - `weasyprint`：仅使用 WeasyPrint
 
 PDF 导出记录会写入后端导出记录表，并可在管理后台查看。
+
+## JSON 导出与回填
+
+`POST /api/resumes/{id}/export/json` 返回结构化快照，不落盘、不渲染，秒级返回：
+
+```json
+{
+  "format": "resumeflow-resume",
+  "format_version": 1,
+  "schema_version": "1.1",
+  "exported_at": "2026-11-16T18:20:46+08:00",
+  "resume": {
+    "title": "前端开发工程师简历",
+    "language": "zh-CN",
+    "template_id": "tech",
+    "template_config": { "theme_color": "#2563eb", "page_margin_top": 14, "...": "..." },
+    "resume_data": { "basics": {}, "summary": {}, "education": [], "...": "..." }
+  }
+}
+```
+
+- **不含** `id` / `user_id` / `share_token` / `create_time`：导入是新建一份简历，带 id 会冲突，带分享 token 等于把凭证写进一个会被转发的文件。
+- **回填**：把同一个 `.json` 上传到 `POST /api/resumes/import-file`，后端直接建新简历，不调用大模型、不预检也不消耗积分。`template_id` 已被删除时回落 `tech`，`template_config` 过白名单收敛。
+- 管理后台的导出记录里，JSON 行的 `file_type` 为 `json`，`file_path` 为占位值 `inline:json`（没有可下载的服务端文件）。
 
 > **Word 导出已下线**：`POST /api/resumes/{id}/export/word` 返回 `410`，前端也不再提供入口。原因是 `word_export_service` 尚未映射 `template_config`（字体 / 主题色 / 页边距），导出的 docx 与预览、PDF 观感不一致。服务实现保留，恢复方式见该路由的 docstring。
 

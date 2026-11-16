@@ -15,6 +15,9 @@ request.interceptors.request.use((config) => {
 request.interceptors.response.use(
   (response) => {
     const contentType = String(response.headers["content-type"] || "")
+    // 下载类接口（PDF / JSON）要拿原始 Blob。只按 contentType 白名单放行时，JSON 导出
+    // 会被当成业务响应解包成 body.data（undefined），下载到一个空文件却不报错。
+    if (response.config?.responseType === "blob") return response
     if (contentType.includes("application/pdf") || contentType.includes("wordprocessingml")) return response
     if (!contentType.includes("application/json")) return response.data
     const body = response.data as ApiResponse<unknown>

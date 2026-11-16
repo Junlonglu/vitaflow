@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import { CheckCircle2, Download, LoaderCircle, PanelLeft, Redo2, Save, Settings, Share2, Trash2, Undo2, X, Edit3, Eye, Pencil, AlertCircle, LayoutTemplate, ArrowRight, Menu, Info } from "lucide-vue-next"
+import { CheckCircle2, ChevronDown, Download, FileJson, FileText, LoaderCircle, PanelLeft, Redo2, Save, Settings, Share2, Trash2, Undo2, X, Edit3, Eye, Pencil, AlertCircle, LayoutTemplate, ArrowRight, Menu, Info } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
+import ActionMenu from "@/components/ui/dropdown/ActionMenu.vue"
 import Input from "@/components/ui/input/Input.vue"
 import FlowAgentIcon from "@/components/common/FlowAgentIcon.vue"
 import FlowPointIcon from "@/components/ui/FlowPointIcon.vue"
@@ -15,7 +16,7 @@ import ResumeAiChatPanel from "@/components/ai/ResumeAiChatPanel.vue"
 import { normalizeResumeData, useResumeStore } from "@/stores/resume"
 import { useChatStore } from "@/stores/chat"
 import { useEditorStore } from "@/stores/editor"
-import { exportPdfApi } from "@/api/export"
+import { exportJsonApi, exportPdfApi } from "@/api/export"
 import { getAiCapabilityApi, getFlowPointSummaryApi, type FlowPointSummary, type AiCapability, type AiChatModelOption, type PendingQuestion, type QuestionAnswer } from "@/api/ai"
 import { duplicateResumeApi } from "@/api/resume"
 import { listTemplatesApi, type TemplateItem } from "@/api/template"
@@ -332,7 +333,7 @@ function startResize(e: MouseEvent) {
 }
 
 const showAiOptimizeModal = ref(false)
-const exportLoading = ref<"" | "pdf">("")
+const exportLoading = ref<"" | "pdf" | "json">("")
 const applySuccess = ref(false)
 let applyTimer: ReturnType<typeof setTimeout> | undefined
 const toastMessage = ref("")
@@ -635,17 +636,29 @@ function selectSection(key: string) {
   editor.setCurrentSection(key)
 }
 
-async function exportPdf() {
+const exportMenuItems = [
+  { key: "pdf", label: "导出 PDF", icon: FileText },
+  { key: "json", label: "导出 JSON", icon: FileJson },
+]
+
+/** 两种格式都要先落库：导出的是「已保存」的简历，不是编辑器内存里的草稿。 */
+async function runExport(kind: "pdf" | "json") {
   if (exportLoading.value) return
-  exportLoading.value = "pdf"
+  exportLoading.value = kind
   try {
     if (!editor.saved) await save({ refreshPreview: false })
-    await exportPdfApi(resumeId.value, resumeStore.currentResume?.title || "简历")
+    const title = resumeStore.currentResume?.title || "简历"
+    if (kind === "pdf") await exportPdfApi(resumeId.value, title)
+    else await exportJsonApi(resumeId.value, title)
   } catch (error: any) {
-    showToast(error?.message || "PDF 导出失败", "error")
+    showToast(error?.message || (kind === "pdf" ? "PDF 导出失败" : "JSON 导出失败"), "error")
   } finally {
     exportLoading.value = ""
   }
+}
+
+function handleExportSelect(key: string) {
+  void runExport(key === "json" ? "json" : "pdf")
 }
 
 function showApplySuccess() {
@@ -868,9 +881,16 @@ async function sendInitialPrompt() {
           <Button size="sm" variant="outline" class="flex h-9 shrink-0 items-center justify-center border-zinc-200 px-3 text-[13px] font-medium text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900" @click="openShareDialog" title="分享简历">
             <Share2 class="h-4 w-4 shrink-0 mr-1.5" /> <span>分享</span>
           </Button>
-          <Button size="sm" class="flex h-9 shrink-0 items-center justify-center whitespace-nowrap px-4 text-[13px] font-medium" :disabled="!!exportLoading" @click="exportPdf">
-            <Download class="h-4 w-4 shrink-0 mr-1.5" /> 导出
-          </Button>
+          <ActionMenu :items="exportMenuItems" @select="handleExportSelect">
+            <template #trigger>
+              <Button size="sm" class="flex h-9 shrink-0 items-center justify-center whitespace-nowrap px-4 text-[13px] font-medium" :disabled="!!exportLoading" aria-label="导出简历" aria-haspopup="menu">
+                <LoaderCircle v-if="exportLoading" class="h-4 w-4 shrink-0 mr-1.5 animate-spin" />
+                <Download v-else class="h-4 w-4 shrink-0 mr-1.5" />
+                <span>导出</span>
+                <ChevronDown class="ml-1 h-3.5 w-3.5 shrink-0 opacity-70" />
+              </Button>
+            </template>
+          </ActionMenu>
         </div>
 
         <!-- Mobile Hamburger Button -->
@@ -926,10 +946,18 @@ async function sendInitialPrompt() {
           <button 
             class="flex items-center justify-center w-full gap-2 px-4 py-2.5 rounded-xl bg-wb-primary text-white hover:bg-wb-primary-hover transition active:scale-95 text-xs font-medium mt-2"
             :disabled="!!exportLoading"
-            @click="mobileMenuOpen = false; exportPdf()"
+            @click="mobileMenuOpen = false; runExport('pdf')"
           >
             <Download class="h-4 w-4 text-zinc-400" />
             <span>导出 PDF</span>
+          </button>
+          <button
+            class="flex items-center justify-center w-full gap-2 px-4 py-2.5 rounded-xl border border-zinc-200 text-zinc-700 hover:bg-zinc-50 transition active:scale-95 text-xs font-medium"
+            :disabled="!!exportLoading"
+            @click="mobileMenuOpen = false; runExport('json')"
+          >
+            <FileJson class="h-4 w-4 text-zinc-400" />
+            <span>导出 JSON</span>
           </button>
         </div>
       </Transition>
@@ -1143,12 +1171,12 @@ async function sendInitialPrompt() {
     </Teleport>
 
     <Transition name="export-fade">
-      <div v-if="exportLoading" class="fixed inset-0 z-modal flex items-center justify-center bg-wb-scrim/45 px-6 backdrop-blur-sm">
+      <!-- 只有 PDF 需要全屏等待（Chromium 渲染可能几秒）；JSON 是毫秒级序列化，
+           给它上遮罩只会闪一下，看上去反而像卡顿，因此只在按钮上转圈。 -->
+      <div v-if="exportLoading === 'pdf'" class="fixed inset-0 z-modal flex items-center justify-center bg-wb-scrim/45 px-6 backdrop-blur-sm">
         <div class="w-full max-w-[320px] rounded-2xl border border-zinc-200 bg-white px-6 py-7 text-center shadow-wb-popup">
           <LoaderCircle class="mx-auto h-10 w-10 animate-spin text-zinc-900" />
-          <h3 class="mt-4 text-base font-semibold text-zinc-900">
-            {{ exportLoading === 'pdf' ? '正在导出 PDF' : '正在导出' }}
-          </h3>
+          <h3 class="mt-4 text-base font-semibold text-zinc-900">正在导出 PDF</h3>
           <p class="mt-2 text-sm leading-6 text-zinc-500">
             正在生成文件，请勿关闭页面。
           </p>

@@ -411,7 +411,7 @@ const pointConfirmDescription = computed(() => {
 const importConfirmDescription = computed(() => {
   if (!flowPointSummary.value) return "正在获取点数信息..."
   const rule = flowPointSummary.value.rules.find((r) => r.feature_type === "import_resume")
-  return `本次智能导入预计消耗 ${formatPointCost(rule)}（当前余额：${flowPointSummary.value.balance} 点）。支持 PDF、Word、TXT/Markdown 单文件导入，也支持一次选择多张图片。`
+  return `本次智能导入预计消耗 ${formatPointCost(rule)}（当前余额：${flowPointSummary.value.balance} 点）。支持 PDF、Word、TXT/Markdown 单文件导入，也支持一次选择多张图片；ResumeFlow 导出的 JSON 快照直接回填，不消耗点数。`
 })
 
 function requestGenerateWithPoints(payload: any) {
@@ -468,7 +468,7 @@ async function handleImportFile(event: Event) {
   if (!files.length) return
   const imageFiles = files.filter((file) => file.type.startsWith("image/") || /\.(png|jpe?g|webp|bmp)$/i.test(file.name))
   if (files.length > 1 && imageFiles.length !== files.length) {
-    showGlobalToast("多文件导入仅支持多张图片，PDF/Word 请单独上传", "error")
+    showGlobalToast("多文件导入仅支持多张图片，PDF/Word/JSON 请单独上传", "error")
     return
   }
   importingResume.value = true
@@ -522,7 +522,7 @@ onBeforeUnmount(() => {
       ref="importFileInput"
       type="file"
       class="hidden"
-      accept=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.webp,.bmp"
+      accept=".pdf,.docx,.txt,.md,.json,.png,.jpg,.jpeg,.webp,.bmp"
       multiple
       @change="handleImportFile"
     />

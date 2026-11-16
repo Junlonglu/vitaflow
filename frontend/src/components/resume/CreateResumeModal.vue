@@ -243,8 +243,8 @@ watch(
 
           <div v-if="templateSelectMode === 'import'" class="mb-6 flex items-start gap-2 rounded-lg border border-zinc-200/60 bg-zinc-50 px-4 py-2.5 text-xs text-zinc-600 sm:items-center">
             <AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-zinc-400 sm:mt-0" />
-            <span class="leading-normal sm:truncate">
-              <strong class="font-medium text-zinc-900">可解析格式：</strong>PDF、Word、TXT、Markdown；多图 JPG / PNG 合并识别。
+            <span class="leading-normal">
+              <strong class="font-medium text-zinc-900">支持格式：</strong>PDF、Word、TXT、Markdown 智能解析；多图 JPG / PNG 合并识别；ResumeFlow 导出的 JSON 直接回填，不消耗点数。
             </span>
           </div>
 

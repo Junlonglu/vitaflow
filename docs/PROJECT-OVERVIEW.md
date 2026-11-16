@@ -136,7 +136,7 @@ vitaflow/
 - 流转：`POST /info-fragments/extract`（从指定简历提取，已存在跳过）、`POST /info-fragments/apply`（把若干条导入简历，返回最新 `resume_data` 与新增条目名，重复导入返回 400）
 
 **用户自带模型与技能 `user_ai.py`**（Ticket 17 / 18）
-- **多模型配置**：`GET|POST /user-ai/models`、`PUT|DELETE /user-ai/models/{id}`、`POST /user-ai/models/{id}/default`（设为默认）、`POST /user-ai/models/{id}/test` 与 `POST /user-ai/models/test`（未保存配置探活）。每用户最多 10 条，任意时刻恰好一条默认项；删除/停用默认项会自动补位。对话请求可带 `user_model_id`（正数指定某条自带模型、`0` 明确使用平台模型、省略则按服务端默认解析），在编辑器模型选择器里与平台模型同列展示。
+- **多模型配置**：`GET|POST /user-ai/models`、`PUT|DELETE /user-ai/models/{id}`、`POST /user-ai/models/{id}/default`（设为默认）、`POST /user-ai/models/{id}/test` 与 `POST /user-ai/models/test`（未保存配置探活）、`POST /user-ai/models/remote-models`（按地址与密钥拉上游 `/models`，带 models.dev 资料，不落盘；页面用它做「选模型」而不是「手填模型名」）。每用户最多 10 条，任意时刻恰好一条默认项；删除/停用默认项会自动补位。对话请求可带 `user_model_id`（正数指定某条自带模型、`0` 明确使用平台模型、省略则按服务端默认解析），在编辑器模型选择器里与平台模型同列展示。
 - **推理强度**：每条配置存 `reasoning_effort`（`auto/off/minimal/low/medium/high/xhigh`）；非 auto 档透传到 ai-service，注册模型时置 `reasoning=true` + `compat.supportsReasoningEffort`，并把 thinkingLevel 交给 `createAgentSession`，最终映射为 OpenAI 兼容端点的 `reasoning_effort`。
 - **技能**：`GET|POST /user-ai/skills`、`PATCH|DELETE /user-ai/skills/{id}`（含启用开关）、`POST /user-ai/skills/import`（单个 .md/.txt/.zip）、`POST /user-ai/skills/import-package`（ZIP 或 `webkitdirectory` 文件夹，多文件按 `SKILL.md` 分组，附属文本拼为「参考资料」）。
 - **密钥与隐私**：`GET /user-ai/security`（部署加密状态与存储说明）、`GET /user-ai/audit-logs?limit=20`（当前用户使用记录，上限 50）、`DELETE /user-ai/keys`（删除全部模型配置与密钥，不可恢复）。CRUD、设为默认、测试连接、对话使用、密文轮换都会写审计。

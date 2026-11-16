@@ -617,6 +617,60 @@ class UserAiEndpointTest(unittest.TestCase):
         self.assertEqual(fake.call_args.args[1], "sk-test-abcdefgh-1234")
         self.assertIsNotNone(svc.get_credential(self.db, 1).last_verified_time)
 
+    def test_remote_model_list_uses_stored_key_and_returns_metadata(self):
+        """拉列表只为「选一个」，密钥可以留空用已存的；资料字段原样带回。"""
+        client = _client(self.db)
+        created = client.post("/api/user-ai/models", json=_credential().model_dump()).json()["data"]
+        upstream = {
+            "models": [
+                {
+                    "id": "deepseek-flash",
+                    "name": None,
+                    "context_window": 1048576,
+                    "max_tokens": 393216,
+                    "input": ["text", "image"],
+                }
+            ]
+        }
+        with (
+            patch("app.api.user_ai.probe_public_url", return_value=(True, "")),
+            patch("app.api.user_ai.call_catalog", return_value=upstream) as catalog,
+        ):
+            resp = client.post(
+                "/api/user-ai/models/remote-models",
+                json={"base_url": BASE_URL, "credential_id": created["id"]},
+            )
+        body = resp.json()
+        self.assertEqual(body["code"], 200)
+        self.assertEqual(body["data"]["models"][0]["context_window"], 1048576)
+        # 用的是解密后的已存密钥，且没有 provider_key：交给 ai-service 按域名猜 models.dev
+        self.assertEqual(catalog.call_args.args[2]["api_key"], "sk-test-abcdefgh-1234")
+        self.assertEqual(catalog.call_args.args[2]["provider_key"], "")
+        self.assertEqual(catalog.call_args.args[1], "/v1/catalog/remote-models")
+
+    def test_remote_model_list_requires_key_and_blocks_private_host(self):
+        client = _client(self.db)
+        # 地址校验在前（地址有问题时先修地址），这里把它放行才轮得到「缺密钥」
+        with patch("app.api.user_ai.probe_public_url", return_value=(True, "")):
+            resp = client.post("/api/user-ai/models/remote-models", json={"base_url": BASE_URL})
+        self.assertEqual(resp.json()["code"], 400)
+        self.assertIn("API Key", resp.json()["message"])
+
+        # 字面内网地址在 schema 层就拦下了；解析到内网的域名由 probe_public_url 兜
+        bad = client.post(
+            "/api/user-ai/models/remote-models",
+            json={"base_url": "http://127.0.0.1:11434/v1", "api_key": "sk-x"},
+        )
+        self.assertEqual(bad.status_code, 422)
+
+        with patch("app.api.user_ai.probe_public_url", return_value=(False, "接入地址不能指向内网")):
+            guarded = client.post(
+                "/api/user-ai/models/remote-models",
+                json={"base_url": BASE_URL, "api_key": "sk-x"},
+            )
+        self.assertEqual(guarded.json()["code"], 400)
+        self.assertIn("内网", guarded.json()["message"])
+
     def test_legacy_credential_endpoint_still_works(self):
         client = _client(self.db)
         saved = client.put("/api/user-ai/credential", json=_credential().model_dump()).json()["data"]

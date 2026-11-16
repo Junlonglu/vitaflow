@@ -19,13 +19,16 @@ from app.core.database import get_db
 from app.core.exceptions import AppException
 from app.core.response import success
 from app.core.security import get_current_user
+from app.core.url_guard import probe_public_url
 from app.models.user import User
 from app.schemas.user_ai import (
     UserAiCredentialIn,
     UserAiCredentialTestIn,
+    UserAiRemoteModelsIn,
     UserSkillIn,
     UserSkillUpdateIn,
 )
+from app.services.ai_service_client import call_catalog
 from app.services import user_ai_service as svc
 
 router = APIRouter(prefix="/user-ai", tags=["user-ai"])
@@ -253,6 +256,45 @@ async def test_unsaved_model(
     current_user: User = Depends(get_current_user),
 ):
     return await _run_probe(db, current_user.id, payload)
+
+
+@router.post("/models/remote-models")
+def list_remote_models(
+    payload: UserAiRemoteModelsIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """拉上游模型列表，供「选模型」而不是「手填模型名」。
+
+    走 ai-service 的 catalog 探测，与后台接入卡是同一段实现：回来的不只是 id，
+    上下文长度、最大输出、是否多模态也一并带上（models.dev 匹配，匹配不到就留空）。
+    不落盘 —— 密钥只是这次请求的入参，不会因为「点一下列表」被写进库。
+
+    SSRF：``UserAiRemoteModelsIn`` 只做了字面校验，这里补一次 DNS 解析后的检查，
+    否则用户填一个解析到 127.0.0.1 的域名就能借服务端探内网。
+    """
+    allowed, reason = probe_public_url(payload.base_url)
+    if not allowed:
+        raise AppException(reason, 400)
+
+    api_key = (payload.api_key or "").strip()
+    if not api_key and payload.credential_id:
+        stored = svc.get_credential(db, current_user.id, payload.credential_id)
+        if stored:
+            api_key = decrypt_secret(stored.api_key_encrypted) or ""
+    if not api_key:
+        raise AppException("请先填写 API Key：读取模型列表要用它向上游取一次", 400)
+
+    try:
+        result = call_catalog(
+            "POST",
+            "/v1/catalog/remote-models",
+            {"base_url": payload.base_url, "api_key": api_key, "provider_key": ""},
+        )
+    except AppException as exc:
+        # ai-service 的报错已经是中文，但会带上内部前缀，前端只想要一句话
+        raise AppException(exc.message or "获取模型列表失败", 400) from exc
+    return success({"models": result.get("models") or []})
 
 
 # ---------------------------------------------------------------------------

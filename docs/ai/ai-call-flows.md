@@ -107,6 +107,28 @@ backend (FastAPI, :8000)                      ai-service (Express+pi-agent, :830
 - 模型 `input` 数组含 `image` 即多模态：前端目录/策略面板显示「多模态」徽标；对话链路用它做图片守卫（2.2 第 4 步）。
 - backend 侧能力推导用 `afetch_catalog_providers`（ai_service_client.py:270，异步拉目录）。
 
+### 4.1 用户端「选模型」链路（BYOK，§6.33）
+
+设置页的「自定义模型接入」不手填模型资料，链路是：
+
+```
+用户选服务商 chip（本地预设，填名称 + Base URL）
+  → 填 API Key
+  → POST /api/user-ai/models/remote-models { base_url, api_key?, credential_id? }
+      · schema `_normalize_base_url` 拦字面内网地址（422）
+      · 接口里再过 `probe_public_url`（DNS 解析后校验，400）
+      · api_key 留空 → 解密 credential_id 那条已存的
+      · 转发 ai-service `POST /v1/catalog/remote-models`，**provider_key 传空**
+          → server.ts:411 用 `guessModelsDevKey(base_url)` 兜底匹配 models.dev
+  ← { models: [{ id, name, context_window, max_tokens, input }] }
+  → 点一行：填 model + 上下文 + 最大输出（按 65,536 上限夹住）+ supports_image
+  → POST/PUT /api/user-ai/models（原有落库接口，密钥 Fernet 加密）
+```
+
+与后台接入卡（`/admin/ai-catalog/remote-models`）走的是同一个 ai-service 端点，差别只有权限与 `provider_key`（后台有目录里的 key 就用它，用户端没有就让 ai-service 按域名猜）。接口**不落盘**：密钥只作为本次请求的入参，点一下列表不会把密钥写进库。
+
+预设、套餐地址、`formatContextWindow` 由 `frontend/src/utils/modelProviders.ts` 单一维护，后台与用户端都从这里引。
+
 ## 5. 可观测性与统计
 
 - 每次调用都落 `ai_tasks` 表：`task_type / status / tokens_used / input_data（含 model ref、真实 usage）/ points_used / model_name（展示快照）`。

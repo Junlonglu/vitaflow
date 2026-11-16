@@ -139,6 +139,24 @@ export const testUserAiModelApi = (id: number, data: { base_url: string; model: 
 export const testUnsavedModelApi = (data: { base_url: string; model: string; api_key?: string }) =>
   request.post<CredentialTestResult, CredentialTestResult>("/user-ai/models/test", data)
 
+/** 上游模型列表的一项：id 之外还带 models.dev 的资料，选中即可自动填。 */
+export interface RemoteModelOption {
+  id: string
+  name: string | null
+  context_window: number | null
+  max_tokens: number | null
+  /** 支持的输入模态，如 ["text", "image"]；匹配不到资料时为 null。 */
+  input: string[] | null
+}
+
+export interface RemoteModelList {
+  models: RemoteModelOption[]
+}
+
+/** 拉上游 /models：不需要模型名（正是为了不必手填），api_key 留空则用已存的那条。 */
+export const listUserAiRemoteModelsApi = (data: { base_url: string; api_key?: string; credential_id?: number }) =>
+  request.post<RemoteModelList, RemoteModelList>("/user-ai/models/remote-models", data)
+
 // ---- 旧单配置接口（保留兼容） ----
 
 export const getUserAiCredentialApi = () =>

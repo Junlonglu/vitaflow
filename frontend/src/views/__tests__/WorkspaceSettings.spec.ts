@@ -15,6 +15,7 @@ const EFFORT_OPTIONS = [
 const api = vi.hoisted(() => ({
   REASONING_EFFORT_OPTIONS: [],
   listUserAiModelsApi: vi.fn(),
+  listUserAiRemoteModelsApi: vi.fn(),
   createUserAiModelApi: vi.fn(),
   updateUserAiModelApi: vi.fn(),
   deleteUserAiModelApi: vi.fn(),
@@ -175,6 +176,8 @@ describe("WorkspaceSettings · 多模型配置", () => {
     await wrapper.find('input[aria-label="接入地址"]').setValue("https://api.example.com/v1")
     await wrapper.find('input[aria-label="模型名称"]').setValue("gpt-4o-mini")
     await wrapper.find('input[aria-label="API Key"]').setValue("sk-secret-abcdef")
+    // 上下文 / 输出 / 推理强度被所选模型填好后收进「更多设置」，覆盖时才展开
+    await buttonByText(wrapper, "更多设置")?.trigger("click")
     await wrapper.find('select[aria-label="推理强度"]').setValue("high")
     await buttonByText(wrapper, "保存配置")?.trigger("click")
     await flushPromises()
@@ -193,11 +196,54 @@ describe("WorkspaceSettings · 多模型配置", () => {
     const wrapper = await mountPage()
     await wrapper.find('button[aria-label="编辑模型 DeepSeek"]').trigger("click")
     expect((wrapper.find('input[aria-label="接入地址"]').element as HTMLInputElement).value).toBe("https://api.example.com/v1")
+    await buttonByText(wrapper, "更多设置")?.trigger("click")
     expect((wrapper.find('select[aria-label="推理强度"]').element as HTMLSelectElement).value).toBe("medium")
     await buttonByText(wrapper, "测试连接")?.trigger("click")
     await flushPromises()
     expect(api.testUserAiModelApi).toHaveBeenCalledWith(3, expect.objectContaining({ model: "deepseek-chat" }))
     expect(wrapper.text()).toContain("API Key 被拒绝")
+  })
+
+  it("选服务商就把名称与地址填好，不用手抄", async () => {
+    const wrapper = await mountPage([])
+    await buttonByText(wrapper, "添加模型")?.trigger("click")
+    await buttonByText(wrapper, "Moonshot Kimi")?.trigger("click")
+    expect((wrapper.find('input[aria-label="模型接入名称"]').element as HTMLInputElement).value).toBe("Moonshot Kimi")
+    expect((wrapper.find('input[aria-label="接入地址"]').element as HTMLInputElement).value).toBe("https://api.moonshot.cn/v1")
+  })
+
+  it("从上游列表挑模型后，上下文与最大输出按上限夹住", async () => {
+    api.listUserAiRemoteModelsApi.mockResolvedValue({
+      models: [{ id: "deepseek-flash", name: null, context_window: 1048576, max_tokens: 393216, input: ["text", "image"] }],
+    })
+    const wrapper = await mountPage([])
+    await buttonByText(wrapper, "添加模型")?.trigger("click")
+    await buttonByText(wrapper, "DeepSeek")?.trigger("click")
+    await wrapper.find('input[aria-label="API Key"]').setValue("sk-secret-abcdef")
+    await buttonByText(wrapper, "获取模型列表")?.trigger("click")
+    await flushPromises()
+    expect(api.listUserAiRemoteModelsApi).toHaveBeenCalledWith({
+      base_url: "https://api.deepseek.com",
+      api_key: "sk-secret-abcdef",
+      credential_id: undefined,
+    })
+
+    await buttonByText(wrapper, "deepseek-flash")?.trigger("click")
+    await buttonByText(wrapper, "更多设置")?.trigger("click")
+    expect((wrapper.find('input[aria-label="模型名称"]').element as HTMLInputElement).value).toBe("deepseek-flash")
+    expect((wrapper.find('input[aria-label="上下文长度"]').element as HTMLInputElement).value).toBe("1048576")
+    // 上游给 393216，后端只收到 65,536，不夹住保存会 422
+    expect((wrapper.find('input[aria-label="最大输出 Token"]').element as HTMLInputElement).value).toBe("65536")
+
+    api.createUserAiModelApi.mockResolvedValue({ ...credential, id: 9 })
+    await buttonByText(wrapper, "保存配置")?.trigger("click")
+    await flushPromises()
+    expect(api.createUserAiModelApi.mock.calls[0][0]).toMatchObject({
+      model: "deepseek-flash",
+      context_window: 1048576,
+      max_tokens: 65536,
+      supports_image: true,
+    })
   })
 
   it("切换默认模型与删除配置调用各自接口", async () => {

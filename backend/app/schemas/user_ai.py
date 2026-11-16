@@ -117,6 +117,23 @@ class UserAiCredentialTestIn(BaseModel):
         return model
 
 
+class UserAiRemoteModelsIn(BaseModel):
+    """读取上游模型列表：不落盘，未保存的接入点也能先拉一次。
+
+    与「测试连接」的区别是这里**不需要模型名**——正是为了不用手填模型名。
+    ``api_key`` 留空时回落到 ``credential_id`` 那条已存的密钥，改地址重拉不必重填。
+    """
+
+    base_url: str = Field(max_length=255)
+    api_key: Optional[str] = Field(default=None, max_length=400)
+    credential_id: Optional[int] = Field(default=None, ge=1)
+
+    @field_validator("base_url")
+    @classmethod
+    def validate_base_url(cls, value: str) -> str:
+        return _normalize_base_url(value)
+
+
 class UserSkillIn(BaseModel):
     name: str = Field(max_length=60)
     description: str = Field(default="", max_length=255)

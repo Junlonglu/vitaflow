@@ -99,11 +99,8 @@ function toggleGroup(label: string) {
           </button>
         </div>
 
-        <header class="mb-6 flex flex-wrap items-start justify-between gap-3">
-          <div class="min-w-0">
-            <h1 class="text-[20px] font-semibold tracking-tight text-zinc-900">{{ title }}</h1>
-            <p class="mt-1 text-[12.5px] leading-relaxed text-zinc-500">管理与配置 VitaFlow 系统各项核心功能</p>
-          </div>
+        <header class="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <h1 class="min-w-0 text-[20px] font-semibold tracking-tight text-zinc-900">{{ title }}</h1>
           <Button variant="outline" size="sm" :disabled="loading" @click="$emit('refresh')"><RefreshCw class="h-4 w-4" :class="{ 'animate-spin': loading }" />刷新</Button>
         </header>
 

@@ -7,7 +7,6 @@ import { ArrowRight } from "lucide-vue-next"
   <section class="bg-white py-12 border-t border-zinc-100 sm:py-32">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
       <h2 class="text-xl font-medium tracking-tight text-zinc-900 sm:text-4xl">准备好开始了？</h2>
-      <p class="mt-3 sm:mt-4 text-sm sm:text-lg text-zinc-500">只需三步，即可拥有属于你的专业简历。</p>
       
       <div class="mt-8 sm:mt-24">
         <div class="flex flex-row justify-center items-center gap-3 sm:gap-12 md:gap-32">

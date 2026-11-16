@@ -70,7 +70,7 @@ function submit() {
         <div class="flex items-center gap-2 border-b border-zinc-100 px-5 py-4">
           <div class="flex-1">
             <h3 class="text-sm font-semibold text-zinc-900">补充岗位相关信息</h3>
-            <p class="mt-0.5 text-xs text-zinc-500">JD 中有几处要求在简历里没有找到对应证据，请逐条补充（没有的可以留空跳过）。</p>
+            <p class="mt-0.5 text-xs text-zinc-500">JD 里没有找到对应证据，可留空跳过</p>
           </div>
           <button type="button" class="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700" title="关闭" aria-label="关闭" @click="emit('close')">
             <X class="h-4 w-4" />

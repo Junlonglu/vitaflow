@@ -179,7 +179,7 @@ watch(
             >
               <span class="min-w-0">
                 <span class="block text-sm font-semibold text-zinc-900">敏感信息脱敏</span>
-                <span class="mt-0.5 block text-xs leading-5 text-zinc-500">隐藏姓名、头像、电话、邮箱、地址、网站及自定义基本信息。</span>
+                <span class="mt-0.5 block text-xs leading-5 text-zinc-500">隐藏姓名、头像、电话、邮箱、地址等个人信息。</span>
               </span>
               <button
                 type="button"
@@ -221,7 +221,7 @@ watch(
                   class="min-w-0 flex-1 bg-transparent text-xs text-zinc-700 outline-none"
                 />
               </div>
-              <p class="mt-1.5 text-xs leading-5 text-zinc-500">支持 3-64 位字母、数字、短横线或下划线，需以字母或数字开头。</p>
+              <p class="mt-1.5 text-xs leading-5 text-zinc-500">3–64 位，字母或数字开头</p>
             </div>
 
             <div v-if="config?.token && config.enabled" class="space-y-3 rounded-2xl border border-blue-100 bg-blue-50/40 p-4">

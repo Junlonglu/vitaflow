@@ -168,9 +168,7 @@ const navItems = [
       
       <!-- Page Header -->
       <header class="mb-7">
-        <p class="mb-1.5 sm:mb-2 text-[10px] sm:text-xs font-semibold uppercase tracking-[0.15em] sm:tracking-[0.18em] text-zinc-400">User Center</p>
         <h1 class="text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-950">个人中心</h1>
-        <p class="mt-1.5 sm:mt-2 text-xs sm:text-sm text-zinc-500">管理你的个人账号信息与偏好设置</p>
       </header>
 
       <!-- Main Layout Grid -->

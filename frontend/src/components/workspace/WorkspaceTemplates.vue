@@ -106,10 +106,7 @@ function startFromTemplate(entry: "starter" | "import" | "blank") {
       </div>
 
       <header class="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 class="text-[20px] font-semibold tracking-tight text-zinc-950 sm:text-[22px]">模板中心</h1>
-          <p class="mt-1 text-[12.5px] leading-5 text-zinc-500">选一套版式直接起稿，创建后还能在编辑器里随时切换。</p>
-        </div>
+        <h1 class="text-[20px] font-semibold tracking-tight text-zinc-950 sm:text-[22px]">模板中心</h1>
         <button
           type="button"
           class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 text-[12px] font-medium text-zinc-700 transition-colors hover:border-zinc-300 hover:text-zinc-950"
@@ -263,9 +260,8 @@ function startFromTemplate(entry: "starter" | "import" | "blank") {
         <div v-else class="m-auto w-full max-w-[240px] text-center">
           <div class="flex h-[300px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-300 bg-white/60">
             <LayoutTemplate class="h-7 w-7 text-zinc-300" />
-            <p class="text-[12px] text-zinc-400">模板预览区</p>
+            <p class="text-[12px] text-zinc-400">选中左侧模板查看预览</p>
           </div>
-          <p class="mt-4 text-[12px] leading-5 text-zinc-500">选中左侧任意模板，这里会显示完整预览。</p>
         </div>
       </div>
     </aside>

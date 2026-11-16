@@ -121,7 +121,7 @@ watch(
                 </span>
                 <span>
                   <span class="block text-base font-semibold tracking-tight text-zinc-950">按岗位起稿</span>
-                  <span class="mt-2 block text-sm leading-6 text-zinc-500">基于行业和岗位生成一份可继续编辑的内容初稿。</span>
+                  <span class="mt-2 block text-sm leading-6 text-zinc-500">按行业与岗位生成初稿</span>
                 </span>
               </button>
               <button class="group flex min-h-40 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-5 text-left transition-colors duration-150 hover:border-zinc-300 active:scale-[0.99]" @click="emit('openBlank')">
@@ -130,7 +130,7 @@ watch(
                 </span>
                 <span>
                   <span class="block text-base font-semibold tracking-tight text-zinc-950">空白简历</span>
-                  <span class="mt-2 block text-sm leading-6 text-zinc-500">保留默认版式和空白内容，适合完全自己填写。</span>
+                  <span class="mt-2 block text-sm leading-6 text-zinc-500">从零开始自己填写</span>
                 </span>
               </button>
               <button class="group flex min-h-40 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-5 text-left transition-colors duration-150 hover:border-zinc-300 active:scale-[0.99]" @click="emit('openImport')">
@@ -139,7 +139,7 @@ watch(
                 </span>
                 <span>
                   <span class="block text-base font-semibold tracking-tight text-zinc-950">导入简历</span>
-                  <span class="mt-2 block text-sm leading-6 text-zinc-500">上传已有文件，解析后套用你选择的简历版式。</span>
+                  <span class="mt-2 block text-sm leading-6 text-zinc-500">解析已有文件后套版式</span>
                 </span>
               </button>
             </div>
@@ -244,7 +244,7 @@ watch(
           <div v-if="templateSelectMode === 'import'" class="mb-6 flex items-start gap-2 rounded-lg border border-zinc-200/60 bg-zinc-50 px-4 py-2.5 text-xs text-zinc-600 sm:items-center">
             <AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-zinc-400 sm:mt-0" />
             <span class="leading-normal sm:truncate">
-              <strong class="font-medium text-zinc-900">支持智能解析的文件格式：</strong>单文件支持 PDF、Word、TXT、Markdown；多图支持 JPG/PNG 合并图文识别。
+              <strong class="font-medium text-zinc-900">可解析格式：</strong>PDF、Word、TXT、Markdown；多图 JPG / PNG 合并识别。
             </span>
           </div>
 
@@ -258,7 +258,6 @@ watch(
                   {{ templateSelectMode === 'import' ? '选择导入版式' : '选择空白版式' }}
                 </h3>
               </div>
-              <span class="text-[11px] font-medium text-zinc-500">点击卡片即可直接应用</span>
             </div>
 
             <div v-if="isImportRendering" class="flex min-h-[300px] items-center justify-center text-sm text-zinc-500">

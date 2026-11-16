@@ -158,9 +158,6 @@ function submit() {
             上架 {{ onlineCount }} / {{ rows.length }}
           </span>
         </div>
-        <p class="mt-1 text-sm text-zinc-500">
-          按模型扣点：目录里的模型和路由组自动成行，只填「一次起扣」和「每百万 token」的单价。
-        </p>
         <p class="mt-1.5 text-xs text-zinc-400">
           默认模型：<span class="font-medium text-zinc-600">{{ defaultName }}</span>
           · 兜底价（未单独定价时）：{{ formatPoints(defaults.points_per_call) }} 点/次 · 输入
@@ -194,7 +191,7 @@ function submit() {
     <div v-if="!pricing" class="px-5 py-12 text-center text-sm text-zinc-400">正在加载模型目录…</div>
 
     <div v-else-if="!rows.length" class="px-5 py-12 text-center text-sm text-zinc-400">
-      模型目录里还没有模型，先在上面「模型目录」里接入服务商并勾选模型
+      模型目录里还没有模型
     </div>
 
     <div v-else class="overflow-x-auto">
@@ -300,13 +297,7 @@ function submit() {
       </table>
     </div>
 
-    <div v-if="rows.length" class="flex flex-col gap-3 border-t border-zinc-100 bg-zinc-50/60 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
-      <p class="text-xs text-zinc-400">
-        格子留空 = 不单独定价，按兜底价（{{ formatPoints(defaults.points_per_call) }} 起扣 · 输入
-        {{ formatPoints(defaults.points_per_million_input_tokens) }} · 输出
-        {{ formatPoints(defaults.points_per_million_output_tokens) }}）扣；一轮约按
-        {{ formatPoints(TYPICAL_TURN.input) }} 输入 + {{ formatPoints(TYPICAL_TURN.output) }} 输出 token 估算。
-      </p>
+    <div v-if="rows.length" class="flex flex-col gap-3 border-t border-zinc-100 bg-zinc-50/60 px-5 py-3 sm:flex-row sm:items-center sm:justify-end">
       <div class="flex shrink-0 items-center gap-2">
         <span v-if="dirty" class="text-xs font-medium text-amber-600">有未保存的改动</span>
         <Button variant="outline" size="sm" class="h-9" :disabled="saving || !dirty" @click="discard"><Undo2 class="mr-1.5 h-4 w-4" />放弃</Button>

@@ -7,6 +7,7 @@ import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
 import Button from "@/components/ui/button/Button.vue"
 import Switch from "@/components/ui/switch/Switch.vue"
 import Select from "@/components/ui/select/Select.vue"
+import FieldTip from "@/components/ui/tooltip/FieldTip.vue"
 import {
   PROVIDER_PRESETS,
   arkPlanOf,
@@ -522,10 +523,10 @@ async function handleSkillFolder(event: Event) {
   <WorkspacePage background="muted">
     <div class="mx-auto w-full max-w-3xl px-4 py-7 sm:px-8 sm:py-10">
       <header class="mb-6">
-        <h1 class="text-[20px] font-semibold tracking-tight text-zinc-900 sm:text-[22px]">模型与技能</h1>
-        <p class="mt-1.5 text-[13px] leading-relaxed text-zinc-500">
-          接入自己的大模型、上传自定义技能，让简历 Agent 按你的方式工作。
-        </p>
+        <h1 class="flex items-center gap-1.5 text-[20px] font-semibold tracking-tight text-zinc-900 sm:text-[22px]">
+          模型与技能
+          <FieldTip text="只作用于简历 Agent 对话；简历生成、导入等一次性任务仍使用平台模型。" />
+        </h1>
       </header>
 
       <div v-if="loading" class="grid place-items-center py-20 text-[13px] text-zinc-400">
@@ -544,7 +545,7 @@ async function handleSkillFolder(event: Event) {
                 <span class="ml-1 text-[12px] text-zinc-400">{{ activeModelCount }} / {{ models.length }} 启用 · 上限 {{ MAX_MODELS }}</span>
               </div>
               <p class="mt-1.5 text-[12.5px] leading-relaxed text-zinc-500">
-                兼容 OpenAI Chat Completions 的接入点。可保存多个模型并设置默认项，也可在对话里临时切换；启用后走你自己的额度，不消耗 Flow Points。
+                兼容 OpenAI Chat Completions；不扣 Flow Points。
               </p>
             </div>
             <Button size="sm" :disabled="modelEditorOpen || models.length >= MAX_MODELS" @click="openModelEditor()">
@@ -555,7 +556,6 @@ async function handleSkillFolder(event: Event) {
 
           <div v-if="!models.length && !modelEditorOpen" class="mt-5 rounded-xl border border-dashed border-zinc-200 px-4 py-9 text-center">
             <p class="text-[13px] text-zinc-500">还没有自定义模型</p>
-            <p class="mt-1 text-[12px] text-zinc-400">添加一个接入点后，对话即可使用你自己的额度</p>
           </div>
 
           <ul v-if="models.length" class="mt-4 divide-y divide-zinc-100 border-t border-zinc-100">
@@ -612,9 +612,6 @@ async function handleSkillFolder(event: Event) {
                   {{ preset.name }}
                 </button>
               </div>
-              <p class="mt-1.5 text-[11.5px] leading-relaxed text-zinc-400">
-                选一家会把名称和接入地址一起填好；自建网关不用选，直接在下面改地址。
-              </p>
             </div>
 
             <!-- 火山方舟这类订阅：换了套餐就换了抵扣额度的地址，别让用户手抄 -->
@@ -657,7 +654,7 @@ async function handleSkillFolder(event: Event) {
                   </button>
                 </span>
                 <input v-model="form.api_key" :type="showKey ? 'text' : 'password'" :placeholder="editingModel?.has_api_key ? '留空表示继续使用已保存的密钥' : 'sk-...'" aria-label="API Key" autocomplete="off" class="h-9 w-full rounded-lg border border-zinc-200 bg-white px-3 text-[13px] text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 hover:border-zinc-300 focus:border-zinc-500" />
-                <span v-if="editingModel?.has_api_key" class="mt-1.5 block text-[11.5px] text-zinc-400">已保存密钥：{{ editingModel.api_key_masked }}（留空即沿用）</span>
+                <span v-if="editingModel?.has_api_key" class="mt-1.5 block text-[11.5px] text-zinc-400">已保存：{{ editingModel.api_key_masked }}</span>
               </label>
             </div>
 
@@ -677,7 +674,7 @@ async function handleSkillFolder(event: Event) {
 
               <div v-if="remoteModels.length" class="mt-2.5">
                 <p v-if="modelNotInList" class="mb-2 flex items-start gap-1.5 rounded-lg bg-amber-50 px-2 py-1.5 text-[11.5px] leading-relaxed text-amber-700">
-                  当前模型名不在这家的列表里，确认一下是不是换了服务商没换模型。
+                  当前模型名不在上游列表里
                 </p>
                 <label class="relative block">
                   <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
@@ -703,13 +700,10 @@ async function handleSkillFolder(event: Event) {
               </div>
 
               <p v-else-if="remoteError" class="mt-2 text-[12px] leading-relaxed text-red-600">{{ remoteError }}</p>
-              <p v-else class="mt-2 text-[11.5px] leading-relaxed text-zinc-400">
-                <template v-if="form.model">点「获取模型列表」换成上游真实存在的模型，也可以直接保存现在填的名字。</template>
-                <template v-else>填好地址与密钥后点「获取模型列表」，挑一个就会把上下文长度、最大输出、是否支持图片一起填好。</template>
-              </p>
+              <p v-else class="mt-2 text-[11.5px] leading-relaxed text-zinc-400">点「获取模型列表」从上游拉取，选中即填好资料</p>
 
               <label class="mt-2.5 block">
-                <span class="mb-1 block text-[11.5px] text-zinc-400">也可以直接填模型名</span>
+                <span class="mb-1 block text-[11.5px] text-zinc-400">模型名</span>
                 <input v-model="form.model" type="text" placeholder="例如 deepseek-chat" aria-label="模型名称" class="h-8 w-full rounded-lg border border-zinc-200 bg-white px-2.5 font-mono text-[12px] text-zinc-900 outline-none transition-colors placeholder:font-sans placeholder:text-zinc-400 hover:border-zinc-300 focus:border-zinc-500" />
               </label>
             </div>
@@ -731,11 +725,11 @@ async function handleSkillFolder(event: Event) {
                 <input v-model.number="form.max_tokens" type="number" :min="MIN_OUTPUT" :max="MAX_OUTPUT" aria-label="最大输出 Token" class="h-9 w-full rounded-lg border border-zinc-200 bg-white px-3 text-[13px] text-zinc-900 outline-none transition-colors hover:border-zinc-300 focus:border-zinc-500" />
               </label>
               <div class="block sm:col-span-2">
-                <span class="mb-1.5 block text-[12px] font-medium text-zinc-700">推理强度</span>
-                <Select v-model="form.reasoning_effort" :options="REASONING_EFFORT_OPTIONS" placeholder="推理强度" aria-label="推理强度" />
-                <span class="mt-1.5 block text-[11.5px] leading-relaxed text-zinc-400">
-                  {{ REASONING_EFFORT_OPTIONS.find((option) => option.value === form.reasoning_effort)?.hint }}。档位原样交给接入点，是否认这个档位由上游决定。
+                <span class="mb-1.5 flex items-center gap-1 text-[12px] font-medium text-zinc-700">
+                  推理强度
+                  <FieldTip :text="`${REASONING_EFFORT_OPTIONS.find((option) => option.value === form.reasoning_effort)?.hint}。档位原样交给接入点，认不认由上游决定。`" />
                 </span>
+                <Select v-model="form.reasoning_effort" :options="REASONING_EFFORT_OPTIONS" placeholder="推理强度" aria-label="推理强度" />
               </div>
             </div>
 
@@ -808,12 +802,11 @@ async function handleSkillFolder(event: Event) {
             </div>
           </div>
           <p class="mt-2 text-[12.5px] leading-relaxed text-zinc-500">
-            支持单个 SKILL.md、ZIP 技能包，或整个技能文件夹（自动识别每个目录下的 SKILL.md 与 references 参考资料）。启用后会在每轮对话中追加给 Agent。
+            启用后在每轮对话中追加给 Agent。
           </p>
 
           <div v-if="!skills.length" class="mt-5 rounded-xl border border-dashed border-zinc-200 px-4 py-10 text-center">
             <p class="text-[13px] text-zinc-500">还没有自定义技能</p>
-            <p class="mt-1 text-[12px] text-zinc-400">上传 .md / .zip 或选择技能文件夹，也可以手动写一段指令</p>
           </div>
 
           <ul v-else class="mt-4 divide-y divide-zinc-100 border-t border-zinc-100">
@@ -851,15 +844,16 @@ async function handleSkillFolder(event: Event) {
                   {{ securityInfo.mode === "dedicated" ? `独立密钥 · ${securityInfo.active_kid}` : "开发回退密钥" }}
                 </span>
               </div>
-              <p class="mt-1.5 text-[12.5px] leading-relaxed text-zinc-500">
-                模型调用由服务端代理，因此服务端必须能解密你的 API Key。密钥以 Fernet 密文存库，页面与接口只返回掩码；日志、异常栈与厂商错误回显都会自动脱敏。
-              </p>
             </div>
             <Button size="sm" variant="outline" :disabled="clearingKeys || !models.length" @click="clearKeysOpen = true">
               <Trash2 class="h-3.5 w-3.5" />
               清除全部密钥
             </Button>
           </div>
+
+          <p v-if="securityInfo?.mode === 'legacy'" class="mt-3 rounded-lg border border-amber-200/60 bg-amber-50 px-3 py-2 text-[12px] leading-relaxed text-amber-700">
+            尚未配置独立的 BYOK_ENCRYPTION_KEYS，已存密钥回退到登录密钥派生。生产环境请以独立随机口令启动。
+          </p>
 
           <dl class="mt-4 grid grid-cols-1 gap-x-6 gap-y-3 border-t border-zinc-100 pt-4 text-[12px] leading-relaxed sm:grid-cols-2">
             <div>
@@ -886,7 +880,7 @@ async function handleSkillFolder(event: Event) {
               最近使用记录
               <span class="font-normal text-zinc-400">仅你自己可见</span>
             </div>
-            <p v-if="!auditLogs.length" class="mt-2 text-[12px] text-zinc-400">暂无记录。添加、修改、测试或调用自定义模型后会出现在这里。</p>
+            <p v-if="!auditLogs.length" class="mt-2 text-[12px] text-zinc-400">暂无记录</p>
             <ul v-else class="mt-2 divide-y divide-zinc-100">
               <li v-for="item in auditLogs.slice(0, 8)" :key="item.id" class="flex items-baseline gap-3 py-2 text-[12px]">
                 <span class="shrink-0 font-mono text-[11px] text-zinc-400">{{ formatAuditTime(item.create_time) }}</span>
@@ -896,12 +890,6 @@ async function handleSkillFolder(event: Event) {
             </ul>
           </div>
         </section>
-
-        <p class="mt-4 px-1 text-[12px] leading-relaxed text-zinc-400">
-          {{ securityInfo?.mode === "legacy" ? "当前部署尚未配置独立的 BYOK_ENCRYPTION_KEYS，仍回退到登录密钥派生；生产环境请以独立随机口令启动。" : "加密口令与登录密钥相互独立，轮换登录密钥不会影响已存的 API Key。" }}
-          出于安全考虑默认只允许公网接入点，本机 / 内网网关需由部署方显式放开。
-          自定义模型与技能作用于简历 Agent 对话；简历生成、导入等一次性任务仍使用平台模型，以保证结构化输出的稳定性。
-        </p>
       </template>
     </div>
 

@@ -11,6 +11,7 @@ import { computed, ref, watch } from "vue"
 import Button from "@/components/ui/button/Button.vue"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
 import Select from "@/components/ui/select/Select.vue"
+import FieldTip from "@/components/ui/tooltip/FieldTip.vue"
 import {
   getAdminCatalogEnvKeysApi,
   getAdminCatalogPlanUsageApi,
@@ -258,18 +259,15 @@ void loadEnvKeys()
 
 <template>
   <div class="space-y-4">
-    <div class="flex items-start justify-between gap-3">
-      <div class="min-w-0">
-        <h3 class="font-semibold text-zinc-900">服务商接入</h3>
-        <p class="mt-0.5 text-xs text-zinc-400">点一行展开成表单，改完再保存；目录由 AI 服务持有（models.json），勾选要用的模型，价格在下面的「模型定价」里填</p>
-      </div>
+    <div class="flex items-center justify-between gap-3">
+      <h3 class="font-semibold text-zinc-900">服务商接入</h3>
       <div class="flex shrink-0 items-center gap-2">
         <Button variant="outline" size="sm" class="shrink-0 whitespace-nowrap" :disabled="saving" @click="onRefresh"><RefreshCw class="mr-1.5 h-3.5 w-3.5" />刷新</Button>
         <Button v-if="!fauxProvider" size="sm" class="shrink-0 whitespace-nowrap" :disabled="saving || Boolean(createSeed)" @click="openCreateProvider"><Plus class="mr-1.5 h-4 w-4" />新增服务商</Button>
       </div>
     </div>
 
-    <p v-if="fauxProvider" class="rounded-xl border border-amber-200/60 bg-amber-50 px-4 py-2.5 text-xs font-medium text-amber-700">当前为 faux 演示模式：目录仅提供内置 faux/demo 模型，不可编辑；接入真实服务商请切换 AI 服务为 real 模式</p>
+    <p v-if="fauxProvider" class="rounded-xl border border-amber-200/60 bg-amber-50 px-4 py-2.5 text-xs font-medium text-amber-700">faux 演示模式：内置模型只读，切换为 real 后才能接入真实服务商</p>
 
     <AiProviderCard
       v-if="createSeed"
@@ -324,10 +322,10 @@ void loadEnvKeys()
     <!-- 路由组：多个目录模型共用一个引用，上游故障时选型静默换人 -->
     <div v-if="!fauxProvider" class="rounded-xl border border-zinc-200 bg-white">
       <div class="flex items-center justify-between gap-3 border-b border-zinc-100 p-4">
-        <div class="min-w-0">
-          <h3 class="font-semibold text-zinc-900">路由组</h3>
-          <p class="mt-0.5 text-xs text-zinc-400">把几个模型绑成一个 "group/标识" 引用：某个服务商挂掉时，对话在选型阶段自动换到组内其他模型；同一会话内保持同一模型，避免浪费厂商的提示词缓存</p>
-        </div>
+        <h3 class="flex items-center gap-1.5 font-semibold text-zinc-900">
+          路由组
+          <FieldTip text="把几个模型绑成一个 group/ 引用：上游故障时自动换到组内其他模型，同一会话内保持同一模型，避免浪费提示词缓存。" />
+        </h3>
         <Button size="sm" class="shrink-0 whitespace-nowrap" @click="openCreateGroup"><Plus class="mr-1.5 h-4 w-4" />新增路由组</Button>
       </div>
       <div class="space-y-2 p-4">
@@ -341,7 +339,7 @@ void loadEnvKeys()
             <button class="rounded-full p-1.5 text-zinc-400 transition hover:bg-red-50 hover:text-red-600 active:scale-95" title="删除路由组" @click="emit('deleteGroup', group.id)"><Trash2 class="h-3.5 w-3.5" /></button>
           </div>
         </div>
-        <p v-if="!groups.length" class="py-3 text-center text-xs text-zinc-400">暂无路由组；给单个模型配置即可满足大部分场景，多个服务商互为备胎时再建组</p>
+        <p v-if="!groups.length" class="py-3 text-center text-xs text-zinc-400">暂无路由组</p>
       </div>
     </div>
   </div>
@@ -351,10 +349,9 @@ void loadEnvKeys()
       <div class="flex max-h-[80vh] w-full max-w-md flex-col rounded-2xl bg-white p-5 shadow-wb-popup">
         <h4 class="text-lg font-semibold text-zinc-900">{{ groupEditingId ? "编辑路由组" : "新增路由组" }}</h4>
         <div class="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-          <label class="block space-y-1.5 text-sm font-medium text-zinc-700">组标识<span class="text-red-500">*</span><input v-model="groupForm.id" :disabled="!!groupEditingId" class="block h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm outline-none transition-colors focus:border-zinc-900 disabled:bg-zinc-50 disabled:text-zinc-400" placeholder="例如 main" /><p v-if="groupErrors.id" class="text-xs font-normal text-red-600">{{ groupErrors.id }}</p><span class="block text-xs font-normal text-zinc-400">对话引用将形如 group/{{ groupForm.id || "标识" }}，保存后不可改</span></label>
+          <label class="block space-y-1.5 text-sm font-medium text-zinc-700">组标识<span class="text-red-500">*</span><input v-model="groupForm.id" :disabled="!!groupEditingId" class="block h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm outline-none transition-colors focus:border-zinc-900 disabled:bg-zinc-50 disabled:text-zinc-400" placeholder="例如 main" /><p v-if="groupErrors.id" class="text-xs font-normal text-red-600">{{ groupErrors.id }}</p><span class="block text-xs font-normal text-zinc-400">引用为 group/{{ groupForm.id || "标识" }}，保存后不可改</span></label>
           <label class="block space-y-1.5 text-sm font-medium text-zinc-700">选型策略
             <Select v-model="groupForm.strategy" :options="STRATEGY_OPTIONS" class="!h-10 !rounded-lg text-sm" />
-            <span class="block text-xs font-normal text-zinc-400">顺序：按成员列表从上到下挑第一个可用的；轮询：不同会话轮流用各成员；均衡：优先挑当前用得最少的成员</span>
           </label>
           <div class="space-y-1.5 text-sm font-medium text-zinc-700">成员模型<span class="text-red-500">*</span>
             <div class="space-y-1.5">
@@ -364,10 +361,10 @@ void loadEnvKeys()
                 <span class="truncate text-zinc-800">{{ option.label }}</span>
                 <span class="ml-auto shrink-0 text-[10px] font-medium text-zinc-400">{{ option.ref }}</span>
               </label>
-              <p v-if="!memberOptions.length" class="rounded-lg border border-dashed border-zinc-200 bg-zinc-50 py-4 text-center text-xs text-zinc-400">目录里还没有任何模型，请先在上方接入服务商与模型</p>
+              <p v-if="!memberOptions.length" class="rounded-lg border border-dashed border-zinc-200 bg-zinc-50 py-4 text-center text-xs text-zinc-400">目录里还没有已保存的模型</p>
             </div>
             <p v-if="groupErrors.members" class="text-xs font-normal text-red-600">{{ groupErrors.members }}</p>
-            <span class="block text-xs font-normal text-zinc-400">建议至少两个不同服务商的模型，才能真正起到备胎作用；模型要先在服务商卡里保存</span>
+            <span class="block text-xs font-normal text-zinc-400">只列出已在服务商卡里保存的模型</span>
           </div>
         </div>
         <div class="mt-5 flex justify-end gap-2">

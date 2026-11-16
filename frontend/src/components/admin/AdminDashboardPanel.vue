@@ -4,6 +4,7 @@ import type { Component } from "vue"
 import type { EChartsOption } from "echarts"
 import { Activity, ChevronDown } from "lucide-vue-next"
 import AdminChart from "@/components/admin/AdminChart.vue"
+import FieldTip from "@/components/ui/tooltip/FieldTip.vue"
 import type { DashboardData } from "@/api/admin"
 
 const props = defineProps<{
@@ -202,13 +203,13 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
 
     <section class="mt-5 grid items-start gap-5 lg:grid-cols-2">
       <article class="min-w-0 overflow-hidden rounded-xl border border-zinc-200 bg-white p-4 sm:p-5">
-        <div class="mb-6 flex items-center justify-between"><div><h2 class="font-semibold text-zinc-900">近 7 天活跃趋势</h2><p class="mt-1 text-xs text-zinc-400">用户、简历、AI、导出与分享总活动</p></div><Activity class="h-5 w-5 text-zinc-400" /></div>
+        <div class="mb-6 flex items-center justify-between"><div><h2 class="font-semibold text-zinc-900">近 7 天活跃趋势</h2></div><Activity class="h-5 w-5 text-zinc-400" /></div>
         <AdminChart v-if="dashboard.daily.length" :option="dailyTrendOption" class="h-56 w-full" />
         <p v-else class="py-8 text-center text-sm text-zinc-400">暂无趋势记录</p>
       </article>
 
       <article class="min-w-0 overflow-hidden rounded-xl border border-zinc-200 bg-white p-4 sm:p-5">
-        <h2 class="font-semibold text-zinc-900">运行质量</h2><p class="mt-1 text-xs text-zinc-400">AI 回合与导出成功率</p>
+        <h2 class="font-semibold text-zinc-900">运行质量</h2>
         <div class="mt-5 space-y-5">
           <div v-for="rate in [{ label: 'AI 调用成功率', value: dashboard.rates.ai_success }, { label: '文件导出成功率', value: dashboard.rates.export_success }]" :key="rate.label">
             <div class="mb-2 flex justify-between text-sm"><span class="text-zinc-600">{{ rate.label }}</span><strong>{{ rate.value }}%</strong></div>
@@ -223,7 +224,6 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
 
       <article class="col-span-full min-w-0 overflow-hidden rounded-xl border border-zinc-200 bg-white p-4 sm:p-5">
         <h2 class="font-semibold text-zinc-900">对话环节质量</h2>
-        <p class="mt-1 text-xs text-zinc-400">回合与工具各环节的耗时与失败下钻</p>
         <template v-if="stageRows.length">
           <div class="mt-4 grid grid-cols-2 gap-3">
             <div class="min-w-0 rounded-xl bg-zinc-50 p-3.5">
@@ -283,8 +283,7 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
       <article class="col-span-full min-w-0 overflow-hidden rounded-xl border border-zinc-200 bg-white p-4 sm:p-5">
         <div class="mb-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 class="font-semibold text-zinc-900">用户活跃时间段</h2>
-            <p class="mt-1 text-xs text-zinc-400">近 7 天按小时统计活跃用户与操作次数</p>
+            <h2 class="flex items-center gap-1.5 font-semibold text-zinc-900">用户活跃时间段<FieldTip text="近 7 天按小时聚合：每个时段去过重的活跃用户数，与操作次数分开画。" /></h2>
           </div>
           <div class="flex shrink-0 items-center gap-4 text-xs font-medium text-zinc-500">
             <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-emerald-500"></span>活跃用户</span>
@@ -296,8 +295,7 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
       </article>
 
       <article class="col-span-full min-w-0 overflow-hidden rounded-xl border border-zinc-200 bg-white p-4 sm:p-5">
-        <h2 class="font-semibold text-zinc-900">AI 功能调用分布</h2>
-        <p class="mt-1 text-xs text-zinc-400">对话按指令拆分，历史任务按原类型统计</p>
+        <h2 class="flex items-center gap-1.5 font-semibold text-zinc-900">AI 功能调用分布<FieldTip text="对话按指令拆分，历史任务按原任务类型统计。" /></h2>
         <div class="mt-5 space-y-3">
           <div v-for="item in dashboard.ai_breakdown" :key="item.task_type" class="min-w-0 overflow-hidden rounded-xl border border-zinc-100 bg-zinc-50 p-3 transition hover:bg-zinc-100/80 sm:p-4">
             <div class="flex items-center justify-between gap-1 overflow-hidden sm:gap-2">
@@ -328,7 +326,6 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
 
       <article class="col-span-full min-w-0 overflow-hidden rounded-xl border border-zinc-200 bg-white p-4 sm:p-5">
         <h2 class="font-semibold text-zinc-900">模型调用统计</h2>
-        <p class="mt-1 text-xs text-zinc-400">各模型调用量、Tokens 与 Flow Points 消耗</p>
         <div class="mt-5 space-y-3">
           <div v-for="item in dashboard.model_breakdown || []" :key="item.model_name" class="min-w-0 overflow-hidden rounded-xl border border-zinc-100 bg-zinc-50 p-3 transition hover:bg-zinc-100/80 sm:p-4">
             <div class="flex items-center justify-between gap-1 overflow-hidden sm:gap-2">
@@ -358,7 +355,6 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
 
       <article class="col-span-full min-w-0 overflow-hidden rounded-xl border border-zinc-200 bg-white p-4 sm:p-5">
         <h2 class="font-semibold text-zinc-900">模块润色调用分布</h2>
-        <p class="mt-1 text-xs text-zinc-400">按简历模块拆分调用情况</p>
         <div class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div v-for="item in dashboard.section_breakdown" :key="item.section_type" class="min-w-0 overflow-hidden rounded-xl border border-zinc-100 p-3.5">
             <p class="truncate text-xs font-medium text-zinc-600">{{ sectionText(item.section_type) }}</p>

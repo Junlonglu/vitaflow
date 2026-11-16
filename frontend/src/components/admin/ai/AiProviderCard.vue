@@ -26,6 +26,7 @@ import {
 } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
 import Select from "@/components/ui/select/Select.vue"
+import FieldTip from "@/components/ui/tooltip/FieldTip.vue"
 import {
   probeAdminCatalogModelApi,
   probeAdminRemoteModelsApi,
@@ -630,14 +631,17 @@ function duplicate() {
             placeholder="例如 deepseek"
           />
           <p class="mt-1 text-xs text-zinc-400">
-            Agent 里按 <span class="font-mono">{{ draft.key || "标识" }}/…</span> 选它的模型{{ isCreate ? "，保存后不可改" : "" }}
+            引用前缀 <span class="font-mono">{{ draft.key || "标识" }}/…</span>{{ isCreate ? "，保存后不可改" : "" }}
           </p>
           <p v-if="errors.key" class="mt-1 text-xs text-red-600">{{ errors.key }}</p>
         </div>
       </div>
 
       <div class="grid grid-cols-[56px_minmax(0,1fr)] items-start gap-3">
-        <p class="pt-2 text-xs font-medium text-zinc-500">密钥</p>
+        <p class="flex items-center gap-1 pt-2 text-xs font-medium text-zinc-500">
+          密钥
+          <FieldTip text="环境变量引用 AI 服务进程的 $VAR，密钥不落盘；明文写入 models.json，不进后端数据库。已保存的密钥不回显，替换时填新值、留空保持原样。" />
+        </p>
         <div class="min-w-0 space-y-2">
           <template v-if="provider && !keyResetting">
             <div class="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50/60 px-3 py-2">
@@ -646,7 +650,6 @@ function duplicate() {
               <span v-if="provider.api_key_masked" class="rounded-md border border-emerald-200/60 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">使用中</span>
               <button type="button" class="ml-auto text-[11px] font-medium text-zinc-500 transition-colors hover:text-zinc-900" @click="startKeyReplace">{{ provider.api_key_masked ? "替换密钥" : "配置密钥" }}</button>
             </div>
-            <p class="text-xs text-zinc-400">密钥不会回显；替换时填入新值即可，留空表示保持原样</p>
           </template>
 
           <template v-else>
@@ -697,9 +700,6 @@ function duplicate() {
                 <EyeOff v-else class="h-4 w-4" />
               </button>
             </div>
-            <p class="text-xs text-zinc-400">
-              {{ draft.keyMode === "env" ? "引用 AI 服务进程的环境变量（$VAR），密钥不落盘" : "明文写入模型目录文件 models.json，不进后端数据库" }}
-            </p>
           </template>
         </div>
       </div>
@@ -739,7 +739,7 @@ function duplicate() {
             />
             <Button variant="outline" size="sm" :disabled="!provider || saving" title="保存后才能发探测请求" @click="probeSelected">测试</Button>
           </div>
-          <p class="text-xs text-zinc-400">带不带 /v1 都能用：拉模型会自动尝试两种地址；测试模型发送一个 16 token 的最小请求</p>
+          <p class="text-xs text-zinc-400">带不带 /v1 都能用</p>
           <p v-if="errors.base_url" class="text-xs text-red-600">{{ errors.base_url }}</p>
         </div>
       </div>
@@ -771,7 +771,6 @@ function duplicate() {
               <button type="button" class="rounded-md px-1.5 py-0.5 text-[11px] font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900" @click="selectNone">全不选</button>
             </div>
           </div>
-          <p class="text-[11px] text-zinc-400">勾选即决定 Agent 能用哪些模型：只有「已勾选」里的模型会出现在对话的选型列表里</p>
 
           <template v-if="tab === 'catalog'">
             <div v-if="draft.modelIds.length" class="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto pr-1">
@@ -794,7 +793,7 @@ function duplicate() {
               </button>
             </div>
             <p v-else class="rounded-lg border border-dashed border-zinc-200 bg-zinc-50/60 px-3 py-4 text-center text-xs text-zinc-400">
-              还没有勾选任何模型：切到「所有模型」挑，或在下面手动添加 ID
+              还没有勾选任何模型
             </p>
           </template>
 
@@ -829,7 +828,7 @@ function duplicate() {
                 <p v-if="!remoteShown.length" class="px-1 py-2 text-xs text-zinc-400">没有匹配「{{ remoteFilter }}」的模型</p>
               </div>
             </template>
-            <p v-else class="px-1 py-3 text-xs text-zinc-400">点「重新获取」用上面的地址与密钥向上游要一次列表，不用先保存</p>
+            <p v-else class="px-1 py-3 text-xs text-zinc-400">点「重新获取」拉取上游列表，不用先保存</p>
           </template>
 
           <div class="flex flex-wrap items-center gap-2">
@@ -860,13 +859,14 @@ function duplicate() {
 
           <div v-if="settingsOpen" class="space-y-2 rounded-lg border border-zinc-200 bg-zinc-50/50 p-3">
             <div class="flex flex-wrap items-center justify-between gap-2">
-              <p class="text-[11px] font-medium text-zinc-500">模型资料：显示名称、上下文窗口（tokens）、最大输出（tokens）、推理强度（reasoning_effort）、是否支持图片；保存时一起提交</p>
+              <p class="flex items-center gap-1.5 text-[11px] font-medium text-zinc-500">
+                模型资料
+                <FieldTip text="上下文与最大输出填 tokens 数。推理强度用上游原词，default 不下发 reasoning_effort；选了具体档位会同时把这个模型标成推理模型。" />
+              </p>
               <Button v-if="provider" variant="outline" size="sm" class="shrink-0" :disabled="syncing" @click="syncDev">
                 <DatabaseZap class="h-3.5 w-3.5" :class="syncing ? 'animate-pulse' : ''" />补全空白资料
               </Button>
             </div>
-            <p v-if="provider" class="text-[11px] text-zinc-400">「补全空白资料」查 models.dev，只填没填过的项；拉取模型列表时会自动填，不用手动抄</p>
-            <p class="text-[11px] text-zinc-400">推理强度用上游参数原词（low / high / max）；default 不下发 reasoning_effort，选了具体档位会把这个模型标成推理模型</p>
             <div v-for="id in draft.modelIds" :key="`meta-${id}`" class="flex flex-wrap items-end gap-2">
               <label class="flex min-w-[140px] flex-1 flex-col gap-1">
                 <span class="text-[10px] text-zinc-400">显示名称</span>
@@ -905,9 +905,9 @@ function duplicate() {
       <div v-if="accessKeySpec" class="grid grid-cols-[56px_minmax(0,1fr)] items-start gap-3">
         <p class="pt-2 text-xs font-medium text-zinc-500">用量</p>
         <div class="min-w-0 space-y-2 rounded-lg border border-zinc-200 bg-zinc-50/50 p-3">
-          <p class="text-[11px] font-medium text-zinc-600">
+          <p class="flex items-center gap-1.5 text-[11px] font-medium text-zinc-600">
             {{ accessKeyTitle }}
-            <span class="ml-1 font-normal text-zinc-400">账号级只读凭证，不参与推理</span>
+            <FieldTip :text="accessKeyHint" />
           </p>
           <div class="grid gap-2 sm:grid-cols-2">
             <label class="block space-y-1">
@@ -929,11 +929,8 @@ function duplicate() {
               />
             </label>
           </div>
-          <p class="text-[11px] text-zinc-400">{{ accessKeyHint }}</p>
 
-          <p v-if="!provider" class="text-[11px] text-zinc-400">
-            {{ activePlan?.key === "payg" ? "按量付费不需要填；切到套餐再填才会读用量" : "保存后会用这对密钥读一次用量" }}
-          </p>
+          <p v-if="!provider" class="text-[11px] text-zinc-400">{{ activePlan?.key === "payg" ? "按量付费不需要填写" : "保存后会用这对密钥读一次用量" }}</p>
           <p v-else-if="planLoading" class="text-[11px] text-zinc-400">套餐用量查询中…</p>
           <div v-else-if="planUsage" class="space-y-2">
             <p v-if="planUsage.needs_access_key" class="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700">
@@ -969,7 +966,6 @@ function duplicate() {
           <Button variant="ghost" size="sm" class="px-2 text-red-600" @click="remove"><Trash2 class="h-3.5 w-3.5" />移除</Button>
           <Button variant="ghost" size="sm" class="px-2" @click="duplicate"><Copy class="h-3.5 w-3.5" />复制</Button>
         </template>
-        <span v-else class="text-[11px] text-zinc-400">保存后才会出现在 Agent 的模型列表里</span>
       </div>
       <div class="flex flex-wrap items-center gap-2">
         <span v-if="removedCount" class="text-[11px] font-medium text-amber-600">保存将移除 {{ removedCount }} 个模型</span>

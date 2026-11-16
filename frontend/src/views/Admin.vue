@@ -10,6 +10,7 @@ import Select from "@/components/ui/select/Select.vue"
 import Textarea from "@/components/ui/textarea/Textarea.vue"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
 import PaginationFooter from "@/components/ui/pagination/PaginationFooter.vue"
+import FieldTip from "@/components/ui/tooltip/FieldTip.vue"
 import AdminShell from "@/components/admin/AdminShell.vue"
 import AdminDashboardPanel from "@/components/admin/AdminDashboardPanel.vue"
 import AnnouncementManager from "@/components/admin/AnnouncementManager.vue"
@@ -1037,12 +1038,11 @@ onMounted(() => load())
                     <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zinc-900 text-white"><Gift class="h-5 w-5" /></span>
                     <div>
                       <h2 class="font-semibold text-zinc-900 text-base">注册赠送</h2>
-                      <p class="mt-1 text-xs text-zinc-500 leading-relaxed">新用户完成注册后自动发放 Flow Points，设置为 0 则不赠送。</p>
                     </div>
                   </div>
                 </div>
                 <div class="mt-6">
-                  <label class="block text-xs font-medium text-zinc-700 mb-2.5">新用户赠送点数</label>
+                  <label class="mb-2.5 flex items-center gap-1 text-xs font-medium text-zinc-700">新用户赠送点数<FieldTip text="新用户完成注册后自动发放 Flow Points，设为 0 则不赠送。" /></label>
                   <input v-model.number="settingsForm.signup_gift_points" type="number" min="0" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
                 </div>
               </article>
@@ -1053,12 +1053,11 @@ onMounted(() => load())
                     <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700"><MessageSquare class="h-5 w-5" /></span>
                     <div>
                       <h2 class="font-semibold text-zinc-900 text-base">反馈通知邮箱</h2>
-                      <p class="mt-1 text-xs text-zinc-500 leading-relaxed">用户提交意见反馈后会发送提醒邮件，留空则不发送。</p>
                     </div>
                   </div>
                 </div>
                 <div class="mt-6">
-                  <label class="block text-xs font-medium text-zinc-700 mb-2.5">接收邮箱</label>
+                  <label class="mb-2.5 flex items-center gap-1 text-xs font-medium text-zinc-700">接收邮箱<FieldTip text="用户提交意见反馈后发送提醒邮件，留空则不发送。" /></label>
                   <input v-model.trim="settingsForm.feedback_notify_email" type="email" placeholder="admin@example.com" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
                 </div>
               </article>
@@ -1069,12 +1068,11 @@ onMounted(() => load())
                     <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700"><ShieldCheck class="h-5 w-5" /></span>
                     <div>
                       <h2 class="font-semibold text-zinc-900 text-base">兑换安全</h2>
-                      <p class="mt-1 text-xs text-zinc-500 leading-relaxed">限制每个用户每天尝试兑换码的次数，降低撞码和误操作风险。</p>
                     </div>
                   </div>
                 </div>
                 <div class="mt-6">
-                  <label class="block text-xs font-medium text-zinc-700 mb-2.5">每日尝试次数</label>
+                  <label class="mb-2.5 flex items-center gap-1 text-xs font-medium text-zinc-700">每日尝试次数<FieldTip text="限制每个用户每天尝试兑换码的次数，降低撞码和误操作风险。" /></label>
                   <input v-model.number="settingsForm.redeem_daily_attempt_limit" type="number" min="0" max="1000" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
                 </div>
               </article>
@@ -1083,8 +1081,7 @@ onMounted(() => load())
             <!-- 提示文案设置：全宽单栏，释放富文本工具栏展示空间 -->
             <article class="rounded-xl border border-zinc-200 bg-white p-6">
               <div class="border-b border-zinc-100 pb-4 mb-5">
-                <h2 class="font-semibold text-zinc-900 text-base">AI 记录页提示</h2>
-                <p class="mt-1 text-xs text-zinc-500">展示在用户 AI 记录页余额下方，可用于说明点数兑换比例、计费规则或活动信息。</p>
+                <h2 class="flex items-center gap-1.5 font-semibold text-zinc-900 text-base">AI 记录页提示<FieldTip text="展示在用户 AI 记录页余额下方，可用于说明点数兑换比例或活动信息。" /></h2>
               </div>
               <div class="min-h-[220px]">
                 <RichTextEditor v-model="settingsForm.ai_records_hint" compact placeholder="例如：1 元约等于 100 Flow Points，具体扣点以后台规则为准。" />
@@ -1093,8 +1090,7 @@ onMounted(() => load())
 
             <article class="rounded-xl border border-zinc-200 bg-white p-6">
               <div class="border-b border-zinc-100 pb-4 mb-5">
-                <h2 class="font-semibold text-zinc-900 text-base">用户协议与隐私政策</h2>
-                <p class="mt-1 text-xs text-zinc-500">在用户注册与登录时展示并要求勾选，支持编辑富文本条款内容。</p>
+                <h2 class="flex items-center gap-1.5 font-semibold text-zinc-900 text-base">用户协议与隐私政策<FieldTip text="注册与登录时展示并要求勾选，支持富文本编辑。" /></h2>
               </div>
               <div class="min-h-[220px]">
                 <RichTextEditor v-model="settingsForm.user_agreement" placeholder="请输入用户协议与隐私政策内容..." />

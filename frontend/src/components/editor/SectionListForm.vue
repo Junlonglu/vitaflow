@@ -178,7 +178,6 @@ const activeItem = computed(() => props.items.find(i => i.id === activeItemId.va
            <FileEdit class="w-7 h-7 text-zinc-300" />
          </div>
          <span class="text-[15px] font-medium text-zinc-500">在左侧选择一个条目进行编辑</span>
-         <span class="text-[13px] text-zinc-400 mt-1">或点击下方按钮添加新条目</span>
       </div>
   </div>
   </div>

@@ -49,7 +49,7 @@ onMounted(() => load())
   <WorkspacePage>
     <main class="mx-auto max-w-4xl px-4 py-8 sm:px-6 md:py-14">
       <header class="mb-8 flex items-end justify-between gap-4">
-        <div><p class="mb-1.5 sm:mb-2 text-[10px] sm:text-xs font-semibold uppercase tracking-[0.15em] sm:tracking-[0.18em] text-zinc-400">Announcements</p><h1 class="text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-950">历史公告</h1><p class="mt-1.5 sm:mt-2 text-xs sm:text-sm text-zinc-500">查看 VitaFlow 的更新与重要通知</p></div>
+        <h1 class="text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-950">历史公告</h1>
         <Button variant="outline" size="sm" :disabled="loading" @click="load(data.page)"><RefreshCw class="h-4 w-4" :class="{ 'animate-spin': loading }" />刷新</Button>
       </header>
 

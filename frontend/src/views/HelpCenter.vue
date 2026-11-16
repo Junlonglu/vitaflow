@@ -327,7 +327,7 @@ const faqs = [
             </div>
             <h2 class="mt-3 text-xl font-semibold tracking-tight">没有找到答案？</h2>
             <p class="mt-2 text-sm leading-6 text-zinc-300">
-              把问题、使用场景和出现异常的位置写清楚，管理员处理后你可以在个人中心查看反馈状态和回复。
+              管理员处理后可在个人中心查看回复。
             </p>
           </div>
           <RouterLink to="/workspace/profile?tab=feedback" class="shrink-0 select-none">

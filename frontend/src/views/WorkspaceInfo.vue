@@ -22,6 +22,7 @@ import AppDialog from "@/components/ui/dialog/AppDialog.vue"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
 import Button from "@/components/ui/button/Button.vue"
 import Select from "@/components/ui/select/Select.vue"
+import FieldTip from "@/components/ui/tooltip/FieldTip.vue"
 import {
   applyInfoFragmentsApi,
   createInfoFragmentApi,
@@ -379,10 +380,8 @@ onUnmounted(() => window.clearTimeout(searchTimer))
           <h1 class="flex items-center gap-2 text-[20px] font-semibold tracking-tight text-zinc-900">
             <Database class="h-5 w-5 text-zinc-400" stroke-width="1.75" />
             信息库
+            <FieldTip text="把简历拆成一条条可复用的事实。对话里可让 AI 检索，或在整理出新信息时先存到这里。" />
           </h1>
-          <p class="mt-1.5 max-w-2xl text-[12.5px] leading-relaxed text-zinc-500">
-            把简历拆成一条条可复用的事实。对话里可以直接让 AI 检索、导入简历，或在整理出新信息时先存到这里。
-          </p>
         </div>
         <div class="flex items-center gap-2">
           <Button type="button" variant="outline" class="h-9 px-3 text-[13px]" @click="openExtract">

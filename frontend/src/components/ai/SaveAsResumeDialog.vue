@@ -39,7 +39,7 @@ function confirm() {
             <X class="h-4 w-4" />
           </button>
         </div>
-        <p class="mt-2 text-xs leading-relaxed text-zinc-500">当前简历的修改已生效。可以把这份优化结果另存为一份新简历，当前简历保持不变。</p>
+        <p class="mt-2 text-xs leading-relaxed text-zinc-500">另存一份，当前简历不受影响。</p>
         <label class="mt-4 block text-xs font-medium text-zinc-600" for="save-as-title">新简历标题</label>
         <input
           id="save-as-title"

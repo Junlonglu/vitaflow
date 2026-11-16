@@ -341,11 +341,7 @@ onMounted(() => refresh())
   <WorkspacePage>
     <main class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:py-12">
       <header class="mb-7">
-        <div>
-          <p class="mb-1.5 sm:mb-2 text-[10px] sm:text-xs font-semibold uppercase tracking-[0.15em] sm:tracking-[0.18em] text-zinc-400">AI Usage</p>
-          <h1 class="text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-950">Flow Points</h1>
-          <p class="mt-1.5 sm:mt-2 text-xs sm:text-sm text-zinc-500">兑换 Flow Points 和 查看流水记录</p>
-        </div>
+        <h1 class="text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-950">Flow Points</h1>
       </header>
 
       <div v-if="error" class="mb-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ error }}</div>
@@ -601,7 +597,7 @@ onMounted(() => refresh())
                 <h3 class="font-semibold text-zinc-900">生成结果</h3>
                 <ul class="mt-4 space-y-2 text-sm text-zinc-700">
                   <li v-for="item in genericResultLines(selectedHistory)" :key="item" class="rounded-xl bg-zinc-50 px-3 py-2">• {{ item }}</li>
-                  <li v-if="!genericResultLines(selectedHistory).length" class="rounded-xl bg-zinc-50 px-3 py-2 text-zinc-400">结果已保存，但没有可摘要展示的文本。</li>
+                  <li v-if="!genericResultLines(selectedHistory).length" class="rounded-xl bg-zinc-50 px-3 py-2 text-zinc-400">结果已保存，无可展示摘要。</li>
                 </ul>
               </div>
             </template>

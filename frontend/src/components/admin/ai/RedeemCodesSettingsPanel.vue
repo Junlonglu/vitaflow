@@ -195,7 +195,7 @@ defineEmits<{
         <div class="mb-5 flex items-center justify-between">
           <div>
             <h3 class="font-semibold text-zinc-900">导入兑换码</h3>
-            <p class="mt-1 text-xs text-zinc-400">TXT 内容每行一个兑换码，重复的码会自动跳过；每个用户对同一个码只能兑换一次。</p>
+            <p class="mt-1 text-xs text-zinc-400">每行一个，重复的码自动跳过</p>
           </div>
           <button class="rounded-full p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600" @click="showImportModal = false"><X class="h-5 w-5" /></button>
         </div>
@@ -207,7 +207,7 @@ defineEmits<{
             <label class="space-y-1.5 text-sm font-medium text-zinc-700">可兑换人数<input v-model.number="importForm.total_count" type="number" min="1" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
             <label class="space-y-1.5 text-sm font-medium text-zinc-700">过期时间<input v-model="importForm.expire_time" type="datetime-local" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
           </div>
-          <label class="flex items-start gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-3 text-sm text-zinc-700"><input v-model="importForm.ip_once" type="checkbox" class="mt-1 h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900" /><span><span class="font-medium text-zinc-900">同一 IP 只能兑换一次</span><span class="mt-0.5 block text-xs text-zinc-500">导入的每个兑换码都会启用该限制。</span></span></label>
+          <label class="flex items-center gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-3 text-sm text-zinc-700"><input v-model="importForm.ip_once" type="checkbox" class="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900" /><span class="font-medium text-zinc-900">同一 IP 只能兑换一次</span></label>
           <label class="space-y-1.5 text-sm font-medium text-zinc-700">备注<input v-model="importForm.note" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="例如：线下活动导入" /></label>
           <Button class="mt-2 h-11 rounded-xl" :disabled="importingCodes" @click="$emit('importCodes')"><Upload class="mr-2 h-4 w-4" />{{ importingCodes ? "导入中" : "确认导入" }}</Button>
         </div>
@@ -219,7 +219,7 @@ defineEmits<{
         <div class="mb-5 flex items-start justify-between gap-4">
           <div>
             <h3 class="font-semibold text-zinc-900">批量设置价格</h3>
-            <p class="mt-1 text-xs text-zinc-500">可按备注或批次 ID 精确匹配兑换码，已兑换记录也会同步用于首页收入统计。</p>
+            <p class="mt-1 text-xs text-zinc-500">改价会同步到首页收入统计</p>
           </div>
           <button class="rounded-full p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600" @click="showBatchPriceModal = false"><X class="h-5 w-5" /></button>
         </div>
@@ -255,7 +255,7 @@ defineEmits<{
           <label class="space-y-1.5 text-sm font-medium text-zinc-700">过期时间<input v-model="editCodeForm.expire_time" type="datetime-local" class="block h-11 w-full rounded-xl border border-zinc-200 px-3.5 text-sm outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
           <label class="space-y-1.5 text-sm font-medium text-zinc-700">备注<input v-model="editCodeForm.note" maxlength="2000" class="block h-11 w-full rounded-xl border border-zinc-200 px-3.5 text-sm outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="可选" /></label>
           <label class="flex cursor-pointer items-center justify-between rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm">
-            <span><span class="font-medium text-zinc-900">同一 IP 只能兑换一次</span><span class="mt-0.5 block text-xs text-zinc-500">开启后，该兑换码会校验兑换 IP。</span></span>
+            <span class="font-medium text-zinc-900">同一 IP 只能兑换一次</span>
             <input v-model="editCodeForm.ip_once" type="checkbox" class="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900" />
           </label>
           <div class="flex justify-end gap-3 pt-1">

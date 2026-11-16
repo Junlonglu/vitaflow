@@ -57,7 +57,7 @@ const selectedSet = (): Set<string> => new Set(props.selectedIds)
       </template>
       <div v-else class="flex h-full flex-col items-center justify-center px-6 text-center">
         <p class="text-[13px] font-medium text-zinc-500">当前模块没有待确认的变更</p>
-        <p class="mt-1 text-xs text-zinc-400">其他模块可能还有变更，可切换左侧模块查看，或直接在对话中确认</p>
+        <p class="mt-1 text-xs text-zinc-400">其他模块可能还有</p>
       </div>
     </div>
   </div>

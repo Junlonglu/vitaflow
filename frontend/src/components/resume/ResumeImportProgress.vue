@@ -30,8 +30,6 @@ withDefaults(defineProps<{
             <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-zinc-100 bg-zinc-50 text-sm font-semibold tabular-nums text-zinc-700">{{ progress }}%</span>
           </div>
 
-          <p class="mt-4 text-sm leading-6 text-zinc-500">正在识别原简历内容与结构，并转换为可继续编辑的履历数据。</p>
-
           <div class="mt-6 space-y-2.5">
             <div
               v-for="(stage, index) in stages"
@@ -60,7 +58,7 @@ withDefaults(defineProps<{
 
           <div class="mt-5 flex items-start gap-3 rounded-2xl bg-zinc-50 px-4 py-3 text-xs leading-5 text-zinc-500 ring-1 ring-zinc-200/70">
             <Sparkles class="mt-0.5 h-4 w-4 shrink-0 text-zinc-600" />
-            <span>完成后将直接进入编辑页面<span v-if="templateName">，并应用「{{ templateName }}」模板</span>，请勿关闭当前窗口。</span>
+            <span>完成后自动进入编辑页<span v-if="templateName">，并应用「{{ templateName }}」模板</span>；请勿关闭窗口。</span>
           </div>
         </section>
       </div>

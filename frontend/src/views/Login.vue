@@ -221,9 +221,6 @@ async function handleResetPassword() {
         <h1 class="text-4xl sm:text-5xl font-medium tracking-tight leading-[1.15]">
           你的经历，<br />值得更好的表达。
         </h1>
-        <p class="mt-6 text-lg text-zinc-400">
-          从内容编辑到 AI 优化，再到 PDF 导出，让简历制作一步到位。
-        </p>
       </div>
       
       <div class="relative z-base flex flex-col gap-1">
@@ -317,7 +314,6 @@ async function handleResetPassword() {
           <!-- Back: Register -->
           <div class="back absolute w-full h-full bg-white flex flex-col justify-center">
             <h1 class="text-2xl font-semibold text-zinc-900 tracking-tight">创建账号</h1>
-            <p class="mt-2 text-sm text-zinc-500">只需几秒，开启你的极简简历之旅</p>
             
             <div class="mt-8 flex-1 space-y-4">
               <div>

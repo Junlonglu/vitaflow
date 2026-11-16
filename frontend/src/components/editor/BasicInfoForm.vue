@@ -380,8 +380,7 @@ function addPresetField(preset: (typeof basicInfoPresets)[number]) {
           </button>
         </div>
         <div class="flex flex-col gap-0.5 md:gap-1 text-[11px] md:text-xs text-zinc-500">
-          <p>支持 JPG, PNG 格式</p>
-          <p>文件大小不超过 5MB</p>
+          <p>JPG / PNG，≤ 5MB</p>
         </div>
       </div>
     </div>

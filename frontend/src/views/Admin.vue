@@ -16,32 +16,25 @@ import AdminUsersPanel from "@/components/admin/AdminUsersPanel.vue"
 import AdminResumesPanel from "@/components/admin/AdminResumesPanel.vue"
 import AdminExportsPanel from "@/components/admin/AdminExportsPanel.vue"
 import AdminFeedbacksPanel from "@/components/admin/AdminFeedbacksPanel.vue"
+import AdminAiTasksPanel from "@/components/admin/AdminAiTasksPanel.vue"
+import AdminPointTransactionsPanel from "@/components/admin/AdminPointTransactionsPanel.vue"
 import AnnouncementManager from "@/components/admin/AnnouncementManager.vue"
 import AiSettingsManager from "@/components/admin/AiSettingsManager.vue"
 import RichTextEditor from "@/components/admin/RichTextEditor.vue"
 import TemplatePreview from "@/components/templates/TemplatePreview.vue"
 import type { EChartsOption } from "echarts"
 import {
-  getAdminAiTasksApi, getAdminDashboardApi,
-  getAdminAiConfigsApi, getAdminFlowPointTransactionsApi, getAdminResumeStarterIndustriesApi, getAdminResumeStartersApi, getAdminSettingsApi, getAdminTemplatesApi,
-  revokeAllUsersFlowPointsGrantApi, updateAdminResumeStarterApi, updateAdminSettingsApi, updateAdminTemplateApi,
+  getAdminDashboardApi,
+  getAdminResumeStarterIndustriesApi, getAdminResumeStartersApi, getAdminSettingsApi, getAdminTemplatesApi,
+  updateAdminResumeStarterApi, updateAdminSettingsApi, updateAdminTemplateApi,
   createAdminResumeStarterApi, deleteAdminResumeStarterApi,
-  type AdminAiConfig, type AdminAiTask, type AdminFlowPointTransaction, type AdminResumeStarter, type AdminResumeStarterIndustry, type AdminTemplate,
+  type AdminResumeStarter, type AdminResumeStarterIndustry, type AdminTemplate,
   type DashboardData, type PageData,
 } from "@/api/admin"
 import {
   ADMIN_PAGE_SIZE_OPTIONS as pageSizeOptions,
-  featureText,
   formatCurrency,
-  formatDate,
-  formatNumber,
   formatTokenNumber,
-  modelDisplay,
-  sectionText,
-  statusClass,
-  statusText,
-  taskTypeText,
-  tokenUsage,
 } from "@/utils/adminFormat"
 import { showGlobalToast } from "@/utils/toast"
 
@@ -51,22 +44,14 @@ const section = ref<Section>("dashboard")
 const loading = ref(false)
 const error = ref("")
 const keyword = ref("")
-const statusFilter = ref("")
-const typeFilter = ref("")
-const modelFilter = ref("")
 const starterIndustryFilter = ref("")
 const pageSize = ref(20)
-const otherModelFilterValue = "__other__"
 const dashboard = ref<DashboardData | null>(null)
-const aiTasks = ref<PageData<AdminAiTask>>({ items: [], total: 0, page: 1, page_size: 20 })
 const templates = ref<PageData<AdminTemplate>>({ items: [], total: 0, page: 1, page_size: 20 })
 const resumeStarters = ref<PageData<AdminResumeStarter>>({ items: [], total: 0, page: 1, page_size: 20 })
 const starterIndustries = ref<AdminResumeStarterIndustry[]>([])
 const templateOptions = ref<AdminTemplate[]>([])
-const pointTransactions = ref<PageData<AdminFlowPointTransaction>>({ items: [], total: 0, page: 1, page_size: 20 })
 
-const aiModelConfigs = ref<AdminAiConfig[]>([])
-const aiModelOptionsLoaded = ref(false)
 const settingsForm = ref({
   signup_gift_points: 0,
   redeem_daily_attempt_limit: 10,
@@ -116,8 +101,6 @@ const navItems = navGroups.flatMap((group) => group.items)
 
 const currentTitle = computed(() => navItems.find((item) => item.id === section.value)?.label || "管理后台")
 const currentPage = computed(() => {
-  if (section.value === "ai") return aiTasks.value
-  if (section.value === "point-transactions") return pointTransactions.value
   if (section.value === "templates") return templates.value
   if (section.value === "industry-templates") return resumeStarters.value
   return null
@@ -216,12 +199,6 @@ const dashboardCards = computed(() => {
   ]
 })
 
-async function ensureAiModelOptions() {
-  if (aiModelOptionsLoaded.value) return
-  aiModelConfigs.value = await getAdminAiConfigsApi()
-  aiModelOptionsLoaded.value = true
-}
-
 async function ensureTemplateOptions() {
   if (templateOptions.value.length) return
   const data = await getAdminTemplatesApi({ page: 1, page_size: 100 })
@@ -232,10 +209,7 @@ async function load(page = 1) {
   loading.value = true
   error.value = ""
   try {
-    if (["ai", "point-transactions"].includes(section.value)) await ensureAiModelOptions()
     if (section.value === "dashboard") dashboard.value = await getAdminDashboardApi()
-    if (section.value === "ai") aiTasks.value = await getAdminAiTasksApi({ page, page_size: pageSize.value, status: statusFilter.value || undefined, task_type: typeFilter.value || undefined, model: modelFilter.value || undefined })
-    if (section.value === "point-transactions") pointTransactions.value = await getAdminFlowPointTransactionsApi({ page, page_size: pageSize.value, keyword: keyword.value, direction: statusFilter.value || undefined, feature_type: typeFilter.value || undefined, model: modelFilter.value || undefined })
 
     if (section.value === "system-settings") {
       const data = await getAdminSettingsApi()
@@ -270,9 +244,6 @@ async function load(page = 1) {
 function switchSection(value: Section) {
   section.value = value
   keyword.value = ""
-  statusFilter.value = ""
-  typeFilter.value = ""
-  modelFilter.value = ""
   starterIndustryFilter.value = ""
   pageSize.value = 20
   load()
@@ -280,33 +251,6 @@ function switchSection(value: Section) {
 
 function handleShellSection(value: string) {
   switchSection(value as Section)
-}
-
-const showRevokeGrantConfirm = ref(false)
-const revokeGrantTarget = ref<AdminFlowPointTransaction | null>(null)
-
-function requestRevokeGrant(item: AdminFlowPointTransaction) {
-  if (!item.grant_batch_no) return
-  revokeGrantTarget.value = item
-  showRevokeGrantConfirm.value = true
-}
-
-async function executeRevokeGrant() {
-  const target = revokeGrantTarget.value
-  const batchNo = target?.grant_batch_no
-  if (!batchNo) return
-  try {
-    const result = await revokeAllUsersFlowPointsGrantApi(batchNo, {
-      description: `撤回误发放批次 ${batchNo}`,
-    }) as any
-    showGlobalToast(`已分 ${result?.batches ?? 0} 批撤回 ${result?.count ?? 0} 个用户的发放`)
-    await load(currentPage.value?.page || 1)
-  } catch (err: any) {
-    showGlobalToast(err.message || "撤回发放失败", "error")
-  } finally {
-    showRevokeGrantConfirm.value = false
-    revokeGrantTarget.value = null
-  }
 }
 
 async function updateTemplateDisplay(item: AdminTemplate, data: { sort_order?: number; is_visible?: boolean }) {
@@ -644,63 +588,6 @@ async function saveSettings() {
   }
 }
 
-const statusOptions = computed(() => {
-  if (section.value === 'point-transactions') {
-    return [
-      { label: '全部方向', value: '' },
-      { label: '扣减', value: 'consume' },
-      { label: '充值发放', value: 'recharge' },
-    ]
-  }
-  return [
-    { label: '全部状态', value: '' },
-    { label: '成功', value: 'success' },
-    { label: '失败', value: 'failed' },
-    { label: '处理中', value: 'pending' },
-  ]
-})
-
-const modelFilterOptions = computed(() => {
-  const seen = new Set<string>()
-  const options = [{ label: '全部模型', value: '' }]
-  for (const item of aiModelConfigs.value) {
-    const model = String(item.model_ref || '').trim()
-    if (!model || seen.has(model)) continue
-    seen.add(model)
-    const label = item.name && item.name !== model ? `${item.name}` : model
-    options.push({ label, value: model })
-  }
-  options.push({ label: '其他模型', value: otherModelFilterValue })
-  return options
-})
-
-const aiTypeOptions = [
-  { label: '全部 AI 功能', value: '' },
-  { label: 'AI 智能生成', value: 'generate_resume' },
-  { label: '导入简历', value: 'import_resume' },
-  { label: '简历诊断', value: 'resume_score' },
-  { label: 'JD 优化', value: 'jd_optimize' },
-  { label: '简历翻译', value: 'resume_translate' },
-  { label: '模块润色', value: 'section_optimize' },
-  { label: 'AI 助手对话', value: 'ai_chat' },
-]
-
-const pointFeatureOptions = [
-  { label: '全部功能', value: '' },
-  { label: 'AI 智能生成', value: 'generate_resume' },
-  { label: '导入简历', value: 'import_resume' },
-  { label: 'AI 润色', value: 'section_optimize' },
-  { label: 'AI 助手', value: 'ai_chat' },
-  { label: '智能诊断', value: 'resume_score' },
-  { label: 'JD 优化', value: 'jd_optimize' },
-  { label: '简历翻译', value: 'resume_translate' },
-  { label: '兑换码充值', value: 'redeem' },
-  { label: '管理员调整', value: 'admin_adjust' },
-  { label: '全员发放', value: 'admin_grant_all' },
-  { label: '全员发放撤回', value: 'admin_grant_all_revoke' },
-  { label: '注册赠送', value: 'signup_gift' },
-]
-
 onMounted(() => load())
 </script>
 
@@ -807,67 +694,25 @@ onMounted(() => load())
         <AdminResumesPanel v-else-if="section === 'resumes'" />
         <AdminExportsPanel v-else-if="section === 'exports'" />
         <AdminFeedbacksPanel v-else-if="section === 'feedbacks'" />
+        <AdminAiTasksPanel v-else-if="section === 'ai'" />
+        <AdminPointTransactionsPanel v-else-if="section === 'point-transactions'" />
 
         <template v-else>
-          <div v-if="['ai', 'point-transactions', 'industry-templates'].includes(section)" class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div v-if="['point-transactions', 'industry-templates'].includes(section)" class="relative w-full sm:w-72">
+          <div v-if="section === 'industry-templates'" class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div class="relative w-full sm:w-72">
               <Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-              <input v-model="keyword" class="h-10 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-zinc-400" :placeholder="section === 'point-transactions' ? '搜索用户、邮箱或说明' : section === 'industry-templates' ? '搜索行业、岗位或 ID' : '搜索用户名、邮箱或标题'" @keyup.enter="load(1)" />
+              <input v-model="keyword" class="h-10 w-full rounded-lg border border-zinc-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-zinc-400" placeholder="搜索行业、岗位或 ID" @keyup.enter="load(1)" />
             </div>
-            <div v-if="section === 'industry-templates'" class="w-full sm:w-44">
+            <div class="w-full sm:w-44">
               <Select v-model="starterIndustryFilter" :options="starterIndustryFilterOptions" placeholder="全部行业" class="h-10 w-full rounded-lg" @change="load(1)" />
             </div>
-            <div v-if="['ai', 'point-transactions'].includes(section)" class="w-full sm:w-32">
-              <Select v-model="statusFilter" :options="statusOptions" placeholder="全部状态" class="h-10 w-full rounded-lg" @change="load(1)" />
-            </div>
-            <div v-if="['ai', 'point-transactions'].includes(section)" class="w-full sm:w-40">
-              <Select v-model="typeFilter" :options="section === 'point-transactions' ? pointFeatureOptions : aiTypeOptions" placeholder="全部功能" class="h-10 w-full rounded-lg" @change="load(1)" />
-            </div>
-            <div v-if="['ai', 'point-transactions'].includes(section)" class="w-full sm:w-44">
-              <Select v-model="modelFilter" :options="modelFilterOptions" placeholder="全部模型" class="h-10 w-full rounded-lg" @change="load(1)" />
-            </div>
-            <Button v-if="['point-transactions', 'industry-templates'].includes(section)" class="w-full sm:w-auto" @click="load(1)">查询</Button>
-            <Button v-if="section === 'industry-templates'" variant="outline" class="w-full sm:w-auto" @click="openStarterCreator"><Plus class="h-4 w-4" />新增岗位预设</Button>
+            <Button class="w-full sm:w-auto" @click="load(1)">查询</Button>
+            <Button variant="outline" class="w-full sm:w-auto" @click="openStarterCreator"><Plus class="h-4 w-4" />新增岗位预设</Button>
           </div>
 
           <div class="overflow-hidden rounded-xl border border-zinc-200 bg-white">
             <div v-if="loading" class="flex h-64 items-center justify-center text-sm text-zinc-400"><RefreshCw class="mr-2 h-4 w-4 animate-spin" />正在加载</div>
             <div v-else class="overflow-x-auto">
-              <table v-if="section === 'ai'" class="w-full min-w-[1200px] text-left text-sm"><thead><tr class="border-b bg-zinc-50 text-xs whitespace-nowrap text-zinc-500"><th class="px-5 py-3">AI 功能</th><th class="px-5 py-3">具体模块</th><th class="px-5 py-3">模型</th><th class="px-5 py-3">用户</th><th class="px-5 py-3">扣点 / Token</th><th class="px-5 py-3">简历 ID</th><th class="px-5 py-3">状态</th><th class="px-5 py-3">时间</th><th class="px-5 py-3">错误</th></tr></thead><tbody><tr v-for="item in aiTasks.items" :key="item.id" class="border-b border-zinc-100 last:border-0"><td class="px-5 py-4 font-medium whitespace-nowrap">{{ item.task_type === 'ai_chat' ? featureText(item.feature) : taskTypeText(item.task_type) }}</td><td class="px-5 py-4 text-zinc-500 whitespace-nowrap">{{ item.task_type === 'ai_chat' && item.input_data?.tool_calls ? `${item.input_data.tool_calls} 步工具` : item.task_type === 'section_optimize' ? sectionText(item.input_data?.section_type) : '—' }}</td><td class="px-5 py-4 whitespace-nowrap"><p class="font-medium text-zinc-800">{{ modelDisplay(item).display || '—' }}</p><p v-if="modelDisplay(item).raw" class="mt-0.5 text-[11px] text-zinc-400">{{ modelDisplay(item).raw }}</p></td><td class="px-5 py-4 whitespace-nowrap">{{ item.username }}</td><td class="px-5 py-4 whitespace-nowrap"><span class="whitespace-nowrap rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700">{{ item.points_used || 0 }} 点</span><p v-if="tokenUsage(item).total" class="mt-1 whitespace-nowrap text-[11px] text-zinc-500">{{ formatTokenNumber(tokenUsage(item).total) }} tokens</p><p v-if="tokenUsage(item).total" class="mt-0.5 whitespace-nowrap text-[11px] text-zinc-400">入 {{ formatTokenNumber(tokenUsage(item).input) }} · 出 {{ formatTokenNumber(tokenUsage(item).output) }}</p></td><td class="px-5 py-4 text-zinc-500">{{ item.resume_id || '—' }}</td><td class="px-5 py-4 whitespace-nowrap"><span class="whitespace-nowrap rounded-full px-2 py-1 text-xs ring-1 ring-inset" :class="statusClass(item.status)">{{ statusText(item.status) }}</span></td><td class="px-5 py-4 text-zinc-500 whitespace-nowrap">{{ formatDate(item.create_time) }}</td><td class="max-w-sm truncate px-5 py-4 text-xs text-red-600" :title="item.error_message">{{ item.error_message || '—' }}</td></tr></tbody></table>
-
-              <table v-if="section === 'point-transactions'" class="w-full min-w-[1240px] text-left text-sm">
-                <thead>
-                  <tr class="border-b bg-zinc-50 text-xs text-zinc-500">
-                    <th class="px-5 py-3">用户</th>
-                    <th class="px-5 py-3">类型</th>
-                    <th class="px-5 py-3">模型</th>
-                    <th class="px-5 py-3">变动</th>
-                    <th class="px-5 py-3">余额</th>
-                    <th class="px-5 py-3">Token</th>
-                    <th class="px-5 py-3">说明</th>
-                    <th class="px-5 py-3">时间</th>
-                    <th class="px-5 py-3 text-right">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="item in pointTransactions.items" :key="item.id" class="border-b border-zinc-100 last:border-0">
-                    <td class="px-5 py-4"><p class="font-medium text-zinc-900">{{ item.username }}</p><p class="mt-0.5 text-xs text-zinc-400">{{ item.email }}</p></td>
-                    <td class="px-5 py-4 whitespace-nowrap"><span class="whitespace-nowrap rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-700">{{ item.feature_name }}</span></td>
-                    <td class="px-5 py-4 whitespace-nowrap"><p class="font-medium text-zinc-800">{{ modelDisplay(item).display || '—' }}</p><p v-if="modelDisplay(item).raw" class="mt-0.5 text-[11px] text-zinc-400">{{ modelDisplay(item).raw }}</p></td>
-                    <td class="px-5 py-4 whitespace-nowrap"><span class="font-semibold" :class="item.points_delta > 0 ? 'text-emerald-700' : 'text-red-600'">{{ item.points_delta > 0 ? '+' : '' }}{{ item.points_delta }}</span></td>
-                    <td class="px-5 py-4 text-zinc-700">{{ item.balance_after }}</td>
-                    <td class="px-5 py-4 text-zinc-500">{{ item.tokens_used ? formatTokenNumber(item.tokens_used) : '—' }}</td>
-                    <td class="max-w-md truncate px-5 py-4 text-zinc-600" :title="item.description">{{ item.description || '—' }}</td>
-                    <td class="px-5 py-4 text-zinc-500 whitespace-nowrap">{{ formatDate(item.create_time) }}</td>
-                    <td class="px-5 py-4 text-right whitespace-nowrap">
-                      <button v-if="item.can_revoke" class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 active:scale-95" @click="requestRevokeGrant(item)">撤回批次</button>
-                      <span v-else class="text-xs text-zinc-300">—</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-
-
               <div v-if="section === 'templates'" class="grid gap-5 p-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                 <article v-for="item in templates.items" :key="item.template_id" class="group relative flex flex-col rounded-xl bg-white p-4 border border-zinc-200/60 transition hover:border-zinc-300">
                   <div class="flex items-center justify-between gap-2">
@@ -965,14 +810,6 @@ onMounted(() => load())
             />
           </div>
         </template>
-    <ConfirmDialog
-      v-model:open="showRevokeGrantConfirm"
-      title="确认撤回全员发放？"
-      :description="`将撤回批次 ${revokeGrantTarget?.grant_batch_no || ''} 的全员发放。若用户余额不足，将扣到 0，并保留完整撤回流水。`"
-      destructive
-      @confirm="executeRevokeGrant"
-    />
-
 
     <Teleport to="body">
       <Transition

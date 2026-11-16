@@ -86,6 +86,18 @@ export function feedbackStatusText(value: string): string {
   return ({ open: "待处理", processing: "处理中", resolved: "已解决", closed: "已关闭" } as Record<string, string>)[value] || value
 }
 
+/** AI 任务列表的「AI 功能」列：对话按 feature 细分，其余走任务类型文案。 */
+export function aiTaskFeatureText(item: AdminAiTask): string {
+  return item.task_type === "ai_chat" ? featureText(item.feature) : taskTypeText(item.task_type)
+}
+
+/** AI 任务列表的「具体模块」列：对话显示工具步数，模块润色显示模块名，其余留横线。 */
+export function aiTaskModuleText(item: AdminAiTask): string {
+  if (item.task_type === "ai_chat" && item.input_data?.tool_calls) return `${item.input_data.tool_calls} 步工具`
+  if (item.task_type === "section_optimize") return sectionText(item.input_data?.section_type)
+  return "—"
+}
+
 export function sectionText(value?: string): string {
   return (
     { basics: "基本信息", summary: "个人简介", education: "教育经历", skills: "专业技能", work: "工作经历", projects: "项目经历", awards: "荣誉奖项" } as Record<

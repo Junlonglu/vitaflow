@@ -356,7 +356,14 @@ export const getAdminUsersApi = (params: Record<string, unknown>) => request.get
 export const updateAdminUserStatusApi = (id: number, status: "active" | "disabled") => request.patch(`/admin/users/${id}/status`, { status })
 export const updateAdminUserFlowPointsApi = (id: number, data: { points_delta: number; description?: string }) => request.patch(`/admin/users/${id}/flow-points`, data)
 export const grantAllUsersFlowPointsApi = (data: { points: number; description?: string; batch_size?: number }) => request.post("/admin/users/flow-points/grant-all", data)
-export const revokeAllUsersFlowPointsGrantApi = (batchNo: string, data: { description?: string; batch_size?: number } = {}) => request.post(`/admin/users/flow-points/grant-all/${batchNo}/revoke`, data)
+/** 撤回全员发放的回包：分了几批、退了多少人。 */
+export interface AdminGrantRevokeResult {
+  count: number
+  batches: number
+}
+
+export const revokeAllUsersFlowPointsGrantApi = (batchNo: string, data: { description?: string; batch_size?: number } = {}) =>
+  request.post<AdminGrantRevokeResult, AdminGrantRevokeResult>(`/admin/users/flow-points/grant-all/${batchNo}/revoke`, data)
 export const getAdminFlowPointTransactionsApi = (params: Record<string, unknown>) => request.get<PageData<AdminFlowPointTransaction>, PageData<AdminFlowPointTransaction>>("/admin/flow-point-transactions", { params })
 export const getAdminResumesApi = (params: Record<string, unknown>) => request.get<PageData<AdminResume>, PageData<AdminResume>>("/admin/resumes", { params })
 export const getAdminAiTasksApi = (params: Record<string, unknown>) => request.get<PageData<AdminAiTask>, PageData<AdminAiTask>>("/admin/ai-tasks", { params })

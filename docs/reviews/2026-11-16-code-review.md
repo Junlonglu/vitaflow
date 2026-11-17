@@ -224,8 +224,10 @@ content, _ = read_uploaded_file(object_name)   # 同步 HTTP 打 MinIO/OSS
 
 | P2-10a | 收敛 18 个文件里 67 处 `catch (X: any)`（65 语句 + 2 promise）为 `unknown`，错误展示改用已有的 `utils/errorText.errorMessage()`。`request.ts` 统一 `throw new Error(中文 message)`，故中文透传行为一致，英文传输层报错顺带换中文兜底。`Login.vue` 5 处无兜底的 `e.message` 补了场景文案；新增 `errorText.spec.ts`（7 条）锁住语义 | 18 个 `.ts/.vue`、`utils/__tests__/errorText.spec.ts` | `errorText.spec.ts`（7 条） |
 
-P2-10 第一批后前端 **201 passed**（194 + 7），`vue-tsc` 0 错，`vite build` 通过，全仓 0 处残留 `catch(any)`。
+| P2-10b | `aiDiff.ts` 单文件 22 处 `any` 收敛为 `unknown` + 类型守卫。数据是 AI 返回的动态简历 JSON（各 section 形状不同、`ResumeData` 无索引签名），判别联合会失真，故用 `asRecord`/`asArray`/`layoutOf`/`sectionTitlesOf` 收窄到 `DataRecord`（字符串键→未知值）。`buildSelectedResumeData` 改泛型 `<T>` 保留入参类型，与 `previewResumeDataApi(ResumeData)` 兼容 | `utils/aiDiff.ts` | `aiDiff.spec.ts`（14 条，原 14 条行为不变） |
+
+P2-10 两批后前端 **201 passed**，`vue-tsc` 0 错，`vite build` 通过：全仓 0 处 `catch(any)`、`aiDiff.ts` 代码层 0 处 `any`。剩余零散 `as any` 分布在 API 层回包与类型定义里，属低风险长尾，按需收紧即可，不阻塞收口。
 
 ### 仍未处理
 
-P2-10 剩余：`aiDiff.ts` 单文件 22 处 `any`（简历 section 判别联合重构，单独处理），以及 API 层与类型定义里零散的 `as any` / `: any`。P2-8、P2-9 已全部完成。
+无阻断项。审查报告 P0 / P1 / P2 全部条目已处理完毕；仅剩 P2-10 长尾（API 层零散 `as any`）可按需渐进收紧。

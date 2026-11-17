@@ -10,13 +10,14 @@ import { RefreshCw } from "lucide-vue-next"
 import Select from "@/components/ui/select/Select.vue"
 import PaginationFooter from "@/components/ui/pagination/PaginationFooter.vue"
 import { getAdminExportsApi, type AdminExport, type PageData } from "@/api/admin"
-import { ADMIN_PAGE_SIZE_OPTIONS, formatDate, statusClass, statusText } from "@/utils/adminFormat"
+import { ADMIN_PAGE_SIZE_DEFAULT,
+  ADMIN_PAGE_SIZE_OPTIONS, formatDate, statusClass, statusText } from "@/utils/adminFormat"
 
-const data = ref<PageData<AdminExport>>({ items: [], total: 0, page: 1, page_size: 20 })
+const data = ref<PageData<AdminExport>>({ items: [], total: 0, page: 1, page_size: ADMIN_PAGE_SIZE_DEFAULT })
 const loading = ref(false)
 const error = ref("")
 const statusFilter = ref("")
-const pageSize = ref(20)
+const pageSize = ref(ADMIN_PAGE_SIZE_DEFAULT)
 
 const statusOptions = [
   { label: "全部状态", value: "" },

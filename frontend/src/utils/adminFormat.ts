@@ -124,7 +124,8 @@ export function feedbackStatusClass(value?: string): string {
   return statusClass(value === "resolved" ? "success" : value === "closed" ? "disabled" : "pending")
 }
 
-/** 管理后台列表共用的每页条数档位。 */
+/** 管理后台列表共用的每页条数档位（默认 10 条）。 */
+export const ADMIN_PAGE_SIZE_DEFAULT = 10
 export const ADMIN_PAGE_SIZE_OPTIONS = [
   { label: "10 条/页", value: 10 },
   { label: "20 条/页", value: 20 },

@@ -10,6 +10,7 @@ import Select from "@/components/ui/select/Select.vue"
 import PaginationFooter from "@/components/ui/pagination/PaginationFooter.vue"
 import { getAdminAiTasksApi, type AdminAiTask, type PageData } from "@/api/admin"
 import {
+  ADMIN_PAGE_SIZE_DEFAULT,
   ADMIN_PAGE_SIZE_OPTIONS,
   aiTaskFeatureText,
   aiTaskModuleText,
@@ -22,13 +23,13 @@ import {
 } from "@/utils/adminFormat"
 import { useAdminModelFilter } from "@/composables/useAdminModelFilter"
 
-const data = ref<PageData<AdminAiTask>>({ items: [], total: 0, page: 1, page_size: 20 })
+const data = ref<PageData<AdminAiTask>>({ items: [], total: 0, page: 1, page_size: ADMIN_PAGE_SIZE_DEFAULT })
 const loading = ref(false)
 const error = ref("")
 const statusFilter = ref("")
 const typeFilter = ref("")
 const modelFilter = ref("")
-const pageSize = ref(20)
+const pageSize = ref(ADMIN_PAGE_SIZE_DEFAULT)
 
 const statusOptions = [
   { label: "全部状态", value: "" },

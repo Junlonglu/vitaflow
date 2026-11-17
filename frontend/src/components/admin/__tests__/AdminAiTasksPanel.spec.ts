@@ -68,7 +68,7 @@ async function mountPanel() {
 
 describe("AdminAiTasksPanel", () => {
   beforeEach(() => {
-    vi.mocked(getAdminAiTasksApi).mockReset().mockResolvedValue({ items: cloneTasks(), total: 2, page: 1, page_size: 20 } as never)
+    vi.mocked(getAdminAiTasksApi).mockReset().mockResolvedValue({ items: cloneTasks(), total: 2, page: 1, page_size: 10 } as never)
     vi.mocked(getAdminAiConfigsApi).mockReset().mockResolvedValue([
       { name: "Claude Sonnet 4.5", model_ref: "claude-sonnet-4-5" },
     ] as never)
@@ -77,7 +77,7 @@ describe("AdminAiTasksPanel", () => {
   it("挂载即拉第一页并渲染任务行", async () => {
     const wrapper = await mountPanel()
 
-    expect(vi.mocked(getAdminAiTasksApi).mock.calls[0][0]).toMatchObject({ page: 1, page_size: 20 })
+    expect(vi.mocked(getAdminAiTasksApi).mock.calls[0][0]).toMatchObject({ page: 1, page_size: 10 })
     const text = wrapper.text()
     expect(text).toContain("对话 · 润色")
     expect(text).toContain("alice")

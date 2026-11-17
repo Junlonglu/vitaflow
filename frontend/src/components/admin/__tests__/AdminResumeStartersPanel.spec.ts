@@ -121,7 +121,7 @@ describe("AdminResumeStartersPanel", () => {
     document.body.innerHTML = ""
     vi.mocked(showGlobalToast).mockClear()
     vi.mocked(getAdminResumeStarterIndustriesApi).mockReset().mockResolvedValue(INDUSTRIES as never)
-    vi.mocked(getAdminResumeStartersApi).mockReset().mockResolvedValue({ items: cloneStarters(), total: 2, page: 1, page_size: 20 } as never)
+    vi.mocked(getAdminResumeStartersApi).mockReset().mockResolvedValue({ items: cloneStarters(), total: 2, page: 1, page_size: 10 } as never)
     vi.mocked(getAdminTemplatesApi).mockReset().mockResolvedValue({ items: [{ name: "科技风", category: "技术", template_id: "tech" }], total: 1, page: 1, page_size: 100 } as never)
     vi.mocked(createAdminResumeStarterApi).mockReset().mockResolvedValue({ ...STARTERS[0], starter_id: "new" } as never)
     vi.mocked(updateAdminResumeStarterApi).mockReset().mockResolvedValue({ ...STARTERS[0] } as never)
@@ -131,7 +131,7 @@ describe("AdminResumeStartersPanel", () => {
   it("挂载即拉第一页并渲染岗位行与模块/关键词摘要", async () => {
     const wrapper = await mountPanel()
 
-    expect(vi.mocked(getAdminResumeStartersApi).mock.calls[0][0]).toMatchObject({ page: 1, page_size: 20 })
+    expect(vi.mocked(getAdminResumeStartersApi).mock.calls[0][0]).toMatchObject({ page: 1, page_size: 10 })
     const text = wrapper.text()
     expect(text).toContain("前端工程师")
     expect(text).toContain("Web / 小程序")

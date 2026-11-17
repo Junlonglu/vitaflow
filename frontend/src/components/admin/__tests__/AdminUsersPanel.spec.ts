@@ -66,7 +66,7 @@ function cloneUsers(): AdminUser[] {
 }
 
 function page(items: AdminUser[], overrides: Record<string, unknown> = {}) {
-  return { items, total: items.length, page: 1, page_size: 20, ...overrides }
+  return { items, total: items.length, page: 1, page_size: 10, ...overrides }
 }
 
 async function mountPanel() {
@@ -108,7 +108,7 @@ describe("AdminUsersPanel", () => {
     const wrapper = await mountPanel()
 
     expect(getAdminUsersApi).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(getAdminUsersApi).mock.calls[0][0]).toMatchObject({ page: 1, page_size: 20, sort_by: "create_time", sort_order: "desc" })
+    expect(vi.mocked(getAdminUsersApi).mock.calls[0][0]).toMatchObject({ page: 1, page_size: 10, sort_by: "create_time", sort_order: "desc" })
 
     const text = wrapper.text()
     expect(text).toContain("alice")

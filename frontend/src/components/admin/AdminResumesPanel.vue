@@ -16,13 +16,14 @@ import {
   type AdminTemplate,
   type PageData,
 } from "@/api/admin"
-import { ADMIN_PAGE_SIZE_OPTIONS, formatDate } from "@/utils/adminFormat"
+import { ADMIN_PAGE_SIZE_DEFAULT,
+  ADMIN_PAGE_SIZE_OPTIONS, formatDate } from "@/utils/adminFormat"
 
-const data = ref<PageData<AdminResume>>({ items: [], total: 0, page: 1, page_size: 20 })
+const data = ref<PageData<AdminResume>>({ items: [], total: 0, page: 1, page_size: ADMIN_PAGE_SIZE_DEFAULT })
 const loading = ref(false)
 const error = ref("")
 const keyword = ref("")
-const pageSize = ref(20)
+const pageSize = ref(ADMIN_PAGE_SIZE_DEFAULT)
 const templates = ref<AdminTemplate[]>([])
 
 const languageLabel: Record<string, string> = { "zh-CN": "简体中文", en: "英文" }

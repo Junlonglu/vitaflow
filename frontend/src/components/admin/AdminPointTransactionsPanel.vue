@@ -17,18 +17,19 @@ import {
   type AdminFlowPointTransaction,
   type PageData,
 } from "@/api/admin"
-import { ADMIN_PAGE_SIZE_OPTIONS, formatDate, formatTokenNumber, modelDisplay } from "@/utils/adminFormat"
+import { ADMIN_PAGE_SIZE_DEFAULT,
+  ADMIN_PAGE_SIZE_OPTIONS, formatDate, formatTokenNumber, modelDisplay } from "@/utils/adminFormat"
 import { useAdminModelFilter } from "@/composables/useAdminModelFilter"
 import { showGlobalToast } from "@/utils/toast"
 
-const data = ref<PageData<AdminFlowPointTransaction>>({ items: [], total: 0, page: 1, page_size: 20 })
+const data = ref<PageData<AdminFlowPointTransaction>>({ items: [], total: 0, page: 1, page_size: ADMIN_PAGE_SIZE_DEFAULT })
 const loading = ref(false)
 const error = ref("")
 const keyword = ref("")
 const direction = ref("")
 const featureType = ref("")
 const modelFilter = ref("")
-const pageSize = ref(20)
+const pageSize = ref(ADMIN_PAGE_SIZE_DEFAULT)
 
 const directionOptions = [
   { label: "全部方向", value: "" },

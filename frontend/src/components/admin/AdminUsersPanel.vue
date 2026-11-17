@@ -24,6 +24,7 @@ import {
   type PageData,
 } from "@/api/admin"
 import {
+  ADMIN_PAGE_SIZE_DEFAULT,
   ADMIN_PAGE_SIZE_OPTIONS,
   formatDate,
   formatNumber,
@@ -36,12 +37,12 @@ import { showGlobalToast } from "@/utils/toast"
 
 type UserSortKey = "username" | "role" | "resume_count" | "flow_points" | "status" | "create_time"
 
-const data = ref<PageData<AdminUser>>({ items: [], total: 0, page: 1, page_size: 20 })
+const data = ref<PageData<AdminUser>>({ items: [], total: 0, page: 1, page_size: ADMIN_PAGE_SIZE_DEFAULT })
 const loading = ref(false)
 const error = ref("")
 const keyword = ref("")
 const statusFilter = ref("")
-const pageSize = ref(20)
+const pageSize = ref(ADMIN_PAGE_SIZE_DEFAULT)
 const sortBy = ref<UserSortKey>("create_time")
 const sortOrder = ref<"asc" | "desc">("desc")
 

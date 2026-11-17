@@ -8,6 +8,7 @@ import AiModelSettingsPanel from "@/components/admin/ai/AiModelSettingsPanel.vue
 import PointRulesSettingsPanel from "@/components/admin/ai/PointRulesSettingsPanel.vue"
 import RedeemCodesSettingsPanel from "@/components/admin/ai/RedeemCodesSettingsPanel.vue"
 import type { ProviderSavePayload } from "@/components/admin/ai/providerDraft"
+import { ADMIN_PAGE_SIZE_DEFAULT } from "@/utils/adminFormat"
 import { showGlobalToast } from "@/utils/toast"
 import {
   createAdminCatalogGroupApi,
@@ -50,7 +51,7 @@ const loading = ref(false)
 const error = ref("")
 const pricing = ref<AdminModelPricing | null>(null)
 const rules = ref<AdminPointRule[]>([])
-const codes = ref<PageData<AdminRedeemCode>>({ items: [], total: 0, page: 1, page_size: 20 })
+const codes = ref<PageData<AdminRedeemCode>>({ items: [], total: 0, page: 1, page_size: ADMIN_PAGE_SIZE_DEFAULT })
 const catalog = ref<AdminCatalog | null>(null)
 const activeTab = ref<SettingsMode>(props.mode || "model")
 const savingPricing = ref(false)

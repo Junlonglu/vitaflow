@@ -50,7 +50,7 @@ function cloneFeedbacks(): AdminFeedback[] {
 }
 
 function pageOf(items: AdminFeedback[]) {
-  return { items, total: items.length, page: 1, page_size: 20 }
+  return { items, total: items.length, page: 1, page_size: 10 }
 }
 
 function lastListParams(): Record<string, unknown> | undefined {
@@ -118,7 +118,7 @@ describe("AdminFeedbacksPanel", () => {
     const wrapper = mount(AdminFeedbacksPanel)
     await flushPromises()
 
-    expect(getAdminFeedbacksApi).toHaveBeenCalledWith({ page: 1, page_size: 20, status: undefined })
+    expect(getAdminFeedbacksApi).toHaveBeenCalledWith({ page: 1, page_size: 10, status: undefined })
     const text = wrapper.text()
     expect(text).toContain("功能建议")
     expect(text).toContain("问题反馈")

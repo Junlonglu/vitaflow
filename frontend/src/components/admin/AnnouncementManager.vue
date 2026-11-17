@@ -12,9 +12,10 @@ import {
   updateAdminAnnouncementApi, updateAdminAnnouncementStatusApi,
   type AdminAnnouncement, type PageData,
 } from "@/api/admin"
+import { ADMIN_PAGE_SIZE_DEFAULT } from "@/utils/adminFormat"
 import { showGlobalToast } from "@/utils/toast"
 
-const data = ref<PageData<AdminAnnouncement>>({ items: [], total: 0, page: 1, page_size: 20 })
+const data = ref<PageData<AdminAnnouncement>>({ items: [], total: 0, page: 1, page_size: ADMIN_PAGE_SIZE_DEFAULT })
 const loading = ref(false)
 const saving = ref(false)
 const error = ref("")
@@ -45,7 +46,7 @@ async function load(page = 1) {
   loading.value = true
   error.value = ""
   try {
-    data.value = await getAdminAnnouncementsApi({ page, page_size: 10, keyword: keyword.value, status: status.value || undefined })
+    data.value = await getAdminAnnouncementsApi({ page, page_size: ADMIN_PAGE_SIZE_DEFAULT, keyword: keyword.value, status: status.value || undefined })
   } catch (err: unknown) {
     error.value = errorMessage(err, "公告加载失败")
   } finally {

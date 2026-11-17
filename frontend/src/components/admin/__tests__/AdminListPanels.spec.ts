@@ -59,7 +59,7 @@ const EXPORTS = [
 ] as never
 
 function pageOf<T>(items: T[]) {
-  return { items, total: items.length, page: 1, page_size: 20 }
+  return { items, total: items.length, page: 1, page_size: 10 }
 }
 
 describe("AdminResumesPanel", () => {
@@ -72,7 +72,7 @@ describe("AdminResumesPanel", () => {
     const wrapper = mount(AdminResumesPanel)
     await flushPromises()
 
-    expect(getAdminResumesApi).toHaveBeenCalledWith({ page: 1, page_size: 20, keyword: "" })
+    expect(getAdminResumesApi).toHaveBeenCalledWith({ page: 1, page_size: 10, keyword: "" })
     expect(wrapper.text()).toContain("前端开发工程师简历")
     expect(wrapper.text()).toContain("#80")
     expect(wrapper.text()).toContain("简体中文")
@@ -126,7 +126,7 @@ describe("AdminExportsPanel", () => {
     const wrapper = mount(AdminExportsPanel)
     await flushPromises()
 
-    expect(getAdminExportsApi).toHaveBeenCalledWith({ page: 1, page_size: 20, status: undefined })
+    expect(getAdminExportsApi).toHaveBeenCalledWith({ page: 1, page_size: 10, status: undefined })
     expect(wrapper.text()).toContain("成功")
     expect(wrapper.text()).toContain("失败")
     // 大写是 CSS `uppercase`，jsdom 不做样式变换，断言原始值。

@@ -18,15 +18,15 @@ import {
   createAdminResumeStarterApi, updateAdminResumeStarterApi, deleteAdminResumeStarterApi,
   type AdminResumeStarter, type AdminResumeStarterIndustry, type AdminTemplate, type PageData,
 } from "@/api/admin"
-import { ADMIN_PAGE_SIZE_OPTIONS } from "@/utils/adminFormat"
+import { ADMIN_PAGE_SIZE_DEFAULT, ADMIN_PAGE_SIZE_OPTIONS } from "@/utils/adminFormat"
 import { showGlobalToast } from "@/utils/toast"
 
 const keyword = ref("")
 const industryFilter = ref("")
-const pageSize = ref(20)
+const pageSize = ref(ADMIN_PAGE_SIZE_DEFAULT)
 const loading = ref(false)
 const error = ref("")
-const data = ref<PageData<AdminResumeStarter>>({ items: [], total: 0, page: 1, page_size: 20 })
+const data = ref<PageData<AdminResumeStarter>>({ items: [], total: 0, page: 1, page_size: ADMIN_PAGE_SIZE_DEFAULT })
 const industries = ref<AdminResumeStarterIndustry[]>([])
 const templateOptions = ref<AdminTemplate[]>([])
 

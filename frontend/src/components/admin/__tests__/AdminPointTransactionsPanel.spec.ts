@@ -79,7 +79,7 @@ describe("AdminPointTransactionsPanel", () => {
   beforeEach(() => {
     vi.mocked(getAdminFlowPointTransactionsApi)
       .mockReset()
-      .mockResolvedValue({ items: ROWS.map((item) => ({ ...item })), total: 2, page: 1, page_size: 20 } as never)
+      .mockResolvedValue({ items: ROWS.map((item) => ({ ...item })), total: 2, page: 1, page_size: 10 } as never)
     vi.mocked(getAdminAiConfigsApi).mockReset().mockResolvedValue([] as never)
     vi.mocked(revokeAllUsersFlowPointsGrantApi).mockReset()
     vi.mocked(showGlobalToast).mockClear()
@@ -88,7 +88,7 @@ describe("AdminPointTransactionsPanel", () => {
   it("挂载即拉第一页并渲染流水行", async () => {
     const wrapper = await mountPanel()
 
-    expect(vi.mocked(getAdminFlowPointTransactionsApi).mock.calls[0][0]).toMatchObject({ page: 1, page_size: 20, keyword: "" })
+    expect(vi.mocked(getAdminFlowPointTransactionsApi).mock.calls[0][0]).toMatchObject({ page: 1, page_size: 10, keyword: "" })
     const text = wrapper.text()
     expect(text).toContain("alice@example.com")
     expect(text).toContain("全员发放")

@@ -21,15 +21,16 @@ import {
   type AdminFeedbackUpdateResult,
   type PageData,
 } from "@/api/admin"
-import { ADMIN_PAGE_SIZE_OPTIONS, feedbackStatusClass, feedbackStatusText, formatDate } from "@/utils/adminFormat"
+import { ADMIN_PAGE_SIZE_DEFAULT,
+  ADMIN_PAGE_SIZE_OPTIONS, feedbackStatusClass, feedbackStatusText, formatDate } from "@/utils/adminFormat"
 import { sanitizeFeedbackHtml } from "@/lib/sanitize"
 import { showGlobalToast } from "@/utils/toast"
 
-const data = ref<PageData<AdminFeedback>>({ items: [], total: 0, page: 1, page_size: 20 })
+const data = ref<PageData<AdminFeedback>>({ items: [], total: 0, page: 1, page_size: ADMIN_PAGE_SIZE_DEFAULT })
 const loading = ref(false)
 const error = ref("")
 const statusFilter = ref("")
-const pageSize = ref(20)
+const pageSize = ref(ADMIN_PAGE_SIZE_DEFAULT)
 
 const statusOptions = [
   { label: "全部状态", value: "" },

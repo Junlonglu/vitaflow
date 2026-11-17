@@ -29,6 +29,7 @@ import {
   type AdminTemplate, type DashboardData, type PageData,
 } from "@/api/admin"
 import {
+  ADMIN_PAGE_SIZE_DEFAULT,
   ADMIN_PAGE_SIZE_OPTIONS as pageSizeOptions,
   formatCurrency,
   formatTokenNumber,
@@ -40,9 +41,9 @@ type Section = "dashboard" | "announcements" | "users" | "resumes" | "ai" | "poi
 const section = ref<Section>("dashboard")
 const loading = ref(false)
 const error = ref("")
-const pageSize = ref(20)
+const pageSize = ref(ADMIN_PAGE_SIZE_DEFAULT)
 const dashboard = ref<DashboardData | null>(null)
-const templates = ref<PageData<AdminTemplate>>({ items: [], total: 0, page: 1, page_size: 20 })
+const templates = ref<PageData<AdminTemplate>>({ items: [], total: 0, page: 1, page_size: ADMIN_PAGE_SIZE_DEFAULT })
 
 const settingsForm = ref({
   signup_gift_points: 0,
@@ -216,7 +217,7 @@ async function load(page = 1) {
 
 function switchSection(value: Section) {
   section.value = value
-  pageSize.value = 20
+  pageSize.value = ADMIN_PAGE_SIZE_DEFAULT
   load()
 }
 
@@ -301,49 +302,49 @@ onMounted(() => load())
         <AiSettingsManager v-else-if="section === 'redeem-codes'" mode="codes" />
 
         <template v-else-if="section === 'system-settings'">
-          <div class="space-y-6 max-w-5xl">
+          <div class="space-y-4 max-w-5xl">
             <!-- 基础配置：双栏网格，高度统一，紧凑优雅 -->
-            <section class="grid gap-5 md:grid-cols-3">
-              <article class="rounded-xl border border-zinc-200 bg-white p-6 flex flex-col justify-between">
+            <section class="grid gap-4 md:grid-cols-3">
+              <article class="rounded-xl border border-zinc-200 bg-white p-5 flex flex-col justify-between">
                 <div>
                   <div class="flex items-start gap-3.5">
-                    <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zinc-900 text-white"><Gift class="h-5 w-5" /></span>
+                    <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-900 text-white"><Gift class="h-5 w-5" /></span>
                     <div>
                       <h2 class="font-semibold text-zinc-900 text-base">注册赠送</h2>
                     </div>
                   </div>
                 </div>
-                <div class="mt-6">
+                <div class="mt-4">
                   <label class="mb-2.5 flex items-center gap-1 text-xs font-medium text-zinc-700">新用户赠送点数<FieldTip text="新用户完成注册后自动发放 Flow Points，设为 0 则不赠送。" /></label>
                   <input v-model.number="settingsForm.signup_gift_points" type="number" min="0" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
                 </div>
               </article>
               
-              <article class="rounded-xl border border-zinc-200 bg-white p-6 flex flex-col justify-between">
+              <article class="rounded-xl border border-zinc-200 bg-white p-5 flex flex-col justify-between">
                 <div>
                   <div class="flex items-start gap-3.5">
-                    <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700"><MessageSquare class="h-5 w-5" /></span>
+                    <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700"><MessageSquare class="h-5 w-5" /></span>
                     <div>
                       <h2 class="font-semibold text-zinc-900 text-base">反馈通知邮箱</h2>
                     </div>
                   </div>
                 </div>
-                <div class="mt-6">
+                <div class="mt-4">
                   <label class="mb-2.5 flex items-center gap-1 text-xs font-medium text-zinc-700">接收邮箱<FieldTip text="用户提交意见反馈后发送提醒邮件，留空则不发送。" /></label>
                   <input v-model.trim="settingsForm.feedback_notify_email" type="email" placeholder="admin@example.com" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
                 </div>
               </article>
 
-              <article class="rounded-xl border border-zinc-200 bg-white p-6 flex flex-col justify-between">
+              <article class="rounded-xl border border-zinc-200 bg-white p-5 flex flex-col justify-between">
                 <div>
                   <div class="flex items-start gap-3.5">
-                    <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700"><ShieldCheck class="h-5 w-5" /></span>
+                    <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700"><ShieldCheck class="h-5 w-5" /></span>
                     <div>
                       <h2 class="font-semibold text-zinc-900 text-base">兑换安全</h2>
                     </div>
                   </div>
                 </div>
-                <div class="mt-6">
+                <div class="mt-4">
                   <label class="mb-2.5 flex items-center gap-1 text-xs font-medium text-zinc-700">每日尝试次数<FieldTip text="限制每个用户每天尝试兑换码的次数，降低撞码和误操作风险。" /></label>
                   <input v-model.number="settingsForm.redeem_daily_attempt_limit" type="number" min="0" max="1000" class="block h-11 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" />
                 </div>
@@ -352,25 +353,21 @@ onMounted(() => load())
 
             <!-- 提示文案设置：全宽单栏，释放富文本工具栏展示空间 -->
             <article class="rounded-xl border border-zinc-200 bg-white p-6">
-              <div class="border-b border-zinc-100 pb-4 mb-5">
+              <div class="border-b border-zinc-100 pb-3 mb-4">
                 <h2 class="flex items-center gap-1.5 font-semibold text-zinc-900 text-base">AI 记录页提示<FieldTip text="展示在用户 AI 记录页余额下方，可用于说明点数兑换比例或活动信息。" /></h2>
               </div>
-              <div class="min-h-[220px]">
-                <RichTextEditor v-model="settingsForm.ai_records_hint" compact placeholder="例如：1 元约等于 100 Flow Points，具体扣点以后台规则为准。" />
-              </div>
+              <RichTextEditor v-model="settingsForm.ai_records_hint" compact placeholder="例如：1 元约等于 100 Flow Points，具体扣点以后台规则为准。" />
             </article>
 
             <article class="rounded-xl border border-zinc-200 bg-white p-6">
-              <div class="border-b border-zinc-100 pb-4 mb-5">
+              <div class="border-b border-zinc-100 pb-3 mb-4">
                 <h2 class="flex items-center gap-1.5 font-semibold text-zinc-900 text-base">用户协议与隐私政策<FieldTip text="注册与登录时展示并要求勾选，支持富文本编辑。" /></h2>
               </div>
-              <div class="min-h-[220px]">
-                <RichTextEditor v-model="settingsForm.user_agreement" placeholder="请输入用户协议与隐私政策内容..." />
-              </div>
+              <RichTextEditor v-model="settingsForm.user_agreement" placeholder="请输入用户协议与隐私政策内容..." />
             </article>
 
             <!-- 独立的操作底部栏 -->
-            <div class="flex items-center justify-end pt-2">
+            <div class="sticky bottom-0 z-10 -mx-1 flex items-center justify-end border-t border-zinc-100 bg-zinc-50/95 px-1 py-3 backdrop-blur-sm">
               <Button :disabled="savingSettings" @click="saveSettings" class="px-6 py-2.5"><Settings class="h-4 w-4 mr-2" />{{ savingSettings ? "保存中..." : "保存全部设置" }}</Button>
             </div>
           </div>

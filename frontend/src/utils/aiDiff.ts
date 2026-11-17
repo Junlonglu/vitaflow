@@ -23,6 +23,44 @@ interface ComparableEntry {
   compareText: string
 }
 
+/**
+ * 简历数据是动态 JSON：整份数据、自定义模块条目、对象型 section 都是「字符串键 → 未知值」。
+ * 这些 helper 把 unknown 收窄成可安全访问的结构，替代原来的裸 any——字段是否存在、
+ * 是什么类型，由运行时判断，编译器不再假定「什么都有」。
+ */
+type DataRecord = Record<string, unknown>
+
+function asRecord(value: unknown): DataRecord | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as DataRecord) : null
+}
+
+function asArray(value: unknown): unknown[] | null {
+  return Array.isArray(value) ? value : null
+}
+
+function layoutOf(data: unknown): DataRecord | null {
+  return asRecord(asRecord(data)?.layout)
+}
+
+function sectionTitlesOf(data: unknown): DataRecord | null {
+  return asRecord(layoutOf(data)?.section_titles)
+}
+
+function sectionOrderOf(data: unknown): string[] {
+  const order = asArray(layoutOf(data)?.section_order) || []
+  return order.filter((item): item is string => typeof item === "string" && Boolean(item))
+}
+
+function customSectionsOf(data: unknown): unknown[] {
+  return asArray(asRecord(data)?.custom_sections) || []
+}
+
+function customSectionIdsOf(data: unknown): string[] {
+  return customSectionsOf(data)
+    .map((item) => asRecord(item)?.id)
+    .filter((id): id is string => typeof id === "string" && Boolean(id))
+}
+
 const builtInTitles: Record<string, string> = {
   basics: "基本信息",
   summary: "个人简介",
@@ -252,25 +290,41 @@ function compareFieldValue(key: string, value: unknown) {
   return compareValue(value)
 }
 
-function itemTitle(item: any, index: number, fallback: string) {
-  return compact(item?.name || item?.company || item?.organization || item?.school || item?.title || item?.position || item?.role || item?.publisher || item?.platform) || `${fallback} ${index + 1}`
+/** 条目标识：按字段优先级取第一个非空值，保持原来的 `a || b || …` 语义。 */
+function itemIdentity(item: unknown): string {
+  const record = asRecord(item)
+  if (!record) return ""
+  return compact(
+    record.name || record.company || record.organization || record.school || record.title ||
+      record.position || record.role || record.publisher || record.platform,
+  )
 }
 
-function itemKey(item: any, index: number) {
-  const identity = compact(item?.id || item?.name || item?.company || item?.organization || item?.school || item?.title || item?.position || item?.role || item?.publisher || item?.platform)
-  return identity || `item_${index}`
+function itemTitle(item: unknown, index: number, fallback: string) {
+  return itemIdentity(item) || `${fallback} ${index + 1}`
 }
 
-function sectionTitle(data: any, key: string) {
-  return data?.layout?.section_titles?.[key] || builtInTitles[key] || data?.custom_sections?.find((item: any) => item.id === key)?.title || "自定义模块"
+function itemKey(item: unknown, index: number) {
+  return itemIdentity(item) || `item_${index}`
+}
+
+function sectionTitle(data: unknown, key: string) {
+  const title = sectionTitlesOf(data)?.[key]
+  const custom = customSectionsOf(data).find((item) => asRecord(item)?.id === key)
+  return (
+    (typeof title === "string" && title) ||
+    builtInTitles[key] ||
+    (asRecord(custom)?.title as string) ||
+    "自定义模块"
+  )
 }
 
 /** 模块标题变更的 DiffItem entryKey（翻译/重命名模块标题时可勾选）。 */
 export const SECTION_TITLE_ENTRY_KEY = "__title__"
 
-function titleDiffItem(sectionKey: string, currentData: any, nextData: any): DiffItem | null {
-  const before = currentData?.layout?.section_titles?.[sectionKey]
-  const after = nextData?.layout?.section_titles?.[sectionKey]
+function titleDiffItem(sectionKey: string, currentData: unknown, nextData: unknown): DiffItem | null {
+  const before = sectionTitlesOf(currentData)?.[sectionKey]
+  const after = sectionTitlesOf(nextData)?.[sectionKey]
   const beforeText = typeof before === "string" ? before.trim() : ""
   const afterText = typeof after === "string" ? after.trim() : ""
   if (!afterText || beforeText === afterText) return null
@@ -280,25 +334,29 @@ function titleDiffItem(sectionKey: string, currentData: any, nextData: any): Dif
   return { id: `${sectionKey}:${SECTION_TITLE_ENTRY_KEY}:modified`, kind: "modified", sectionKey, entryKey: SECTION_TITLE_ENTRY_KEY, title: "模块标题", before: beforeText, after: afterText }
 }
 
-export function sectionValue(data: any, key: string) {
-  if (!data) return undefined
-  if (data[key] !== undefined) return data[key]
-  return data.custom_sections?.find((item: any) => item.id === key)
+export function sectionValue(data: unknown, key: string): unknown {
+  const record = asRecord(data)
+  if (!record) return undefined
+  if (record[key] !== undefined) return record[key]
+  return customSectionsOf(data).find((item) => asRecord(item)?.id === key)
 }
 
-function hasSection(data: any, key: string) {
-  if (!data) return false
-  if (Object.prototype.hasOwnProperty.call(data, key)) return true
-  return Boolean(data.custom_sections?.some((item: any) => item.id === key))
+function hasSection(data: unknown, key: string) {
+  const record = asRecord(data)
+  if (!record) return false
+  if (Object.prototype.hasOwnProperty.call(record, key)) return true
+  return customSectionsOf(data).some((item) => asRecord(item)?.id === key)
 }
 
-function toEntries(sectionKey: string, value: any, fallbackTitle: string): ComparableEntry[] {
+function toEntries(sectionKey: string, value: unknown, fallbackTitle: string): ComparableEntry[] {
   if (sectionKey === "summary") {
-    const text = plain(value?.content ?? value)
-    return text ? [{ key: "summary", title: fallbackTitle, text, compareText: compareValue(value?.content ?? value) }] : []
+    const content = asRecord(value)?.content ?? value
+    const text = plain(content)
+    return text ? [{ key: "summary", title: fallbackTitle, text, compareText: compareValue(content) }] : []
   }
-  if (value && typeof value === "object" && !Array.isArray(value) && Array.isArray(value.items)) {
-    return value.items.map((item: any, index: number) => ({
+  const record = asRecord(value)
+  if (record && Array.isArray(record.items)) {
+    return record.items.map((item, index) => ({
       key: itemKey(item, index),
       title: itemTitle(item, index, "条目"),
       text: plain(item),
@@ -306,7 +364,7 @@ function toEntries(sectionKey: string, value: any, fallbackTitle: string): Compa
     }))
   }
   if (Array.isArray(value)) {
-    return value.map((item: any, index: number) => ({
+    return value.map((item, index) => ({
       key: itemKey(item, index),
       title: itemTitle(item, index, fallbackTitle),
       text: plain(item),
@@ -321,11 +379,11 @@ function cloneData<T>(value: T): T {
   return JSON.parse(JSON.stringify(value ?? null))
 }
 
-function entryMatches(item: any, key: string, index: number) {
+function entryMatches(item: unknown, key: string, index: number) {
   return itemKey(item, index) === key
 }
 
-function replaceListEntry(current: any[], next: any[], entryKey: string, kind: DiffKind) {
+function replaceListEntry(current: unknown[], next: unknown[], entryKey: string, kind: DiffKind) {
   if (kind === "removed") return current.filter((item, index) => !entryMatches(item, entryKey, index))
   const nextItem = next.find((item, index) => entryMatches(item, entryKey, index))
   if (!nextItem) return current
@@ -336,45 +394,40 @@ function replaceListEntry(current: any[], next: any[], entryKey: string, kind: D
   return result
 }
 
-function setSectionValue(data: any, sectionKey: string, value: any) {
+function setSectionValue(data: DataRecord, sectionKey: string, value: unknown) {
   if (Object.prototype.hasOwnProperty.call(data, sectionKey) || builtInTitles[sectionKey]) {
     data[sectionKey] = value
     return
   }
-  const index = (data.custom_sections || []).findIndex((item: any) => item.id === sectionKey)
-  if (index >= 0) data.custom_sections[index] = value
+  const customs = asArray(data.custom_sections)
+  const index = (customs || []).findIndex((item) => asRecord(item)?.id === sectionKey)
+  if (customs && index >= 0) customs[index] = value
 }
 
-export function buildSelectedResumeData(currentData: any, optimizedData: any, selectedIds: string[], sections: SectionDiff[]) {
+/** 泛型保留入参类型：调用方传 ResumeData 得到的仍是 ResumeData，不再退化成 any。 */
+export function buildSelectedResumeData<T>(currentData: T, optimizedData: unknown, selectedIds: string[], sections: SectionDiff[]): T {
   const selected = new Set(selectedIds)
-  const result = cloneData(currentData || {})
-  const next = cloneData(optimizedData || {})
+  const result = cloneData(currentData || {}) as DataRecord
+  const next = cloneData(optimizedData || {}) as DataRecord
 
   sections.forEach((section) => {
     section.changes.forEach((change) => {
       if (!selected.has(change.id)) return
       const currentValue = sectionValue(result, section.key)
       const nextValue = sectionValue(next, section.key)
-      if (Array.isArray(currentValue) || Array.isArray(nextValue)) {
-        setSectionValue(
-          result,
-          section.key,
-          replaceListEntry(currentValue || [], nextValue || [], change.entryKey, change.kind),
-        )
+      const currentArray = asArray(currentValue)
+      const nextArray = asArray(nextValue)
+      if (currentArray || nextArray) {
+        setSectionValue(result, section.key, replaceListEntry(currentArray || [], nextArray || [], change.entryKey, change.kind))
         return
       }
-      if (
-        currentValue &&
-        nextValue &&
-        typeof currentValue === "object" &&
-        typeof nextValue === "object" &&
-        Array.isArray(currentValue.items) &&
-        Array.isArray(nextValue.items)
-      ) {
+      const currentRecord = asRecord(currentValue)
+      const nextRecord = asRecord(nextValue)
+      if (currentRecord && nextRecord && Array.isArray(currentRecord.items) && Array.isArray(nextRecord.items)) {
         setSectionValue(result, section.key, {
-          ...currentValue,
-          ...nextValue,
-          items: replaceListEntry(currentValue.items, nextValue.items, change.entryKey, change.kind),
+          ...currentRecord,
+          ...nextRecord,
+          items: replaceListEntry(currentRecord.items, nextRecord.items, change.entryKey, change.kind),
         })
         return
       }
@@ -386,25 +439,31 @@ export function buildSelectedResumeData(currentData: any, optimizedData: any, se
     })
   })
 
-  if (next.layout) {
+  const nextLayout = layoutOf(next)
+  if (nextLayout) {
     // 模块标题按勾选逐项合并（翻译/重命名标题可单独取消），其余 layout 字段整组合并
     const selectedTitleKeys = new Set(
-      sections.flatMap((section) => section.changes.filter((change) => change.entryKey === SECTION_TITLE_ENTRY_KEY && selected.has(change.id)).map((change) => section.key)),
+      sections.flatMap((section) =>
+        section.changes
+          .filter((change) => change.entryKey === SECTION_TITLE_ENTRY_KEY && selected.has(change.id))
+          .map((change) => section.key),
+      ),
     )
-    result.layout = {
-      ...(result.layout || {}),
-      ...next.layout,
-      section_titles: { ...(result.layout?.section_titles || {}) },
-    }
-    const nextTitles = next.layout.section_titles || {}
+    const mergedTitles: DataRecord = { ...(asRecord(layoutOf(result)?.section_titles) || {}) }
+    const nextTitles = asRecord(nextLayout.section_titles) || {}
     for (const key of Object.keys(nextTitles)) {
-      if (selectedTitleKeys.has(key)) result.layout.section_titles[key] = nextTitles[key]
+      if (selectedTitleKeys.has(key)) mergedTitles[key] = nextTitles[key]
+    }
+    result.layout = {
+      ...(layoutOf(result) || {}),
+      ...nextLayout,
+      section_titles: mergedTitles,
     }
   }
-  return result
+  return result as T
 }
 
-export function diffSection(sectionKey: string, currentValue: any, nextValue: any, title = builtInTitles[sectionKey] || "当前模块"): DiffItem[] {
+export function diffSection(sectionKey: string, currentValue: unknown, nextValue: unknown, title = builtInTitles[sectionKey] || "当前模块"): DiffItem[] {
   const currentEntries = toEntries(sectionKey, currentValue, title)
   const nextEntries = toEntries(sectionKey, nextValue, title)
   const currentMap = new Map(currentEntries.map((item) => [item.key, item]))
@@ -436,7 +495,7 @@ export interface UnchangedEntry {
 }
 
 /** 审阅模式用：变更（含模块标题）+ 未变更条目（提案前后一致，含提案后用户手动改过导致的零差异）。 */
-export function sectionEntriesForReview(sectionKey: string, currentData: any, nextData: any, title?: string): { changes: DiffItem[]; unchanged: UnchangedEntry[] } {
+export function sectionEntriesForReview(sectionKey: string, currentData: unknown, nextData: unknown, title?: string): { changes: DiffItem[]; unchanged: UnchangedEntry[] } {
   const resolvedTitle = title || sectionTitle(currentData, sectionKey) || sectionTitle(nextData, sectionKey)
   const currentValue = sectionValue(currentData, sectionKey)
   const nextValue = sectionValue(nextData, sectionKey)
@@ -461,21 +520,21 @@ export function sectionEntriesForReview(sectionKey: string, currentData: any, ne
   return { changes, unchanged }
 }
 
-export function diffResume(currentData: any, optimizedData: any): SectionDiff[] {
+export function diffResume(currentData: unknown, optimizedData: unknown): SectionDiff[] {
   if (!currentData || !optimizedData) return []
   const order = [
     ...new Set([
       "basics",
-      ...(currentData.layout?.section_order || []),
-      ...(optimizedData.layout?.section_order || []),
+      ...sectionOrderOf(currentData),
+      ...sectionOrderOf(optimizedData),
       "summary",
       "education",
       "skills",
       "work",
       "projects",
       "awards",
-      ...(currentData.custom_sections || []).map((item: any) => item.id),
-      ...(optimizedData.custom_sections || []).map((item: any) => item.id),
+      ...customSectionIdsOf(currentData),
+      ...customSectionIdsOf(optimizedData),
     ]),
   ].filter(Boolean)
 

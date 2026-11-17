@@ -47,7 +47,10 @@
   box-sizing: border-box; 
   --removed-body-scroll-bar-size: 0px !important;
 }
-html { overflow-y: scroll; }
+/* 根元素不常驻滚动条：全站都是 h-dvh 全屏布局 + 内部容器滚动，根滚动条永远为空。
+   用 scroll 会在预览区滚动条旁多出一条带系统箭头的空轨道（编辑器最右缘双滚动条）。
+   auto 保留「真有超长页面时按需出现」的能力，但平时不占位。 */
+html { overflow-y: auto; }
 body, html body, html body[style] {
   margin: 0;
   padding-right: 0 !important;

@@ -815,6 +815,10 @@ macOS 落 San Francisco + 苹方；**Windows 用 CDP `CSS.getPlatformFontsForNod
 `scrollbar-gutter: auto` 时 247 → 237（**横跳 10px**），`stable` 时 237 → 237（**不跳**）。
 无头模式下 Playwright 默认隐藏滚动条，这个差异复现不出来，必须用 `headless=False` 测。
 
+**补记（2026-11-17）：根元素常驻空滚动条。** `index.css` 曾有 `html { overflow-y: scroll; }`，让根元素永远显示一条带系统箭头的滚动条（Windows 实测吃 10px 视口宽）。但全站是 `h-dvh` 全屏 + 内部容器滚动，根 `scrollHeight === clientHeight`——这 10px 轨道永远是空的。编辑器预览区恰好自己也有 `overflow-auto`，于是页面最右缘并排出现两条滚动条（底部两个向下箭头并排），即用户报的「双滚动条」。
+
+全站 13 路由 + 手机/平板视口验证：没有任何页面的根元素真正溢出，`scroll` 改成 `overflow-y: auto` 后根条从 10px → 0，按需出现的语义保留，长页面若真超高仍会滚。规则收敛为：**根元素不常驻滚动条，滚动一律交给内部容器**（内部容器继续用 `scrollbar-gutter: stable` 防横跳）。验证读 `window.innerWidth - document.documentElement.clientWidth`，应为 0。
+
 ### 6.14 文本溢出收口（2026-11-15）
 
 `truncate` 和 `line-clamp` 全站共 97 处，但只有 30 处会真被截断——**写了截断类不等于会被截断**，所以不能按类名统计工作量。规则只有一条：

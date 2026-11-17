@@ -83,14 +83,18 @@ class AllowedTypesTest(unittest.TestCase):
             svc.upload_avatar(_Db(), 7, _upload(b"x" * (svc.MAX_SIZE + 1), "image/png"))
         self.assertEqual(getattr(ctx.exception, "code", None), 400)
 
-    def test_ai_chat_image_limit_is_larger_than_avatar(self):
-        # 5MB 的对话图片应当通过，头像则不允许（3MB 上限）。
-        content = b"x" * (svc.MAX_SIZE + 1)
+    def test_all_image_upload_entries_share_one_limit(self):
+        # 三个上传口共用 MAX_SIZE：恰好到上限能过，多 1 字节在任何一个口都被挡。
         patches = _patched_storage()
+        at_limit = b"x" * svc.MAX_SIZE
+        oversize = b"x" * (svc.MAX_SIZE + 1)
         with patches[0], patches[1], patches[2]:
-            svc.upload_ai_chat_image(_Db(), 7, _upload(content, "image/png"))
-        with self.assertRaises(Exception):
-            svc.upload_avatar(_Db(), 7, _upload(content, "image/png"))
+            for upload in (svc.upload_avatar, svc.upload_announcement_image, svc.upload_ai_chat_image):
+                with self.subTest(upload=upload.__name__):
+                    upload(_Db(), 7, _upload(at_limit, "image/png"))
+                    with self.assertRaises(Exception) as ctx:
+                        upload(_Db(), 7, _upload(oversize, "image/png"))
+                    self.assertEqual(getattr(ctx.exception, "code", None), 400)
 
 
 class ObjectNameTest(unittest.TestCase):

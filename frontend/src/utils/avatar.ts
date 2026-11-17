@@ -1,6 +1,10 @@
 const API_FILE_PREFIX = "/api/files/"
 const AVATAR_OBJECT_PREFIX = "avatar/"
 
+/** 与后端 `storage_service.MAX_SIZE` 对齐：三个图片上传口共用这一个上限。 */
+export const AVATAR_MAX_BYTES = 5 * 1024 * 1024
+export const AVATAR_MAX_LABEL = "5MB"
+
 /**
  * 简历里的头像有三种形态：新数据存对象名（`avatar/1_x.jpg`），旧数据和用户填的
  * 外链是完整 URL，外链直接可用。统一成 `<img src>` 能吃的地址。

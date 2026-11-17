@@ -16,7 +16,10 @@ from app.models.resume import UploadedFile
 
 
 ALLOWED_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
-MAX_SIZE = 3 * 1024 * 1024
+# 三个图片上传口（头像 / 公告图 / 对话图）共用这一个上限，别再各写一个字面量。
+MAX_SIZE = 5 * 1024 * 1024
+# 报错文案跟着常量走，改上限时不会漏改提示语。
+MAX_SIZE_MB = MAX_SIZE // (1024 * 1024)
 # 一个账号最多保留多少张头像。头像库的「删除」只清索引不删对象，所以这里限制的
 # 是可选项数量，避免用户反复上传把库和存储都堆满。
 MAX_AVATARS_PER_USER = 30
@@ -160,7 +163,7 @@ def upload_avatar(db: Session, user_id: int, file: UploadFile) -> dict[str, str]
         raise AppException("头像仅支持 jpg、jpeg、png、webp", 400)
     content = file.file.read()
     if len(content) > MAX_SIZE:
-        raise AppException("头像不能超过 3MB", 400)
+        raise AppException(f"头像不能超过 {MAX_SIZE_MB}MB", 400)
     existing = (
         db.query(UploadedFile)
         .filter(UploadedFile.user_id == user_id, UploadedFile.file_type == "avatar")
@@ -197,8 +200,8 @@ def upload_announcement_image(db: Session, user_id: int, file: UploadFile) -> di
     if file.content_type not in ALLOWED_TYPES:
         raise AppException("公告图片仅支持 jpg、jpeg、png、webp", 400)
     content = file.file.read()
-    if len(content) > 5 * 1024 * 1024:
-        raise AppException("公告图片不能超过 5MB", 400)
+    if len(content) > MAX_SIZE:
+        raise AppException(f"公告图片不能超过 {MAX_SIZE_MB}MB", 400)
 
     suffix = ALLOWED_TYPES[file.content_type]
     object_name = f"announcement/{uuid4().hex}{suffix}"
@@ -227,8 +230,8 @@ def upload_ai_chat_image(db: Session, user_id: int, file: UploadFile) -> dict[st
     if file.content_type not in ALLOWED_TYPES:
         raise AppException("AI 对话图片仅支持 jpg、jpeg、png、webp", 400)
     content = file.file.read()
-    if len(content) > 5 * 1024 * 1024:
-        raise AppException("AI 对话图片不能超过 5MB", 400)
+    if len(content) > MAX_SIZE:
+        raise AppException(f"AI 对话图片不能超过 {MAX_SIZE_MB}MB", 400)
 
     suffix = ALLOWED_TYPES[file.content_type]
     object_name = f"ai-chat/{user_id}_{uuid4().hex}{suffix}"

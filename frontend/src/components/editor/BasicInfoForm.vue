@@ -10,7 +10,7 @@ import Label from "@/components/ui/label/Label.vue"
 import AvatarCropperModal from "./AvatarCropperModal.vue"
 import { uploadAvatarApi } from "@/api/file"
 import { listAvatarsApi, type AvatarItem } from "@/api/avatar"
-import { avatarObjectName, avatarSrc } from "@/utils/avatar"
+import { avatarObjectName, avatarSrc, AVATAR_MAX_BYTES, AVATAR_MAX_LABEL } from "@/utils/avatar"
 import { basicInfoPresets } from "@/utils/resumePresets"
 
 const props = defineProps<{ basics: Record<string, any> }>()
@@ -291,8 +291,8 @@ const cropImageName = ref("")
 function handleFileSelect(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (!file) return
-  if (file.size > 5 * 1024 * 1024) {
-    showToast("图片不能超过 5MB", "error")
+  if (file.size > AVATAR_MAX_BYTES) {
+    showToast(`图片不能超过 ${AVATAR_MAX_LABEL}`, "error")
     return
   }
   
@@ -417,7 +417,7 @@ function addPresetField(preset: (typeof basicInfoPresets)[number]) {
           </button>
         </div>
         <div class="flex flex-col gap-0.5 md:gap-1 text-[11px] md:text-xs text-zinc-500">
-          <p>JPG / PNG，≤ 5MB</p>
+          <p>JPG / PNG，≤ {{ AVATAR_MAX_LABEL }}</p>
           <button
             type="button"
             class="hit-area inline-flex w-fit items-center gap-1 rounded-md py-0.5 text-[11px] font-medium text-zinc-500 transition-colors hover:text-zinc-900 md:text-xs"
@@ -453,7 +453,7 @@ function addPresetField(preset: (typeof basicInfoPresets)[number]) {
             :title="item.file_name || '头像'"
             @click="pickLibraryAvatar(item)"
           >
-            <img :src="item.url" alt="" class="h-full w-full object-cover" />
+            <img :src="item.url" alt="" loading="lazy" decoding="async" class="h-full w-full object-cover" />
           </button>
         </div>
       </div>

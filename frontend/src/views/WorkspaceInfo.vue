@@ -39,6 +39,7 @@ import {
 import { listResumesApi } from "@/api/resume"
 import { deleteAvatarApi, listAvatarsApi, type AvatarItem } from "@/api/avatar"
 import { uploadAvatarApi } from "@/api/file"
+import { AVATAR_MAX_BYTES, AVATAR_MAX_LABEL } from "@/utils/avatar"
 import type { ResumeItem } from "@/types/resume"
 import { showGlobalToast } from "@/utils/toast"
 
@@ -133,8 +134,8 @@ async function onAvatarFileChange(event: Event) {
   // 清掉 value：同一个文件再选一次也要能触发 change。
   input.value = ""
   if (!file || avatarUploading.value) return
-  if (file.size > 3 * 1024 * 1024) {
-    showGlobalToast("头像不能超过 3MB", "error")
+  if (file.size > AVATAR_MAX_BYTES) {
+    showGlobalToast(`头像不能超过 ${AVATAR_MAX_LABEL}`, "error")
     return
   }
   avatarUploading.value = true
@@ -507,6 +508,8 @@ onUnmounted(() => window.clearTimeout(searchTimer))
             <img
               :src="avatar.url"
               :alt="avatar.file_name || '头像'"
+              loading="lazy"
+              decoding="async"
               class="h-full w-full rounded-lg object-cover ring-1 ring-zinc-200"
             />
             <span

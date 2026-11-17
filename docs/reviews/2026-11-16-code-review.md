@@ -222,6 +222,10 @@ content, _ = read_uploaded_file(object_name)   # 同步 HTTP 打 MinIO/OSS
 
 八个后台分区已全部抽成独立面板，`Admin.vue` 1595 → **449 行**，`load()` 只剩 dashboard / system-settings / templates 三分支，共享表格外壳仅剩模板设置一格。浏览器实测（真实后端 + dev server）：八分区正常渲染、岗位预设列表 20 行、编辑弹窗 11 个 textarea 全部回填、控制台 0 错误。前端单测 141 → **194 passed**，`vue-tsc` 0 错，`vite build` 通过。
 
+| P2-10a | 收敛 18 个文件里 67 处 `catch (X: any)`（65 语句 + 2 promise）为 `unknown`，错误展示改用已有的 `utils/errorText.errorMessage()`。`request.ts` 统一 `throw new Error(中文 message)`，故中文透传行为一致，英文传输层报错顺带换中文兜底。`Login.vue` 5 处无兜底的 `e.message` 补了场景文案；新增 `errorText.spec.ts`（7 条）锁住语义 | 18 个 `.ts/.vue`、`utils/__tests__/errorText.spec.ts` | `errorText.spec.ts`（7 条） |
+
+P2-10 第一批后前端 **201 passed**（194 + 7），`vue-tsc` 0 错，`vite build` 通过，全仓 0 处残留 `catch(any)`。
+
 ### 仍未处理
 
-P2-10（`any` 收敛：前端 184 处、`aiDiff.ts` 单文件 22 处）。P2-8 已全部完成；P2-9 测试覆盖缺口已补齐（上传、分享、模板、注册/重置、反馈、PDF 导出均已有 HTTP 层测试）。
+P2-10 剩余：`aiDiff.ts` 单文件 22 处 `any`（简历 section 判别联合重构，单独处理），以及 API 层与类型定义里零散的 `as any` / `: any`。P2-8、P2-9 已全部完成。

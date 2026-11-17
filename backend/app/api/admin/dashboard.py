@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
-from fastapi import APIRouter, Depends
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
+
 from app.core.database import get_db
 from app.core.response import success
 from app.core.security import get_current_admin
-from app.models.ai_task import AiTask
+from app.api.admin.common import WINDOW_DAYS
 from app.models.ai_config import AiModelConfig, FlowPointRedeemCode, FlowPointRedeemRecord, FlowPointTransaction
+from app.models.ai_task import AiTask
 from app.models.export_record import ExportRecord
 from app.models.resume import Resume, UploadedFile
 from app.models.user import User
@@ -20,6 +23,15 @@ from app.services.flow_points_service import point_amount, point_number
 
 
 router = APIRouter(prefix="", tags=["admin"], dependencies=[Depends(get_current_admin)])
+
+
+# 上游美元价 → 点数 的既定换算系数（定价页把「点数/百万」定为美元价 × 21600）。
+# 反算成本时用它还原上游单价：美元/百万 = 点数/百万 ÷ 21600。
+_POINTS_PER_USD = Decimal("21600")
+
+# 失败原因去重上限：先取原始分组，归一化后再合并同名原因。
+_FAILURE_REASON_SCAN = 60
+_FAILURE_REASON_LIMIT = 8
 
 
 def _breakdown_key(task_type: object, feature: object) -> str:
@@ -177,73 +189,237 @@ def _stage_quality_breakdown(rows: list) -> dict:
     }
 
 
-@router.get("/dashboard")
-def dashboard(db: Session = Depends(get_db)):
-    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    total_users = db.scalar(select(func.count()).select_from(User)) or 0
-    total_resumes = db.scalar(select(func.count()).select_from(Resume)) or 0
-    total_ai = db.scalar(select(func.count()).select_from(AiTask)) or 0
-    total_exports = db.scalar(select(func.count()).select_from(ExportRecord)) or 0
-    first_user_time = db.scalar(select(func.min(User.create_time)))
-    operating_days = (today.date() - first_user_time.date()).days + 1 if first_user_time else 0
-    ai_success = db.scalar(select(func.count()).select_from(AiTask).where(AiTask.status == "success")) or 0
-    export_success = db.scalar(select(func.count()).select_from(ExportRecord).where(ExportRecord.status == "success")) or 0
-    storage_bytes = db.scalar(select(func.coalesce(func.sum(UploadedFile.file_size), 0))) or 0
-    redeem_revenue_expr = case(
-        (FlowPointRedeemRecord.price > 0, FlowPointRedeemRecord.price),
-        else_=func.coalesce(FlowPointRedeemCode.price, 0),
-    )
-    redeem_revenue_query = (
-        select(func.coalesce(func.sum(redeem_revenue_expr), 0))
-        .select_from(FlowPointRedeemRecord)
-        .outerjoin(FlowPointRedeemCode, FlowPointRedeemCode.id == FlowPointRedeemRecord.code_id)
-    )
-    total_redeem_revenue = point_amount(db.scalar(redeem_revenue_query) or 0)
-    today_redeem_revenue = point_amount(
-        db.scalar(redeem_revenue_query.where(FlowPointRedeemRecord.create_time >= today)) or 0
-    )
-    total_points_consumed = point_amount(abs(
-        db.scalar(
-            select(func.coalesce(func.sum(FlowPointTransaction.points_delta), 0)).where(
-                FlowPointTransaction.points_delta < 0
-            )
-        )
-        or 0
-    ))
-    today_points_consumed = point_amount(abs(
-        db.scalar(
-            select(func.coalesce(func.sum(FlowPointTransaction.points_delta), 0)).where(
-                FlowPointTransaction.points_delta < 0,
-                FlowPointTransaction.create_time >= today,
-            )
-        )
-        or 0
-    ))
-    total_points_recharged = point_amount(db.scalar(
-        select(func.coalesce(func.sum(FlowPointTransaction.points_delta), 0)).where(
-            FlowPointTransaction.points_delta > 0
-        )
-    ) or 0)
-    active_user_ids: set[int] = set()
-    active_user_ids.update(
+def _resolve_window(key: str) -> dict[str, Any]:
+    """把前端传的 range 收敛成 [start, now) 与同长度的上一窗口 [prev_start, start)。"""
+    normalized = key if key in WINDOW_DAYS else "7d"
+    days = WINDOW_DAYS[normalized]
+    now = datetime.now()
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    start = today - timedelta(days=days - 1)
+    return {
+        "key": normalized,
+        "days": days,
+        "now": now,
+        "today": today,
+        "start": start,
+        "prev_start": start - timedelta(days=days),
+    }
+
+
+def _pct_delta(value: float, prev: float) -> float | None:
+    """环比百分比；上一窗口为 0 时无可比基数，返回 None 让前端显示「—」。"""
+    if prev <= 0:
+        return None
+    return round((value - prev) * 100 / prev, 1)
+
+
+def _kpi(value: float, prev: float) -> dict[str, Any]:
+    return {"value": value, "prev": prev, "delta_pct": _pct_delta(value, prev)}
+
+
+def _day_key(raw: object) -> str:
+    """`func.date()` 在 MySQL 返回 date、SQLite 返回字符串，统一成 ISO 日期。"""
+    if isinstance(raw, datetime):
+        return raw.date().isoformat()
+    if isinstance(raw, date):
+        return raw.isoformat()
+    return str(raw)[:10]
+
+
+def _active_user_ids(db: Session, start: datetime) -> set[int]:
+    """窗口内有过任一动作的去重用户（简历新建/编辑、AI 调用、导出、分享）。"""
+    ids: set[int] = set()
+    ids.update(
         uid
         for uid in db.scalars(
-            select(Resume.user_id).where(or_(Resume.create_time >= today, Resume.update_time >= today))
+            select(Resume.user_id).where(or_(Resume.create_time >= start, Resume.update_time >= start))
         ).all()
         if uid
     )
-    active_user_ids.update(uid for uid in db.scalars(select(AiTask.user_id).where(AiTask.create_time >= today)).all() if uid)
-    active_user_ids.update(uid for uid in db.scalars(select(ExportRecord.user_id).where(ExportRecord.create_time >= today)).all() if uid)
-    breakdown_rows = db.execute(
-        select(
-            AiTask.task_type,
-            AiTask.feature,
-            func.count(AiTask.id),
-            func.sum(case((AiTask.status == "success", 1), else_=0)),
-            func.sum(case((AiTask.status == "failed", 1), else_=0)),
-        ).group_by(AiTask.task_type, AiTask.feature)
+    ids.update(uid for uid in db.scalars(select(AiTask.user_id).where(AiTask.create_time >= start)).all() if uid)
+    ids.update(uid for uid in db.scalars(select(ExportRecord.user_id).where(ExportRecord.create_time >= start)).all() if uid)
+    ids.update(uid for uid in db.scalars(select(Resume.user_id).where(Resume.share_created_time >= start)).all() if uid)
+    return ids
+
+
+def _redeem_revenue_query():
+    revenue_expr = case(
+        (FlowPointRedeemRecord.price > 0, FlowPointRedeemRecord.price),
+        else_=func.coalesce(FlowPointRedeemCode.price, 0),
+    )
+    return (
+        select(func.coalesce(func.sum(revenue_expr), 0))
+        .select_from(FlowPointRedeemRecord)
+        .outerjoin(FlowPointRedeemCode, FlowPointRedeemCode.id == FlowPointRedeemRecord.code_id)
+    )
+
+
+def _redeem_revenue(db: Session, start: datetime | None = None, end: datetime | None = None) -> float:
+    query = _redeem_revenue_query()
+    if start is not None:
+        query = query.where(FlowPointRedeemRecord.create_time >= start)
+    if end is not None:
+        query = query.where(FlowPointRedeemRecord.create_time < end)
+    return point_amount(db.scalar(query) or 0)
+
+
+def _points_consumed(db: Session, start: datetime | None = None) -> float:
+    query = select(func.coalesce(func.sum(FlowPointTransaction.points_delta), 0)).where(
+        FlowPointTransaction.points_delta < 0
+    )
+    if start is not None:
+        query = query.where(FlowPointTransaction.create_time >= start)
+    return point_amount(abs(db.scalar(query) or 0))
+
+
+def _funnel(db: Session, start: datetime) -> dict[str, Any]:
+    """新用户转化漏斗：注册 → 建简历 → 用过 AI → 导出过。
+
+    以窗口内注册的用户为 cohort（他们后续任一时间的动作都算），窗口内没有新注册
+    时退回全站口径，避免看板整块空白。
+    """
+    cohort = db.scalar(select(func.count()).select_from(User).where(User.create_time >= start)) or 0
+    if cohort:
+        basis = "cohort"
+        scope = select(User.id).where(User.create_time >= start)
+        total = cohort
+    else:
+        basis = "all"
+        scope = select(User.id)
+        total = db.scalar(select(func.count()).select_from(User)) or 0
+    if not total:
+        return {"basis": basis, "steps": []}
+
+    def _reached(model, column) -> int:
+        return db.scalar(select(func.count(func.distinct(column))).where(column.in_(scope))) or 0
+
+    steps = [
+        {"key": "registered", "label": "注册", "value": total},
+        {"key": "resume", "label": "创建简历", "value": _reached(Resume, Resume.user_id)},
+        {"key": "ai", "label": "用过 AI", "value": _reached(AiTask, AiTask.user_id)},
+        {"key": "export", "label": "导出过", "value": _reached(ExportRecord, ExportRecord.user_id)},
+    ]
+    for step in steps:
+        step["rate"] = round(step["value"] * 100 / total, 1)
+    return {"basis": basis, "steps": steps}
+
+
+def _normalize_reason(text: str) -> str:
+    """失败原因归一：折掉空白与换行，截断过长内容，方便同名原因合并计数。"""
+    collapsed = " ".join(str(text).split())
+    return collapsed if len(collapsed) <= 140 else collapsed[:137] + "..."
+
+
+def _failure_reasons(db: Session, start: datetime, failed_total: int) -> list[dict[str, Any]]:
+    """窗口内失败任务的 error_message Top N（归一化后合并同名原因）。"""
+    rows = db.execute(
+        select(AiTask.error_message, func.count())
+        .where(
+            AiTask.status == "failed",
+            AiTask.create_time >= start,
+            AiTask.error_message.isnot(None),
+            AiTask.error_message != "",
+        )
+        .group_by(AiTask.error_message)
+        .order_by(func.count().desc())
+        .limit(_FAILURE_REASON_SCAN)
     ).all()
-    token_rows = db.execute(
+    merged: dict[str, int] = {}
+    for message, count in rows:
+        reason = _normalize_reason(message)
+        merged[reason] = merged.get(reason, 0) + int(count or 0)
+    ordered = sorted(merged.items(), key=lambda item: item[1], reverse=True)[:_FAILURE_REASON_LIMIT]
+    return [
+        {
+            "reason": reason,
+            "count": count,
+            "share": round(count * 100 / failed_total, 1) if failed_total else 0.0,
+        }
+        for reason, count in ordered
+    ]
+
+
+def _model_pricing(db: Session) -> tuple[dict[str, tuple[float, float]], dict[str, str]]:
+    """模型定价表：ref → (输入美元/百万, 输出美元/百万)，以及裸模型 id → ref 的唯一映射。
+
+    只收录输入输出价都有值的配置；缺价的模型不计成本（宁缺勿错）。
+    """
+    price_by_ref: dict[str, tuple[float, float]] = {}
+    refs_by_bare: dict[str, list[str]] = {}
+    for config in db.scalars(select(AiModelConfig)).all():
+        ref = str(getattr(config, "model_ref", None) or "").strip()
+        if not ref:
+            continue
+        refs_by_bare.setdefault(ref.split("/", 1)[-1], []).append(ref)
+        raw_input = getattr(config, "chat_points_per_million_input_tokens", None)
+        raw_output = getattr(config, "chat_points_per_million_output_tokens", None)
+        if raw_input is None or raw_output is None:
+            continue
+        price_by_ref[ref] = (
+            float(Decimal(str(raw_input)) / _POINTS_PER_USD),
+            float(Decimal(str(raw_output)) / _POINTS_PER_USD),
+        )
+    bare_to_ref = {bare: refs[0] for bare, refs in refs_by_bare.items() if len(refs) == 1}
+    return price_by_ref, bare_to_ref
+
+
+def _resolve_model_key(input_data: dict, raw_model_name: str | None, bare_to_ref: dict[str, str]) -> str:
+    """历史任务的 model_name 口径不一（裸 id / 策略名 / ref），统一收敛到目录 ref。"""
+    candidate = str((input_data or {}).get("model") or "").strip()
+    if candidate and "/" not in candidate and candidate in bare_to_ref:
+        candidate = bare_to_ref[candidate]
+    if candidate:
+        return candidate
+    fallback = str(raw_model_name or (input_data or {}).get("model_name") or "").strip()
+    if fallback and "/" not in fallback and fallback in bare_to_ref:
+        fallback = bare_to_ref[fallback]
+    return fallback
+
+
+@router.get("/dashboard")
+def dashboard(window: str = Query("7d", alias="range"), db: Session = Depends(get_db)):
+    resolved = _resolve_window(window)
+    start: datetime = resolved["start"]
+    prev_start: datetime = resolved["prev_start"]
+    today: datetime = resolved["today"]
+    now: datetime = resolved["now"]
+
+    def _count(model, *conditions) -> int:
+        stmt = select(func.count()).select_from(model)
+        if conditions:
+            stmt = stmt.where(*conditions)
+        return db.scalar(stmt) or 0
+
+    total_users = _count(User)
+    total_resumes = _count(Resume)
+    total_ai = _count(AiTask)
+    total_exports = _count(ExportRecord)
+    first_user_time = db.scalar(select(func.min(User.create_time)))
+    operating_days = (today.date() - first_user_time.date()).days + 1 if first_user_time else 0
+    storage_bytes = db.scalar(select(func.coalesce(func.sum(UploadedFile.file_size), 0))) or 0
+
+    # ---- 窗口内计数 + 上一窗口同比 ----
+    window_ai = _count(AiTask, AiTask.create_time >= start)
+    window_ai_failed = _count(AiTask, AiTask.create_time >= start, AiTask.status == "failed")
+    window_ai_success = _count(AiTask, AiTask.create_time >= start, AiTask.status == "success")
+    prev_ai = _count(AiTask, AiTask.create_time >= prev_start, AiTask.create_time < start)
+    prev_ai_failed = _count(AiTask, AiTask.create_time >= prev_start, AiTask.create_time < start, AiTask.status == "failed")
+    window_resumes = _count(Resume, Resume.create_time >= start)
+    prev_resumes = _count(Resume, Resume.create_time >= prev_start, Resume.create_time < start)
+    window_exports = _count(ExportRecord, ExportRecord.create_time >= start)
+    window_exports_success = _count(ExportRecord, ExportRecord.create_time >= start, ExportRecord.status == "success")
+    prev_exports = _count(ExportRecord, ExportRecord.create_time >= prev_start, ExportRecord.create_time < start)
+    window_users = _count(User, User.create_time >= start)
+    prev_users = _count(User, User.create_time >= prev_start, User.create_time < start)
+    active_now = len(_active_user_ids(db, start))
+    active_prev = len(_active_user_ids(db, prev_start) - _active_user_ids(db, start))
+
+    window_revenue = _redeem_revenue(db, start)
+    prev_window_revenue = _redeem_revenue(db, prev_start, start)
+    today_revenue = _redeem_revenue(db, today)
+
+    # ---- 窗口内的 AI 任务一次性扫一遍，供 token / 模型 / 成本 / 按日 token 复用 ----
+    task_rows = db.execute(
         select(
             AiTask.task_type,
             AiTask.feature,
@@ -252,91 +428,80 @@ def dashboard(db: Session = Depends(get_db)):
             AiTask.input_data,
             AiTask.model_name,
             AiTask.points_used,
-        )
+        ).where(AiTask.create_time >= start)
     ).all()
+    price_by_ref, bare_to_ref = _model_pricing(db)
+
     token_summary = {"total": 0, "today": 0, "input": 0, "output": 0}
     token_by_type: dict[str, dict[str, int]] = {}
-    model_map: dict[str, dict[str, object]] = {}
-    configured_models = list(
-        db.scalars(
-            select(AiModelConfig).order_by(
-                AiModelConfig.sort_order.asc(),
-                AiModelConfig.id.asc(),
-            )
-        )
-    )
-    for config in configured_models:
-        model_name = str(getattr(config, "model_ref", None) or "").strip()
-        if not model_name:
-            continue
-        model_item = model_map.setdefault(
-            model_name,
-            {
-                "model_name": model_name,
-                "model_raw_name": model_name,
-                "config_names": set(),
-                "total": 0,
-                "tokens": 0,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "points_used": Decimal("0.00"),
-            },
-        )
-        if config.name and str(config.name) != model_name:
-            model_item["config_names"].add(str(config.name))
-    # 历史任务的 model_name 口径不一（裸 id / 策略名 / ref）；裸 id 若能唯一映射到已配置 ref 则归并
-    refs_by_model_id: dict[str, list[str]] = {}
-    for config in configured_models:
-        ref = str(getattr(config, "model_ref", None) or "").strip()
-        if ref and "/" in ref:
-            refs_by_model_id.setdefault(ref.split("/", 1)[1], []).append(ref)
+    points_by_type: dict[str, Decimal] = {}
+    model_map: dict[str, dict[str, Any]] = {}
+    tokens_by_day: dict[str, int] = {}
+    cost_usd = 0.0
+    priced_calls = 0
+    for task_type, task_feature, create_time, fallback_tokens, input_data, raw_model_name, points_used in task_rows:
+        payload = input_data or {}
+        usage = normalize_token_usage(payload, fallback_tokens or 0)
+        input_tokens = int(usage["input_tokens"])
+        output_tokens = int(usage["output_tokens"])
+        total_tokens = int(usage["total_tokens"])
 
-    for task_type, task_feature, create_time, fallback_tokens, input_data, raw_model_name, points_used in token_rows:
-        usage = normalize_token_usage(input_data, fallback_tokens or 0)
-        item = token_by_type.setdefault(_breakdown_key(task_type, task_feature), {"total": 0, "input": 0, "output": 0})
-        item["total"] += int(usage["total_tokens"])
-        item["input"] += int(usage["input_tokens"])
-        item["output"] += int(usage["output_tokens"])
-        token_summary["total"] += int(usage["total_tokens"])
-        token_summary["input"] += int(usage["input_tokens"])
-        token_summary["output"] += int(usage["output_tokens"])
+        breakdown_key = _breakdown_key(task_type, task_feature)
+        item = token_by_type.setdefault(breakdown_key, {"total": 0, "input": 0, "output": 0})
+        item["total"] += total_tokens
+        item["input"] += input_tokens
+        item["output"] += output_tokens
+        points_by_type[breakdown_key] = points_by_type.get(breakdown_key, Decimal("0.00")) + point_amount(points_used or 0)
+        token_summary["total"] += total_tokens
+        token_summary["input"] += input_tokens
+        token_summary["output"] += output_tokens
         if create_time and create_time >= today:
-            token_summary["today"] += int(usage["total_tokens"])
-        input_data = input_data or {}
-        config_name = input_data.get("model_name")
-        # 聚合键以目录模型 ref（input_data.model，各链路统一写入）为准，与按模型计费同口径
-        model_name = str(input_data.get("model") or "").strip()
-        if model_name and "/" not in model_name:
-            refs = refs_by_model_id.get(model_name, [])
-            if len(refs) == 1:
-                model_name = refs[0]
-        if not model_name:
-            model_name = str(raw_model_name or config_name or "")
-        if not model_name:
-            continue
-        model_key = model_name
-        model_item = model_map.setdefault(
-            model_key,
-            {
-                "model_name": model_name,
-                "model_raw_name": str(raw_model_name) if raw_model_name else "",
-                "config_names": set(),
-                "total": 0,
-                "tokens": 0,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "points_used": Decimal("0.00"),
-            },
+            token_summary["today"] += total_tokens
+        if create_time:
+            day_key = create_time.date().isoformat()
+            tokens_by_day[day_key] = tokens_by_day.get(day_key, 0) + total_tokens
+
+        model_key = _resolve_model_key(payload, raw_model_name, bare_to_ref)
+        if model_key:
+            model_item = model_map.setdefault(
+                model_key,
+                {
+                    "model_name": model_key,
+                    "model_raw_name": str(raw_model_name or ""),
+                    "config_names": set(),
+                    "total": 0,
+                    "tokens": 0,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "points_used": Decimal("0.00"),
+                },
+            )
+            config_name = payload.get("model_name")
+            if config_name and str(config_name) != model_key:
+                model_item["config_names"].add(str(config_name))
+            model_item["total"] = int(model_item["total"]) + 1
+            model_item["tokens"] = int(model_item["tokens"]) + total_tokens
+            model_item["input_tokens"] = int(model_item["input_tokens"]) + input_tokens
+            model_item["output_tokens"] = int(model_item["output_tokens"]) + output_tokens
+            model_item["points_used"] = point_amount(model_item["points_used"]) + point_amount(points_used or 0)
+
+        price = price_by_ref.get(model_key) if model_key else None
+        if price is not None:
+            priced_calls += 1
+            cost_usd += input_tokens / 1_000_000 * price[0] + output_tokens / 1_000_000 * price[1]
+
+    # ---- 功能分布（窗口内） ----
+    breakdown_rows = db.execute(
+        select(
+            AiTask.task_type,
+            AiTask.feature,
+            func.count(AiTask.id),
+            func.sum(case((AiTask.status == "success", 1), else_=0)),
+            func.sum(case((AiTask.status == "failed", 1), else_=0)),
         )
-        if config_name and str(config_name) != model_name:
-            model_item["config_names"].add(str(config_name))
-        model_item["total"] = int(model_item["total"]) + 1
-        model_item["tokens"] = int(model_item["tokens"]) + int(usage["total_tokens"])
-        model_item["input_tokens"] = int(model_item["input_tokens"]) + int(usage["input_tokens"])
-        model_item["output_tokens"] = int(model_item["output_tokens"]) + int(usage["output_tokens"])
-        model_item["points_used"] = point_amount(model_item["points_used"]) + point_amount(points_used or 0)
-    # 功能分布：对话回合（ai_chat）按 feature 拆分（润色/翻译/JD优化/自由对话…），
-    # 其余任务类型沿用 task_type；两个 group-by 在此按同一 key 合并。
+        .where(AiTask.create_time >= start)
+        .group_by(AiTask.task_type, AiTask.feature)
+    ).all()
     breakdown_map: dict[str, dict[str, int]] = {}
     for task_type, task_feature, total, success_count, failed_count in breakdown_rows:
         item = breakdown_map.setdefault(_breakdown_key(task_type, task_feature), {"total": 0, "success": 0, "failed": 0})
@@ -347,76 +512,136 @@ def dashboard(db: Session = Depends(get_db)):
         {
             "task_type": key,
             **counts,
+            "success_rate": round(counts["success"] * 100 / counts["total"], 1) if counts["total"] else 0.0,
+            "points_used": point_number(points_by_type.get(key, Decimal("0.00"))),
             "tokens": token_by_type.get(key, {}).get("total", 0),
             "input_tokens": token_by_type.get(key, {}).get("input", 0),
             "output_tokens": token_by_type.get(key, {}).get("output", 0),
         }
         for key, counts in sorted(breakdown_map.items(), key=lambda value: value[1]["total"], reverse=True)
     ]
-    section_rows = db.execute(
-        select(AiTask.input_data, AiTask.status).where(AiTask.task_type == "section_optimize")
-    ).all()
-    built_in_sections = {"basics", "summary", "education", "skills", "work", "projects", "awards"}
-    section_map: dict[str, dict[str, int]] = {}
-    for input_data, task_status in section_rows:
-        section_type = str((input_data or {}).get("section_type") or "unknown")
-        if section_type not in built_in_sections:
-            section_type = "custom"
-        item = section_map.setdefault(section_type, {"total": 0, "success": 0, "failed": 0})
-        item["total"] += 1
-        if task_status in {"success", "failed"}:
-            item[task_status] += 1
 
     # 对话环节质量：回合任务行上的 turn_timing（回合耗时）+ tool_quality（工具
     # 步骤）统一聚合，全部来自 ai-service 计费上报的事实行，与消息表解耦——
     # 删简历后口径仍与功能分布一致。按 id 降序取近 500 行，行序即新→旧，
     # 供「近10次」趋势样本使用。
-    task_rows = db.execute(
+    stage_rows = db.execute(
         select(AiTask.input_data, AiTask.status)
         .where(AiTask.task_type == "ai_chat", AiTask.input_data.isnot(None))
         .order_by(AiTask.id.desc())
         .limit(500)
     ).all()
-    stage_quality = _stage_quality_breakdown([(row.input_data, row.status) for row in task_rows])
+    stage_quality = _stage_quality_breakdown([(row.input_data, row.status) for row in stage_rows])
 
-    daily = []
-    start_day = today - timedelta(days=6)
-    end_day = today + timedelta(days=1)
+    # ---- 按日趋势（窗口内，SQL 分组，不再逐日发查询） ----
+    buckets: dict[str, dict[str, Any]] = {}
+    for offset in range(resolved["days"]):
+        day = (start + timedelta(days=offset)).date()
+        buckets[day.isoformat()] = {
+            "date": day.strftime("%m-%d"),
+            "users": 0,
+            "resumes": 0,
+            "ai_tasks": 0,
+            "exports": 0,
+            "shares": 0,
+            "tokens": 0,
+            "points_consumed": 0.0,
+        }
+
+    def _spread(rows, field: str, *, points: bool = False) -> None:
+        for raw_day, value in rows:
+            bucket = buckets.get(_day_key(raw_day))
+            if bucket is None:
+                continue
+            bucket[field] = round(float(value or 0), 2) if points else int(value or 0)
+
+    _spread(
+        db.execute(
+            select(func.date(User.create_time), func.count())
+            .where(User.create_time >= start)
+            .group_by(func.date(User.create_time))
+        ).all(),
+        "users",
+    )
+    _spread(
+        db.execute(
+            select(func.date(Resume.create_time), func.count())
+            .where(Resume.create_time >= start)
+            .group_by(func.date(Resume.create_time))
+        ).all(),
+        "resumes",
+    )
+    _spread(
+        db.execute(
+            select(func.date(AiTask.create_time), func.count())
+            .where(AiTask.create_time >= start)
+            .group_by(func.date(AiTask.create_time))
+        ).all(),
+        "ai_tasks",
+    )
+    _spread(
+        db.execute(
+            select(func.date(ExportRecord.create_time), func.count())
+            .where(ExportRecord.create_time >= start)
+            .group_by(func.date(ExportRecord.create_time))
+        ).all(),
+        "exports",
+    )
+    _spread(
+        db.execute(
+            select(func.date(Resume.share_created_time), func.count())
+            .where(Resume.share_created_time >= start)
+            .group_by(func.date(Resume.share_created_time))
+        ).all(),
+        "shares",
+    )
+    _spread(
+        db.execute(
+            select(func.date(FlowPointTransaction.create_time), func.sum(FlowPointTransaction.points_delta))
+            .where(FlowPointTransaction.points_delta < 0, FlowPointTransaction.create_time >= start)
+            .group_by(func.date(FlowPointTransaction.create_time))
+        ).all(),
+        "points_consumed",
+        points=True,
+    )
+    for day_key, tokens in tokens_by_day.items():
+        if day_key in buckets:
+            buckets[day_key]["tokens"] = tokens
+    daily = list(buckets.values())
+
+    # ---- 活跃时段（固定近 7 天，与窗口解耦：时段分布需要足够样本才有意义） ----
+    hourly_start = today - timedelta(days=6)
     hourly_user_ids: list[set[int]] = [set() for _ in range(24)]
     hourly_actions = [0 for _ in range(24)]
 
     def add_hourly_activity(user_id: int | None, create_time: datetime | None) -> None:
-        if not user_id or not create_time or create_time < start_day or create_time >= end_day:
+        if not user_id or not create_time or create_time < hourly_start:
             return
         hour = create_time.hour
         hourly_user_ids[hour].add(int(user_id))
         hourly_actions[hour] += 1
 
-    resume_activity_rows = db.execute(
+    for user_id, create_time, update_time in db.execute(
         select(Resume.user_id, Resume.create_time, Resume.update_time).where(
-            or_(
-                Resume.create_time >= start_day,
-                Resume.update_time >= start_day,
-            )
+            or_(Resume.create_time >= hourly_start, Resume.update_time >= hourly_start)
         )
-    ).all()
-    for user_id, create_time, update_time in resume_activity_rows:
+    ).all():
         add_hourly_activity(user_id, create_time)
         if update_time != create_time:
             add_hourly_activity(user_id, update_time)
 
     for user_id, create_time in db.execute(
-        select(AiTask.user_id, AiTask.create_time).where(AiTask.create_time >= start_day)
+        select(AiTask.user_id, AiTask.create_time).where(AiTask.create_time >= hourly_start)
     ).all():
         add_hourly_activity(user_id, create_time)
 
     for user_id, create_time in db.execute(
-        select(ExportRecord.user_id, ExportRecord.create_time).where(ExportRecord.create_time >= start_day)
+        select(ExportRecord.user_id, ExportRecord.create_time).where(ExportRecord.create_time >= hourly_start)
     ).all():
         add_hourly_activity(user_id, create_time)
 
     for user_id, share_created_time in db.execute(
-        select(Resume.user_id, Resume.share_created_time).where(Resume.share_created_time >= start_day)
+        select(Resume.user_id, Resume.share_created_time).where(Resume.share_created_time >= hourly_start)
     ).all():
         add_hourly_activity(user_id, share_created_time)
 
@@ -430,37 +655,25 @@ def dashboard(db: Session = Depends(get_db)):
         for hour, user_ids in enumerate(hourly_user_ids)
     ]
 
-    for offset in range(7):
-        day = start_day + timedelta(days=offset)
-        next_day = day + timedelta(days=1)
-        daily.append(
-            {
-                "date": day.strftime("%m-%d"),
-                "users": db.scalar(select(func.count()).select_from(User).where(User.create_time >= day, User.create_time < next_day)) or 0,
-                "resumes": db.scalar(select(func.count()).select_from(Resume).where(Resume.create_time >= day, Resume.create_time < next_day)) or 0,
-                "ai_tasks": db.scalar(select(func.count()).select_from(AiTask).where(AiTask.create_time >= day, AiTask.create_time < next_day)) or 0,
-                "exports": db.scalar(select(func.count()).select_from(ExportRecord).where(ExportRecord.create_time >= day, ExportRecord.create_time < next_day)) or 0,
-                "shares": db.scalar(select(func.count()).select_from(Resume).where(Resume.share_created_time >= day, Resume.share_created_time < next_day)) or 0,
-                "tokens": sum(
-                    int(normalize_token_usage(input_data, fallback_tokens or 0)["total_tokens"])
-                    for _, _, create_time, fallback_tokens, input_data, _, _ in token_rows
-                    if create_time and day <= create_time < next_day
-                ),
-                "points_consumed": point_number(abs(
-                    db.scalar(
-                        select(func.coalesce(func.sum(FlowPointTransaction.points_delta), 0)).where(
-                            FlowPointTransaction.points_delta < 0,
-                            FlowPointTransaction.create_time >= day,
-                            FlowPointTransaction.create_time < next_day,
-                        )
-                    )
-                    or 0
-                )),
-            }
-        )
-
     return success(
         {
+            "range": {
+                "key": resolved["key"],
+                "days": resolved["days"],
+                "start": start.isoformat(),
+                "end": now.isoformat(),
+            },
+            # 顶部常驻 KPI 条：全部是窗口值 + 环比，没有累计值
+            "kpi": {
+                "active_users": _kpi(active_now, active_prev),
+                "ai_calls": _kpi(window_ai, prev_ai),
+                "new_users": _kpi(window_users, prev_users),
+                "resumes": _kpi(window_resumes, prev_resumes),
+                "exports": _kpi(window_exports, prev_exports),
+                "revenue_cny": _kpi(window_revenue, prev_window_revenue),
+                "failed_calls": _kpi(window_ai_failed, prev_ai_failed),
+            },
+            # 累计值只作为脚注，不做主指标
             "totals": {
                 "users": total_users,
                 "resumes": total_resumes,
@@ -471,29 +684,46 @@ def dashboard(db: Session = Depends(get_db)):
                 "launch_date": first_user_time.date().isoformat() if first_user_time else None,
             },
             "today": {
-                "users": db.scalar(select(func.count()).select_from(User).where(User.create_time >= today)) or 0,
-                "active_users": len(active_user_ids),
-                "resumes": db.scalar(select(func.count()).select_from(Resume).where(Resume.create_time >= today)) or 0,
-                "ai_tasks": db.scalar(select(func.count()).select_from(AiTask).where(AiTask.create_time >= today)) or 0,
-                "exports": db.scalar(select(func.count()).select_from(ExportRecord).where(ExportRecord.create_time >= today)) or 0,
+                "users": _count(User, User.create_time >= today),
+                "active_users": active_now,
+                "resumes": _count(Resume, Resume.create_time >= today),
+                "ai_tasks": _count(AiTask, AiTask.create_time >= today),
+                "exports": _count(ExportRecord, ExportRecord.create_time >= today),
             },
             "rates": {
-                "ai_success": round(ai_success * 100 / total_ai, 1) if total_ai else 0,
-                "export_success": round(export_success * 100 / total_exports, 1) if total_exports else 0,
+                "ai_success": round(window_ai_success * 100 / window_ai, 1) if window_ai else 0,
+                "export_success": round(window_exports_success * 100 / window_exports, 1) if window_exports else 0,
             },
             "tokens": {
                 **token_summary,
-                "avg_per_task": round(token_summary["total"] / total_ai, 1) if total_ai else 0,
+                "avg_per_task": round(token_summary["total"] / window_ai, 1) if window_ai else 0,
             },
             "points": {
-                "consumed": point_number(total_points_consumed),
-                "today_consumed": point_number(today_points_consumed),
-                "recharged": point_number(total_points_recharged),
+                "consumed": _points_consumed(db, start),
+                "today_consumed": _points_consumed(db, today),
+                "recharged": point_number(point_amount(db.scalar(
+                    select(func.coalesce(func.sum(FlowPointTransaction.points_delta), 0)).where(
+                        FlowPointTransaction.points_delta > 0
+                    )
+                ) or 0)),
             },
             "revenue": {
-                "redeemed": point_number(total_redeem_revenue),
-                "today_redeemed": point_number(today_redeem_revenue),
+                "redeemed": _redeem_revenue(db),
+                "window_redeemed": window_revenue,
+                "today_redeemed": today_revenue,
             },
+            # 成本按上游美元价估算；收入是点数兑换的人民币。两者币种不同，
+            # 只用于看趋势，不做毛利（毛利需要汇率与售价口径，见看板说明）。
+            "economics": {
+                # 两位小数会把小额估算抹成 0.00，保留四位由前端决定展示精度
+                "cost_usd": round(cost_usd, 4),
+                "revenue_cny": window_revenue,
+                "avg_cost_per_call_usd": round(cost_usd / window_ai, 4) if window_ai else 0,
+                "priced_calls": priced_calls,
+                "unpriced_calls": max(window_ai - priced_calls, 0),
+            },
+            "funnel": _funnel(db, start),
+            "failure_reasons": _failure_reasons(db, start, window_ai_failed),
             "ai_breakdown": ai_breakdown,
             "model_breakdown": [
                 {
@@ -510,9 +740,6 @@ def dashboard(db: Session = Depends(get_db)):
                     ),
                     reverse=True,
                 )
-            ],
-            "section_breakdown": [
-                {"section_type": section_type, **counts} for section_type, counts in section_map.items()
             ],
             "stage_quality": stage_quality,
             "daily": daily,

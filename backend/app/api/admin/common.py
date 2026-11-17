@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 from app.models.ai_task import AiTask
@@ -7,6 +9,24 @@ from app.models.ai_config import AiModelConfig
 
 
 OTHER_MODEL_FILTER_VALUE = "__other__"
+
+# 后台列表与看板共用的时间窗口。看板概览的环比、漏斗、失败归因都跟着它走，
+# 避免「有的卡是累计值、有的卡是近 7 天」这种口径混乱。
+WINDOW_DAYS = {"today": 1, "7d": 7, "30d": 30, "90d": 90}
+
+
+def window_start(window: str | None) -> datetime | None:
+    """range 参数 → 窗口起点（当天 00:00 往前推 N-1 天）。
+
+    ``None`` / ``"all"`` / 未知取值都表示不限时间，交给调用方决定是否兜底。
+    """
+    if not window or window == "all":
+        return None
+    days = WINDOW_DAYS.get(window)
+    if days is None:
+        return None
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    return today - timedelta(days=days - 1)
 
 
 def _configured_ai_model_names(db: Session) -> list[str]:

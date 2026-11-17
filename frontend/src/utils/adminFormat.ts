@@ -30,6 +30,46 @@ export function formatTokenNumber(value?: number): string {
   return num.toString()
 }
 
+/** 耗时（毫秒）→ 可读文本：不足 1 秒给毫秒，超过给一位小数秒。 */
+export function formatMs(value?: number | null): string {
+  if (value === null || value === undefined) return "—"
+  return value < 1000 ? `${value}ms` : `${(value / 1000).toFixed(1)}s`
+}
+
+/** 美元金额：成本估算常是几百到几千分之一美元，小于 1 美元时给四位小数。 */
+export function formatUsd(value?: number): string {
+  const num = Number(value || 0)
+  return `$${num < 1 ? num.toFixed(4) : num.toFixed(2)}`
+}
+
+/** 字节数 → GB/MB：存储占用只需要两位有效量级。 */
+export function formatBytes(value?: number): string {
+  const num = Number(value || 0)
+  if (num >= 1024 ** 3) return `${(num / 1024 ** 3).toFixed(2)} GB`
+  if (num >= 1024 ** 2) return `${(num / 1024 ** 2).toFixed(1)} MB`
+  if (num >= 1024) return `${(num / 1024).toFixed(1)} KB`
+  return `${num} B`
+}
+
+/** 环比百分比；无基数（上一窗口为 0）时给「—」，持平给「持平」。 */
+export function formatDeltaPct(delta?: number | null): string {
+  if (delta === null || delta === undefined) return "—"
+  if (delta > 0) return `↑${delta}%`
+  if (delta < 0) return `↓${Math.abs(delta)}%`
+  return "持平"
+}
+
+/**
+ * 环比涨跌的颜色：涨用 emerald、跌用 red。
+ *
+ * `inverted` 用于「越少越好」的指标（失败数），涨了才是坏消息。
+ */
+export function deltaToneClass(delta?: number | null, inverted = false): string {
+  if (!delta) return "text-zinc-400"
+  const good = inverted ? delta < 0 : delta > 0
+  return good ? "text-emerald-600" : "text-red-600"
+}
+
 export function tokenUsage(item: AdminAiTask): { total: number; input: number; output: number } {
   const usage = item.input_data?.token_usage
   const total = Number(usage?.total_tokens ?? item.tokens_used ?? 0)
@@ -67,19 +107,35 @@ export function taskTypeText(value: string): string {
   } as Record<string, string>)[value] || value
 }
 
+/** 对话回合的快捷指令文案（`ai_tasks.feature`）。 */
+const FEATURE_LABELS: Record<string, string> = {
+  polish: "对话 · 润色",
+  translate: "对话 · 翻译",
+  diagnose: "对话 · 简历诊断",
+  match: "对话 · JD匹配",
+  rewrite: "对话 · 重写经历",
+  optimize: "对话 · JD优化",
+  generate: "对话 · 生成",
+  greeting: "对话 · 开场白",
+  chat: "对话 · 自由交流",
+}
+
 /** 对话回合（ai_chat）按 feature 显示具体指令；无 feature 的历史行归「AI 助手对话」。 */
 export function featureText(value?: string | null): string {
-  return ({
-    polish: "对话 · 润色",
-    translate: "对话 · 翻译",
-    diagnose: "对话 · 简历诊断",
-    match: "对话 · JD匹配",
-    rewrite: "对话 · 重写经历",
-    optimize: "对话 · JD优化",
-    generate: "对话 · 生成",
-    greeting: "对话 · 开场白",
-    chat: "对话 · 自由交流",
-  } as Record<string, string>)[value || ""] || "AI 助手对话"
+  return FEATURE_LABELS[value || ""] || "AI 助手对话"
+}
+
+/**
+ * 看板「功能分布」行的文案。
+ *
+ * 聚合键可能是 task_type（历史任务），也可能是 feature（对话回合），所以先查
+ * task_type 表、再查 feature 表；两边都查不到就原样输出，避免把未知键伪装成
+ * 「AI 助手对话」。
+ */
+export function aiBreakdownLabel(key: string): string {
+  const taskLabel = taskTypeText(key)
+  if (taskLabel !== key) return taskLabel
+  return FEATURE_LABELS[key] || key
 }
 
 export function feedbackStatusText(value: string): string {

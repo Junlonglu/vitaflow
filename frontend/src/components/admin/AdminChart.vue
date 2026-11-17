@@ -2,11 +2,12 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import type { EChartsOption } from "echarts"
 import { BarChart, LineChart } from "echarts/charts"
-import { GridComponent, TooltipComponent } from "echarts/components"
+import { GridComponent, LegendComponent, TooltipComponent } from "echarts/components"
 import { init, use, type EChartsType } from "echarts/core"
 import { CanvasRenderer } from "echarts/renderers"
 
-use([BarChart, LineChart, GridComponent, TooltipComponent, CanvasRenderer])
+// 多序列趋势图需要图例区分线条，没注册时 echarts 只会打警告、图例静默不显示
+use([BarChart, LineChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
 
 defineOptions({ inheritAttrs: false })
 

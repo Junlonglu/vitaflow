@@ -16,17 +16,49 @@ export interface TokenUsage {
   calls?: Array<{ label?: string; input_tokens?: number; output_tokens?: number }>
 }
 
+/** 顶部 KPI 的窗口值 + 环比；上一窗口为 0 时 delta_pct 为 null（无可比基数）。 */
+export interface DashboardKpi {
+  value: number
+  prev: number
+  delta_pct: number | null
+}
+
 export interface DashboardData {
+  range: { key: string; days: number; start: string; end: string }
+  // 概览条：全部是窗口值 + 环比，累计值只出现在 totals（脚注）
+  kpi: {
+    active_users: DashboardKpi
+    ai_calls: DashboardKpi
+    new_users: DashboardKpi
+    resumes: DashboardKpi
+    exports: DashboardKpi
+    revenue_cny: DashboardKpi
+    failed_calls: DashboardKpi
+  }
   totals: { users: number; resumes: number; ai_tasks: number; exports: number; storage_bytes: number; operating_days: number; launch_date?: string | null }
   today: { users: number; active_users: number; resumes: number; ai_tasks: number; exports: number }
   rates: { ai_success: number; export_success: number }
   tokens: { total: number; today: number; input: number; output: number; avg_per_task: number }
   points: { consumed: number; today_consumed: number; recharged: number }
-  revenue?: { redeemed: number; today_redeemed: number }
+  revenue: { redeemed: number; window_redeemed: number; today_redeemed: number }
+  // 成本按上游美元价估算，收入是点数兑换的人民币；币种不同，只用于看趋势
+  economics: { cost_usd: number; revenue_cny: number; avg_cost_per_call_usd: number; priced_calls: number; unpriced_calls: number }
+  // cohort = 以窗口内注册用户为基数；窗口内没有新注册时后端退回全站口径（all）
+  funnel: { basis: "cohort" | "all"; steps: Array<{ key: string; label: string; value: number; rate: number }> }
+  failure_reasons: Array<{ reason: string; count: number; share: number }>
   // 聚合键：对话回合（ai_chat）取 feature（polish/…/chat），其余任务取 task_type
-  ai_breakdown: Array<{ task_type: string; total: number; success: number; failed: number; tokens: number; input_tokens: number; output_tokens: number }>
+  ai_breakdown: Array<{
+    task_type: string
+    total: number
+    success: number
+    failed: number
+    success_rate: number
+    points_used: number
+    tokens: number
+    input_tokens: number
+    output_tokens: number
+  }>
   model_breakdown?: Array<{ model_name: string; model_raw_name?: string; config_names?: string[]; total: number; tokens: number; input_tokens: number; output_tokens: number; points_used: number }>
-  section_breakdown: Array<{ section_type: string; total: number; success: number; failed: number }>
   // 对话环节质量：回合环节（首字/生成/整回合 + 首字细分 loader/session/provider）
   // 与工具类型统一聚合（duration_ms 毫秒）。近10次样本按任务行新→旧取，
   // recent_delta_pct 为近10次平均相对总体平均的升降百分比。
@@ -351,7 +383,8 @@ export interface AdminFeedback {
   update_time: string
 }
 
-export const getAdminDashboardApi = () => request.get<DashboardData, DashboardData>("/admin/dashboard")
+export const getAdminDashboardApi = (range: string) =>
+  request.get<DashboardData, DashboardData>("/admin/dashboard", { params: { range } })
 export const getAdminUsersApi = (params: Record<string, unknown>) => request.get<PageData<AdminUser>, PageData<AdminUser>>("/admin/users", { params })
 export const updateAdminUserStatusApi = (id: number, status: "active" | "disabled") => request.patch(`/admin/users/${id}/status`, { status })
 export const updateAdminUserFlowPointsApi = (id: number, data: { points_delta: number; description?: string }) => request.patch(`/admin/users/${id}/flow-points`, data)

@@ -2,8 +2,8 @@
 import { errorMessage } from "@/utils/errorText"
 import { computed, onMounted, ref } from "vue"
 import {
-  Activity, Bot, Download, FileText, LayoutDashboard, LayoutTemplate, Megaphone, DollarSign,
-  Briefcase, ChevronsUp, ChevronsDown, Eye, EyeOff, Gift, MessageSquare, RefreshCw, Settings, ShieldCheck, SlidersHorizontal, Ticket, Users, Zap,
+  Activity, Bot, Download, FileText, LayoutDashboard, LayoutTemplate, Megaphone,
+  Briefcase, Eye, EyeOff, Gift, MessageSquare, RefreshCw, Settings, ShieldCheck, SlidersHorizontal, Ticket, Users, Zap,
 } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
 import PaginationFooter from "@/components/ui/pagination/PaginationFooter.vue"
@@ -21,7 +21,6 @@ import AnnouncementManager from "@/components/admin/AnnouncementManager.vue"
 import AiSettingsManager from "@/components/admin/AiSettingsManager.vue"
 import RichTextEditor from "@/components/admin/RichTextEditor.vue"
 import TemplatePreview from "@/components/templates/TemplatePreview.vue"
-import type { EChartsOption } from "echarts"
 import {
   getAdminDashboardApi,
   getAdminSettingsApi, getAdminTemplatesApi,
@@ -31,8 +30,6 @@ import {
 import {
   ADMIN_PAGE_SIZE_DEFAULT,
   ADMIN_PAGE_SIZE_OPTIONS as pageSizeOptions,
-  formatCurrency,
-  formatTokenNumber,
 } from "@/utils/adminFormat"
 import { showGlobalToast } from "@/utils/toast"
 
@@ -43,6 +40,8 @@ const loading = ref(false)
 const error = ref("")
 const pageSize = ref(ADMIN_PAGE_SIZE_DEFAULT)
 const dashboard = ref<DashboardData | null>(null)
+// 看板时间窗口由面板上的分段控件改，页面只负责按新窗口重新取数
+const dashboardRange = ref("7d")
 const templates = ref<PageData<AdminTemplate>>({ items: [], total: 0, page: 1, page_size: ADMIN_PAGE_SIZE_DEFAULT })
 
 const settingsForm = ref({
@@ -104,98 +103,17 @@ const pageNumbers = computed(() => {
   const end = Math.min(totalPages.value, start + 4)
   return Array.from({ length: end - start + 1 }, (_, index) => start + index)
 })
-const dailyTotal = (item: DashboardData["daily"][number]) => item.users + item.resumes + item.ai_tasks + item.exports + (item.shares || 0)
-const dailyTrendOption = computed<EChartsOption>(() => {
-  const items = dashboard.value?.daily || []
-  return {
-    color: ["#18181b"],
-    tooltip: {
-      trigger: "axis",
-      axisPointer: { type: "shadow" },
-      borderWidth: 0,
-      backgroundColor: "#18181b",
-      textStyle: { color: "#fff", fontSize: 12 },
-      formatter: (params: any) => {
-        const rows = Array.isArray(params) ? params : [params]
-        const index = rows[0]?.dataIndex || 0
-        const day = items[index]
-        if (!day) return ""
-        return [
-          `<div style="font-weight:700;margin-bottom:6px;">${day.date}<span style="float:right;color:#34d399;margin-left:18px;">${dailyTotal(day)} 总活动</span></div>`,
-          `新增用户：<b>${day.users}</b>`,
-          `简历创作：<b>${day.resumes}</b>`,
-          `AI 调用：<b>${day.ai_tasks}</b>`,
-          `文件导出：<b>${day.exports}</b>`,
-          `分享次数：<b>${day.shares || 0}</b>`,
-        ].join("<br/>")
-      },
-    },
-    grid: { left: 4, right: 4, top: 20, bottom: 18, containLabel: true },
-    xAxis: { type: "category", data: items.map((item) => item.date), axisTick: { show: false }, axisLine: { lineStyle: { color: "#e4e4e7" } }, axisLabel: { color: "#a1a1aa", fontWeight: 500 } },
-    yAxis: { type: "value", minInterval: 1, splitLine: { lineStyle: { color: "#f4f4f5" } }, axisLabel: { color: "#a1a1aa" }, axisLine: { show: false }, axisTick: { show: false } },
-    series: [
-      { name: "总活动", type: "bar", barMaxWidth: 24, itemStyle: { borderRadius: [8, 8, 0, 0] }, data: items.map(dailyTotal) },
-    ],
-  }
-})
-const hourlyActivityOption = computed<EChartsOption>(() => {
-  const items = dashboard.value?.hourly_activity || []
-  return {
-    color: ["#10b981", "#cbd5e1"],
-    tooltip: {
-      trigger: "axis",
-      borderWidth: 0,
-      backgroundColor: "#18181b",
-      textStyle: { color: "#fff", fontSize: 12 },
-      formatter: (params: any) => {
-        const rows = Array.isArray(params) ? params : [params]
-        const index = rows[0]?.dataIndex || 0
-        const item = items[index]
-        if (!item) return ""
-        return [`<b>${item.label}</b>`, `活跃用户：<b>${item.active_users}</b> 人`, `操作次数：<b>${item.actions}</b>`].join("<br/>")
-      },
-    },
-    grid: { left: 4, right: 4, top: 24, bottom: 18, containLabel: true },
-    xAxis: { type: "category", data: items.map((item) => item.label), axisTick: { show: false }, axisLine: { lineStyle: { color: "#e4e4e7" } }, axisLabel: { color: "#a1a1aa", interval: 3, formatter: (value: string) => value.slice(0, 2) } },
-    yAxis: [
-      { type: "value", minInterval: 1, splitLine: { lineStyle: { color: "#f4f4f5" } }, axisLabel: { color: "#a1a1aa" }, axisLine: { show: false }, axisTick: { show: false } },
-      { type: "value", minInterval: 1, splitLine: { show: false }, axisLabel: { color: "#a1a1aa" }, axisLine: { show: false }, axisTick: { show: false } },
-    ],
-    series: [
-      {
-        name: "活跃用户",
-        type: "line",
-        smooth: true,
-        showSymbol: false,
-        symbol: "circle",
-        symbolSize: 7,
-        data: items.map((item) => item.active_users),
-        areaStyle: { color: "rgba(16,185,129,0.08)" },
-        lineStyle: { width: 2.5 },
-      },
-      { name: "操作次数", type: "bar", yAxisIndex: 1, barMaxWidth: 8, itemStyle: { borderRadius: [4, 4, 0, 0] }, data: items.map((item) => item.actions) },
-    ],
-  }
-})
-const dashboardCards = computed(() => {
-  if (!dashboard.value) return []
-  return [
-    { label: "用户总数", value: dashboard.value.totals.users, formattedValue: undefined, today: dashboard.value.today.users, formattedToday: undefined, icon: Users },
-    { label: "简历总数", value: dashboard.value.totals.resumes, formattedValue: undefined, today: dashboard.value.today.resumes, formattedToday: undefined, icon: FileText },
-    { label: "AI 任务", value: dashboard.value.totals.ai_tasks, formattedValue: undefined, today: dashboard.value.today.ai_tasks, formattedToday: undefined, icon: Bot },
-    { label: "导出总数", value: dashboard.value.totals.exports, formattedValue: undefined, today: dashboard.value.today.exports, formattedToday: undefined, icon: Download },
-    { label: "Token 消耗", value: dashboard.value.tokens?.total || 0, formattedValue: formatTokenNumber(dashboard.value.tokens?.total), today: dashboard.value.tokens?.today || 0, formattedToday: formatTokenNumber(dashboard.value.tokens?.today), icon: Zap },
-    { label: "Flow Points 消耗", value: dashboard.value.points?.consumed || 0, formattedValue: undefined, today: dashboard.value.points?.today_consumed || 0, formattedToday: undefined, icon: Activity },
-    { label: "总收入", value: dashboard.value.revenue?.redeemed || 0, formattedValue: formatCurrency(dashboard.value.revenue?.redeemed), today: dashboard.value.revenue?.today_redeemed || 0, formattedToday: formatCurrency(dashboard.value.revenue?.today_redeemed), icon: DollarSign },
-    { label: "上线天数", value: dashboard.value.totals.operating_days, formattedValue: undefined, today: 0, formattedToday: undefined, icon: Activity },
-  ]
-})
+function changeDashboardRange(value: string) {
+  dashboardRange.value = value
+  load()
+}
+
 
 async function load(page = 1) {
   loading.value = true
   error.value = ""
   try {
-    if (section.value === "dashboard") dashboard.value = await getAdminDashboardApi()
+    if (section.value === "dashboard") dashboard.value = await getAdminDashboardApi(dashboardRange.value)
 
     if (section.value === "system-settings") {
       const data = await getAdminSettingsApi()
@@ -291,9 +209,8 @@ onMounted(() => load())
         <AdminDashboardPanel
           v-if="section === 'dashboard' && dashboard"
           :dashboard="dashboard"
-          :cards="dashboardCards"
-          :daily-trend-option="dailyTrendOption"
-          :hourly-activity-option="hourlyActivityOption"
+          :range="dashboardRange"
+          @update:range="changeDashboardRange"
         />
 
         <AnnouncementManager v-else-if="section === 'announcements'" />

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@/utils/errorText"
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue"
 import { useRoute } from "vue-router"
 import { AlertCircle, Clock3 } from "lucide-vue-next"
@@ -89,8 +90,8 @@ onMounted(async () => {
   try {
     sharedResume.value = await getPublicSharedResumeApi(String(route.params.token || ""))
     await nextTick()
-  } catch (reason: any) {
-    error.value = reason?.message || "分享不存在或已失效"
+  } catch (reason: unknown) {
+    error.value = errorMessage(reason, "分享不存在或已失效")
   } finally {
     loading.value = false
   }

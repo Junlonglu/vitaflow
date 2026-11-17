@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@/utils/errorText"
 import { computed, nextTick, ref, onMounted, onUnmounted, watch } from "vue"
 import Sortable from "sortablejs"
 import { Award, Banknote, BookOpen, Briefcase, Building2, Calendar, CalendarCheck, Car, ChevronDown, ChevronRight, Code2, Cpu, Github, Globe, GraduationCap, GripVertical, Heart, IdCard, Images, Info, Languages, Laptop, Link, Linkedin, Mail, Map, MapPin, MessageCircle, Phone, Plus, Rocket, School, Sparkles, Star, Tag, Trash2, UserRound, Wallet, Wrench, LoaderCircle, CheckCircle2, AlertCircle, Camera, X } from "lucide-vue-next"
@@ -313,8 +314,8 @@ async function handleCropped(blob: Blob) {
     props.basics.avatar = result.url
     emit("change")
     showToast("头像上传成功", "success")
-  } catch (error: any) {
-    showToast(error.message || "上传失败", "error")
+  } catch (error: unknown) {
+    showToast(errorMessage(error, "上传失败"), "error")
   } finally {
     isUploading.value = false
   }

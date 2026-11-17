@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@/utils/errorText"
 import { computed, onMounted, ref } from "vue"
 import { Activity, FileSearch, History, Languages, LoaderCircle, MessageSquare, RefreshCw, ScrollText, Send, TicketCheck, X } from "lucide-vue-next"
 import WorkspacePage from "@/components/workspace/WorkspacePage.vue"
@@ -238,8 +239,8 @@ async function runPageLoad(action: () => Promise<void>) {
   error.value = ""
   try {
     await action()
-  } catch (err: any) {
-    error.value = err.message || "数据加载失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "数据加载失败")
   } finally {
     loading.value = false
   }
@@ -261,8 +262,8 @@ async function refresh() {
     if (activeTab.value === "records") await loadRecords(1)
     if (activeTab.value === "points") await loadTransactions(1)
     if (activeTab.value === "histories") await loadHistories()
-  } catch (err: any) {
-    error.value = err.message || "数据加载失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "数据加载失败")
   } finally {
     loading.value = false
   }
@@ -310,8 +311,8 @@ async function redeem() {
     redeemCode.value = ""
     await loadSummary()
     await loadTransactions(1)
-  } catch (err: any) {
-    showGlobalToast(err.message || "兑换失败", "error")
+  } catch (err: unknown) {
+    showGlobalToast(errorMessage(err, "兑换失败"), "error")
   } finally {
     redeeming.value = false
   }

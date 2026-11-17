@@ -14,6 +14,7 @@ import Input from "@/components/ui/input/Input.vue"
 import Label from "@/components/ui/label/Label.vue"
 import BrandLogo from "@/components/common/BrandLogo.vue"
 import { Check, X } from "lucide-vue-next"
+import { errorMessage } from "@/utils/errorText"
 
 const router = useRouter()
 const route = useRoute()
@@ -96,8 +97,8 @@ async function handleLogin() {
     if (!loginPassword.value) throw new Error("请输入密码")
     await user.login(loginEmail.value, loginPassword.value)
     router.push("/workspace")
-  } catch (e: any) {
-    loginError.value = e.message
+  } catch (e: unknown) {
+    loginError.value = errorMessage(e, "登录失败，请稍后重试")
   }
 }
 
@@ -119,8 +120,8 @@ async function sendCode() {
         countdownTimer = undefined
       }
     }, 1000)
-  } catch (e: any) {
-    regError.value = e.message
+  } catch (e: unknown) {
+    regError.value = errorMessage(e, "验证码发送失败，请稍后重试")
   } finally {
     sendingCode.value = false
   }
@@ -150,8 +151,8 @@ async function handleRegister() {
     regForm.value = { username: "", email: "", password: "", verification_code: "" }
     // auto switch to login
     router.push("/login")
-  } catch (e: any) {
-    regError.value = e.message
+  } catch (e: unknown) {
+    regError.value = errorMessage(e, "注册失败，请稍后重试")
   }
 }
 
@@ -173,8 +174,8 @@ async function sendResetCode() {
         resetCountdownTimer = undefined
       }
     }, 1000)
-  } catch (e: any) {
-    resetError.value = e.message
+  } catch (e: unknown) {
+    resetError.value = errorMessage(e, "验证码发送失败，请稍后重试")
   } finally {
     sendingResetCode.value = false
   }
@@ -198,8 +199,8 @@ async function handleResetPassword() {
     loginSuccess.value = "密码已重置，请使用新密码登录"
     resetForm.value = { email: "", verification_code: "", new_password: "" }
     isForgotPassword.value = false
-  } catch (e: any) {
-    resetError.value = e.message
+  } catch (e: unknown) {
+    resetError.value = errorMessage(e, "重置密码失败，请稍后重试")
   }
 }
 </script>

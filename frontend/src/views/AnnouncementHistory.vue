@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@/utils/errorText"
 import { onMounted, ref } from "vue"
 import { ChevronRight, Megaphone, RefreshCw, X } from "lucide-vue-next"
 import WorkspacePage from "@/components/workspace/WorkspacePage.vue"
@@ -23,8 +24,8 @@ async function load(page = 1) {
   error.value = ""
   try {
     data.value = await getAnnouncementHistoryApi(page, data.value.page_size)
-  } catch (err: any) {
-    error.value = err.message || "公告加载失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "公告加载失败")
   } finally {
     loading.value = false
   }
@@ -35,8 +36,8 @@ async function openDetail(item: AnnouncementHistoryItem) {
   error.value = ""
   try {
     detail.value = await getAnnouncementDetailApi(item.id)
-  } catch (err: any) {
-    error.value = err.message || "公告详情加载失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "公告详情加载失败")
   } finally {
     detailLoading.value = false
   }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@/utils/errorText"
 import { computed, onMounted, ref } from "vue"
 import { Briefcase, FileUp, LayoutTemplate, PanelLeft, Plus, Search, X } from "lucide-vue-next"
 import BrandLogo from "@/components/common/BrandLogo.vue"
@@ -51,8 +52,8 @@ onMounted(async () => {
   try {
     templates.value = await listTemplatesApi()
     selectedId.value = templates.value[0]?.template_id || ""
-  } catch (err: any) {
-    error.value = err?.message || "模板加载失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "模板加载失败")
   } finally {
     loading.value = false
   }
@@ -66,8 +67,8 @@ function reload() {
       templates.value = items
       selectedId.value = items[0]?.template_id || ""
     })
-    .catch((err: any) => {
-      error.value = err?.message || "模板加载失败"
+    .catch((err: unknown) => {
+      error.value = errorMessage(err, "模板加载失败")
     })
     .finally(() => {
       loading.value = false

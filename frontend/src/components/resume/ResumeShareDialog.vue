@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@/utils/errorText"
 import { computed, ref, watch } from "vue"
 import { Check, Clock3, Copy, ExternalLink, Link2, RefreshCw, ShieldCheck } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
@@ -70,8 +71,8 @@ async function loadSettings() {
       expiryMode.value = data.enabled ? "permanent" : "7"
       customExpireTime.value = ""
     }
-  } catch (error: any) {
-    showGlobalToast(error?.message || "分享设置加载失败", "error")
+  } catch (error: unknown) {
+    showGlobalToast(errorMessage(error, "分享设置加载失败"), "error")
     emit("update:open", false)
   } finally {
     loading.value = false
@@ -104,8 +105,8 @@ async function saveSettings(regenerateToken = false) {
     customToken.value = config.value.token || ""
     savedToken.value = config.value.token || ""
     showGlobalToast(regenerateToken ? "分享链接已重新生成" : enabled.value ? "分享已开启" : "分享已关闭")
-  } catch (error: any) {
-    showGlobalToast(error?.message || "分享设置保存失败", "error")
+  } catch (error: unknown) {
+    showGlobalToast(errorMessage(error, "分享设置保存失败"), "error")
   } finally {
     saving.value = false
   }

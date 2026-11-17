@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@/utils/errorText"
 import { computed, onMounted, ref } from "vue"
 import {
   Activity, Bot, Download, FileText, LayoutDashboard, LayoutTemplate, Megaphone, DollarSign,
@@ -206,8 +207,8 @@ async function load(page = 1) {
       }
     }
     if (section.value === "templates") templates.value = await getAdminTemplatesApi({ page, page_size: pageSize.value })
-  } catch (err: any) {
-    error.value = err.message || "数据加载失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "数据加载失败")
   } finally {
     loading.value = false
   }
@@ -230,8 +231,8 @@ async function updateTemplateDisplay(item: AdminTemplate, data: { sort_order?: n
     templates.value.items.sort((a, b) => a.sort_order - b.sort_order || a.template_id.localeCompare(b.template_id))
     await updateAdminTemplateApi(item.template_id, data)
     showGlobalToast("模板展示设置已更新")
-  } catch (err: any) {
-    showGlobalToast(err.message || "模板设置更新失败", "error")
+  } catch (err: unknown) {
+    showGlobalToast(errorMessage(err, "模板设置更新失败"), "error")
     await load(templates.value.page)
   }
 }
@@ -266,8 +267,8 @@ async function saveSettings() {
       user_agreement: data.user_agreement || "",
     }
     showGlobalToast("系统设置已保存")
-  } catch (err: any) {
-    showGlobalToast(err.message || "系统设置保存失败", "error")
+  } catch (err: unknown) {
+    showGlobalToast(errorMessage(err, "系统设置保存失败"), "error")
   } finally {
     savingSettings.value = false
   }

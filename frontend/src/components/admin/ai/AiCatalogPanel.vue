@@ -6,6 +6,7 @@
  * 列表容器与「一次只开一张」的展开控制、新增/复制的草稿卡、余额与套餐用量的
  * 拉取、路由组的新增与编辑。
  */
+import { errorMessage } from "@/utils/errorText"
 import { Check, Pencil, Plus, RefreshCw, Server, Trash2 } from "lucide-vue-next"
 import { computed, ref, watch } from "vue"
 import Button from "@/components/ui/button/Button.vue"
@@ -162,7 +163,7 @@ async function loadPlanUsages(providers: AdminCatalogProvider[]) {
     planUsages.value[provider.key] = "loading"
     try {
       planUsages.value[provider.key] = await getAdminCatalogPlanUsageApi(provider.key)
-    } catch (err: any) {
+    } catch (err: unknown) {
       planUsages.value[provider.key] = {
         vendor: provider.plan_vendor,
         plan: provider.plan_label || "",
@@ -171,7 +172,7 @@ async function loadPlanUsages(providers: AdminCatalogProvider[]) {
         plans: [],
         as_of: new Date().toISOString(),
         stale: false,
-        error: err.message || "套餐用量查询失败",
+        error: errorMessage(err, "套餐用量查询失败"),
       }
     }
   }

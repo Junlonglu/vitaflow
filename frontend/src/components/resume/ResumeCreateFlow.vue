@@ -229,8 +229,8 @@ async function loadStarterCatalog() {
     if (selectedStarterIndustryId.value) {
       await loadStarterRoles(selectedStarterIndustryId.value)
     }
-  } catch (error: any) {
-    starterError.value = error?.message || "岗位起稿内容加载失败"
+  } catch (error: unknown) {
+    starterError.value = errorMessage(error, "岗位起稿内容加载失败")
   } finally {
     starterLoading.value = false
   }
@@ -276,9 +276,9 @@ async function loadStarterRoles(industryId: string) {
     mergeStarterIndustry(nextIndustry)
     loadedStarterIndustryIds.add(industryId)
     selectedStarterRoleId.value = nextIndustry.roles[0]?.starter_id || ""
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (requestId === starterRoleRequestId) {
-      starterRolesError.value = error?.message || "岗位方向加载失败"
+      starterRolesError.value = errorMessage(error, "岗位方向加载失败")
     }
   } finally {
     if (requestId === starterRoleRequestId) starterRolesLoading.value = false
@@ -324,8 +324,8 @@ async function createStarterResume() {
     )
     showCreate.value = false
     emit("created", item.id)
-  } catch (error: any) {
-    showGlobalToast(error?.message || "创建失败，请重试", "error")
+  } catch (error: unknown) {
+    showGlobalToast(errorMessage(error, "创建失败，请重试"), "error")
   } finally {
     starterCreating.value = false
   }
@@ -359,8 +359,8 @@ async function createResume(templateId: string) {
     const item = await store.createResume(templateId)
     showCreate.value = false
     emit("created", item.id)
-  } catch (error: any) {
-    showGlobalToast(error?.message || "创建失败，请重试", "error")
+  } catch (error: unknown) {
+    showGlobalToast(errorMessage(error, "创建失败，请重试"), "error")
   }
 }
 
@@ -395,7 +395,7 @@ async function generateResume(payload: any) {
     const item = await store.createResumeFromAi(result)
     showAiCreate.value = false
     emit("created", item.id)
-  } catch (error: any) {
+  } catch (error: unknown) {
     aiError.value = isSilentStreamError(error) || isAbortError(error) ? "" : errorMessage(error, "AI 生成失败")
   } finally {
     if (generateController === controller) generateController = null
@@ -494,8 +494,8 @@ async function handleImportFile(event: Event) {
     finishImportProgress()
     showGlobalToast("导入成功", "success")
     emit("created", item.id)
-  } catch (error: any) {
-    showGlobalToast(error?.message || "导入失败，未识别到有效简历内容", "error")
+  } catch (error: unknown) {
+    showGlobalToast(errorMessage(error, "导入失败，未识别到有效简历内容"), "error")
     stopImportProgress()
   } finally {
     importingResume.value = false

@@ -185,7 +185,7 @@ export function useResumeChatStream(options: ResumeChatStreamOptions) {
         : []
       loaded.value = true
       jdOptimizeArmed.value = false
-    } catch (err: any) {
+    } catch (err: unknown) {
       error.value = errorMessage(err, "对话记录加载失败")
     }
   }
@@ -204,7 +204,7 @@ export function useResumeChatStream(options: ResumeChatStreamOptions) {
     if (!sessionId) {
       try {
         sessionId = (await chatStore.ensureSession(options.resumeId.value)).id
-      } catch (err: any) {
+      } catch (err: unknown) {
         sessionSwitchLock.value = false
         error.value = errorMessage(err, "创建对话失败，请重试")
         return
@@ -232,7 +232,7 @@ export function useResumeChatStream(options: ResumeChatStreamOptions) {
         session_id: sessionId,
       }, { ...streamHandlers(assistantIndex), signal: controller.signal })
       await settleTurn(response, messages.value[assistantIndex], "chat", stamp)
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (isAbortError(err)) return
       const assistant = messages.value[assistantIndex]
       if (assistant) assistant.streaming = false
@@ -316,7 +316,7 @@ export function useResumeChatStream(options: ResumeChatStreamOptions) {
         session_id: activeSessionId.value,
       }, { ...streamHandlers(assistantIndex), signal: controller.signal })
       await settleTurn(response, messages.value[assistantIndex], "regenerate", startedAt)
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (isAbortError(err)) return
       // 重新生成会截断后续气泡，本地状态已不可信，直接以服务端为准重载。
       await load().catch(() => undefined)
@@ -350,7 +350,7 @@ export function useResumeChatStream(options: ResumeChatStreamOptions) {
       if (response?.assistant_message) Object.assign(message, response.assistant_message)
       if (action === "apply" && response?.resume_data) await options.applyResumeSnapshot()
       options.onDecisionApplied?.(message, action, response)
-    } catch (err: any) {
+    } catch (err: unknown) {
       message.action_status = previousStatus
       error.value = errorMessage(err, action === "apply" ? "修改写入失败" : "取消修改失败")
     } finally {
@@ -374,7 +374,7 @@ export function useResumeChatStream(options: ResumeChatStreamOptions) {
       messages.value = []
       loaded.value = true
       chatStore.fetchSessions(options.resumeId.value, { force: true }).catch(() => undefined)
-    } catch (err: any) {
+    } catch (err: unknown) {
       error.value = errorMessage(err, "清除对话记录失败")
     }
   }
@@ -387,7 +387,7 @@ export function useResumeChatStream(options: ResumeChatStreamOptions) {
       await chatStore.createSession(options.resumeId.value)
       messages.value = []
       loaded.value = true
-    } catch (err: any) {
+    } catch (err: unknown) {
       error.value = errorMessage(err, "新建对话失败，请重试")
     }
   }

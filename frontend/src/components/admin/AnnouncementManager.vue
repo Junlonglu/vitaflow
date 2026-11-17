@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@/utils/errorText"
 import { onMounted, ref } from "vue"
 import { Edit3, Eye, Megaphone, Plus, Trash2, X } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
@@ -45,8 +46,8 @@ async function load(page = 1) {
   error.value = ""
   try {
     data.value = await getAdminAnnouncementsApi({ page, page_size: 10, keyword: keyword.value, status: status.value || undefined })
-  } catch (err: any) {
-    error.value = err.message || "公告加载失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "公告加载失败")
   } finally {
     loading.value = false
   }
@@ -75,8 +76,8 @@ async function save() {
     editorOpen.value = false
     await load(editingId.value ? data.value.page : 1)
     showGlobalToast("保存成功")
-  } catch (err: any) {
-    error.value = err.message || "保存失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "保存失败")
   } finally {
     saving.value = false
   }
@@ -88,8 +89,8 @@ async function toggleStatus(item: AdminAnnouncement) {
     const updated = await updateAdminAnnouncementStatusApi(item.id, next)
     Object.assign(item, updated)
     showGlobalToast(next === "published" ? "发布成功" : "撤回成功")
-  } catch (err: any) {
-    error.value = err.message || "状态更新失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "状态更新失败")
   }
 }
 
@@ -104,8 +105,8 @@ async function executeRemove() {
     await deleteAdminAnnouncementApi(confirmTarget.value.id)
     await load(data.value.items.length === 1 && data.value.page > 1 ? data.value.page - 1 : data.value.page)
     showGlobalToast("删除成功")
-  } catch (err: any) {
-    error.value = err.message || "删除失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "删除失败")
   } finally {
     showConfirm.value = false
     confirmTarget.value = null

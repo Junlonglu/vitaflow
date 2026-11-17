@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@/utils/errorText"
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import type { PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist/legacy/build/pdf.mjs"
 
@@ -106,7 +107,7 @@ async function renderPage(pageNumber: number, seq: number) {
       viewport,
       transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
     })
-    .promise.catch((err: any) => {
+    .promise.catch((err: unknown) => {
       if (seq === loadSeq) throw err
     })
 }
@@ -146,8 +147,8 @@ async function loadPdf(blob: Blob | null) {
     await nextTick()
     await Promise.all(nextPages.map((item) => renderPage(item.pageNumber, seq)))
     await centerHorizontal()
-  } catch (err: any) {
-    if (seq === loadSeq) error.value = err?.message || "PDF 预览生成失败"
+  } catch (err: unknown) {
+    if (seq === loadSeq) error.value = errorMessage(err, "PDF 预览生成失败")
   } finally {
     if (seq === loadSeq) loading.value = false
   }

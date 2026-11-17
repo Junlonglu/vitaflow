@@ -28,6 +28,7 @@ import SaveAsResumeDialog from "@/components/ai/SaveAsResumeDialog.vue"
 import { listUserAiModelsApi, type UserAiCredential } from "@/api/userAi"
 import { showGlobalToast } from "@/utils/toast"
 import { createPresetSection } from "@/utils/resumePresets"
+import { errorMessage } from "@/utils/errorText"
 import { applyResumeLanguage, normalizeResumeLanguage } from "@/utils/resumeLocale"
 import { useWorkspaceBridge } from "@/composables/useWorkspaceBridge"
 import { useWorkspaceDrawer } from "@/composables/useWorkspaceDrawer"
@@ -499,7 +500,7 @@ async function loadResumeEditor() {
     if (window.innerWidth < 768) {
       editor.setPreviewScale(Number(((window.innerWidth - 32) / 794).toFixed(2)))
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Failed to load resume:", error)
     showToast("简历不存在或无权限访问", "error")
     router.replace("/workspace")
@@ -605,8 +606,8 @@ async function resetStyleChanged() {
   flushHistoryCommit()
   try {
     await save()
-  } catch (error: any) {
-    showToast(error?.message || "保存默认样式失败", "error")
+  } catch (error: unknown) {
+    showToast(errorMessage(error, "保存默认样式失败"), "error")
   }
 }
 
@@ -650,8 +651,8 @@ async function runExport(kind: "pdf" | "json") {
     const title = resumeStore.currentResume?.title || "简历"
     if (kind === "pdf") await exportPdfApi(resumeId.value, title)
     else await exportJsonApi(resumeId.value, title)
-  } catch (error: any) {
-    showToast(error?.message || (kind === "pdf" ? "PDF 导出失败" : "JSON 导出失败"), "error")
+  } catch (error: unknown) {
+    showToast(errorMessage(error, kind === "pdf" ? "PDF 导出失败" : "JSON 导出失败"), "error")
   } finally {
     exportLoading.value = ""
   }
@@ -690,8 +691,8 @@ async function confirmSaveAsNewResume(title: string) {
     jdOptimizedMessageId.value = null
     showGlobalToast("已另存为新简历", "success")
     router.push(`/workspace/${created.id}`)
-  } catch (error: any) {
-    showGlobalToast(error?.message || "另存失败，请重试", "error")
+  } catch (error: unknown) {
+    showGlobalToast(errorMessage(error, "另存失败，请重试"), "error")
   } finally {
     saveAsLoading.value = false
   }

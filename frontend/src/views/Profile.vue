@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@/utils/errorText"
 import { onMounted, ref, watch } from "vue"
 import { useRoute } from "vue-router"
 import WorkspacePage from "@/components/workspace/WorkspacePage.vue"
@@ -63,8 +64,8 @@ async function saveProfile() {
     profileSaving.value = true
     user.userInfo = await updateProfileApi({ username: username.value })
     showGlobalToast("用户名已成功更新", "success")
-  } catch (e: any) {
-    showGlobalToast(e.message || "更新失败，请重试", "error")
+  } catch (e: unknown) {
+    showGlobalToast(errorMessage(e, "更新失败，请重试"), "error")
   } finally {
     profileSaving.value = false
   }
@@ -85,8 +86,8 @@ async function savePassword() {
     })
     passwordForm.value = { current_password: "", new_password: "", confirm_password: "" }
     showGlobalToast("密码已成功修改", "success")
-  } catch (e: any) {
-    showGlobalToast(e.message || "修改密码失败，请核对当前密码", "error")
+  } catch (e: unknown) {
+    showGlobalToast(errorMessage(e, "修改密码失败，请核对当前密码"), "error")
   } finally {
     passwordSaving.value = false
   }
@@ -107,8 +108,8 @@ async function submitFeedback() {
     feedbackContact.value = ""
     await loadMyFeedbacks(1)
     feedbackView.value = "history"
-  } catch (err: any) {
-    showGlobalToast(err.message || "反馈提交失败", "error")
+  } catch (err: unknown) {
+    showGlobalToast(errorMessage(err, "反馈提交失败"), "error")
   } finally {
     feedbackSubmitting.value = false
   }
@@ -118,8 +119,8 @@ async function loadMyFeedbacks(page = 1) {
   feedbacksLoading.value = true
   try {
     myFeedbacks.value = await getMyFeedbacksApi({ page, page_size: myFeedbacks.value.page_size })
-  } catch (err: any) {
-    showGlobalToast(err.message || "反馈列表加载失败", "error")
+  } catch (err: unknown) {
+    showGlobalToast(errorMessage(err, "反馈列表加载失败"), "error")
   } finally {
     feedbacksLoading.value = false
   }

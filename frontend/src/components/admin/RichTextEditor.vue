@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@/utils/errorText"
 import { nextTick, onMounted, onUnmounted, ref, watch } from "vue"
 import { AlignCenter, AlignLeft, AlignRight, Bold, ImagePlus, Italic, Link, List, ListOrdered, LoaderCircle, Quote, Redo2, Strikethrough, Underline, Undo2, X } from "lucide-vue-next"
 import Select from "@/components/ui/select/Select.vue"
@@ -228,8 +229,8 @@ async function insertImage(event: Event) {
     }
     selectImage(image)
     emit("update:modelValue", (editor.value?.innerHTML || "").replace(/<!--[\s\S]*?-->/g, "").replace(/&lt;!--[\s\S]*?--&gt;/g, "").replace(/&amp;nbsp;/g, "&nbsp;"))
-  } catch (error: any) {
-    imageError.value = error.message || "图片上传失败"
+  } catch (error: unknown) {
+    imageError.value = errorMessage(error, "图片上传失败")
   } finally {
     uploadingImage.value = false
   }

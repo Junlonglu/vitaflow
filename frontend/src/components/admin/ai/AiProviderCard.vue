@@ -6,6 +6,7 @@
  * 目录里接了多少家；点开才变表单（身份、密钥、端点、模型、高级、保存/取消）。
  * 一次只开一张由父组件控制，收起会丢弃草稿，所以切换前要确认。
  */
+import { errorMessage } from "@/utils/errorText"
 import { computed, ref, watch } from "vue"
 import {
   Check,
@@ -461,8 +462,8 @@ async function loadRemote(force = false) {
     remoteLoaded.value = true
     const filled = applyRemoteMetadata()
     if (filled) showGlobalToast(`已按上游资料补好 ${filled} 个模型的上下文窗口与最大输出`)
-  } catch (err: any) {
-    remoteError.value = err.message || "获取模型列表失败"
+  } catch (err: unknown) {
+    remoteError.value = errorMessage(err, "获取模型列表失败")
   } finally {
     remoteLoading.value = false
   }
@@ -482,8 +483,8 @@ async function probeOne(id: string) {
   try {
     const result = await probeAdminCatalogModelApi(props.provider.key, id)
     probes.value[id] = { status: result.ok ? "ok" : "error", latency: result.latency_ms, error: result.error }
-  } catch (err: any) {
-    probes.value[id] = { status: "error", latency: null, error: err.message || "测试请求失败" }
+  } catch (err: unknown) {
+    probes.value[id] = { status: "error", latency: null, error: errorMessage(err, "测试请求失败") }
   }
 }
 

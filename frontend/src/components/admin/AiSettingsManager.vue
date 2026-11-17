@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@/utils/errorText"
 import { computed, onMounted, ref, watch } from "vue"
 import { RefreshCw, Settings2, Ticket, Zap } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
@@ -190,8 +191,8 @@ async function load(page = 1) {
       }
     })
     codes.value = codeData
-  } catch (err: any) {
-    error.value = err.message || "AI 配置加载失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "AI 配置加载失败")
   } finally {
     loading.value = false
   }
@@ -211,8 +212,8 @@ async function saveModelPricing(items: AdminModelPricingWriteItem[]) {
     // 顺手刷新一次目录，让上面的接入卡状态跟着走。
     await refreshCatalog()
     showGlobalToast("模型定价已保存")
-  } catch (err: any) {
-    error.value = err.message || "模型定价保存失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "模型定价保存失败")
     showGlobalToast(error.value, "error")
     throw err
   } finally {
@@ -223,8 +224,8 @@ async function saveModelPricing(items: AdminModelPricingWriteItem[]) {
 async function refreshCatalog() {
   try {
     catalog.value = await getAdminAiCatalogApi()
-  } catch (err: any) {
-    showGlobalToast(err.message || "模型目录加载失败", "error")
+  } catch (err: unknown) {
+    showGlobalToast(errorMessage(err, "模型目录加载失败"), "error")
   }
 }
 
@@ -262,8 +263,8 @@ async function submitCatalogProvider(payload: ProviderSavePayload) {
           })
     catalog.value = data
     showGlobalToast(payload.mode === "create" ? `服务商 ${payload.key} 已接入` : "服务商已保存")
-  } catch (err: any) {
-    error.value = err.message || "服务商保存失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "服务商保存失败")
     showGlobalToast(error.value, "error")
     await refreshCatalog()
     throw err
@@ -288,8 +289,8 @@ async function removeCatalogProvider(key: string) {
     }
     catalog.value = await deleteAdminCatalogProviderApi(key)
     showGlobalToast("服务商已移除")
-  } catch (err: any) {
-    error.value = err.message || "移除服务商失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "移除服务商失败")
     showGlobalToast(error.value, "error")
     await refreshCatalog()
   } finally {
@@ -308,8 +309,8 @@ async function syncCatalogProviderDev(key: string) {
     } else {
       showGlobalToast(`已同步 models.dev 资料：匹配 ${sync.matched} 个模型，补全 ${sync.filled} 项`)
     }
-  } catch (err: any) {
-    error.value = err.message || "同步模型资料失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "同步模型资料失败")
     showGlobalToast(error.value, "error")
   }
 }
@@ -319,8 +320,8 @@ async function createCatalogGroup(data: AdminRoutingGroupWrite) {
   try {
     catalog.value = await createAdminCatalogGroupApi(data)
     showGlobalToast("路由组已创建")
-  } catch (err: any) {
-    error.value = err.message || "路由组创建失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "路由组创建失败")
     showGlobalToast(error.value, "error")
   }
 }
@@ -330,8 +331,8 @@ async function updateCatalogGroup(id: string, data: Omit<AdminRoutingGroupWrite,
   try {
     catalog.value = await updateAdminCatalogGroupApi(id, data)
     showGlobalToast("路由组已更新")
-  } catch (err: any) {
-    error.value = err.message || "路由组更新失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "路由组更新失败")
     showGlobalToast(error.value, "error")
   }
 }
@@ -342,8 +343,8 @@ async function deleteCatalogGroup(id: string) {
   try {
     catalog.value = await deleteAdminCatalogGroupApi(id)
     showGlobalToast("路由组已删除")
-  } catch (err: any) {
-    error.value = err.message || "路由组删除失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "路由组删除失败")
     showGlobalToast(error.value, "error")
   }
 }
@@ -367,8 +368,8 @@ async function saveRules() {
     }
     await load(codes.value.page)
     showGlobalToast("点数规则保存成功")
-  } catch (err: any) {
-    error.value = err.message || "扣点规则保存失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "扣点规则保存失败")
     showGlobalToast(error.value, "error")
   } finally {
     savingRules.value = false
@@ -392,8 +393,8 @@ async function generateCodes() {
     await load(1)
     showGlobalToast("兑换码生成成功")
     showGenerateModal.value = false
-  } catch (err: any) {
-    error.value = err.message || "兑换码生成失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "兑换码生成失败")
     showGlobalToast(error.value, "error")
   } finally {
     generatingCodes.value = false
@@ -421,8 +422,8 @@ async function importCodes() {
     showGlobalToast(`已导入 ${items.length} 个兑换码`)
     showImportModal.value = false
     importText.value = ""
-  } catch (err: any) {
-    error.value = err.message || "兑换码导入失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "兑换码导入失败")
     showGlobalToast(error.value, "error")
   } finally {
     importingCodes.value = false
@@ -449,8 +450,8 @@ async function exportCodes() {
     link.click()
     link.remove()
     URL.revokeObjectURL(url)
-  } catch (err: any) {
-    error.value = err.message || "兑换码导出失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "兑换码导出失败")
     showGlobalToast(error.value, "error")
   } finally {
     exportingCodes.value = false
@@ -463,8 +464,8 @@ async function toggleCode(item: AdminRedeemCode) {
     const next = item.status === "active" ? "disabled" : "active"
     const updated = await updateAdminRedeemCodeStatusApi(item.id, next)
     Object.assign(item, updated)
-  } catch (err: any) {
-    error.value = err.message || "兑换码状态更新失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "兑换码状态更新失败")
     showGlobalToast(error.value, "error")
   }
 }
@@ -505,8 +506,8 @@ async function saveCode() {
     Object.assign(editingCode.value, updated)
     editingCode.value = null
     showGlobalToast("兑换码已更新")
-  } catch (err: any) {
-    error.value = err.message || "兑换码更新失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "兑换码更新失败")
     showGlobalToast(error.value, "error")
   } finally {
     savingCode.value = false
@@ -530,8 +531,8 @@ async function saveBatchPrice() {
     await load(codes.value.page)
     showBatchPriceModal.value = false
     showGlobalToast(`已更新 ${result.codes} 个兑换码，影响 ${result.redeemed} 条兑换记录`)
-  } catch (err: any) {
-    error.value = err.message || "批量设置价格失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "批量设置价格失败")
     showGlobalToast(error.value, "error")
   } finally {
     savingBatchPrice.value = false
@@ -550,8 +551,8 @@ async function confirmDeleteCode() {
     codeToDelete.value = null
     await load(currentPage)
     showGlobalToast("兑换码已删除")
-  } catch (err: any) {
-    error.value = err.message || "兑换码删除失败"
+  } catch (err: unknown) {
+    error.value = errorMessage(err, "兑换码删除失败")
     showGlobalToast(error.value, "error")
   } finally {
     deletingCode.value = false

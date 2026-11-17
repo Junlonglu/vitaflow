@@ -62,6 +62,8 @@ resume_data (JSON) ◀───┼─ AI 写回 resolve_chat_change(apply)
 `*` 为必填（指 AI 新建条目时应提供，数据库层不强制）。文本上限：短文本 400、长文本 4000、简介 4000；标题类字段在生成 id 前缀时使用 `edu_ / skill_ / work_ / project_ / award_ / custom_ / citem_`。
 
 > 工作经历的岗位字段是 **`position`**，项目经历的角色字段是 **`role`** —— 这一对最容易写反，Agent 契约里已显式列出。
+>
+> `basics.avatar` 是**账号头像库的引用**，不是简历内容：只存对象名（`avatar/{user_id}_{uuid}.jpg`），渲染时由 `avatar_service` 拼成存储代理地址；旧数据里的完整 URL 仍然兼容。头像不随 JSON 导出——导出时剥掉本系统引用，导入时残留引用会被清空并提示用户到信息库重新选。
 
 ## 4. 写入前的规范化（`normalize_resume_document`）
 

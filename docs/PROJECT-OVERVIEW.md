@@ -135,6 +135,12 @@ vitaflow/
 - 写入：`POST /info-fragments`（指纹重复时合并）、`POST /info-fragments/bulk`（单次 30 条）、`PUT|DELETE /info-fragments/{id}`
 - 流转：`POST /info-fragments/extract`（从指定简历提取，已存在跳过）、`POST /info-fragments/apply`（把若干条导入简历，返回最新 `resume_data` 与新增条目名，重复导入返回 400）
 
+**头像库 `avatars.py`**
+- 不单独建表：复用 `uploaded_files` 的 `file_type="avatar"` 记录当库，上传即入库（`POST /files/upload-avatar`），账号级，每人最多 30 张。
+- 列表：`GET /avatars`（返回 `items` + `total` + `limit`，每张带 `usage_count`＝有多少份简历正在用它）
+- 移除：`DELETE /avatars/{id}`（只清索引，不删存储对象——已写入简历的图片仍然可访问，避免已分享简历裂图）
+- 简历里 `basics.avatar` 只存对象名（`avatar/{user_id}_{uuid}.jpg`），渲染时拼成代理 URL；旧数据里的完整 URL 继续兼容。头像**不随 JSON 导出**：导出时剥掉本系统引用，导入时残留引用会被清空并在成功提示里说明。
+
 **用户自带模型与技能 `user_ai.py`**（Ticket 17 / 18）
 - **多模型配置**：`GET|POST /user-ai/models`、`PUT|DELETE /user-ai/models/{id}`、`POST /user-ai/models/{id}/default`（设为默认）、`POST /user-ai/models/{id}/test` 与 `POST /user-ai/models/test`（未保存配置探活）、`POST /user-ai/models/remote-models`（按地址与密钥拉上游 `/models`，带 models.dev 资料，不落盘；页面用它做「选模型」而不是「手填模型名」）。每用户最多 10 条，任意时刻恰好一条默认项；删除/停用默认项会自动补位。对话请求可带 `user_model_id`（正数指定某条自带模型、`0` 明确使用平台模型、省略则按服务端默认解析），在编辑器模型选择器里与平台模型同列展示。
 - **推理强度**：档位是上游参数原词 `auto/off/minimal/low/medium/high/xhigh/max`（`auto` 即界面的 `default`）。用户端每条 BYOK 配置存 `reasoning_effort`，非 auto 档透传到 ai-service，注册模型时置 `reasoning=true` + `compat.supportsReasoningEffort`，把 thinkingLevel 交给 `createAgentSession`；平台模型则在 `models.json` 里存同名字段（后台「模型资料 · 推理强度」），ai-service 每轮按 model ref 读它当 thinkingLevel，没有就保持默认（推理模型 medium、其它 off）。两条路最终都映射为 OpenAI 兼容端点的 `reasoning_effort`。

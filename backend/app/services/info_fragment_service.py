@@ -375,7 +375,18 @@ def extract_from_resume(db: Session, user_id: int, resume: Resume) -> dict[str, 
     if isinstance(basics, dict) and any(
         str(basics.get(key) or "").strip() for key in ("name", "phone", "email", "title", "location")
     ):
-        candidates.append(("basic", {key: value for key, value in basics.items() if isinstance(value, (str, int, float))}))
+        # 头像属于账号头像库（信息库页单独管理），不是一条可复用的文字事实，
+        # 拆成 fragment 只会让「个人信息」里多出一个贴对象名的文本框。
+        candidates.append(
+            (
+                "basic",
+                {
+                    key: value
+                    for key, value in basics.items()
+                    if key != "avatar" and isinstance(value, (str, int, float))
+                },
+            )
+        )
 
     for section, kind in SECTION_TO_KIND.items():
         items = data.get(section)

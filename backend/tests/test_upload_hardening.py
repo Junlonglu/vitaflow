@@ -20,15 +20,27 @@ from app.services.storage import storage_service as svc
 
 
 class _Db:
-    def __init__(self):
+    """只够 upload_* 用的桩：记录 add/commit，并回答头像数量（上传前的配额检查）。"""
+
+    def __init__(self, avatar_count: int = 0):
         self.added = []
         self.committed = False
+        self.avatar_count = avatar_count
 
     def add(self, obj):
         self.added.append(obj)
 
     def commit(self):
         self.committed = True
+
+    def query(self, *args, **kwargs):
+        return self
+
+    def filter(self, *args, **kwargs):
+        return self
+
+    def count(self):
+        return self.avatar_count
 
 
 def _upload(content: bytes, content_type: str | None, filename: str = "a.png") -> UploadFile:

@@ -5,6 +5,7 @@ import {
   CircleAlert,
   Database,
   FileDown,
+  Images,
   LoaderCircle,
   Pencil,
   Plus,
@@ -36,6 +37,8 @@ import {
   type InfoFragmentKind,
 } from "@/api/infoFragment"
 import { listResumesApi } from "@/api/resume"
+import { deleteAvatarApi, listAvatarsApi, type AvatarItem } from "@/api/avatar"
+import { uploadAvatarApi } from "@/api/file"
 import type { ResumeItem } from "@/types/resume"
 import { showGlobalToast } from "@/utils/toast"
 
@@ -92,6 +95,73 @@ async function loadMeta() {
   counts.value = meta.counts || {}
 }
 
+// ---------------------------------------------------------------------------
+// 头像库
+// ---------------------------------------------------------------------------
+
+/** 后端 uploaded_files 里 file_type=avatar 的记录；上传即入库，删除只清索引。 */
+const avatars = ref<AvatarItem[]>([])
+const avatarLimit = ref(0)
+const avatarsLoading = ref(true)
+const avatarsError = ref("")
+const avatarUploading = ref(false)
+const avatarDeleteTarget = ref<AvatarItem | null>(null)
+const avatarInputEl = ref<HTMLInputElement | null>(null)
+
+async function loadAvatars() {
+  avatarsLoading.value = true
+  avatarsError.value = ""
+  try {
+    const result = await listAvatarsApi()
+    avatars.value = result.items
+    avatarLimit.value = result.limit
+  } catch (error) {
+    avatars.value = []
+    avatarsError.value = errorMessage(error, "头像库读取失败")
+  } finally {
+    avatarsLoading.value = false
+  }
+}
+
+function pickAvatarFile() {
+  avatarInputEl.value?.click()
+}
+
+async function onAvatarFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  // 清掉 value：同一个文件再选一次也要能触发 change。
+  input.value = ""
+  if (!file || avatarUploading.value) return
+  if (file.size > 3 * 1024 * 1024) {
+    showGlobalToast("头像不能超过 3MB", "error")
+    return
+  }
+  avatarUploading.value = true
+  try {
+    await uploadAvatarApi(file)
+    showGlobalToast("头像已存入信息库", "success")
+    await loadAvatars()
+  } catch (error) {
+    showGlobalToast(errorMessage(error, "上传失败"), "error")
+  } finally {
+    avatarUploading.value = false
+  }
+}
+
+async function confirmDeleteAvatar() {
+  const target = avatarDeleteTarget.value
+  if (!target) return
+  try {
+    await deleteAvatarApi(target.id)
+    showGlobalToast("已从信息库移除")
+    avatarDeleteTarget.value = null
+    await loadAvatars()
+  } catch (error) {
+    showGlobalToast(errorMessage(error, "删除失败"), "error")
+  }
+}
+
 // 分类字段表来自 /meta；列表先就绪而字段表没到时，编辑弹窗会渲染不出字段，
 // 甚至把空表单保存回去，所以首屏等两者都完成再展示卡片。
 async function refresh() {
@@ -103,6 +173,8 @@ async function refresh() {
         listError.value = errorMessage(error, "信息库加载失败")
       }),
       loadMeta().catch((error) => showGlobalToast(errorMessage(error, "分类信息加载失败，可稍后重试"), "error")),
+      // 头像库失败不该挡住整页：区块内自己显示错误与重试。
+      loadAvatars(),
     ])
   } finally {
     loading.value = false
@@ -389,6 +461,72 @@ onUnmounted(() => window.clearTimeout(searchTimer))
         </div>
       </header>
 
+      <!-- 头像库：账号级素材，任意一份简历都能挑一张 -->
+      <section class="mt-4 rounded-xl border border-zinc-200/70 bg-white p-3 sm:p-4">
+        <div class="flex items-center justify-between gap-2">
+          <h2 class="flex min-w-0 items-center gap-1.5 text-[13px] font-semibold text-zinc-900">
+            <Images class="h-4 w-4 shrink-0 text-zinc-400" stroke-width="1.75" />
+            头像
+            <FieldTip text="上传过的头像都存在这里，简历里随时切换。头像不随 JSON 导出，换设备/换账号后在这里重新选一张。" />
+            <span v-if="avatars.length" class="shrink-0 text-[11.5px] font-normal text-zinc-400">
+              {{ avatars.length }}<template v-if="avatarLimit">/{{ avatarLimit }}</template>
+            </span>
+          </h2>
+          <Button
+            type="button"
+            variant="outline"
+            class="h-8 shrink-0 px-2.5 text-[12.5px]"
+            :disabled="avatarUploading"
+            @click="pickAvatarFile"
+          >
+            <LoaderCircle v-if="avatarUploading" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            <Upload v-else class="mr-1.5 h-3.5 w-3.5" />
+            上传头像
+          </Button>
+          <input
+            ref="avatarInputEl"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            class="hidden"
+            @change="onAvatarFileChange"
+          />
+        </div>
+
+        <div v-if="avatarsLoading" class="mt-2.5 flex items-center gap-1.5 text-[12px] text-zinc-500">
+          <LoaderCircle class="h-3.5 w-3.5 animate-spin" /> 正在读取头像…
+        </div>
+        <div v-else-if="avatarsError" class="mt-2.5 flex items-center justify-between gap-2 text-[12px] text-red-600">
+          <span>{{ avatarsError }}</span>
+          <button type="button" class="shrink-0 underline underline-offset-4" @click="loadAvatars">重试</button>
+        </div>
+        <p v-else-if="!avatars.length" class="mt-2.5 text-[12px] text-zinc-500">
+          还没有头像。上传后会自动存进这里，之后每份简历都能直接选用。
+        </p>
+        <div v-else class="mt-3 flex flex-wrap gap-2.5">
+          <div v-for="avatar in avatars" :key="avatar.id" class="group relative h-16 w-14 shrink-0">
+            <img
+              :src="avatar.url"
+              :alt="avatar.file_name || '头像'"
+              class="h-full w-full rounded-lg object-cover ring-1 ring-zinc-200"
+            />
+            <span
+              v-if="avatar.usage_count"
+              class="pointer-events-none absolute bottom-1 left-1 rounded bg-wb-scrim/70 px-1 py-px text-[10px] leading-tight text-[#fff]"
+            >
+              {{ avatar.usage_count }} 份在用
+            </span>
+            <button
+              type="button"
+              class="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-red-100 text-red-600 opacity-0 ring-2 ring-white transition-opacity hover:bg-red-500 hover:text-wb-on-solid group-hover:opacity-100 focus-visible:opacity-100"
+              title="从信息库移除"
+              @click="avatarDeleteTarget = avatar"
+            >
+              <X class="h-3 w-3" />
+            </button>
+          </div>
+        </div>
+      </section>
+
       <div class="mt-5 flex flex-col gap-3">
         <div class="flex items-center gap-2">
           <div class="relative min-w-0 flex-1">
@@ -661,5 +799,19 @@ onUnmounted(() => window.clearTimeout(searchTimer))
     :description="deleteTarget ? `「${deleteTarget.title}」将从信息库移除，已导入简历的内容不受影响。` : ''"
     @update:open="(value) => { if (!value) deleteTarget = null }"
     @confirm="confirmDelete"
+  />
+
+  <ConfirmDialog
+    :open="avatarDeleteTarget !== null"
+    title="从信息库移除这张头像？"
+    :description="
+      avatarDeleteTarget
+        ? avatarDeleteTarget.usage_count
+          ? `这张头像正在被 ${avatarDeleteTarget.usage_count} 份简历使用：已写入简历的图片不会消失，只是以后新建简历时选不到它了。`
+          : '移除后新建简历时选不到它，已写入简历的图片不受影响。'
+        : ''
+    "
+    @update:open="(value) => { if (!value) avatarDeleteTarget = null }"
+    @confirm="confirmDeleteAvatar"
   />
 </template>

@@ -9,6 +9,8 @@ import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
 import Label from "@/components/ui/label/Label.vue"
 import AvatarCropperModal from "./AvatarCropperModal.vue"
 import { uploadAvatarApi } from "@/api/file"
+import { listAvatarsApi, type AvatarItem } from "@/api/avatar"
+import { avatarObjectName, avatarSrc } from "@/utils/avatar"
 import { basicInfoPresets } from "@/utils/resumePresets"
 
 const props = defineProps<{ basics: Record<string, any> }>()
@@ -311,14 +313,48 @@ async function handleCropped(blob: Blob) {
   try {
     const file = new File([blob], cropImageName.value, { type: "image/jpeg" })
     const result = await uploadAvatarApi(file)
-    props.basics.avatar = result.url
+    // 存对象名而不是完整 URL：换域名/换部署不该让简历里的照片失效。
+    props.basics.avatar = result.object_name
     emit("change")
     showToast("头像上传成功", "success")
+    if (libraryOpen.value) void refreshLibrary()
   } catch (error: unknown) {
     showToast(errorMessage(error, "上传失败"), "error")
   } finally {
     isUploading.value = false
   }
+}
+
+// 头像库：上传过的头像都留在信息库里，多份简历可以各自挑一张。
+const libraryOpen = ref(false)
+const libraryLoading = ref(false)
+const libraryError = ref("")
+const libraryItems = ref<AvatarItem[]>([])
+const currentObjectName = computed(() => avatarObjectName(props.basics.avatar))
+
+async function refreshLibrary() {
+  libraryLoading.value = true
+  libraryError.value = ""
+  try {
+    const result = await listAvatarsApi()
+    libraryItems.value = result.items
+  } catch (error: unknown) {
+    libraryItems.value = []
+    libraryError.value = errorMessage(error, "头像库读取失败")
+  } finally {
+    libraryLoading.value = false
+  }
+}
+
+function toggleLibrary() {
+  libraryOpen.value = !libraryOpen.value
+  if (libraryOpen.value) void refreshLibrary()
+}
+
+function pickLibraryAvatar(item: AvatarItem) {
+  props.basics.avatar = item.object_name
+  emit("change")
+  libraryOpen.value = false
 }
 function addCustom() {
   ensureConfig()
@@ -359,7 +395,7 @@ function addPresetField(preset: (typeof basicInfoPresets)[number]) {
         <div class="relative group h-13 w-13 md:h-16 md:w-16 shrink-0">
           <!-- Avatar Image or Placeholder -->
           <label class="relative flex h-full w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl md:rounded-2xl border-2 border-dashed transition-colors" :class="[basics.avatar ? 'border-transparent ring-1 ring-zinc-200' : 'border-zinc-300 hover:border-zinc-400 bg-zinc-50 hover:bg-zinc-100', { 'opacity-50 pointer-events-none': isUploading }]">
-            <img v-if="basics.avatar" :src="basics.avatar" class="h-full w-full object-cover" />
+            <img v-if="basics.avatar" :src="avatarSrc(basics.avatar)" class="h-full w-full object-cover" />
             <UserRound v-else class="h-5 w-5 md:h-6 md:w-6 text-zinc-400" />
             
             <!-- Hover Overlay for Upload -->
@@ -382,6 +418,43 @@ function addPresetField(preset: (typeof basicInfoPresets)[number]) {
         </div>
         <div class="flex flex-col gap-0.5 md:gap-1 text-[11px] md:text-xs text-zinc-500">
           <p>JPG / PNG，≤ 5MB</p>
+          <button
+            type="button"
+            class="hit-area inline-flex w-fit items-center gap-1 rounded-md py-0.5 text-[11px] font-medium text-zinc-500 transition-colors hover:text-zinc-900 md:text-xs"
+            :aria-expanded="libraryOpen"
+            @click="toggleLibrary"
+          >
+            <Images class="h-3.5 w-3.5" />
+            从信息库选择<span v-if="libraryItems.length" class="text-zinc-400">（{{ libraryItems.length }}）</span>
+            <ChevronDown class="h-3 w-3 transition-transform" :class="{ 'rotate-180': libraryOpen }" />
+          </button>
+        </div>
+      </div>
+
+      <!-- 头像库：上传过的头像都留在这里，多份简历各挑一张 -->
+      <div v-if="libraryOpen" class="mt-2.5 rounded-xl border border-zinc-200/80 bg-white p-2.5 md:p-3">
+        <div v-if="libraryLoading" class="flex items-center gap-1.5 text-[11px] text-zinc-500 md:text-xs">
+          <LoaderCircle class="h-3.5 w-3.5 animate-spin" /> 正在读取头像库…
+        </div>
+        <div v-else-if="libraryError" class="flex items-center justify-between gap-2 text-[11px] text-red-600 md:text-xs">
+          <span>{{ libraryError }}</span>
+          <button type="button" class="shrink-0 underline underline-offset-4" @click="refreshLibrary">重试</button>
+        </div>
+        <p v-else-if="!libraryItems.length" class="text-[11px] text-zinc-500 md:text-xs">
+          信息库里还没有头像。上传一张后会自动存进来，之后每份简历都能直接选用。
+        </p>
+        <div v-else class="flex flex-wrap gap-2">
+          <button
+            v-for="item in libraryItems"
+            :key="item.id"
+            type="button"
+            class="relative h-12 w-12 overflow-hidden rounded-lg ring-1 ring-zinc-200 transition-transform hover:ring-zinc-400 active:scale-95 md:h-14 md:w-14"
+            :class="{ 'ring-2 ring-zinc-900 hover:ring-zinc-900': currentObjectName === item.object_name }"
+            :title="item.file_name || '头像'"
+            @click="pickLibraryAvatar(item)"
+          >
+            <img :src="item.url" alt="" class="h-full w-full object-cover" />
+          </button>
         </div>
       </div>
     </div>

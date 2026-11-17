@@ -192,6 +192,16 @@ class FragmentServiceTest(unittest.TestCase):
         self.assertEqual(again["created"], 0)
         self.assertEqual(svc.list_fragments(self.db, 1)[1], result["created"])
 
+    def test_extract_skips_avatar(self):
+        resume = _resume(self.db)
+        # 头像是账号头像库的引用，不该变成一条「个人信息」文本条目。
+        resume.resume_data["basics"]["avatar"] = "avatar/1_a.jpg"
+        self.db.commit()
+        svc.extract_from_resume(self.db, 1, resume)
+        basic = next(row for row in svc.list_fragments(self.db, 1, kind="basic", page_size=50)[0])
+        self.assertNotIn("avatar", basic.payload)
+        self.assertEqual(basic.payload.get("name"), "张三")
+
     def test_merge_fragments_into_resume_appends_and_skips_duplicates(self):
         resume = _resume(self.db)
         project, _ = svc.create_fragment(self.db, 1, "project", {"name": "新项目", "role": "后端"})

@@ -8,6 +8,7 @@ from markupsafe import Markup
 
 from app.core.config import settings
 from app.core.template_config import normalize_template_config
+from app.services.avatar_service import resolve_for_render
 from app.services.resume_locale import (
     localized_section_title,
     resolve_resume_language,
@@ -188,11 +189,11 @@ def _prepare_resume_data(resume_data: dict[str, Any], language: str = "zh-CN") -
     data["_language"] = normalized_language
     data["_labels"] = resume_locale(normalized_language)
     basics = data.setdefault("basics", {})
-    avatar = basics.get("avatar")
-    public_prefix = settings.minio_public_url.rstrip("/") + "/"
-    if isinstance(avatar, str) and avatar.startswith(public_prefix):
-        object_name = avatar.removeprefix(public_prefix)
-        basics["avatar"] = f"{settings.pdf_base_url.rstrip('/')}/api/files/{object_name}"
+    if isinstance(basics, dict) and basics.get("avatar"):
+        # 简历里存的是对象名（新版）或完整 URL（旧数据 / 用户填的外链）。渲染前
+        # 统一解析成渲染进程能取到的地址；认不出来的外链原样保留，交给
+        # pdf_export_service 的资源白名单做 SSRF 校验。
+        basics["avatar"] = resolve_for_render(basics["avatar"])
     layout = data.setdefault("layout", {})
     skills_options = layout.get("skills_options")
     if not isinstance(skills_options, dict):

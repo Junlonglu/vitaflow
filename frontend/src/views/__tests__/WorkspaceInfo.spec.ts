@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
 import type { InfoFragment, InfoFragmentKind, InfoFragmentMeta } from "@/api/infoFragment"
+import type { AvatarItem } from "@/api/avatar"
 
 const kinds: InfoFragmentKind[] = [
   {
@@ -39,11 +40,15 @@ const api = vi.hoisted(() => ({
   applyInfoFragmentsApi: vi.fn(),
 }))
 const resumeApi = vi.hoisted(() => ({ listResumesApi: vi.fn() }))
+const avatarApi = vi.hoisted(() => ({ listAvatarsApi: vi.fn(), deleteAvatarApi: vi.fn() }))
+const fileApi = vi.hoisted(() => ({ uploadAvatarApi: vi.fn() }))
 const toast = vi.hoisted(() => ({ showGlobalToast: vi.fn() }))
 const router = vi.hoisted(() => ({ push: vi.fn() }))
 
 vi.mock("@/api/infoFragment", () => api)
 vi.mock("@/api/resume", () => resumeApi)
+vi.mock("@/api/avatar", () => avatarApi)
+vi.mock("@/api/file", () => fileApi)
 vi.mock("@/utils/toast", () => toast)
 vi.mock("vue-router", () => ({ useRouter: () => router }))
 
@@ -84,7 +89,11 @@ const stubs = {
 
 const metaResponse: InfoFragmentMeta = { kinds, counts: { project: 1, award: 0 }, limit: 500 }
 
-async function mountPage(items: InfoFragment[] = [fragment], metaImpl?: () => Promise<InfoFragmentMeta>) {
+async function mountPage(
+  items: InfoFragment[] = [fragment],
+  metaImpl?: () => Promise<InfoFragmentMeta>,
+  avatarItems: AvatarItem[] = [],
+) {
   api.listInfoFragmentsApi.mockResolvedValue({
     items,
     total: items.length,
@@ -99,6 +108,7 @@ async function mountPage(items: InfoFragment[] = [fragment], metaImpl?: () => Pr
     page: 1,
     page_size: 48,
   })
+  avatarApi.listAvatarsApi.mockResolvedValue({ items: avatarItems, total: avatarItems.length, limit: 30 })
   const wrapper = mount(WorkspaceInfo, { global: { stubs } })
   await flushPromises()
   return wrapper
@@ -326,5 +336,38 @@ describe("WorkspaceInfo", () => {
     await deleteButton!.trigger("click")
     expect(wrapper.find(".confirm").exists()).toBe(true)
     expect(api.deleteInfoFragmentApi).not.toHaveBeenCalled()
+  })
+
+  it("renders the avatar library with usage counts", async () => {
+    const wrapper = await mountPage([fragment], undefined, [
+      {
+        id: 3,
+        object_name: "avatar/1_a.jpg",
+        url: "/api/files/avatar/1_a.jpg",
+        file_name: "正装照.jpg",
+        usage_count: 2,
+        create_time: "",
+      },
+    ])
+    expect(wrapper.find('img[src="/api/files/avatar/1_a.jpg"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain("2 份在用")
+  })
+
+  it("requires confirmation before removing an avatar from the library", async () => {
+    const wrapper = await mountPage([fragment], undefined, [
+      {
+        id: 3,
+        object_name: "avatar/1_a.jpg",
+        url: "/api/files/avatar/1_a.jpg",
+        file_name: "正装照.jpg",
+        usage_count: 0,
+        create_time: "",
+      },
+    ])
+    const removeButton = wrapper.findAll("button").find((button) => button.attributes("title") === "从信息库移除")
+    await removeButton!.trigger("click")
+    expect(wrapper.find(".confirm").exists()).toBe(true)
+    // 删除只清索引：被简历引用的图片不会消失，所以这里不该有额外副作用。
+    expect(avatarApi.deleteAvatarApi).not.toHaveBeenCalled()
   })
 })

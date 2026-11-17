@@ -5,7 +5,22 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, ai, announcements, auth, exports, feedback, files, info_fragments, resume_starters, resumes, shares, templates, user_ai
+from app.api import (
+    admin,
+    ai,
+    announcements,
+    auth,
+    avatars,
+    exports,
+    feedback,
+    files,
+    info_fragments,
+    resume_starters,
+    resumes,
+    shares,
+    templates,
+    user_ai,
+)
 from app.core.config import settings
 from app.core.crypto import ByokKeyError, validate_encryption_config
 from app.core.exceptions import register_exception_handlers
@@ -82,6 +97,7 @@ app.include_router(resume_starters.router, prefix="/api")
 app.include_router(shares.router, prefix="/api")
 app.include_router(templates.router, prefix="/api")
 app.include_router(files.router, prefix="/api")
+app.include_router(avatars.router, prefix="/api")
 app.include_router(ai.router, prefix="/api")
 app.include_router(exports.router, prefix="/api")
 app.include_router(feedback.router, prefix="/api")

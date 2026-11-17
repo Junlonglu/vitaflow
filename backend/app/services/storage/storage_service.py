@@ -17,13 +17,17 @@ from app.models.resume import UploadedFile
 
 ALLOWED_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
 MAX_SIZE = 3 * 1024 * 1024
+# 一个账号最多保留多少张头像。头像库的「删除」只清索引不删对象，所以这里限制的
+# 是可选项数量，避免用户反复上传把库和存储都堆满。
+MAX_AVATARS_PER_USER = 30
 CHUNK_SIZE = 32 * 1024
 CACHE_MAX_AGE = 31536000
 CACHE_CONTROL = f"public, max-age={CACHE_MAX_AGE}, immutable"
 
 # 桶里可以对外代理的对象前缀。上传入口只会写这几种，白名单把「拿任意 key
 # 去读桶」挡在业务层，路径穿越（..、绝对路径、反斜杠）也一并拒绝。
-PUBLIC_OBJECT_PREFIXES = ("avatar/", "announcement/")
+AVATAR_OBJECT_PREFIX = "avatar/"
+PUBLIC_OBJECT_PREFIXES = (AVATAR_OBJECT_PREFIX, "announcement/")
 PRIVATE_OBJECT_PREFIXES = ("ai-chat/",)
 ALLOWED_OBJECT_PREFIXES = (*PUBLIC_OBJECT_PREFIXES, *PRIVATE_OBJECT_PREFIXES)
 
@@ -157,6 +161,13 @@ def upload_avatar(db: Session, user_id: int, file: UploadFile) -> dict[str, str]
     content = file.file.read()
     if len(content) > MAX_SIZE:
         raise AppException("头像不能超过 3MB", 400)
+    existing = (
+        db.query(UploadedFile)
+        .filter(UploadedFile.user_id == user_id, UploadedFile.file_type == "avatar")
+        .count()
+    )
+    if existing >= MAX_AVATARS_PER_USER:
+        raise AppException(f"头像最多保留 {MAX_AVATARS_PER_USER} 张，请先到信息库删除不用的头像", 400)
 
     suffix = ALLOWED_TYPES[file.content_type]
     object_name = f"avatar/{user_id}_{uuid4().hex}{suffix}"

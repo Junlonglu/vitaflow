@@ -88,6 +88,26 @@ export function modelDisplay(item: {
   return { display, raw }
 }
 
+/**
+ * 模型列的第二行：只在两个名字确实不同源时才给。
+ *
+ * 配置名常常就是上游名去掉 vendor 前缀（`deepseek/deepseek-v4-flash` ↔
+ * `deepseek-v4-flash`），两行并排只是同一串字符被截两遍，反而挤掉列宽。
+ * 但「友好名 vs 精确版本号」（`Claude Sonnet 4.5` ↔ `claude-sonnet-4-5-20250929`）
+ * 携带的是不同信息，不能因为一方包含另一方就吞掉。
+ */
+export function modelSecondaryText(item: {
+  model_name?: string | null
+  model_config_name?: string | null
+  model_raw_name?: string | null
+}): string {
+  const { display, raw } = modelDisplay(item)
+  if (!raw || !display) return raw
+  const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "")
+  const bare = raw.includes("/") ? raw.slice(raw.lastIndexOf("/") + 1) : raw
+  return normalize(bare) === normalize(display) ? "" : raw
+}
+
 export function statusText(value: string): string {
   return (
     { active: "正常", disabled: "已停用", success: "成功", failed: "失败", pending: "处理中" } as Record<string, string>
@@ -152,6 +172,18 @@ export function aiTaskModuleText(item: AdminAiTask): string {
   if (item.task_type === "ai_chat" && item.input_data?.tool_calls) return `${item.input_data.tool_calls} 步工具`
   if (item.task_type === "section_optimize") return sectionText(item.input_data?.section_type)
   return "—"
+}
+
+/**
+ * AI 任务关联的简历文案。
+ *
+ * 简历删掉后 `resume_id` 还在、标题 join 不到，裸 ID 对运营没有意义，
+ * 所以明确写成「已删除的简历 #N」，方便客诉时回溯。
+ */
+export function aiTaskResumeText(item: Pick<AdminAiTask, "resume_id" | "resume_title">): string {
+  if (item.resume_title) return item.resume_title
+  if (item.resume_id) return `已删除的简历 #${item.resume_id}`
+  return "无关联简历"
 }
 
 export function sectionText(value?: string): string {

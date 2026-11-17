@@ -114,6 +114,7 @@ export interface AdminAiTask {
   user_id: number
   username: string
   resume_id?: number
+  resume_title?: string | null
   task_type: string
   feature?: string | null
   status: string
@@ -122,6 +123,8 @@ export interface AdminAiTask {
   model_raw_name?: string | null
   points_used: number
   tokens_used: number
+  /** 对话回合取 turn_timing.total_ms，其余任务取 create→update 的时间差 */
+  duration_ms?: number | null
   error_message?: string
   input_data: {
     section_type?: string
@@ -400,6 +403,14 @@ export const revokeAllUsersFlowPointsGrantApi = (batchNo: string, data: { descri
 export const getAdminFlowPointTransactionsApi = (params: Record<string, unknown>) => request.get<PageData<AdminFlowPointTransaction>, PageData<AdminFlowPointTransaction>>("/admin/flow-point-transactions", { params })
 export const getAdminResumesApi = (params: Record<string, unknown>) => request.get<PageData<AdminResume>, PageData<AdminResume>>("/admin/resumes", { params })
 export const getAdminAiTasksApi = (params: Record<string, unknown>) => request.get<PageData<AdminAiTask>, PageData<AdminAiTask>>("/admin/ai-tasks", { params })
+/**
+ * AI 任务明细 CSV（当前筛选条件，最多 5000 条）。
+ *
+ * 和兑换码导出同一套做法：后端返回 `text/csv` 文本，前端落成 Blob 触发下载。
+ * 走 `text` 而不是 `blob` 是为了绕开 request 拦截器对 blob 的放行分支。
+ */
+export const exportAdminAiTasksApi = (params: Record<string, unknown>) =>
+  request.get<string, string>("/admin/ai-tasks/export", { params, responseType: "text" } as any)
 export const getAdminExportsApi = (params: Record<string, unknown>) => request.get<PageData<AdminExport>, PageData<AdminExport>>("/admin/exports", { params })
 export const getAdminTemplatesApi = (params: Record<string, unknown>) => request.get<PageData<AdminTemplate>, PageData<AdminTemplate>>("/admin/templates", { params })
 export const updateAdminTemplateApi = (templateId: string, data: { sort_order?: number; is_visible?: boolean }) =>

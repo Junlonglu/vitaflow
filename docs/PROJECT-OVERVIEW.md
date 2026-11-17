@@ -155,7 +155,7 @@ vitaflow/
 - `feedback.py`：`POST /feedback`、`GET /feedback`
 - `announcements.py`：`GET /announcements`、`GET /announcements/current`、`GET /announcements/{id}`、`POST /announcements/{id}/dismiss`
 - `resume_starters.py`：`GET /resume-starters`（按行业预置的简历起手式）
-- `admin.py`（约 2157 行，管理员专用）：公告 CRUD、仪表盘、站点设置、反馈处理与回信、积分批量发放/撤销、积分流水、用户管理、简历总览、AI 任务、AI 模型定价（`/ai-configs`、`/model-pricing`）、**模型目录代理**（`/ai-catalog*`，转发到 ai-service）、积分规则、兑换码（含导入/导出）、导出记录、模板管理、起手式与行业模板管理
+- `api/admin/`（10 个路由模块 + `common.py` 共用辅助，`__init__.py` 聚合出 `/admin` 前缀，管理员专用）：公告 CRUD、数据看板（`/dashboard?range=`）、站点设置、反馈处理与回信、积分批量发放/撤销、积分流水、用户管理、简历总览、AI 任务（含 CSV 导出）、AI 模型定价（`/ai-configs`、`/model-pricing`）、**模型目录代理**（`/ai-catalog*`，转发到 ai-service）、积分规则、兑换码（含导入/导出）、导出记录、模板管理、起手式与行业模板管理
 
 ### 5.3 服务层职责
 
@@ -566,7 +566,7 @@ docker compose --profile full up -d --build
 
 | 项 | 位置 | 说明 |
 |---|---|---|
-| 超大文件 | `admin.py` 2157 行、`ai_chat_service.py` 1218 行、`Admin.vue` 1599 行、`ResumeEditor.vue` 1527 行 | 与「路由不堆业务、视图不堆表单」的自我约束有张力；`ai_chat_service.py` 同时管会话、上下文、模型选择、校验、合并、决策，改动易牵一发动全身 |
+| 超大文件 | `ai_chat_service.py` 1675 行、`api/admin/dashboard.py` 748 行、`ResumeEditor.vue` 1357 行 | 与「路由不堆业务、视图不堆表单」的自我约束有张力；`ai_chat_service.py` 同时管会话、上下文、模型选择、校验、合并、决策，改动易牵一发动全身。`Admin.vue` 已从 1599 行拆到 364 行（面板化，§6.37/§6.39），看板聚合单独成 `dashboard.py` |
 | settings 未固定 | `ai-service/src/agent.ts` | 两处 `createAgentSession` 都未传 `settingsManager`，会读 `<cwd>/.pi-agent/settings.json`，导致 compaction/retry 行为受部署目录影响、不可复现。建议改 `SettingsManager.inMemory({ compaction, retry })` |
 | thinking 逐 token 穿两跳 | `agent.ts` → NDJSON → FastAPI → 浏览器 | 每次 1–3 字符，一次响应上百条，每条都要一次 `JSON.parse` + `res.write` + 前端状态更新。建议 Node 侧 80–120ms 节流合并；同时 `res.write` 未处理背压（未监听 `drain`） |
 | 工具回调往返 | 每个工具一次跨进程 HTTP | 一轮可能 3 次往返。优化方向：上下文里预置 section 只读快照，让 `get_resume_context` 本地返回 |

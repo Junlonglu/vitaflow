@@ -109,14 +109,15 @@ def import_resume_file(
         # 导出的 JSON 本身已是结构化简历，直接回填：不走 AI 解析、不预检积分、不建 AiTask。
         single = upload_files[0] if len(upload_files) == 1 else None
         if single is not None and Path(single.filename or "").suffix.lower() == ".json":
-            resume = import_resume_from_json(
+            resume, warnings = import_resume_from_json(
                 db,
                 current_user.id,
                 single.file.read(),
                 single.filename or "导入简历",
                 template_id,
             )
-            return success(ResumeOut.model_validate(resume).model_dump(), "导入成功")
+            message = "；".join(["导入成功", *warnings])
+            return success(ResumeOut.model_validate(resume).model_dump(), message)
         text = extract_resume_text_from_uploads(upload_files)
         filenames = [item.filename or "resume" for item in upload_files]
         display_filename = filenames[0] if len(filenames) == 1 else f"{filenames[0]} 等 {len(filenames)} 张图片"

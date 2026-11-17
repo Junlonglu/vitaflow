@@ -123,6 +123,54 @@ class ParseExportTest(unittest.TestCase):
         self.assertIn("第 2 行", ctx.exception.message)
 
 
+class AvatarStripTest(unittest.TestCase):
+    """头像属于账号素材，不随 JSON 走：导出剥掉本系统引用，外链原样保留。"""
+
+    def test_export_strips_local_avatar_reference(self):
+        resume = _make_resume(
+            resume_data={
+                "basics": {"name": "张三", "avatar": "avatar/1_abc.jpg"},
+                "education": [],
+                "schema_version": "1.1",
+            }
+        )
+        payload = build_export_payload(resume)
+        self.assertEqual(payload["resume"]["resume_data"]["basics"]["avatar"], "")
+        # 剥的是导出副本；ORM 对象必须原封不动，否则一提交就把库里头像清了。
+        self.assertEqual(resume.resume_data["basics"]["avatar"], "avatar/1_abc.jpg")
+
+    def test_export_strips_legacy_proxy_url_avatar(self):
+        resume = _make_resume(
+            resume_data={
+                "basics": {"name": "张三", "avatar": "http://127.0.0.1:8000/api/files/avatar/1_abc.jpg"},
+                "education": [],
+            }
+        )
+        payload = build_export_payload(resume)
+        self.assertEqual(payload["resume"]["resume_data"]["basics"]["avatar"], "")
+        # 文件里不能出现本机/内网地址。
+        self.assertNotIn("127.0.0.1", json.dumps(payload, ensure_ascii=False))
+
+    def test_export_keeps_external_avatar_url(self):
+        external = "https://cdn.example.com/me.png"
+        resume = _make_resume(resume_data={"basics": {"name": "张三", "avatar": external}, "education": []})
+        payload = build_export_payload(resume)
+        self.assertEqual(payload["resume"]["resume_data"]["basics"]["avatar"], external)
+
+    def test_parse_flags_dropped_avatar(self):
+        body = json.dumps(
+            {"basics": {"name": "张三", "avatar": "avatar/1_abc.jpg"}}, ensure_ascii=False
+        ).encode("utf-8")
+        parsed = parse_resume_export(body)
+        self.assertTrue(parsed["dropped_avatar"])
+        self.assertEqual(parsed["resume_data"]["basics"]["avatar"], "")
+
+    def test_parse_without_avatar_does_not_flag(self):
+        body = json.dumps({"basics": {"name": "张三"}}, ensure_ascii=False).encode("utf-8")
+        parsed = parse_resume_export(body)
+        self.assertFalse(parsed["dropped_avatar"])
+
+
 class ExportRouteTest(unittest.TestCase):
     def test_export_json_returns_attachment(self):
         resume = _make_resume()
@@ -161,7 +209,7 @@ class ExportRouteTest(unittest.TestCase):
 class ImportRouteTest(unittest.TestCase):
     def test_json_upload_skips_ai_pipeline(self):
         created = _make_resume(id=21, title="张三的简历")
-        with patch("app.api.resumes.import_resume_from_json", return_value=created) as mock_import, patch(
+        with patch("app.api.resumes.import_resume_from_json", return_value=(created, [])) as mock_import, patch(
             "app.api.resumes.ai_service_task_result_sync"
         ) as mock_ai:
             resp = _make_client(resumes_router).post(
@@ -170,9 +218,24 @@ class ImportRouteTest(unittest.TestCase):
             )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["data"]["id"], 21)
+        self.assertEqual(resp.json()["message"], "导入成功")
         mock_import.assert_called_once()
         # 结构化回填不该触发大模型，也不该产生积分预检。
         mock_ai.assert_not_called()
+
+    def test_json_upload_reports_dropped_avatar(self):
+        created = _make_resume(id=22)
+        with patch(
+            "app.api.resumes.import_resume_from_json",
+            return_value=(created, ["头像已忽略"]),
+        ):
+            resp = _make_client(resumes_router).post(
+                "/api/resumes/import-file",
+                files={"files": ("备份.json", b'{"basics": {"name": "x"}}', "application/json")},
+            )
+        self.assertEqual(resp.status_code, 200)
+        # 提示必须跟着成功消息走，否则用户会以为导出丢了东西。
+        self.assertIn("头像已忽略", resp.json()["message"])
 
 
 class ImportServiceTest(unittest.TestCase):
@@ -181,26 +244,41 @@ class ImportServiceTest(unittest.TestCase):
         with patch("app.services.resume_json_export.create_resume", return_value=created) as mock_create, patch(
             "app.services.resume_json_export.get_template", return_value=None
         ):
-            result = import_resume_from_json(MagicMock(), 1, body, "导入.json", template_id)
-        return result, mock_create
+            resume, warnings = import_resume_from_json(MagicMock(), 1, body, "导入.json", template_id)
+        return resume, warnings, mock_create
 
     def test_unknown_template_falls_back_to_tech(self):
         body = json.dumps({"resume": {"title": "旧简历", "template_id": "removed_template", "resume_data": {"basics": {}}}}).encode()
-        result, mock_create = self._run(body)
-        self.assertIs(result.id, 31)
+        resume, _, mock_create = self._run(body)
+        self.assertIs(resume.id, 31)
         payload = mock_create.call_args.args[2]
         self.assertEqual(payload.template_id, "tech")
         self.assertEqual(payload.template_config["template_id"], "tech")
 
     def test_title_falls_back_to_basics_name(self):
         body = json.dumps({"basics": {"name": "王五"}}, ensure_ascii=False).encode("utf-8")
-        _, mock_create = self._run(body)
+        _, _, mock_create = self._run(body)
         self.assertEqual(mock_create.call_args.args[2].title, "王五的简历")
 
     def test_title_is_truncated_to_column_limit(self):
         body = json.dumps({"resume": {"title": "长" * 300, "resume_data": {"basics": {}}}}).encode()
-        _, mock_create = self._run(body)
+        _, _, mock_create = self._run(body)
         self.assertEqual(len(mock_create.call_args.args[2].title), 100)
+
+    def test_import_reports_dropped_avatar(self):
+        body = json.dumps(
+            {"basics": {"name": "张三", "avatar": "http://127.0.0.1:8000/api/files/avatar/1_a.jpg"}},
+            ensure_ascii=False,
+        ).encode("utf-8")
+        resume, warnings, mock_create = self._run(body)
+        self.assertEqual(mock_create.call_args.args[2].resume_data["basics"]["avatar"], "")
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("头像", warnings[0])
+
+    def test_import_without_avatar_has_no_warning(self):
+        body = json.dumps({"basics": {"name": "王五"}}, ensure_ascii=False).encode("utf-8")
+        _, warnings, _ = self._run(body)
+        self.assertEqual(warnings, [])
 
 
 if __name__ == "__main__":

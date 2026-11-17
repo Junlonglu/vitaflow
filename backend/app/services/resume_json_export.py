@@ -11,6 +11,7 @@ PDF 走 Chromium 渲染，JSON 不做渲染：直接把落库的结构化数据�
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,7 @@ from app.core.resume_schema import LIST_SECTIONS, SCHEMA_VERSION
 from app.core.template_config import normalize_template_config
 from app.models.resume import Resume
 from app.schemas.resume import ResumeCreate, default_template_config
+from app.services.avatar_service import avatar_object_name
 from app.services.resume_import_service import derive_imported_resume_title
 from app.services.resume_locale import normalize_resume_language
 from app.services.resume_service import create_resume
@@ -34,11 +36,31 @@ INLINE_FILE_PATH = "inline:json"
 DEFAULT_TEMPLATE_ID = "tech"
 
 _NOT_A_RESUME_MESSAGE = "JSON 内容不是一份简历，请选择 ResumeFlow 导出的 .json 文件"
+AVATAR_DROPPED_MESSAGE = "文件里的头像已忽略（头像属于账号素材，不随 JSON 迁移），请到信息库重新选择"
+
+
+def _strip_local_avatar(resume_data: dict[str, Any]) -> bool:
+    """剥掉指向本系统存储的头像引用，返回是否真的剥掉了东西。
+
+    头像存在账号级头像库里（见 ``avatar_service``），对象名换一台机器就指不到
+    东西，导出去只会变成裂图。用户自己填的外链头像属于简历内容，跨实例仍然
+    有效，保持原样。
+    """
+    basics = resume_data.get("basics")
+    if not isinstance(basics, dict):
+        return False
+    if not avatar_object_name(basics.get("avatar")):
+        return False
+    basics["avatar"] = ""
+    return True
 
 
 def build_export_payload(resume: Resume) -> dict[str, Any]:
     resume_data = resume.resume_data if isinstance(resume.resume_data, dict) else {}
     template_config = resume.template_config if isinstance(resume.template_config, dict) else {}
+    # 必须深拷贝：resume.resume_data 是 ORM 属性，就地改会把库里头像一起清掉。
+    exportable_data = deepcopy(resume_data)
+    _strip_local_avatar(exportable_data)
     return {
         "format": EXPORT_FORMAT,
         "format_version": EXPORT_FORMAT_VERSION,
@@ -50,7 +72,7 @@ def build_export_payload(resume: Resume) -> dict[str, Any]:
             "language": normalize_resume_language(resume.language),
             "template_id": resume.template_id,
             "template_config": template_config,
-            "resume_data": resume_data,
+            "resume_data": exportable_data,
         },
     }
 
@@ -98,12 +120,16 @@ def parse_resume_export(data: bytes, fallback_title: str = "") -> dict[str, Any]
 
     language = normalize_resume_language(source.get("language"))
     template_config = source.get("template_config") if isinstance(source.get("template_config"), dict) else {}
+    # 旧版导出文件里可能还留着「本机地址 + 对象名」的头像；导入端一并剥掉，免得
+    # 新账号下挂一条注定 404 的图片地址。
+    dropped_avatar = _strip_local_avatar(resume_data)
     return {
         "title": str(source.get("title") or "").strip(),
         "language": language,
         "template_id": str(source.get("template_id") or "").strip(),
         "template_config": template_config,
         "resume_data": resume_data,
+        "dropped_avatar": dropped_avatar,
         "fallback_title": Path(fallback_title).stem.strip() if fallback_title else "",
     }
 
@@ -123,7 +149,12 @@ def import_resume_from_json(
     data: bytes,
     filename: str,
     template_id: str = "",
-) -> Resume:
+) -> tuple[Resume, list[str]]:
+    """回填一份 JSON 简历，返回 ``(简历, 需要提示用户的说明)``。
+
+    说明目前只有一种：文件里带了自己系统的头像引用、已被忽略。调用方要把它拼进
+    成功提示，否则用户会以为「导出丢东西了」。
+    """
     payload = parse_resume_export(data, fallback_title=filename)
     resolved_template = _resolve_template_id(db, payload["template_id"], template_id)
     # 配置要过白名单收敛：它会进 <style>，导出文件可能被手改过。
@@ -131,7 +162,7 @@ def import_resume_from_json(
     config["template_id"] = resolved_template
     language = payload["language"]
     title = payload["title"] or derive_imported_resume_title(payload["resume_data"], payload["fallback_title"], language)
-    return create_resume(
+    resume = create_resume(
         db,
         user_id,
         ResumeCreate(
@@ -142,3 +173,5 @@ def import_resume_from_json(
             template_config=config,
         ),
     )
+    warnings = [AVATAR_DROPPED_MESSAGE] if payload["dropped_avatar"] else []
+    return resume, warnings

@@ -1,20 +1,35 @@
 <script setup lang="ts">
-import { ref } from "vue"
+import { computed, onMounted, ref } from "vue"
 import { useRouter } from "vue-router"
-import { ArrowUp, Briefcase, FileUp, PanelLeft, Sparkles } from "lucide-vue-next"
+import { Briefcase, FileUp, PanelLeft, Sparkles } from "lucide-vue-next"
 import BrandLogo from "@/components/common/BrandLogo.vue"
+import AiComposer from "@/components/ai/AiComposer.vue"
 import { useResumeStore } from "@/stores/resume"
+import { useChatModels } from "@/composables/useChatModels"
 import { useWorkspaceDrawer } from "@/composables/useWorkspaceDrawer"
 import { useWorkspaceCreate, type CreateEntry } from "@/composables/useWorkspaceCreate"
+import { writeChatHandoff } from "@/utils/chatHandoff"
 import { showGlobalToast } from "@/utils/toast"
+import type { AiChatAttachment } from "@/api/ai"
 
 const router = useRouter()
 const store = useResumeStore()
 const { openDrawer } = useWorkspaceDrawer()
 const { openCreate } = useWorkspaceCreate()
+// 和编辑器共用一套模型选择：首页选的模型，进编辑器后还是它。
+const { selectedKey, modelChoices, supportsImages, load: loadChatModels } = useChatModels()
 
-const prompt = ref("")
+const composerRef = ref<InstanceType<typeof AiComposer> | null>(null)
 const busy = ref(false)
+
+const selectedModelId = computed({
+  get: () => selectedKey.value,
+  set: (value: string | number | null) => {
+    selectedKey.value = value == null || value === "" ? null : String(value)
+  },
+})
+
+onMounted(() => void loadChatModels())
 
 function startCreate(entry: CreateEntry) {
   openCreate(entry)
@@ -27,28 +42,29 @@ const scenarios = [
   { key: "i18n", label: "中英双语", seed: "/翻译 英文" },
 ]
 
-const suggestions = [
-  "帮我写一份后端开发实习生的简历",
-  "我做了两个课程项目，怎么写成简历里的项目经历",
-  "这份简历投产品经理岗，哪里最容易被刷",
-  "把工作经历改写得更有数据说服力",
-]
-
 function applySeed(seed: string) {
-  prompt.value = seed
+  void composerRef.value?.setDraft(seed)
 }
 
-async function submit() {
-  if (busy.value) return
+/**
+ * 首页只做一件事：把你这句话变成一份新简历，然后交给编辑器接着说。
+ *
+ * 简历在后台静默创建，文本 / 图片 / 模型通过 sessionStorage 一次性交接，
+ * 编辑器读完即删——所以刷新不会重发，URL 也不会拖一串编码后的正文。
+ */
+async function submit(content: string, attachments: AiChatAttachment[]) {
+  const text = content.trim()
+  if (busy.value || (!text && !attachments.length)) return
+  if (attachments.length && !supportsImages.value) {
+    showGlobalToast("当前选择的模型不支持图片输入，请切换模型后再试", "error")
+    return
+  }
   busy.value = true
   try {
     const created = (await store.createResume("tech")) as { id: number }
-    const text = prompt.value.trim()
-    if (text) {
-      router.push({ path: `/workspace/${created.id}`, query: { prompt: text } })
-    } else {
-      router.push(`/workspace/${created.id}`)
-    }
+    writeChatHandoff({ prompt: text, attachments, modelKey: selectedKey.value })
+    composerRef.value?.reset()
+    await router.push(`/workspace/${created.id}`)
   } catch {
     showGlobalToast("创建简历失败，请重试", "error")
   } finally {
@@ -59,7 +75,7 @@ async function submit() {
 
 <template>
   <div class="thin-scrollbar flex h-full min-w-0 flex-1 overflow-y-auto px-6 py-8">
-    <div class="m-auto w-full max-w-[620px]">
+    <div class="m-auto w-full max-w-[760px]">
       <div class="mb-6 flex items-center justify-between md:hidden">
         <div class="flex items-center gap-1">
           <button
@@ -72,67 +88,45 @@ async function submit() {
           </button>
           <BrandLogo size="sm" />
         </div>
-        <RouterLink to="/workspace/resumes" class="select-none text-[12px] font-medium text-zinc-600">全部简历</RouterLink>
+        <RouterLink to="/workspace/resumes" class="select-none text-[13px] font-medium text-zinc-600">全部简历</RouterLink>
       </div>
-      <h1 class="text-[22px] font-semibold tracking-tight text-zinc-950 sm:text-[26px]">ResumeFlow，帮你写好一份简历</h1>
+      <h1 class="text-[24px] font-semibold tracking-tight text-zinc-950 sm:text-[30px]">ResumeFlow，帮你写好一份简历</h1>
 
-      <div class="mt-4 flex flex-wrap gap-0.5">
+      <div class="mt-5 flex flex-wrap gap-1">
         <button
           v-for="item in scenarios"
           :key="item.key"
           type="button"
-          class="inline-flex h-7 items-center rounded-md px-2 text-[12px] text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
+          class="inline-flex h-8 items-center rounded-md px-2.5 text-[13px] text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
           @click="applySeed(item.seed)"
         >
           {{ item.label }}
         </button>
       </div>
 
-      <div class="mt-4 rounded-xl border border-zinc-200/80 bg-white p-2.5 transition-colors focus-within:border-zinc-300 focus-within:ring-2 focus-within:ring-zinc-900/[0.04]">
-        <textarea
-          v-model="prompt"
-          rows="3"
-          placeholder="例如：帮我写一份面向字节跳动后端实习的简历，我在校做过两个分布式项目……"
-          class="block w-full resize-none border-0 bg-transparent px-1 py-1 text-[13px] leading-6 text-zinc-900 outline-none placeholder:text-zinc-400"
-          @keydown.enter.exact.prevent="submit"
-        ></textarea>
-        <div class="mt-1 flex items-center justify-between gap-3 px-1">
-          <span class="text-[11px] text-zinc-400">Enter 发送 · Shift + Enter 换行</span>
-          <button
-            type="button"
-            class="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-wb-primary text-white transition-colors hover:bg-wb-primary-hover active:scale-95 disabled:opacity-30"
-            :disabled="busy"
-            aria-label="开始"
-            @click="submit"
-          >
-            <ArrowUp class="h-4 w-4" />
-          </button>
-        </div>
-      </div>
+      <AiComposer
+        ref="composerRef"
+        v-model:selected-model-id="selectedModelId"
+        class="mt-5"
+        :loading="busy"
+        :model-choices="modelChoices"
+        :supports-multimodal="supportsImages"
+        :show-session-actions="false"
+        placeholder="例如：帮我写一份面向字节跳动后端实习的简历，我在校做过两个分布式项目……"
+        @send="submit"
+      />
 
-      <div class="mt-3 space-y-1">
-        <button
-          v-for="item in suggestions"
-          :key="item"
-          type="button"
-          class="flex w-full items-center rounded-md px-2 py-1.5 text-left text-[12px] text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
-          @click="applySeed(item)"
-        >
-          <span class="truncate">{{ item }}</span>
-        </button>
-      </div>
-
-      <div class="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-zinc-100 pt-4 text-[12px] text-zinc-500">
+      <div class="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-[13px] text-zinc-600">
         <button type="button" class="inline-flex items-center gap-1.5 transition-colors hover:text-zinc-900" @click="startCreate('blank')">
-          <Sparkles class="h-3.5 w-3.5 text-zinc-400" />
+          <Sparkles class="h-4 w-4 text-zinc-400" />
           <span>空白简历</span>
         </button>
         <button type="button" class="inline-flex items-center gap-1.5 transition-colors hover:text-zinc-900" @click="startCreate('starter')">
-          <Briefcase class="h-3.5 w-3.5 text-zinc-400" />
+          <Briefcase class="h-4 w-4 text-zinc-400" />
           <span>按岗位起稿</span>
         </button>
         <button type="button" class="inline-flex items-center gap-1.5 transition-colors hover:text-zinc-900" @click="startCreate('import')">
-          <FileUp class="h-3.5 w-3.5 text-zinc-400" />
+          <FileUp class="h-4 w-4 text-zinc-400" />
           <span>导入已有简历</span>
         </button>
       </div>

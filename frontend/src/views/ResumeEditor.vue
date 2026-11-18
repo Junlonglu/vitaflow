@@ -17,7 +17,7 @@ import { normalizeResumeData, useResumeStore } from "@/stores/resume"
 import { useChatStore } from "@/stores/chat"
 import { useEditorStore } from "@/stores/editor"
 import { exportJsonApi, exportPdfApi } from "@/api/export"
-import { getAiCapabilityApi, getFlowPointSummaryApi, type FlowPointSummary, type AiCapability, type AiChatModelOption, type PendingQuestion, type QuestionAnswer } from "@/api/ai"
+import { getFlowPointSummaryApi, type FlowPointSummary, type PendingQuestion, type QuestionAnswer } from "@/api/ai"
 import { duplicateResumeApi } from "@/api/resume"
 import { listTemplatesApi, type TemplateItem } from "@/api/template"
 import TemplatePreview from "@/components/templates/TemplatePreview.vue"
@@ -25,14 +25,15 @@ import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
 import ResumeShareDialog from "@/components/resume/ResumeShareDialog.vue"
 import QuestionDialog from "@/components/ai/QuestionDialog.vue"
 import SaveAsResumeDialog from "@/components/ai/SaveAsResumeDialog.vue"
-import { listUserAiModelsApi, type UserAiCredential } from "@/api/userAi"
 import { showGlobalToast } from "@/utils/toast"
 import { createPresetSection } from "@/utils/resumePresets"
 import { errorMessage } from "@/utils/errorText"
+import { takeChatHandoff } from "@/utils/chatHandoff"
 import { applyResumeLanguage, normalizeResumeLanguage } from "@/utils/resumeLocale"
 import { useWorkspaceBridge } from "@/composables/useWorkspaceBridge"
 import { useWorkspaceDrawer } from "@/composables/useWorkspaceDrawer"
 import { useResumeChatStream } from "@/composables/useResumeChatStream"
+import { useChatModels } from "@/composables/useChatModels"
 import { useResumeHistory } from "@/composables/useResumeHistory"
 import { useResumePreview } from "@/composables/useResumePreview"
 
@@ -135,9 +136,7 @@ const formPanelExpanded = ref(true)
 
 // 当前会话：会话列表与选中态都在 chat store 里（侧栏共用），这里只跟随它。
 const activeSessionId = computed(() => chatStore.activeSessionId(resumeId.value))
-const aiCapability = ref<AiCapability | null>(null)
 const flowPointSummary = ref<FlowPointSummary | null>(null)
-const aiCapabilityLoaded = ref(false)
 // 补充信息对话框（ask_user_questions → pending_questions）
 const questionsDialogOpen = ref(false)
 const questionsDialogList = ref<PendingQuestion[]>([])
@@ -146,54 +145,18 @@ const saveAsDialogOpen = ref(false)
 const saveAsTitle = ref("")
 const saveAsLoading = ref(false)
 const jdOptimizedMessageId = ref<number | null>(null)
-// 模型选择器用 "p:<平台模型id>" / "u:<用户自带模型id>" 作为值；旧版本存的是纯数字。
-function readStoredModelKey(): string | null {
-  const raw = localStorage.getItem("vitaflow_chat_model_id")
-  if (!raw) return null
-  return /^\d+$/.test(raw) ? `p:${raw}` : raw
-}
-const selectedChatModelKey = ref<string | null>(readStoredModelKey())
-const userAiModels = ref<UserAiCredential[]>([])
-const chatModels = computed<AiChatModelOption[]>(() => aiCapability.value?.chat_models || [])
-const enabledUserModels = computed(() => userAiModels.value.filter((item) => item.enabled))
-const modelChoices = computed(() => [
-  ...chatModels.value.map((model) => ({
-    value: `p:${model.id}`,
-    label: model.name,
-    icon: (model.supports_multimodal ? "image" : "text") as "image" | "text",
-    price: "",
-  })),
-  ...enabledUserModels.value.map((model) => ({
-    value: `u:${model.id}`,
-    label: `${model.provider_label} · ${model.model}`,
-    icon: (model.supports_image ? "image" : "text") as "image" | "text",
-    price: "",
-    meta: "自带",
-  })),
-])
-const effectiveChatModelId = computed(() => {
-  const key = selectedChatModelKey.value
-  return key?.startsWith("p:") ? Number(key.slice(2)) || null : null
-})
-/** undefined = 服务端按默认解析；0 = 明确使用平台模型；正数 = 指定自带模型。 */
-const effectiveUserModelId = computed<number | undefined>(() => {
-  const key = selectedChatModelKey.value
-  if (key?.startsWith("u:")) return Number(key.slice(2)) || undefined
-  if (key?.startsWith("p:")) return 0
-  return undefined
-})
-const supportsChatImages = computed(() => {
-  const key = selectedChatModelKey.value
-  if (key?.startsWith("u:")) {
-    const id = Number(key.slice(2))
-    return Boolean(enabledUserModels.value.find((item) => item.id === id)?.supports_image)
-  }
-  if (key?.startsWith("p:")) {
-    const id = Number(key.slice(2))
-    return Boolean(chatModels.value.find((item) => item.id === id)?.supports_multimodal)
-  }
-  return Boolean(aiCapability.value?.supports_multimodal)
-})
+// 模型选择与能力加载跟首页共用一份（composables/useChatModels.ts），绑定名保持原样。
+const {
+  loaded: aiCapabilityLoaded,
+  selectedKey: selectedChatModelKey,
+  chatModels,
+  modelChoices,
+  effectiveModelId: effectiveChatModelId,
+  effectiveUserModelId,
+  supportsImages: supportsChatImages,
+  load: loadAiCapability,
+  refreshUserModels: loadUserModels,
+} = useChatModels()
 
 const isMobile = ref(false)
 
@@ -284,11 +247,6 @@ watch(sidePanel, (newVal) => {
     if (!aiCapabilityLoaded.value) loadAiCapability()
     else loadUserModels()
   }
-})
-
-watch(selectedChatModelKey, (value) => {
-  if (value) localStorage.setItem("vitaflow_chat_model_id", value)
-  else localStorage.removeItem("vitaflow_chat_model_id")
 })
 
 const isResizing = ref(false)
@@ -708,46 +666,6 @@ async function openChatPanel() {
   if (!chatLoaded.value) await loadChatMessages()
 }
 
-async function loadUserModels() {
-  try {
-    userAiModels.value = (await listUserAiModelsApi()).items || []
-  } catch {
-    // 设置接口不可用不影响平台模型对话
-  }
-}
-
-async function loadAiCapability() {
-  try {
-    const [capability, modelList] = await Promise.all([
-      getAiCapabilityApi().catch(() => null),
-      listUserAiModelsApi().catch(() => null),
-    ])
-    aiCapability.value = capability
-    userAiModels.value = modelList?.items || []
-    const models = capability?.chat_models || []
-    const choices = modelChoices.value
-    const currentKey = selectedChatModelKey.value
-    if (!choices.length) {
-      selectedChatModelKey.value = null
-    } else if (!currentKey || !choices.some((item) => item.value === currentKey)) {
-      // 有启用的自带模型时优先用它的默认项，否则回落到平台默认模型。
-      const byokDefault = enabledUserModels.value.find((item) => item.is_default) || enabledUserModels.value[0]
-      const defaultId = capability?.default_chat_model_id
-      selectedChatModelKey.value = byokDefault
-        ? `u:${byokDefault.id}`
-        : defaultId && models.some((item) => item.id === defaultId)
-          ? `p:${defaultId}`
-          : models.length
-            ? `p:${models[0].id}`
-            : null
-    }
-  } catch {
-    aiCapability.value = null
-  } finally {
-    aiCapabilityLoaded.value = true
-  }
-}
-
 async function confirmClearChatMessages() {
   if (chatLoading.value || !chatMessages.value.length) return
   if (window.confirm("确定清除当前简历的 AI 对话记录吗？")) await clearChatMessages()
@@ -790,15 +708,23 @@ onMounted(() => {
 /** 从工作区首页带着一句话进来时，把它作为第一条对话直接发出去。 */
 async function sendInitialPrompt() {
   const raw = route.query.prompt
-  const text = Array.isArray(raw) ? raw[0] : raw
-  if (!text || initialPromptSent.value || !resumeStore.currentResume) return
+  const queryText = Array.isArray(raw) ? raw[0] : raw
+  if (!resumeStore.currentResume) return
+  // 交接只读一次：读完即删，刷新页面不会重复发送。
+  const handoff = takeChatHandoff()
+  const text = (handoff?.prompt || queryText || "").trim()
+  if (!text || initialPromptSent.value) return
   initialPromptSent.value = true
-  await router.replace({ path: route.path, query: {} })
+  if (raw) await router.replace({ path: route.path, query: {} })
   mainMode.value = "ai"
   if (sidePanel.value !== "chat") sidePanel.value = "chat"
   if (!chatLoaded.value) await loadChatMessages()
   if (!aiCapabilityLoaded.value) await loadAiCapability()
-  await sendChatMessage(String(text))
+  // 首页选过模型就沿用；模型已被停用 / 删除时安静回落到默认项。
+  if (handoff?.modelKey && modelChoices.value.some((item) => item.value === handoff.modelKey)) {
+    selectedChatModelKey.value = handoff.modelKey
+  }
+  await sendChatMessage(text, handoff?.attachments || [])
 }
 </script>
 
@@ -817,7 +743,7 @@ async function sendInitialPrompt() {
             v-model="resumeStore.currentResume.title" 
             placeholder="无标题简历"
             size="1"
-            class="peer col-start-1 row-start-1 w-full min-w-0 border border-transparent bg-transparent pl-1 pr-6 md:pl-2 md:pr-8 py-1 text-[14px] sm:text-[18px] font-semibold tracking-tight text-zinc-900 hover:border-zinc-200 hover:bg-zinc-50 focus:border-zinc-900 focus:bg-white transition-colors outline-none rounded-md truncate"
+            class="peer col-start-1 row-start-1 w-full min-w-0 border border-transparent bg-transparent pl-1 pr-6 md:pl-2 md:pr-8 py-1 text-[14px] sm:text-[18px] font-semibold tracking-tight text-zinc-900 hover:border-zinc-200 hover:bg-wb-hover focus:border-zinc-900 focus:bg-white transition-colors outline-none rounded-md truncate"
             @input="markChanged" 
           />
           <Pencil class="absolute right-1.5 md:right-2.5 h-3.5 w-3.5 text-zinc-400 pointer-events-none opacity-40 transition-opacity group-hover:opacity-100 peer-focus:opacity-0" />
@@ -873,13 +799,13 @@ async function sendInitialPrompt() {
 
         <!-- Desktop Action Buttons -->
         <div v-if="!isMobile" class="flex items-center gap-2">
-          <Button size="sm" variant="outline" class="flex h-9 shrink-0 items-center justify-center border-zinc-200 px-3 text-[13px] font-medium text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900" @click="openTemplateModal" title="更换模板">
+          <Button size="sm" variant="outline" class="flex h-9 shrink-0 items-center justify-center border-zinc-200 px-3 text-[13px] font-medium text-zinc-600 hover:bg-wb-hover hover:text-zinc-900" @click="openTemplateModal" title="更换模板">
             <LayoutTemplate class="h-4 w-4 shrink-0 mr-1.5" /> <span>模板</span>
           </Button>
-          <Button size="sm" variant="outline" class="flex h-9 shrink-0 items-center justify-center border-zinc-200 px-3 text-[13px] font-medium text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900" @click="openStylePanel" title="主题设置">
+          <Button size="sm" variant="outline" class="flex h-9 shrink-0 items-center justify-center border-zinc-200 px-3 text-[13px] font-medium text-zinc-600 hover:bg-wb-hover hover:text-zinc-900" @click="openStylePanel" title="主题设置">
             <Settings class="h-4 w-4 shrink-0 mr-1.5" /> <span>设置</span>
           </Button>
-          <Button size="sm" variant="outline" class="flex h-9 shrink-0 items-center justify-center border-zinc-200 px-3 text-[13px] font-medium text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900" @click="openShareDialog" title="分享简历">
+          <Button size="sm" variant="outline" class="flex h-9 shrink-0 items-center justify-center border-zinc-200 px-3 text-[13px] font-medium text-zinc-600 hover:bg-wb-hover hover:text-zinc-900" @click="openShareDialog" title="分享简历">
             <Share2 class="h-4 w-4 shrink-0 mr-1.5" /> <span>分享</span>
           </Button>
           <ActionMenu :items="exportMenuItems" @select="handleExportSelect">
@@ -953,7 +879,7 @@ async function sendInitialPrompt() {
             <span>导出 PDF</span>
           </button>
           <button
-            class="flex items-center justify-center w-full gap-2 px-4 py-2.5 rounded-xl border border-zinc-200 text-zinc-700 hover:bg-zinc-50 transition active:scale-95 text-xs font-medium"
+            class="flex items-center justify-center w-full gap-2 px-4 py-2.5 rounded-xl border border-zinc-200 text-zinc-700 hover:bg-wb-hover transition active:scale-95 text-xs font-medium"
             :disabled="!!exportLoading"
             @click="mobileMenuOpen = false; runExport('json')"
           >
@@ -975,7 +901,7 @@ async function sendInitialPrompt() {
           <div v-if="!isMobile" class="flex shrink-0 items-center gap-1 border-b border-zinc-200/60 px-2 py-1.5">
             <button
               class="inline-flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[13px] transition-colors"
-              :class="mainMode === 'edit' ? 'bg-zinc-100 font-medium text-zinc-900' : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800'"
+              :class="mainMode === 'edit' ? 'bg-zinc-100 font-medium text-zinc-900' : 'text-zinc-500 hover:bg-wb-hover hover:text-zinc-800'"
               @click="mainMode = 'edit'"
             >
               <Edit3 class="h-3.5 w-3.5" />
@@ -983,7 +909,7 @@ async function sendInitialPrompt() {
             </button>
             <button
               class="inline-flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[13px] transition-colors"
-              :class="mainMode === 'ai' ? 'bg-zinc-100 font-medium text-zinc-900' : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800'"
+              :class="mainMode === 'ai' ? 'bg-zinc-100 font-medium text-zinc-900' : 'text-zinc-500 hover:bg-wb-hover hover:text-zinc-800'"
               @click="mainMode = 'ai'; if(sidePanel === 'none') sidePanel = 'chat'"
             >
               <FlowAgentIcon class="h-3.5 w-3.5" :class="mainMode === 'ai' ? 'text-blue-600' : ''" />

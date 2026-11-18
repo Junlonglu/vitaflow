@@ -1,26 +1,18 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch, computed } from "vue"
-import { CheckCircle2, LoaderCircle, Bot, Target, Wand2, Trash2, X, RotateCcw, HelpCircle, Languages, Stethoscope, MessageCircle, SquarePen, ArrowUp, Plus } from "lucide-vue-next"
+import { CheckCircle2, LoaderCircle, Bot, HelpCircle, RotateCcw, X } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
-import Select from "@/components/ui/select/Select.vue"
-import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
+import AiComposer from "@/components/ai/AiComposer.vue"
+import { CHAT_SKILLS, type ChatSkill } from "@/components/ai/chatSkills"
 import { renderMarkdown } from "@/lib/markdown"
 import { privateFileUrl } from "@/lib/fileUrl"
-import { uploadAiChatImageApi } from "@/api/file"
 import { showGlobalToast } from "@/utils/toast"
 import type { AiChatAttachment, AiChatModelOption, ToolStep } from "@/api/ai"
 import type { ChatMessage } from "@/types/chat"
+import type { ChatModelChoice } from "@/composables/useChatModels"
 import ToolSteps from "@/components/ai/ToolSteps.vue"
 import ThinkingProcess from "@/components/ai/ThinkingProcess.vue"
 import ChatTurnMeta from "@/components/ai/ChatTurnMeta.vue"
-
-type ModelChoice = {
-  value: string
-  label: string
-  icon?: "image" | "text" | ""
-  price?: string
-  meta?: string
-}
 
 const props = defineProps<{
   messages: ChatMessage[]
@@ -31,7 +23,7 @@ const props = defineProps<{
   supportsMultimodal?: boolean
   chatModels?: AiChatModelOption[]
   /** 由编辑器合并「平台模型 + 用户自带模型」后的完整选项；传入时优先使用。 */
-  modelChoices?: ModelChoice[]
+  modelChoices?: ChatModelChoice[]
   selectedModelId?: string | number | null
 }>()
 
@@ -47,57 +39,39 @@ const emit = defineEmits<{
   "update:selectedModelId": [modelId: string | number | null]
 }>()
 
-const input = ref("")
-const inputRef = ref<HTMLTextAreaElement | null>(null)
-const fileInputRef = ref<HTMLInputElement | null>(null)
-const composing = ref(false)
 const listRef = ref<HTMLElement | null>(null)
-const showClearConfirm = ref(false)
-const attachments = ref<AiChatAttachment[]>([])
-const uploadingImage = ref(false)
-const uploadError = ref("")
-const copiedAttachmentUrl = ref("")
+const composerRef = ref<InstanceType<typeof AiComposer> | null>(null)
 const regenerateSource = ref<ChatMessage | null>(null)
 
-function confirmClear() {
-  emit('clear')
-  showClearConfirm.value = false
-}
-
-/**
- * 内置技能：与 ai-service src/skills.ts 一一对应。
- * 点击即发送 `/名称`，服务端把该技能的做法注入这一轮的系统提示词；
- * 技能正文不在前端，前端只负责「让人看得懂、点得到」。
- */
-const SKILLS = [
-  { name: "诊断", description: "体检简历，指出最影响通过率的问题", argumentHint: "", icon: Stethoscope },
-  { name: "JD匹配", description: "拆 JD、对证据、按岗位定向改写", argumentHint: "<粘贴岗位描述>", icon: Target },
-  { name: "重写经历", description: "把一段经历改写成能被追问的条目", argumentHint: "<哪段经历>", icon: SquarePen },
-  { name: "润色", description: "只改表达，不动事实与结构", argumentHint: "<模块名，可留空>", icon: Wand2 },
-  { name: "翻译", description: "整份中英互译，结构不变", argumentHint: "<目标语言>", icon: Languages },
-  { name: "开场白", description: "Boss直聘 / 微信打招呼消息", argumentHint: "", icon: MessageCircle },
-]
+/** 技能清单与首页共用一份（chatSkills.ts），不在这里另写一套名字。 */
 
 /** 无参数技能直接发送，有参数的预填到输入框等用户补全。 */
-function useSkill(skill: (typeof SKILLS)[number]) {
+function useSkill(skill: ChatSkill) {
   if (props.loading) return
-  attachments.value = []
   regenerateSource.value = null
-  if (skill.argumentHint) {
-    input.value = `/${skill.name} `
-    inputRef.value?.focus()
-    adjustHeight()
-  } else {
-    input.value = ""
-    emit("send", `/${skill.name}`)
-  }
+  if (skill.argumentHint) void composerRef.value?.setDraft(`/${skill.name} `)
+  else emit("send", `/${skill.name}`, [])
 }
 
-function adjustHeight() {
-  const el = inputRef.value
-  if (!el) return
-  el.style.height = 'auto'
-  el.style.height = Math.min(el.scrollHeight, 160) + 'px'
+/** 输入区只负责收字和附件；「重新生成」模式下同一份输入要转成 regenerate 事件。 */
+function handleComposerSend(content: string, attachments: AiChatAttachment[]) {
+  const source = regenerateSource.value
+  if (source) {
+    emit("regenerate", source, content, attachments)
+    return
+  }
+  emit("send", content, attachments)
+}
+
+async function startRegenerate(message: ChatMessage) {
+  if (props.loading) return
+  regenerateSource.value = message
+  await composerRef.value?.setDraft(String(message.content || ""), message.attachments || [])
+}
+
+function cancelRegenerate() {
+  regenerateSource.value = null
+  composerRef.value?.reset()
 }
 
 async function scrollToLatest(behavior: ScrollBehavior = "auto") {
@@ -133,168 +107,6 @@ watch(
   },
   { immediate: true, flush: "post" },
 )
-
-function submit(event?: Event) {
-  const keyEvent = event instanceof KeyboardEvent ? event : null
-  if (composing.value || keyEvent?.isComposing || keyEvent?.keyCode === 229) return
-  const text = input.value.trim()
-  if ((!text && !attachments.value.length) || props.loading) return
-  const sendingAttachments = [...attachments.value]
-  const source = regenerateSource.value
-  input.value = ""
-  attachments.value = []
-  regenerateSource.value = null
-  uploadError.value = ""
-  if (inputRef.value) {
-    inputRef.value.style.height = 'auto'
-  }
-  if (source) {
-    emit("regenerate", source, text || "请结合我上传的图片分析简历。", sendingAttachments)
-    return
-  }
-  emit("send", text || "请结合我上传的图片分析简历。", sendingAttachments)
-}
-
-/** 斜杠自动补全：输入以 / 开头且还没进入参数段时，弹出指令菜单（Slack/Notion 式）。 */
-const slashDismissed = ref(false)
-const slashActiveIndex = ref(0)
-const slashMatches = computed(() => {
-  const text = input.value
-  if (!text.startsWith("/") || /\s/.test(text.slice(1))) return []
-  const prefix = text.slice(1).toLowerCase()
-  return SKILLS.filter((skill) => skill.name.toLowerCase().startsWith(prefix))
-})
-const slashOpen = computed(() => !slashDismissed.value && slashMatches.value.length > 0 && !props.loading)
-
-watch(
-  () => input.value,
-  () => {
-    slashDismissed.value = false
-    slashActiveIndex.value = 0
-  },
-)
-
-function applySlashCommand(skill: (typeof SKILLS)[number]) {
-  input.value = `/${skill.name} `
-  inputRef.value?.focus()
-  adjustHeight()
-}
-
-/** 菜单展开时接管 ↑/↓/Tab/Esc；Enter 在 handleEnter 里处理。 */
-function handleSlashNav(event: KeyboardEvent) {
-  if (!slashOpen.value || composing.value || event.isComposing) return
-  if (event.key === "ArrowDown") {
-    event.preventDefault()
-    slashActiveIndex.value = (slashActiveIndex.value + 1) % slashMatches.value.length
-  } else if (event.key === "ArrowUp") {
-    event.preventDefault()
-    slashActiveIndex.value = (slashActiveIndex.value - 1 + slashMatches.value.length) % slashMatches.value.length
-  } else if (event.key === "Tab") {
-    event.preventDefault()
-    applySlashCommand(slashMatches.value[slashActiveIndex.value])
-  } else if (event.key === "Escape") {
-    slashDismissed.value = true
-  }
-}
-
-function handleEnter(event: KeyboardEvent) {
-  if (composing.value || event.isComposing || event.keyCode === 229) return
-  if (slashOpen.value) {
-    event.preventDefault()
-    applySlashCommand(slashMatches.value[slashActiveIndex.value])
-    return
-  }
-  submit(event)
-}
-
-async function startRegenerate(message: ChatMessage) {
-  if (props.loading) return
-  regenerateSource.value = message
-  input.value = String(message.content || "")
-  attachments.value = (message.attachments || []).map((item) => ({ ...item }))
-  uploadError.value = ""
-  await nextTick()
-  adjustHeight()
-  inputRef.value?.focus()
-}
-
-function cancelRegenerate() {
-  regenerateSource.value = null
-  input.value = ""
-  attachments.value = []
-  uploadError.value = ""
-  if (inputRef.value) inputRef.value.style.height = 'auto'
-}
-
-/** 一次消息最多附带的图片数（与后端 MAX_CHAT_ATTACHMENTS 对齐）。 */
-const MAX_ATTACHMENTS = 9
-
-async function uploadImages(files: File[]) {
-  if (!files.length) return
-  const remaining = MAX_ATTACHMENTS - attachments.value.length
-  if (remaining <= 0) {
-    uploadError.value = `一次最多附带 ${MAX_ATTACHMENTS} 张图片`
-    return
-  }
-  const accepted = files.slice(0, remaining)
-  uploadError.value = ""
-  uploadingImage.value = true
-  const failed: string[] = []
-  try {
-    for (const file of accepted) {
-      try {
-        const result = await uploadAiChatImageApi(file)
-        attachments.value.push({ url: result.url, name: file.name, content_type: file.type, object_name: result.object_name })
-      } catch {
-        failed.push(file.name || "图片")
-      }
-    }
-    const over = files.length > remaining ? `一次最多附带 ${MAX_ATTACHMENTS} 张图片` : ""
-    const errors = [over, failed.length ? `${failed.join("、")} 上传失败` : ""].filter(Boolean)
-    if (errors.length) uploadError.value = errors.join("；")
-  } finally {
-    uploadingImage.value = false
-  }
-}
-
-async function handleImageChange(event: Event) {
-  const files = Array.from((event.target as HTMLInputElement).files || [])
-  if (!files.length) return
-  await uploadImages(files)
-  if (fileInputRef.value) fileInputRef.value.value = ""
-}
-
-/** Ctrl+V 粘贴剪贴板图片：与文件选择走同一条上传链路。 */
-async function handlePaste(event: ClipboardEvent) {
-  if (!props.supportsMultimodal) return
-  const files = Array.from(event.clipboardData?.items || [])
-    .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
-    .map((item) => item.getAsFile())
-    .filter((file): file is File => !!file)
-  if (!files.length) return
-  event.preventDefault()
-  await uploadImages(files)
-}
-
-function removeAttachment(index: number) {
-  attachments.value.splice(index, 1)
-}
-
-function chooseImage() {
-  fileInputRef.value?.click()
-}
-
-async function copyAttachmentUrl(url: string) {
-  try {
-    await navigator.clipboard?.writeText(url)
-    copiedAttachmentUrl.value = url
-    window.setTimeout(() => {
-      if (copiedAttachmentUrl.value === url) copiedAttachmentUrl.value = ""
-    }, 1600)
-  } catch {
-    uploadError.value = "复制失败，请手动选择地址"
-  }
-}
 
 function actionStatus(message: ChatMessage) {
   if (!message.optimized_resume_data && !message.pending_info_fragments?.length) return "none"
@@ -354,29 +166,6 @@ const firstAssistantIndex = computed(() => {
   return -1
 })
 
-const platformModelOptions = computed<ModelChoice[]>(() =>
-  (props.chatModels || []).map((model) => {
-    const call = model.points_per_call
-    const inputRate = model.points_per_million_input_tokens
-    const outputRate = model.points_per_million_output_tokens
-    let priceText = ""
-    if (call != null || inputRate != null || outputRate != null) {
-      const parts: string[] = []
-      if (call != null) parts.push(`${call}点/次`)
-      if (inputRate != null) parts.push(`输入${inputRate}/百万`)
-      if (outputRate != null) parts.push(`输出${outputRate}/百万`)
-      priceText = `${model.uses_default_pricing ? "默认 " : ""}${parts.join(" · ")}`
-    }
-    return {
-      label: model.name,
-      value: `p:${model.id}`,
-      icon: model.supports_multimodal ? "image" : "text",
-      price: priceText,
-    }
-  }),
-)
-const modelOptions = computed<ModelChoice[]>(() => props.modelChoices ?? platformModelOptions.value)
-
 const previewImageUrl = ref("")
 function openPreview(url: string) { previewImageUrl.value = url }
 function closePreview() { previewImageUrl.value = "" }
@@ -399,7 +188,7 @@ watch(
 
           <div class="mt-7 grid w-full grid-cols-1 gap-x-1 gap-y-0.5 px-1 text-left sm:grid-cols-2">
             <button
-              v-for="skill in SKILLS"
+              v-for="skill in CHAT_SKILLS"
               :key="skill.name"
               type="button"
               class="group flex items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-zinc-100"
@@ -505,85 +294,25 @@ watch(
         </TransitionGroup>
       </div>
 
-      <form class="composer relative mx-auto mb-18 mt-1 w-[calc(100%-1.5rem)] max-w-3xl shrink-0 rounded-2xl border border-zinc-200 bg-white shadow-[0_1px_2px_rgba(24,24,27,0.04)] transition-colors focus-within:border-zinc-300 focus-within:ring-2 focus-within:ring-zinc-900/[0.04] sm:mb-4 sm:w-[calc(100%-2rem)]" @submit.prevent="submit">
-        <div v-if="attachments.length || uploadError" class="flex flex-wrap gap-2 px-3 pt-3 sm:gap-3">
-          <div v-for="(item, index) in attachments" :key="item.url" class="group relative h-14 w-14 sm:h-16 sm:w-16 shrink-0 rounded-lg border border-zinc-200/80 bg-white">
-            <img :src="privateFileUrl(item.url)" :alt="item.name || '待发送图片'" class="h-full w-full rounded-lg object-cover" />
-            <button type="button" class="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-white text-zinc-400 ring-1 ring-zinc-200/80 transition hover:text-red-500 active:scale-95" title="移除图片" @click="removeAttachment(index)">
-              <X class="h-3 w-3" stroke-width="2" />
-            </button>
-          </div>
-          <p v-if="uploadError" class="w-full text-xs text-red-500">{{ uploadError }}</p>
-        </div>
-        <div class="relative flex items-start">
-          <div v-if="slashOpen" class="absolute bottom-full left-0 right-0 z-popover mb-2 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-wb-popup">
-            <p class="px-4 pb-1 pt-2.5 text-[11px] font-medium text-zinc-400">技能（↑↓ 选择，Enter 补全）</p>
-            <button
-              v-for="(skill, i) in slashMatches"
-              :key="skill.name"
-              type="button"
-              class="flex w-full items-center gap-3 px-4 py-2 text-left transition-colors"
-              :class="i === slashActiveIndex ? 'bg-zinc-100' : 'hover:bg-zinc-50'"
-              @mouseenter="slashActiveIndex = i"
-              @click="applySlashCommand(skill)"
-            >
-              <span class="shrink-0 font-mono text-xs font-medium text-zinc-800">/{{ skill.name }}</span>
-              <span class="min-w-0 flex-1 truncate text-xs text-zinc-500">{{ skill.description }}</span>
-              <span v-if="skill.argumentHint" class="shrink-0 text-[11px] text-zinc-400">{{ skill.argumentHint }}</span>
-            </button>
-          </div>
-          <textarea ref="inputRef" v-model="input" placeholder="说你想改的地方，或输入 / 选一个技能..." rows="1" class="w-full min-h-[40px] sm:min-h-[46px] max-h-[100px] sm:max-h-[160px] resize-none bg-transparent px-3.5 sm:px-4 pt-2.5 sm:pt-3 pb-1 text-[13px] sm:text-[14.5px] leading-relaxed text-zinc-800 placeholder:text-zinc-400 border-0 focus-visible:ring-0 outline-none" style="scrollbar-width: none;" @input="adjustHeight" @compositionstart="composing = true" @compositionend="composing = false" @keydown="handleSlashNav" @keydown.enter.exact.prevent="handleEnter($event)" @paste="handlePaste"></textarea>
-        </div>
-        <div class="flex items-center gap-1 px-2 pb-2 pt-1">
-          <input ref="fileInputRef" type="file" accept="image/png,image/jpeg,image/webp" multiple class="hidden" @change="handleImageChange" />
-          <!-- 左：添加附件（图片） -->
-          <button v-if="supportsMultimodal" type="button" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 active:scale-95 disabled:opacity-40" :disabled="loading || uploadingImage" title="添加图片" @click="chooseImage">
-            <LoaderCircle v-if="uploadingImage" class="h-4 w-4 animate-spin" stroke-width="1.75" />
-            <Plus v-else class="h-4 w-4" stroke-width="1.75" />
-          </button>
-
-          <!-- 左：模型选择（图标 + 名称 + 展开箭头，无边框） -->
-          <div v-if="modelOptions.length" class="flex min-w-0 items-center rounded-lg px-1.5 h-8 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900">
-            <Sparkles class="mr-1 h-3.5 w-3.5 shrink-0 text-zinc-400" stroke-width="1.75" />
-            <Select
-              :model-value="selectedModelId || ''"
-              :options="modelOptions"
-              :disabled="loading"
-              ghost
-              class="!h-8 !max-w-[190px] !rounded-none !p-0 !text-[12.5px] !font-medium"
-              @change="(value) => emit('update:selectedModelId', value || null)"
-            />
-          </div>
-          <span v-else class="px-2 text-[12.5px] text-zinc-400">默认模型</span>
-
-          <!-- 右：新对话 / 清空 / 发送 -->
-          <div class="ml-auto flex shrink-0 items-center gap-0.5">
-            <button v-if="!loading && !regenerateSource" type="button" class="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 active:scale-95" title="新对话" @click="emit('new-session')">
-              <SquarePen class="h-4 w-4" stroke-width="1.75" />
-            </button>
-            <button v-if="messages.length > 0 && !loading && !regenerateSource" type="button" class="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-500 active:scale-95" @click="showClearConfirm = true" title="清空对话">
-              <Trash2 class="h-4 w-4" stroke-width="1.75" />
-            </button>
-            <button v-if="regenerateSource" type="button" class="flex h-8 items-center justify-center rounded-lg px-2.5 text-[12.5px] font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 active:scale-95" title="取消重新生成" @click="cancelRegenerate">
-              取消
-            </button>
-            <button type="submit" class="group ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-wb-primary text-white transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 hover:bg-wb-primary-hover active:scale-[0.94]" :disabled="loading || (!input.trim() && !attachments.length)" :title="regenerateSource ? '确认重新生成' : '发送'" @click="submit">
-              <RotateCcw v-if="regenerateSource" class="h-4 w-4 transition-transform duration-100 ease-out group-hover:rotate-[-25deg]" stroke-width="2" />
-              <LoaderCircle v-else-if="loading" class="h-4 w-4 animate-spin" stroke-width="2" />
-              <ArrowUp v-else class="h-4 w-4 transition-transform duration-100 ease-out group-hover:-translate-y-0.5" stroke-width="2" />
-            </button>
-          </div>
-        </div>
-      </form>
+      <AiComposer
+        ref="composerRef"
+        class="mx-auto mb-18 mt-1 w-[calc(100%-1.5rem)] max-w-3xl shrink-0 sm:mb-4 sm:w-[calc(100%-2rem)]"
+        :loading="loading"
+        :model-choices="modelChoices"
+        :chat-models="chatModels"
+        :has-messages="messages.length > 0"
+        :regenerate="Boolean(regenerateSource)"
+        :selected-model-id="selectedModelId"
+        :supports-multimodal="supportsMultimodal"
+        @send="handleComposerSend"
+        @clear="emit('clear')"
+        @new-session="emit('new-session')"
+        @cancel-regenerate="cancelRegenerate"
+        @update:selected-model-id="(value) => emit('update:selectedModelId', value)"
+      />
     </section>
   </div>
 
-  <ConfirmDialog 
-    v-model:open="showClearConfirm" 
-    title="确认清空对话记录吗？" 
-    description="清空后将无法恢复当前的 AI 会话历史。" 
-    @confirm="confirmClear" 
-  />
 
   <!-- Image Preview Lightbox -->
   <Teleport to="body">

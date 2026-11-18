@@ -2,10 +2,12 @@
 
 > 目的：在还没有 RSI 需求的时候就定好轨迹的落盘格式，避免将来要"重放一个回合"时发现关键字段根本没存。
 > 状态：**P0 已落地（2026-11-13）**，P1/P2 待产品与合规确认。
+>
+> 本文只定"存什么"；"怎么用这批数据做改进"见 `rsi-plan.md`（2026-11-17）。那份文档核对真实轨迹后，在下面的 P1 之前插入了 P1'（纯格式补齐，见 §5），并纠正了两处对现状的假设：`reason_chars` 一直是 0、`outcome` 从不因工具失败变 `failed`。
 
 ## 1. 现在存了什么，缺什么
 
-一次对话回合目前分散在三处：
+P0 落地之前，一次对话回合分散在三处（下面四条缺口里的 2 和 4 已由 P0 补上，3 由 P2 的 `feedback` 事件补）：
 
 | 位置 | 内容 | RSI 视角的问题 |
 |---|---|---|
@@ -84,11 +86,27 @@
 ```json
 {"v":1,"seq":4,"type":"tool_result","trace_id":"01JC...","ts":1763020800960,"t_ms":960,
  "call_id":"tool:1763020800820:5m1puu3awi9","name":"update_resume",
- "ok":true,"category":null,"reason_chars":0,"duration_ms":140,
- "result_digest":{"suggestions":1,"resume_changed_sections":["basics"]}}
+ "ok":true,"category":null,"reason_chars":0,"duration_ms":140}
 ```
 
 `category` 沿用现有错误信封（`validation` / `business` / `infra`），这是 RSI 判断"该不该重试、该不该换策略"的直接信号。
+
+**但只有 `category` 不够，而且 `reason_chars` 帮不上忙。** `agent.ts` 只在 `event.isError`（工具抛错）时算 `reasonChars`；业务校验失败走的是 `details.ok === false`，所以 6 次失败的 `reason_chars` **全是 0**，轨迹里**没有 `reason` 字段**（不是存了 null）。上游响应其实一直带着 `reason` 原文（FastAPI `success({"ok":false,"reason":<issue>})`），是 `trace.ts` 的 `toolResult` 只接长度、把它丢了。
+
+所以"字段名不合法"和"提案为空"这两种完全不同的修法，目前无法区分——**归因阶段拿不到可用的输入**。
+
+补齐方式（R0，见 `rsi-plan.md` §6）：**不改后端协议**，把 `tools/resume.ts` 已读到的 `details.reason` 归一成枚举再落库。
+
+```json
+{"ok":false,"category":"validation",
+ "reason_code":"empty_proposal",
+ "reason_path":"changes[0].fields",
+ "reason_chars":88}
+```
+
+- `reason_code` 用枚举（`empty_proposal` / `unknown_field` / `type_mismatch` / `id_not_found` / `no_effective_change` …），**不存错误原文**，也不存字段值。
+- `reason_path` 只到字段路径，不带内容（≤200 字符），可以进 L1 永久留存。
+- `reason_chars` 保留，用于判断错误信息是否过长（过长通常是上游把整段 schema 吐回来了）。
 
 ### 3.4 `turn_end`
 
@@ -99,7 +117,17 @@
  "steps":{"tool_calls":1,"skills":1,"thinking_chars":0}}
 ```
 
-`outcome` 为 `failed` 时补 `error":{"category","message"}`（message 截断 400 字）。
+`outcome` 为 `failed` 时补 `error":{"message"}`（message 截断 400 字；`trace.ts` 的 `end()` 目前只写 message，不写 category）。
+
+**`outcome` 是传输层口径，不是任务口径。** 实现上（`ai-service/src/agent.ts`）只有"模型不可用 / 流式中断"才写 `failed`；工具调用失败不影响它。实测 7 条轨迹 `outcome` 全是 `ok`，包括两条 **3 次工具调用全部失败** 的回合——模型回了话就算 ok。
+
+所以需要新增一个独立字段，别改 `outcome` 的语义（计费与告警都在读它）：
+
+```json
+{"task_success":false,"task_success_basis":"all_tools_failed"}
+```
+
+`task_success_basis` 取值：`applied`（用户点了应用）/ `all_tools_failed` / `tool_failed`（部分失败）/ `no_tool_call` / `unknown`。宁可给 `unknown`，也不要把"没报错"当成功——错误的正负样本比例会直接污染后续所有评估。
 
 ### 3.5 `feedback` — 可以晚于 `turn_end` 很久
 
@@ -148,6 +176,14 @@
 
 `/v1/task`（生成/导入简历的一次性任务）暂不采集：它没有工具调用，决策信息量远低于对话回合，等 L2 通道一起做。
 
+### P1'（不需要产品确认，纯格式补齐，建议先做）
+
+前两项只改事件字段，不涉及 PII，也不依赖 L2 开关；第三项是导出脚本加参数。三者是后续所有改进动作的前提（见 `rsi-plan.md` §6 R0），所以排在 P1 之前，用字母编号不占 P1 的数字：
+
+a. `tool_result` 补 `reason_code` + `reason_path`（从 `tools/resume.ts` 已拿到的 `details.reason` 映射，不含原文），见 §3.3。
+b. `turn_end` 补 `task_success` + `task_success_basis`，见 §3.4。
+c. `backend/scripts/export_traces.py` 加 `--bucket skill|task_success`（`outcome` 现在恒为 `ok`，不能当分桶键），能一条命令导出"某技能的全部失败回合"。
+
 ### P1（需要产品确认）
 
 5. L2 payload 开关 + 对象存储写入 + TTL 清理任务。
@@ -156,7 +192,7 @@
 ### P2（有明显样本量之后）
 
 7. `edited_after_apply`：对比 apply 后的 `ResumeVersion` 快照与模型产出，算字段级差异。
-8. 评估集：从 L1 里抽"applied 且无后续编辑"的样本做正例，`category=validation` 的失败做负例。
+8. 评估集：从 L1 里抽"applied 且无后续编辑"的样本做正例，`reason_code` 明确的失败做负例（**别用 `category=validation`**——它现在把"空提案"也算进去了，见 `rsi-plan.md` §2.1）。切分时**选择集与测试集不重叠**（`rsi-plan.md` §5）；每技能 30–50 条起步，100 条以下不做迭代。
 
 ## 6. 现在就别做错的三件事
 
@@ -174,4 +210,5 @@
 | `tool_calls` / `tool_quality` | `ai_tasks.input_data`，可直接搬 |
 | `skill` | `server.ts` 的 `skillCommand.skill.id`（已用于计费 feature） |
 | `action` | `ai_chat_messages.action_status` |
-| `outcome` | `ChatTurnOutcome.failed` + `toolQuality` 的失败项 |
+| `outcome` | `ChatTurnOutcome.failed`（**只覆盖模型不可用与流式中断**）。原表写的"toolQuality 失败项"实现里没有接进来，2026-11-17 实测 6 次工具失败的回合仍是 `ok`——门控在 `agent.ts` 的 `trace?.end({..., outcome:"ok"})`，补 `task_success` 而不是改 `outcome` |
+| `task_success` | 无现成来源，需在 `agent.ts` 收尾时按 `toolQuality` + 是否有 apply 推导 |

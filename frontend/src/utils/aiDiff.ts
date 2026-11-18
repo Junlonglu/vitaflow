@@ -212,6 +212,29 @@ function label(key: string) {
   return fieldLabels[key] || key
 }
 
+/** 审阅端「微调」表单要用的字段标签与排序，与 diff 展示共用一份来源。 */
+export function fieldLabelOf(key: string) {
+  return label(key)
+}
+
+export function fieldRankOf(key: string) {
+  return fieldOrderMap.get(key) ?? 999
+}
+
+export function isIgnoredField(key: string) {
+  return ignoredKeys.has(key)
+}
+
+/** 把任意结构化值摊平成与 diff 一致的纯文本（HTML → 文本、数组换行、字段加标签）。 */
+export function plainTextOf(value: unknown) {
+  return plain(value)
+}
+
+/** 文本里是否带富文本标记：带标记的字段在微调框里只展示摊平文本，写入时才落纯文本。 */
+export function containsMarkup(value: unknown) {
+  return typeof value === "string" && /<[a-z][\s\S]*>/i.test(value)
+}
+
 export function localizeFieldText(value: string) {
   let result = value
   Object.entries(fieldLabels)
@@ -308,6 +331,30 @@ function itemKey(item: unknown, index: number) {
   return itemIdentity(item) || `item_${index}`
 }
 
+/**
+ * 同名条目按出现次序加后缀：同一所学校读两个学位、两段同名实习都会撞 `itemKey`，
+ * 不加后缀 diff 会把两条互相错配（结果是「本科那条被硕士那条覆盖」）。
+ */
+function keyedEntries(list: unknown[]) {
+  const seen = new Map<string, number>()
+  return list.map((item, index) => {
+    const base = itemKey(item, index)
+    const count = (seen.get(base) || 0) + 1
+    seen.set(base, count)
+    return { item, key: count === 1 ? base : `${base}#${count}` }
+  })
+}
+
+/** 同一套后缀规则作用到已算好的条目上（toEntries 已经按顺序映射）。 */
+function uniqueEntryKeys(entries: ComparableEntry[]) {
+  const seen = new Map<string, number>()
+  return entries.map((entry) => {
+    const count = (seen.get(entry.key) || 0) + 1
+    seen.set(entry.key, count)
+    return count === 1 ? entry : { ...entry, key: `${entry.key}#${count}` }
+  })
+}
+
 function sectionTitle(data: unknown, key: string) {
   const title = sectionTitlesOf(data)?.[key]
   const custom = customSectionsOf(data).find((item) => asRecord(item)?.id === key)
@@ -341,6 +388,27 @@ export function sectionValue(data: unknown, key: string): unknown {
   return customSectionsOf(data).find((item) => asRecord(item)?.id === key)
 }
 
+/**
+ * 审阅「微调」的起点：从提案里取出这一条的结构化原值。
+ * 标题项返回标题字符串；列表里找不到就退回整段值，避免微调框空白。
+ */
+export function entryPayloadOf(data: unknown, sectionKey: string, entryKey: string): unknown {
+  if (entryKey === SECTION_TITLE_ENTRY_KEY) {
+    const title = sectionTitlesOf(data)?.[sectionKey]
+    return typeof title === "string" ? title : ""
+  }
+  const value = sectionValue(data, sectionKey)
+  if (sectionKey === "summary") {
+    const record = asRecord(value)
+    return record && "content" in record ? record.content : value
+  }
+  const record = asRecord(value)
+  const list = record && Array.isArray(record.items) ? record.items : asArray(value)
+  if (!list) return value
+  const matched = keyedEntries(list).find((entry) => entry.key === entryKey)
+  return matched ? matched.item : value
+}
+
 function hasSection(data: unknown, key: string) {
   const record = asRecord(data)
   if (!record) return false
@@ -356,20 +424,24 @@ function toEntries(sectionKey: string, value: unknown, fallbackTitle: string): C
   }
   const record = asRecord(value)
   if (record && Array.isArray(record.items)) {
-    return record.items.map((item, index) => ({
-      key: itemKey(item, index),
-      title: itemTitle(item, index, "条目"),
-      text: plain(item),
-      compareText: compareValue(item),
-    }))
+    return uniqueEntryKeys(
+      record.items.map((item, index) => ({
+        key: itemKey(item, index),
+        title: itemTitle(item, index, "条目"),
+        text: plain(item),
+        compareText: compareValue(item),
+      })),
+    )
   }
   if (Array.isArray(value)) {
-    return value.map((item, index) => ({
-      key: itemKey(item, index),
-      title: itemTitle(item, index, fallbackTitle),
-      text: plain(item),
-      compareText: compareValue(item),
-    }))
+    return uniqueEntryKeys(
+      value.map((item, index) => ({
+        key: itemKey(item, index),
+        title: itemTitle(item, index, fallbackTitle),
+        text: plain(item),
+        compareText: compareValue(item),
+      })),
+    )
   }
   const text = plain(value)
   return text ? [{ key: sectionKey, title: fallbackTitle, text, compareText: compareValue(value) }] : []
@@ -379,18 +451,17 @@ function cloneData<T>(value: T): T {
   return JSON.parse(JSON.stringify(value ?? null))
 }
 
-function entryMatches(item: unknown, key: string, index: number) {
-  return itemKey(item, index) === key
-}
-
-function replaceListEntry(current: unknown[], next: unknown[], entryKey: string, kind: DiffKind) {
-  if (kind === "removed") return current.filter((item, index) => !entryMatches(item, entryKey, index))
-  const nextItem = next.find((item, index) => entryMatches(item, entryKey, index))
-  if (!nextItem) return current
-  const currentIndex = current.findIndex((item, index) => entryMatches(item, entryKey, index))
-  if (currentIndex === -1) return [...current, cloneData(nextItem)]
+function replaceListEntry(current: unknown[], next: unknown[], override: unknown, entryKey: string, kind: DiffKind) {
+  const currentIndex = keyedEntries(current).findIndex((entry) => entry.key === entryKey)
+  if (kind === "removed" && override === undefined) {
+    return currentIndex === -1 ? current : current.filter((_, index) => index !== currentIndex)
+  }
+  // 人工微调过的那条直接作为载荷，不再从提案里按 key 找——用户可能把标识字段一起改了。
+  const payload = override !== undefined ? override : keyedEntries(next).find((entry) => entry.key === entryKey)?.item
+  if (payload === undefined) return current
+  if (currentIndex === -1) return [...current, cloneData(payload)]
   const result = [...current]
-  result[currentIndex] = cloneData(nextItem)
+  result[currentIndex] = cloneData(payload)
   return result
 }
 
@@ -404,8 +475,20 @@ function setSectionValue(data: DataRecord, sectionKey: string, value: unknown) {
   if (customs && index >= 0) customs[index] = value
 }
 
-/** 泛型保留入参类型：调用方传 ResumeData 得到的仍是 ResumeData，不再退化成 any。 */
-export function buildSelectedResumeData<T>(currentData: T, optimizedData: unknown, selectedIds: string[], sections: SectionDiff[]): T {
+/**
+ * 勾选 + 微调的合并结果。
+ *
+ * `overrides` 的键是 DiffItem.id，值是审阅卡里人工改过的结构化条目（标题项是字符串）。
+ * 有覆盖值时以覆盖值为准，其余沿用提案数据——这样「先改再应用」不会两套数据打架：
+ * 预览、落库走的都是这一个函数。
+ */
+export function buildSelectedResumeData<T>(
+  currentData: T,
+  optimizedData: unknown,
+  selectedIds: string[],
+  sections: SectionDiff[],
+  overrides: Record<string, unknown> = {},
+): T {
   const selected = new Set(selectedIds)
   const result = cloneData(currentData || {}) as DataRecord
   const next = cloneData(optimizedData || {}) as DataRecord
@@ -413,12 +496,15 @@ export function buildSelectedResumeData<T>(currentData: T, optimizedData: unknow
   sections.forEach((section) => {
     section.changes.forEach((change) => {
       if (!selected.has(change.id)) return
+      // 模块标题只走下面的 layout 合并；混进来会把整段 section 一起替换掉。
+      if (change.entryKey === SECTION_TITLE_ENTRY_KEY) return
+      const override = overrides[change.id]
       const currentValue = sectionValue(result, section.key)
       const nextValue = sectionValue(next, section.key)
       const currentArray = asArray(currentValue)
       const nextArray = asArray(nextValue)
       if (currentArray || nextArray) {
-        setSectionValue(result, section.key, replaceListEntry(currentArray || [], nextArray || [], change.entryKey, change.kind))
+        setSectionValue(result, section.key, replaceListEntry(currentArray || [], nextArray || [], override, change.entryKey, change.kind))
         return
       }
       const currentRecord = asRecord(currentValue)
@@ -427,14 +513,14 @@ export function buildSelectedResumeData<T>(currentData: T, optimizedData: unknow
         setSectionValue(result, section.key, {
           ...currentRecord,
           ...nextRecord,
-          items: replaceListEntry(currentRecord.items, nextRecord.items, change.entryKey, change.kind),
+          items: replaceListEntry(currentRecord.items, nextRecord.items, override, change.entryKey, change.kind),
         })
         return
       }
       if (change.kind === "removed") {
         setSectionValue(result, section.key, undefined)
       } else {
-        setSectionValue(result, section.key, cloneData(nextValue))
+        setSectionValue(result, section.key, cloneData(override !== undefined ? override : nextValue))
       }
     })
   })
@@ -442,17 +528,15 @@ export function buildSelectedResumeData<T>(currentData: T, optimizedData: unknow
   const nextLayout = layoutOf(next)
   if (nextLayout) {
     // 模块标题按勾选逐项合并（翻译/重命名标题可单独取消），其余 layout 字段整组合并
-    const selectedTitleKeys = new Set(
-      sections.flatMap((section) =>
-        section.changes
-          .filter((change) => change.entryKey === SECTION_TITLE_ENTRY_KEY && selected.has(change.id))
-          .map((change) => section.key),
-      ),
-    )
+    const titleChanges = sections
+      .flatMap((section) => section.changes)
+      .filter((change) => change.entryKey === SECTION_TITLE_ENTRY_KEY && selected.has(change.id))
     const mergedTitles: DataRecord = { ...(asRecord(layoutOf(result)?.section_titles) || {}) }
     const nextTitles = asRecord(nextLayout.section_titles) || {}
-    for (const key of Object.keys(nextTitles)) {
-      if (selectedTitleKeys.has(key)) mergedTitles[key] = nextTitles[key]
+    for (const change of titleChanges) {
+      const override = overrides[change.id]
+      const title = typeof override === "string" && override.trim() ? override.trim() : nextTitles[change.sectionKey]
+      if (title !== undefined) mergedTitles[change.sectionKey] = title
     }
     result.layout = {
       ...(layoutOf(result) || {}),

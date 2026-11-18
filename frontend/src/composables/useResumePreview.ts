@@ -71,8 +71,12 @@ export function useResumePreview(options: ResumePreviewOptions) {
     previewPaneObserver = null
   }
 
-  // —— AI 修改审阅态（track-changes）：有 pending 提案时左面板换成 diff 审阅卡 ——
+  // —— AI 修改审阅态（track-changes）：有 pending 提案时左面板换成整册 diff 审阅台 ——
   const selectedDiffIds = ref<string[]>([])
+  /** DiffItem.id → 人工微调后的结构化条目；预览与落库都以它为准 */
+  const reviewOverrides = ref<Record<string, unknown>>({})
+  /** 「返回编辑」只是先不看，提案还留着；离开 pending 才清零 */
+  const reviewDismissed = ref(false)
 
   const pendingReviewMessage = computed<ChatMessage | null>(() => {
     for (let index = options.chatMessages.value.length - 1; index >= 0; index--) {
@@ -81,6 +85,8 @@ export function useResumePreview(options: ResumePreviewOptions) {
     }
     return null
   })
+
+  const reviewActive = computed(() => Boolean(pendingReviewMessage.value) && !reviewDismissed.value)
 
   const pendingReviewSections = computed(() => {
     const message = pendingReviewMessage.value
@@ -92,23 +98,20 @@ export function useResumePreview(options: ResumePreviewOptions) {
     pendingReviewSections.value.reduce((sum, section) => sum + section.changes.length, 0),
   )
 
-  const currentReviewSections = computed<ReviewSection[]>(() => {
+  /** 审阅台按模块成册：只保留有变更的模块，无变化条目附在各自模块下（默认折叠）。 */
+  const reviewGroups = computed<ReviewSection[]>(() => {
     const message = pendingReviewMessage.value
     if (!message?.optimized_resume_data || !resumeStore.resumeData) return []
-    const sectionKey = editor.currentSection
-    const matched = pendingReviewSections.value.find((section) => section.key === sectionKey)
-    const { changes, unchanged } = sectionEntriesForReview(
-      sectionKey,
-      resumeStore.resumeData,
-      message.optimized_resume_data,
-      matched?.title,
-    )
-    if (!changes.length && !unchanged.length) return []
-    return [{ key: sectionKey, title: matched?.title || "当前模块", changes, unchanged }]
+    return pendingReviewSections.value.map((section) => ({
+      ...section,
+      unchanged: sectionEntriesForReview(section.key, resumeStore.resumeData, message.optimized_resume_data, section.title).unchanged,
+    }))
   })
 
   watch(pendingReviewMessage, (message) => {
     selectedDiffIds.value = message ? pendingReviewSections.value.flatMap((section) => section.changes.map((item) => item.id)) : []
+    reviewOverrides.value = {}
+    reviewDismissed.value = false
   })
 
   function toggleReviewChange(id: string) {
@@ -117,9 +120,30 @@ export function useResumePreview(options: ResumePreviewOptions) {
       : [...selectedDiffIds.value, id]
   }
 
+  function toggleReviewSection(sectionKey: string) {
+    const section = pendingReviewSections.value.find((item) => item.key === sectionKey)
+    if (!section) return
+    const ids = section.changes.map((item) => item.id)
+    const allOn = ids.every((id) => selectedDiffIds.value.includes(id))
+    selectedDiffIds.value = allOn
+      ? selectedDiffIds.value.filter((id) => !ids.includes(id))
+      : [...new Set([...selectedDiffIds.value, ...ids])]
+  }
+
   function toggleAllReviewChanges() {
     const all = pendingReviewSections.value.flatMap((section) => section.changes.map((item) => item.id))
     selectedDiffIds.value = selectedDiffIds.value.length >= all.length ? [] : all
+  }
+
+  function updateReviewOverride(id: string, payload: unknown) {
+    reviewOverrides.value = { ...reviewOverrides.value, [id]: payload }
+  }
+
+  function resetReviewOverride(id: string) {
+    if (!(id in reviewOverrides.value)) return
+    const next = { ...reviewOverrides.value }
+    delete next[id]
+    reviewOverrides.value = next
   }
 
   function applySelectedReviewChanges() {
@@ -130,11 +154,17 @@ export function useResumePreview(options: ResumePreviewOptions) {
       message.optimized_resume_data,
       selectedDiffIds.value,
       pendingReviewSections.value,
+      reviewOverrides.value,
     )
     void options.applyDecision(message, "apply", merged)
   }
 
+  function dismissReview() {
+    reviewDismissed.value = true
+  }
+
   function goToReviewMode() {
+    reviewDismissed.value = false
     options.onReviewModeRequested()
   }
 
@@ -154,9 +184,15 @@ export function useResumePreview(options: ResumePreviewOptions) {
     try {
       const pending = pendingReviewMessage.value
       let html: string
-      if (pending?.optimized_resume_data && resumeStore.resumeData) {
-        // 审阅模式：预览实时跟随勾选——渲染「当前数据 + 已选变更」的合并结果
-        const merged = buildSelectedResumeData(resumeStore.resumeData, pending.optimized_resume_data, selectedDiffIds.value, pendingReviewSections.value)
+      if (reviewActive.value && pending?.optimized_resume_data && resumeStore.resumeData) {
+        // 审阅模式：预览实时跟随勾选与微调——渲染「当前数据 + 已选变更（含人工改动）」的合并结果
+        const merged = buildSelectedResumeData(
+          resumeStore.resumeData,
+          pending.optimized_resume_data,
+          selectedDiffIds.value,
+          pendingReviewSections.value,
+          reviewOverrides.value,
+        )
         html = await previewResumeDataApi(resumeStore.currentResume.id, merged)
       } else {
         html = await previewHtmlApi(resumeStore.currentResume.id)
@@ -215,8 +251,8 @@ export function useResumePreview(options: ResumePreviewOptions) {
     if (tab === "preview") refreshPreviewIfDirty()
   })
 
-  // 勾选变化或 pending 变化都实时刷新右侧预览（防抖合并连续勾选）
-  watch([pendingReviewMessage, selectedDiffIds], () => schedulePreviewRefresh())
+  // 勾选 / 微调 / 进出审阅态都实时刷新右侧预览（防抖合并连续输入）
+  watch([pendingReviewMessage, selectedDiffIds, reviewOverrides, reviewActive], () => schedulePreviewRefresh())
 
   return {
     previewPaneRef,
@@ -231,13 +267,19 @@ export function useResumePreview(options: ResumePreviewOptions) {
     refreshPreviewIfDirty,
     fetchPreviewHtmlLatest,
     selectedDiffIds,
+    reviewOverrides,
+    reviewActive,
+    reviewGroups,
     pendingReviewMessage,
     pendingReviewSections,
     pendingReviewChangeCount,
-    currentReviewSections,
     toggleReviewChange,
+    toggleReviewSection,
     toggleAllReviewChanges,
+    updateReviewOverride,
+    resetReviewOverride,
     applySelectedReviewChanges,
+    dismissReview,
     goToReviewMode,
     dispose,
   }

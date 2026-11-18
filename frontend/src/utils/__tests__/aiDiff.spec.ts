@@ -4,6 +4,7 @@ import {
   buildSelectedResumeData,
   diffResume,
   diffSection,
+  entryPayloadOf,
   sectionEntriesForReview,
   sectionValue,
 } from "@/utils/aiDiff"
@@ -17,7 +18,7 @@ function resumeFixture() {
       { company: "乙公司", position: "实习", start_date: "2021-06", highlights: ["参与报表"] },
     ] as Array<{ company: string; position: string; start_date: string; highlights: string[] }>,
     skills: { items: ["Redis", "MySQL"] },
-    layout: { section_titles: { work: "工作经历" } },
+    layout: { section_titles: { work: "工作经历" } as Record<string, string> },
   }
 }
 
@@ -128,6 +129,111 @@ describe("buildSelectedResumeData", () => {
     const sections = diffResume(before, after)
     const merged = buildSelectedResumeData(before, after, [], sections)
     expect(merged.work).toEqual(before.work)
+  })
+
+  it("人工微调过的条目以覆盖值为准，其余字段不受影响", () => {
+    const before = resumeFixture()
+    const after = resumeFixture()
+    after.work[0].highlights = ["AI 写的版本"]
+    after.work[0].position = "高级后端"
+    const sections = diffResume(before, after)
+    const change = sections.flatMap((section) => section.changes).find((item) => item.entryKey === "甲公司")!
+    const overrides = { [change.id]: { ...after.work[0], highlights: ["我自己改的版本"] } }
+
+    const merged = buildSelectedResumeData(before, after, [change.id], sections, overrides)
+    expect(merged.work[0].highlights).toEqual(["我自己改的版本"])
+    expect(merged.work[0].position).toBe("高级后端")
+    expect(merged.work[1]).toEqual(before.work[1])
+  })
+
+  it("微调时改了条目标识字段也能落到正确位置", () => {
+    const before = resumeFixture()
+    const after = resumeFixture()
+    after.work[0].highlights = ["AI 版本"]
+    const sections = diffResume(before, after)
+    const change = sections.flatMap((section) => section.changes).find((item) => item.entryKey === "甲公司")!
+    const overrides = { [change.id]: { ...after.work[0], company: "甲公司（已改名）" } }
+
+    const merged = buildSelectedResumeData(before, after, [change.id], sections, overrides)
+    expect(merged.work).toHaveLength(2)
+    expect(merged.work[0].company).toBe("甲公司（已改名）")
+    expect(merged.work[1].company).toBe("乙公司")
+  })
+
+  it("只勾模块标题时不动该模块正文", () => {
+    const before = resumeFixture()
+    const after = resumeFixture()
+    after.layout.section_titles.work = "实习与工作经历"
+    after.layout.section_titles.summary = "个人总结"
+    after.summary.content = "<p>五年经验</p>"
+    const sections = diffResume(before, after)
+    const titleOnly = sections
+      .flatMap((section) => section.changes)
+      .filter((change) => change.entryKey === SECTION_TITLE_ENTRY_KEY)
+      .map((change) => change.id)
+    expect(titleOnly).toHaveLength(2)
+
+    const merged = buildSelectedResumeData(before, after, titleOnly, sections)
+    expect(merged.layout.section_titles).toMatchObject({ work: "实习与工作经历", summary: "个人总结" })
+    expect(merged.summary.content).toBe(before.summary.content)
+  })
+
+  it("模块标题也能人工微调", () => {
+    const before = resumeFixture()
+    const after = resumeFixture()
+    after.layout.section_titles.work = "实习与工作经历"
+    const sections = diffResume(before, after)
+    const change = sections.flatMap((section) => section.changes).find((item) => item.entryKey === SECTION_TITLE_ENTRY_KEY)!
+
+    const merged = buildSelectedResumeData(before, after, [change.id], sections, { [change.id]: "实习 / 工作经历" })
+    expect(merged.layout.section_titles.work).toBe("实习 / 工作经历")
+  })
+})
+
+describe("entryPayloadOf", () => {
+  it("列表模块按条目标识取原值", () => {
+    const data = resumeFixture()
+    expect(entryPayloadOf(data, "work", "乙公司")).toMatchObject({ company: "乙公司" })
+  })
+
+  it("个人简介把 content 拆出来", () => {
+    const data = resumeFixture()
+    expect(entryPayloadOf(data, "summary", "summary")).toBe("<p>三年后端经验</p>")
+  })
+
+  it("整段模块（基本信息）返回自身", () => {
+    const data = resumeFixture()
+    expect(entryPayloadOf(data, "basics", "basics")).toMatchObject({ name: "张三" })
+  })
+
+  it("标题项返回标题字符串", () => {
+    const data = resumeFixture()
+    expect(entryPayloadOf(data, "work", SECTION_TITLE_ENTRY_KEY)).toBe("工作经历")
+  })
+})
+
+describe("同名条目", () => {
+  const twin = () => ({
+    education: [
+      { school: "华南农业大学", major: "信息管理与信息系统", degree: "本科" },
+      { school: "华南农业大学", major: "计算机技术", degree: "硕士" },
+    ],
+  })
+
+  it("同校两段学历不会被当成同一条互相比对", () => {
+    expect(diffSection("education", twin().education, twin().education)).toEqual([])
+  })
+
+  it("只改其中一段时，另一段不被覆盖", () => {
+    const before = twin()
+    const after = twin()
+    after.education[1].degree = "硕士（保研）"
+    const sections = diffResume(before, after)
+    const all = sections.flatMap((section) => section.changes).map((change) => change.id)
+    const merged = buildSelectedResumeData(before, after, all, sections) as typeof before
+    expect(merged.education[0].degree).toBe("本科")
+    expect(merged.education[1].degree).toBe("硕士（保研）")
+    expect(merged.education).toHaveLength(2)
   })
 })
 

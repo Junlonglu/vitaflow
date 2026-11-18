@@ -2,9 +2,18 @@
 import { computed } from "vue"
 import { diffSegments } from "@/utils/wordDiff"
 
-const props = defineProps<{ before?: string; after?: string }>()
+const props = defineProps<{ before?: string; after?: string; side?: "both" | "before" | "after" }>()
 
-const segments = computed(() => diffSegments(props.before, props.after))
+/**
+ * 同一个 diff 拆成前后两栏：前只留「删除 + 未变」，后只留「新增 + 未变」。
+ * 两栏各自保留未变文字，用户不必在脑子里拼接。
+ */
+const segments = computed(() => {
+  const all = diffSegments(props.before, props.after)
+  if (props.side === "before") return all.filter((seg) => seg.type !== "added")
+  if (props.side === "after") return all.filter((seg) => seg.type !== "removed")
+  return all
+})
 </script>
 
 <template>

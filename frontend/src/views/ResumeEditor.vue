@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import { CheckCircle2, ChevronDown, Download, FileJson, FileText, LoaderCircle, PanelLeft, Redo2, Save, Settings, Share2, Trash2, Undo2, X, Edit3, Eye, Pencil, AlertCircle, LayoutTemplate, ArrowRight, Menu, Info } from "lucide-vue-next"
+import { CheckCircle2, ChevronDown, Download, FileJson, FileText, LoaderCircle, PanelLeft, Redo2, Save, Settings, Share2, Sparkles, Trash2, Undo2, X, Edit3, Eye, Pencil, AlertCircle, LayoutTemplate, ArrowRight, Menu, Info } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
 import ActionMenu from "@/components/ui/dropdown/ActionMenu.vue"
 import Input from "@/components/ui/input/Input.vue"
@@ -405,12 +405,18 @@ const {
   refreshPreviewLatest,
   refreshPreviewIfDirty,
   selectedDiffIds,
+  reviewOverrides,
+  reviewActive,
+  reviewGroups,
   pendingReviewMessage,
   pendingReviewChangeCount,
-  currentReviewSections,
   toggleReviewChange,
+  toggleReviewSection,
   toggleAllReviewChanges,
+  updateReviewOverride,
+  resetReviewOverride,
   applySelectedReviewChanges,
+  dismissReview,
   goToReviewMode,
   dispose: disposePreview,
 } = useResumePreview({
@@ -423,6 +429,11 @@ const {
     mainMode.value = "edit"
   },
 })
+
+/** 审阅台的「放弃」= 拒掉这次提案（沿用对话卡片的决策链路）。 */
+function discardReview() {
+  if (pendingReviewMessage.value) void resolveChatDecision(pendingReviewMessage.value, "reject")
+}
 
 function debouncedSave() {
   if (saveDebounceTimer) clearTimeout(saveDebounceTimer)
@@ -919,40 +930,55 @@ async function sendInitialPrompt() {
 
           <!-- Traditional Edit Mode -->
           <div v-show="mainMode === 'edit'" class="flex flex-col flex-1 min-h-0 overflow-hidden relative bg-zinc-50/30">
-            <ModuleSidebar 
-              class="w-full shrink-0 relative z-raised" 
-              :data="resumeStore.resumeData" 
-              :current="editor.currentSection" 
-              @select="selectSection" 
-              @change="markChanged" 
-              @add-custom="addCustomSection"
-              @remove-custom="removeCustomSection"
-            />
-
+            <!-- 审阅台：一次看完全部模块的改动，不再逐个模块点开找 -->
             <ResumeReviewPanel
-              v-if="pendingReviewMessage"
+              v-if="reviewActive"
               class="relative z-base flex-1 min-h-0 min-w-0"
-              :sections="currentReviewSections"
+              :sections="reviewGroups"
               :selected-ids="selectedDiffIds"
-              :total-count="pendingReviewChangeCount"
-              :all-selected="selectedDiffIds.length >= pendingReviewChangeCount && pendingReviewChangeCount > 0"
-              :applying="chatDecisionLoadingId === pendingReviewMessage.id"
+              :overrides="reviewOverrides"
+              :optimized-data="pendingReviewMessage?.optimized_resume_data"
+              :applying="chatDecisionLoadingId === pendingReviewMessage?.id"
               @toggle="toggleReviewChange"
+              @toggle-section="toggleReviewSection"
               @toggle-all="toggleAllReviewChanges"
+              @edit="updateReviewOverride"
+              @reset="resetReviewOverride"
               @apply="applySelectedReviewChanges"
-              @cancel="resolveChatDecision(pendingReviewMessage, 'reject')"
+              @discard="discardReview"
+              @exit="dismissReview"
             />
-            <ResumeFormPanel
-              v-else
-              class="relative z-base flex-1 min-h-0 min-w-0"
-              :data="resumeStore.resumeData"
-              :config="resumeStore.templateConfig"
-              :current="editor.currentSection"
-              :language="resumeStore.currentResume.language"
-              :show-style="false"
-              :is-wide="isWide"
-              @change="markChanged"
-            />
+            <template v-else>
+              <!-- 先不看也能回去：顶部留一条回审阅台的入口 -->
+              <button
+                v-if="pendingReviewMessage"
+                class="flex shrink-0 items-center gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2 text-left transition-colors hover:bg-amber-100"
+                @click="goToReviewMode"
+              >
+                <Sparkles class="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                <span class="min-w-0 truncate text-[12px] text-amber-700">还有 {{ pendingReviewChangeCount }} 项 AI 修改待确认</span>
+                <span class="ml-auto shrink-0 text-[12px] font-medium text-amber-700">查看</span>
+              </button>
+              <ModuleSidebar
+                class="w-full shrink-0 relative z-raised"
+                :data="resumeStore.resumeData"
+                :current="editor.currentSection"
+                @select="selectSection"
+                @change="markChanged"
+                @add-custom="addCustomSection"
+                @remove-custom="removeCustomSection"
+              />
+              <ResumeFormPanel
+                class="relative z-base flex-1 min-h-0 min-w-0"
+                :data="resumeStore.resumeData"
+                :config="resumeStore.templateConfig"
+                :current="editor.currentSection"
+                :language="resumeStore.currentResume.language"
+                :show-style="false"
+                :is-wide="isWide"
+                @change="markChanged"
+              />
+            </template>
           </div>
 
           <!-- AI Workbench Mode -->

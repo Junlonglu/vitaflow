@@ -294,6 +294,162 @@ def assert_cell(theme: str, width: int, route: str, r: dict) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# 矩阵之外的独立检查：审阅台（§6.48）
+# 只有存在 pending 提案时这块 UI 才出现，矩阵里永远拿不到。这里先取一份真实
+# 简历数据改成「有改动」的版本，再拦下会话 / 消息两个接口把提案喂进去，
+# 于是能验证：一次列全部模块、修改前只读、微调的值进预览请求、返回编辑有回收口。
+# ---------------------------------------------------------------------------
+def _review_resume_id() -> int | None:
+    """真实存在的简历 id：矩阵里的 /workspace/79 是历史 id（只验外壳），不能拿来造提案。"""
+    req = urllib.request.Request(f"{BASE}/api/resumes", headers={"Authorization": f"Bearer {TOKEN}"})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        payload = json.loads(resp.read().decode("utf-8"))
+    items = ((payload or {}).get("data") or {}).get("items") or []
+    return items[0]["id"] if items else None
+
+
+def _review_fixture(resume_id: int) -> tuple[dict, list, list] | None:
+    """取真实简历 → 造提案 → 返回 (optimized_data, sessions, messages)。"""
+    req = urllib.request.Request(
+        f"{BASE}/api/resumes/{resume_id}",
+        headers={"Authorization": f"Bearer {TOKEN}"},
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        payload = json.loads(resp.read().decode("utf-8"))
+    data = ((payload or {}).get("data") or {}).get("resume_data")
+    if not isinstance(data, dict):
+        return None
+
+    nxt = json.loads(json.dumps(data, ensure_ascii=False))
+    basics = nxt.setdefault("basics", {})
+    basics["title"] = f"{basics.get('title') or '工程师'}（审阅台回归）"
+
+    titles = nxt.setdefault("layout", {}).setdefault("section_titles", {})
+    list_key = next((k for k in ("projects", "work", "education") if isinstance(nxt.get(k), list) and nxt.get(k)), None)
+    if not list_key:
+        return None
+    titles[list_key] = f"{titles.get(list_key) or list_key}（改）"
+    nxt[list_key].append(
+        {
+            "name": "审阅台回归条目",
+            "role": "验证",
+            "start_date": "2026.01",
+            "description": "用于验证「一次看全部模块」的呈现。",
+            "highlights": ["一条亮点"],
+        }
+    )
+
+    sessions = [{
+        "id": 9901, "resume_id": resume_id, "title": "审计：按 JD 改一版",
+        "message_count": 2, "last_message": "", "is_pinned": False,
+        "create_time": "2026-11-18 10:00:00", "update_time": "2026-11-18 10:00:00",
+    }]
+    messages = [
+        {"id": 9902, "role": "user", "content": "按 JD 改一版", "create_time": "2026-11-18 10:00:00"},
+        {"id": 9903, "role": "assistant", "content": "改好了，逐条看下。", "action_status": "pending",
+         "optimized_resume_data": nxt, "create_time": "2026-11-18 10:01:00"},
+    ]
+    return nxt, sessions, messages
+
+
+def check_review_board(browser) -> list[str]:
+    bad: list[str] = []
+    try:
+        resume_id = _review_resume_id()
+        if resume_id is None:
+            if not AS_JSON:
+                print("  审阅台检查跳过：当前账号没有简历")
+            return bad
+        fixture = _review_fixture(resume_id)
+    except Exception as e:  # noqa: BLE001
+        return [f"造审阅提案失败: {type(e).__name__}: {e}"]
+    if not fixture:
+        return [f"简历 {resume_id} 没有可造提案的列表模块"]
+
+    _, sessions, messages = fixture
+
+    def envelope(data):
+        return json.dumps({"code": 200, "message": "success", "data": data}, ensure_ascii=False)
+
+    previews: list[str] = []
+    ctx = browser.new_context(viewport={"width": 1440, "height": 900})
+    ctx.add_init_script(
+        "localStorage.setItem('vitaflow_token', " + json.dumps(TOKEN) + ");"
+        "localStorage.setItem('vitaflow-theme', 'light');"
+    )
+    page = ctx.new_page()
+    try:
+        page.route(
+            re.compile(rf"/api/ai/resume-chat/{resume_id}/sessions$"),
+            lambda route: route.fulfill(status=200, content_type="application/json", body=envelope(sessions)),
+        )
+        page.route(
+            re.compile(rf"/api/ai/resume-chat/{resume_id}/messages"),
+            lambda route: route.fulfill(status=200, content_type="application/json", body=envelope(messages)),
+        )
+
+        def capture(route):
+            previews.append(route.request.post_data or "")
+            route.continue_()
+
+        page.route(re.compile(rf"/api/resumes/{resume_id}/preview-html$"), capture)
+
+        page.goto(f"{BASE}/workspace/{resume_id}", wait_until="domcontentloaded", timeout=45000)
+        page.wait_for_timeout(1600)
+        page.get_by_role("button", name="内容编辑").first.click()
+        page.wait_for_selector("[data-review-section]", timeout=15000)
+        page.wait_for_timeout(500)
+
+        sections = page.locator("[data-review-section]").count()
+        cards = page.locator("[data-review-section] article").count()
+        chips = page.locator("[data-review-chips] button").count()
+        befores = page.get_by_text("修改前", exact=True).count()
+        afters = page.get_by_text("修改后", exact=True).count()
+
+        if sections < 2:
+            bad.append(f"审阅台应一次列出多个模块，实得 {sections}")
+        if cards < 2:
+            bad.append(f"变更卡数量异常: {cards}")
+        if chips != sections:
+            bad.append(f"模块 chips({chips}) 与模块区块({sections}) 数量不一致")
+        if befores != cards or afters != cards:
+            bad.append(f"每张卡应同时有修改前/修改后，实得 {befores}/{afters} 对 {cards} 张")
+        if page.locator("[data-review-section] article input[type=text], [data-review-section] article textarea").count():
+            bad.append("修改前区块是只读的，不该出现输入控件")
+
+        counted = page.get_by_text(re.compile(r"已选 \d+/\d+ 项")).first.inner_text()
+        if not counted.startswith(f"已选 {cards}/{cards}"):
+            bad.append(f"默认应全选全部变更，实得「{counted}」")
+
+        # 微调 → 值必须进预览请求（预览、落库共用一个合并函数）
+        page.locator('[data-review-section] button[title="微调这一条"]').first.click()
+        page.wait_for_timeout(300)
+        field = page.locator("[data-review-section] article input[type=text], [data-review-section] article textarea").first
+        if not field.count():
+            bad.append("点「微调」后没有出现字段控件")
+        else:
+            field.fill("审阅台回归：人工微调")
+            page.wait_for_timeout(1000)
+            if not any("审阅台回归：人工微调" in item for item in previews):
+                bad.append("人工微调没有进入预览请求")
+            if not page.get_by_text("已微调", exact=True).count():
+                bad.append("人工微调后没有「已微调」标记")
+
+        # 返回编辑：表单回来，顶部留一条回审阅台的入口
+        page.locator('button[title="返回编辑，建议先留着"]').click()
+        page.wait_for_timeout(500)
+        if not page.get_by_text(re.compile(r"还有 \d+ 项 AI 修改待确认")).count():
+            bad.append("返回编辑后没有回审阅台的入口")
+        if page.locator("[data-review-section]").count():
+            bad.append("返回编辑后审阅台仍然占着左栏")
+    except Exception as e:  # noqa: BLE001 - 审计脚本要把任何异常变成一条明确失败
+        bad.append(f"审阅台检查异常: {type(e).__name__}: {e}")
+    finally:
+        ctx.close()
+    return bad
+
+
+# ---------------------------------------------------------------------------
 # 矩阵之外的独立检查：侧栏轨位 + 会话折叠（§6.23）
 # 矩阵各路由都没有展开态（/workspace/79 是历史 id，取不到会话），轨位断言会空跑；
 # 真实接口里每份简历通常也只有一两条对话，跑不到「过多对话」这一态。
@@ -813,6 +969,8 @@ def main() -> int:
 
         # 会话折叠交互（§6.23）：矩阵里数据不够多，单独注入内存态验证
         folding_bad = check_session_folding(browser)
+        # 审阅台（§6.48）：只有存在 pending 提案时才出现，矩阵拿不到
+        review_bad = check_review_board(browser)
         # 全站 tooltip（§6.24）：气泡只在悬停/聚焦时存在，静态矩阵量不到
         tooltip_bad = check_tooltip(browser)
         # 浮层动效与阴影分级（§6.25）：只在「打开的一瞬间」成立，矩阵也量不到
@@ -826,6 +984,7 @@ def main() -> int:
         print(json.dumps({"base": BASE, "mode": mode, "cells": rows,
                           "runtime_failures": runtime_bad,
                           "folding_failures": folding_bad,
+                          "review_failures": review_bad,
                           "tooltip_failures": tooltip_bad,
                           "motion_failures": motion_bad,
                           "dead_class_failures": dead_bad,
@@ -834,16 +993,18 @@ def main() -> int:
         print("─" * 62)
         print(f"运行时 light→dark（不刷新）: {'✓ 稳定' if not runtime_bad else '✗ ' + '; '.join(runtime_bad)}")
         print(f"侧栏轨位 + 折叠 5→8→5 + 激活保护: {'✓ 通过' if not folding_bad else '✗ ' + '; '.join(folding_bad)}")
+        print(f"审阅台（全模块成册 / 修改前只读 / 微调进预览）: {'✓ 通过' if not review_bad else '✗ ' + '; '.join(review_bad)}")
         print(f"全站 tooltip 规格与 title 摘除/恢复: {'✓ 通过' if not tooltip_bad else '✗ ' + '; '.join(tooltip_bad)}")
         print(f"浮层动效分层 + 阴影分档 + reduced-motion: {'✓ 通过' if not motion_bad else '✗ ' + '; '.join(motion_bad)}")
         print(f"死动画类名静态扫描: {'✓ 干净' if not dead_bad else '✗ ' + '; '.join(dead_bad)}")
         print(f"合计 {len(rows)} 格 · 断言失败 {len(failures)} 格"
               + ("" if not runtime_bad else " · 运行时切换失败")
               + ("" if not folding_bad else " · 折叠检查失败")
+              + ("" if not review_bad else " · 审阅台检查失败")
               + ("" if not tooltip_bad else " · tooltip 检查失败")
               + ("" if not motion_bad else " · 动效检查失败")
               + ("" if not dead_bad else " · 死类名残留"))
-    return 1 if (failures or runtime_bad or folding_bad or tooltip_bad
+    return 1 if (failures or runtime_bad or folding_bad or review_bad or tooltip_bad
                  or motion_bad or dead_bad) else 0
 
 

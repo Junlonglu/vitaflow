@@ -34,7 +34,7 @@ const handleMouseMove = (e: MouseEvent) => {
             <RouterLink to="/workspace" class="inline-flex h-12 items-center justify-center rounded-full bg-wb-primary px-8 text-sm font-medium text-white transition-transform duration-100 hover:scale-105 hover:bg-wb-primary-hover focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-2 !text-white">
               开始创建 <ArrowRight class="ml-2 h-4 w-4 text-white" />
             </RouterLink>
-            <RouterLink to="/templates" class="inline-flex h-12 items-center justify-center rounded-full border border-zinc-200 bg-white px-8 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-zinc-200 focus:ring-offset-2">
+            <RouterLink to="/templates" class="inline-flex h-12 items-center justify-center rounded-full border border-zinc-200 bg-white px-8 text-sm font-medium text-zinc-900 transition-colors hover:bg-wb-hover focus:outline-none focus:ring-2 focus:ring-zinc-200 focus:ring-offset-2">
               查看模板
             </RouterLink>
           </div>
@@ -133,7 +133,7 @@ const handleMouseMove = (e: MouseEvent) => {
                   <div class="text-zinc-600 text-[10px] mt-1 flex gap-2">
                     <span>18800000000</span>
                     <span>|</span>
-                    <span>admin@cgz233.cn</span>
+                    <span>hello@example.com</span>
                     <span>|</span>
                     <span>AI Agent 研发工程师</span>
                   </div>
@@ -267,7 +267,7 @@ const handleMouseMove = (e: MouseEvent) => {
                 <RouterLink to="/workspace" class="w-full inline-flex h-11 items-center justify-center rounded-full bg-zinc-900 px-6 text-xs font-medium text-white active:scale-95 transition !text-white">
                   开始创建 <ArrowRight class="ml-2 h-4 w-4 text-white" />
                 </RouterLink>
-                <RouterLink to="/templates" class="w-full inline-flex h-11 items-center justify-center rounded-full border border-zinc-200 bg-white px-6 text-xs font-medium text-zinc-900 active:scale-95 transition hover:bg-zinc-50">
+                <RouterLink to="/templates" class="w-full inline-flex h-11 items-center justify-center rounded-full border border-zinc-200 bg-white px-6 text-xs font-medium text-zinc-900 active:scale-95 transition hover:bg-wb-hover">
                   查看模板
                 </RouterLink>
               </div>

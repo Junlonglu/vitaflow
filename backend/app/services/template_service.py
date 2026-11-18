@@ -18,8 +18,8 @@ from app.services.preview_service import render_resume_html
 logger = logging.getLogger(__name__)
 
 TEMPLATE_CACHE_SECONDS = 3600
-TEMPLATE_LIST_CACHE_KEY = f"{settings.redis_key_prefix}:templates:list:v21"
-TEMPLATE_DETAIL_CACHE_PREFIX = f"{settings.redis_key_prefix}:templates:detail:v21"
+TEMPLATE_LIST_CACHE_KEY = f"{settings.redis_key_prefix}:templates:list:v22"
+TEMPLATE_DETAIL_CACHE_PREFIX = f"{settings.redis_key_prefix}:templates:detail:v22"
 
 TEMPLATES: list[dict[str, Any]] = [
     {
@@ -141,11 +141,11 @@ def _preview_resume_data() -> dict[str, Any]:
             "name": "Elliot",
             "title": "AI 应用开发工程师",
             "phone": "18800000000",
-            "email": "admin@cgz233.cn",
+            "email": "zhangsan@example.com",
             "status": "在读",
             "location": "杭州",
             "highest_degree": "本科",
-            "website": "https://www.cgz233.cn",
+            "website": "https://example.com",
             "avatar": _preview_avatar(),
             "custom_fields": [
                 {"id": "age", "label": "年龄", "value": "男22岁", "icon": "Info", "row": 1, "order": 3},

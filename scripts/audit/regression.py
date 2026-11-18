@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -167,6 +168,7 @@ JS = r"""() => {
   const bottomNav = [...document.querySelectorAll("div")].find((e) => String(e.className).includes("bottom-2.5"));
   const gridHost = [...document.querySelectorAll("[class*='@container']")].map((e) => e.firstElementChild).find(Boolean);
   const containerW = gridHost ? Math.round(gridHost.parentElement.getBoundingClientRect().width) : null;
+  const gridCls = gridHost ? String(gridHost.className) : null;
 
   // 6) 侧栏轨位（§6.23）：父行 / 会话行 / 查看更多 / 新对话的文字必须同落 40 轨，
   //    父子两行时间戳右缘同列（父行常驻展开箭头由会话行右侧占位抵消）。
@@ -179,15 +181,14 @@ JS = r"""() => {
     const R = (el) => el ? el.getBoundingClientRect().right - aside.getBoundingClientRect().left : null;
     const pbtn = aside.querySelector('div.group > button');
     const more = aside.querySelector('[data-session-more]');
-    const addBtn = [...aside.querySelectorAll('button')].find(
-      (b) => b.querySelector('svg') && b.textContent.trim() === '新对话');
+    // 「新建对话」已是父行上的图标按钮（无文字轨），矩阵这里只量有文字的轨位；
+    // 它的位置/显隐由 check_session_folding 单独验。
     sidebar = {
       parentText: L(pbtn?.querySelector('span.truncate')),
-      parentTimeRight: R(pbtn?.querySelector('span.tabular-nums')),
+      parentTimeRight: R(aside.querySelector('div.group span.tabular-nums')),
       sessionText: L(srow.querySelector('span.truncate')),
       sessionTimeRight: R(srow.querySelector('span.tabular-nums')),
       moreText: more ? L(more.querySelector('span')) : null,
-      addText: addBtn ? L(addBtn.querySelector('span')) : null,
     };
   }
 
@@ -204,9 +205,29 @@ JS = r"""() => {
     bottomNav: bottomNav ? getComputedStyle(bottomNav).display !== "none" : false,
     hamburger: !![...document.querySelectorAll("button")].find((b) => b.getAttribute("aria-label") === "Toggle Mobile Menu"),
     containerW,
+    gridCls,
     gridCols: gridHost ? getComputedStyle(gridHost).gridTemplateColumns.split(" ").length : null,
   };
 }"""
+
+
+# Tailwind v4 容器查询断点（@container 下的 @sm/@2xl/@3xl… 按容器宽度生效）
+CONTAINER_BREAKPOINTS = {
+    "3xs": 256, "2xs": 288, "xs": 320, "sm": 384, "md": 448, "lg": 512,
+    "xl": 576, "2xl": 672, "3xl": 768, "4xl": 896, "5xl": 1024, "6xl": 1152, "7xl": 1280,
+}
+
+
+def expected_grid_cols(class_name: str, container_width: int) -> int:
+    """从 `grid-cols-2 @3xl:grid-cols-5` 这类类名算出该宽度下应有的列数。"""
+    base = re.search(r"(?:^|\s)grid-cols-(\d+)(?:\s|$)", class_name)
+    want = int(base.group(1)) if base else 1
+    best = -1
+    for name, cols in re.findall(r"@([0-9a-z]+):grid-cols-(\d+)", class_name):
+        bp = CONTAINER_BREAKPOINTS.get(name)
+        if bp is not None and container_width >= bp and bp > best:
+            best, want = bp, int(cols)
+    return want
 
 
 def assert_cell(theme: str, width: int, route: str, r: dict) -> list[str]:
@@ -253,11 +274,12 @@ def assert_cell(theme: str, width: int, route: str, r: dict) -> list[str]:
         if (r["prevDisplay"] == "none") != compact:
             bad.append(f"预览区显隐与模式不符: {r['prevDisplay']}")
 
-    # 统计卡：容器 >=672 排 4 列，否则 2 列
-    if r["gridCols"] is not None and r["containerW"] is not None:
-        want = 4 if r["containerW"] >= 672 else 2
+    # 统计卡：期望列数从元素自己的类名推导（各页档位不同），而不是写死 4 列——
+    # 看板 KPI 条是 @3xl:grid-cols-5、成本页是 @3xl:grid-cols-4、增长页是 @2xl:3 @4xl:6。
+    if r["gridCols"] is not None and r["containerW"] is not None and r["gridCls"]:
+        want = expected_grid_cols(r["gridCls"], r["containerW"])
         if r["gridCols"] != want:
-            bad.append(f"容器 {r['containerW']} 列数 {r['gridCols']}，应为 {want}")
+            bad.append(f"容器 {r['containerW']} 列数 {r['gridCols']}，应为 {want}（{r['gridCls']}）")
 
     # 侧栏轨位（§6.23）：文字同一竖线、父子时间戳右缘同一列
     sb = r["sidebar"]
@@ -326,6 +348,11 @@ def check_session_folding(browser) -> list[str]:
               more: document.querySelector('aside [data-session-more]')?.textContent.trim() || null,
             })""")
 
+        # 量静止态前先把指针挪开：上面点展开箭头会把那一行留在 hover 里，
+        # 而「新建对话」本来就是 hover 才显形的
+        page.mouse.move(4, 4)
+        page.wait_for_timeout(260)
+
         # 轨位（§6.23）：矩阵各路由都没有展开态，这条强制检查放在这里才真的会跑
         geom = page.evaluate("""() => {
           const a = document.querySelector('aside');
@@ -334,26 +361,56 @@ def check_session_folding(browser) -> list[str]:
           const p = a.querySelector('div.group > button');
           const s = a.querySelector('[data-session-row]');
           const m = a.querySelector('[data-session-more]');
-          const add = [...a.querySelectorAll('button')].find(
-            (b) => b.querySelector('svg') && b.textContent.trim() === '新对话');
+          // 新建对话已改成父行上的图标按钮（WorkBuddy 形态）：没有文字轨，只校验
+          // 「是否长在父行里 / 竖直是否收在行高内 / 右缘是否贴着展开箭头 / 静止是否隐藏」。
+          const add = a.querySelector('[data-new-session]');
+          const addRow = add ? add.closest('div.group') : null;
+          const addRect = add ? add.getBoundingClientRect() : null;
+          const rowRect = addRow ? addRow.getBoundingClientRect() : null;
           return {
             parentIcon: L(p?.querySelector('svg')), parentText: L(p?.querySelector('span.truncate')),
-            parentTimeRight: R(p?.querySelector('span.tabular-nums')),
+            parentTimeRight: R(a.querySelector('div.group span.tabular-nums')),
             sessionText: L(s?.querySelector('span.truncate')),
             sessionTimeRight: R(s?.querySelector('span.tabular-nums')),
-            moreText: L(m?.querySelector('span')), addIcon: L(add?.querySelector('svg')),
-            addText: L(add?.querySelector('span')),
+            moreText: L(m?.querySelector('span')),
+            addInsideRow: Boolean(addRow && addRow === p?.parentElement),
+            addVert: addRect && rowRect
+              ? { top: +(addRect.top - rowRect.top).toFixed(1), bottom: +(rowRect.bottom - addRect.bottom).toFixed(1) }
+              : null,
+            addRight: addRect ? +(addRect.right - a.getBoundingClientRect().left).toFixed(1) : null,
+            rowRight: rowRect ? +(rowRect.right - a.getBoundingClientRect().left).toFixed(1) : null,
+            addOpacity: add ? getComputedStyle(add).opacity : null,
+            addTitle: add ? add.getAttribute('title') : null,
           };
         }""")
         texts = [v for k, v in geom.items() if k.endswith("Text") and v is not None]
         icons = [v for k, v in geom.items() if k.endswith("Icon") and v is not None]
-        if len(texts) < 4 or max(texts) - min(texts) > 1:
+        if len(texts) < 3 or max(texts) - min(texts) > 1:
             bad.append(f"侧栏文字轨不齐: {geom}")
-        if len(icons) < 2 or max(icons) - min(icons) > 1:
+        if len(icons) < 1 or max(icons) - min(icons) > 1:
             bad.append(f"侧栏图标轨不齐: {geom}")
         if geom["parentTimeRight"] is None or geom["sessionTimeRight"] is None \
                 or abs(geom["parentTimeRight"] - geom["sessionTimeRight"]) > 2:
             bad.append(f"父子时间戳右缘不齐: {geom['parentTimeRight']} / {geom['sessionTimeRight']}")
+        # 新建对话：父行内、竖直居中收在行高内、右缘贴着展开箭头（20px 槽位）、静止 opacity 0
+        if not geom["addInsideRow"]:
+            bad.append(f"新建对话不在父行内: {geom}")
+        if not geom["addVert"] or geom["addVert"]["top"] < 0 or geom["addVert"]["bottom"] < 0:
+            bad.append(f"新建对话竖直溢出父行: {geom['addVert']}")
+        if geom["rowRight"] is None or geom["addRight"] is None or geom["rowRight"] - geom["addRight"] < 20:
+            bad.append(f"新建对话右缘未贴住展开箭头: row={geom['rowRight']} add={geom['addRight']}")
+        if geom["addOpacity"] != "0":
+            bad.append(f"新建对话静止态应隐藏，实得 opacity={geom['addOpacity']}")
+        if not geom["addTitle"]:
+            bad.append("新建对话缺少 title（tooltip 文案）")
+        elif "Ctrl" in geom["addTitle"] or "Alt" in geom["addTitle"] or "⌘" in geom["addTitle"]:
+            bad.append(f"新建对话 tooltip 不应带快捷键，实得 {geom['addTitle']}")
+        page.locator("aside [data-new-session]").first.hover()
+        page.wait_for_timeout(260)
+        add_op = page.evaluate(
+            "() => getComputedStyle(document.querySelector('aside [data-new-session]')).opacity")
+        if add_op != "1":
+            bad.append(f"新建对话 hover 未显形，opacity={add_op}")
 
         s = state()
         if s["rows"] != 5 or s["more"] != "查看更多 (3)":
@@ -420,12 +477,17 @@ def check_tooltip(browser) -> list[str]:
           const cs = getComputedStyle(t), dot = getComputedStyle(t, '::before');
           const host = document.querySelector('[aria-describedby="wb-tooltip"]');
           const tr = t.getBoundingClientRect(), hr = host ? host.getBoundingClientRect() : null;
-          return { shown: t.dataset.shown, placement: t.dataset.placement, text: t.textContent.trim(),
+          const pl = t.dataset.placement;
+          // 三角画在气泡的哪一边取决于放置方向：放下方时朝上（border-bottom），放上方时朝下（border-top）
+          const arrow = pl === 'top'
+            ? { w: dot.borderLeftWidth, h: dot.borderTopWidth, c: dot.borderTopColor }
+            : { w: dot.borderLeftWidth, h: dot.borderBottomWidth, c: dot.borderBottomColor };
+          return { shown: t.dataset.shown, placement: pl, text: t.textContent.trim(),
                    bg: cs.backgroundColor, color: cs.color, radius: cs.borderRadius,
                    fontSize: cs.fontSize, pad: cs.padding, z: cs.zIndex,
-                   arrowW: dot.borderLeftWidth, arrowH: dot.borderBottomWidth || dot.borderTopWidth,
-                   arrowColor: dot.borderBottomColor || dot.borderTopColor,
-                   gap: hr ? +(tr.top - hr.bottom).toFixed(1) : null,
+                   arrowW: arrow.w, arrowH: arrow.h,
+                   arrowColor: arrow.c,
+                   gap: hr ? +((pl === 'top' ? hr.top - tr.bottom : tr.top - hr.bottom)).toFixed(1) : null,
                    hostTitle: host ? host.hasAttribute('title') : null,
                    hostDescribed: !!host };
         }""")
@@ -444,8 +506,9 @@ def check_tooltip(browser) -> list[str]:
             bad.append(f"字号应为 13px，实得 {r['fontSize']}")
         if r["pad"] != "10px 14px":
             bad.append(f"内边距应为 10px 14px，实得 {r['pad']}")
-        if r["placement"] != "bottom":
-            bad.append(f"默认应放下方，实得 {r['placement']}")
+        # 侧栏父行的图标按钮显式指定 data-tooltip-placement="top"（下方紧贴会话行）
+        if r["placement"] != "top":
+            bad.append(f"显式指定 top 的元素应放上方，实得 {r['placement']}")
         if r["gap"] is None or abs(r["gap"] - 8) > 1:
             bad.append(f"气泡与目标间距应为 8，实得 {r['gap']}")
         if r["arrowW"] != "5px" or r["arrowH"] != "5px":
@@ -456,6 +519,39 @@ def check_tooltip(browser) -> list[str]:
             bad.append("悬停期间 title 未被摘除，会叠出浏览器原生提示")
         if not r["hostDescribed"]:
             bad.append("缺少 aria-describedby 关联")
+
+        # 未指定方向的元素仍默认放下方（§6.24 的约定没变）：临时插一个探针按钮量一次
+        page.evaluate("""() => {
+          const b = document.createElement('button');
+          b.id = '__tip_probe';
+          b.title = '默认方向探测';
+          b.textContent = 'x';
+          b.style.cssText = 'position:fixed;left:640px;top:320px;width:40px;height:24px;z-index:99998';
+          document.body.appendChild(b);
+        }""")
+        page.hover("#__tip_probe")
+        page.wait_for_timeout(450)
+        d = page.evaluate("""() => {
+          const t = document.querySelector('#wb-tooltip');
+          const host = document.querySelector('[aria-describedby="wb-tooltip"]');
+          if (!t) return null;
+          const tr = t.getBoundingClientRect(), hr = host ? host.getBoundingClientRect() : null;
+          const pl = t.dataset.placement;
+          return { placement: pl, text: t.textContent.trim(),
+                   gap: hr ? +((pl === 'top' ? hr.top - tr.bottom : tr.top - hr.bottom)).toFixed(1) : null };
+        }""")
+        if not d:
+            bad.append("探针按钮未触发出气泡")
+        else:
+            if d["placement"] != "bottom":
+                bad.append(f"未指定方向时应默认放下方，实得 {d['placement']}")
+            if d["gap"] is None or abs(d["gap"] - 8) > 1:
+                bad.append(f"默认方向的间距应为 8，实得 {d['gap']}")
+        # 顺序要紧：先移开指针让它按 pointerout 收起，再删探针。
+        # 反过来的话元素已从 DOM 消失，pointerout 不会再来，气泡会一直挂在 shown=true。
+        page.mouse.move(1240, 780)
+        page.wait_for_timeout(240)
+        page.evaluate("() => document.querySelector('#__tip_probe')?.remove()")
 
         # 离开后必须收起，并把 title 还回去
         page.mouse.move(1240, 780)

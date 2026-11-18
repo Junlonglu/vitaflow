@@ -34,6 +34,8 @@ let pending: HTMLElement | null = null
 let savedTitle: string | null = null
 let showTimer = 0
 let hideTimer = 0
+let resumeTimer = 0
+let titleObserver: MutationObserver | null = null
 
 function ensureTip(): HTMLDivElement {
   if (tip) return tip
@@ -47,8 +49,31 @@ function ensureTip(): HTMLDivElement {
   return node
 }
 
+/**
+ * 框架重渲染会把 title 原样写回来（`v-for` 刷新、`:title` 的依赖变了），
+ * 而指针没动就不会再有 `pointerover`。此时若不管，浏览器在指针静止后
+ * 会自己弹系统提示——这是「有时冒出原生白框气泡」的第二条来路。
+ * 只盯当前这一个元素，收起就断开。
+ */
+function watchTitle(el: HTMLElement) {
+  stopWatchingTitle()
+  titleObserver = new MutationObserver(() => {
+    const back = el.getAttribute("title")
+    if (back === null) return
+    el.removeAttribute("title")
+    if (back.trim()) savedTitle = back
+  })
+  titleObserver.observe(el, { attributes: true, attributeFilter: ["title"] })
+}
+
+function stopWatchingTitle() {
+  titleObserver?.disconnect()
+  titleObserver = null
+}
+
 /** 把临时摘掉的 title 还回去，交给读屏和下一次悬停 */
 function restoreTitle() {
+  stopWatchingTitle()
   if (target && savedTitle !== null && !target.hasAttribute("title")) {
     target.setAttribute("title", savedTitle)
   }
@@ -60,9 +85,38 @@ function restoreTitle() {
 function hide() {
   window.clearTimeout(showTimer)
   window.clearTimeout(hideTimer)
+  window.clearTimeout(resumeTimer)
   pending = null
   if (tip) tip.dataset.shown = "false"
   restoreTitle()
+}
+
+/**
+ * 被动收起：只藏气泡，**不**把 title 还回去。
+ *
+ * 滚动 / 按下 / 缩放时气泡得先消失（它 fixed 定位不跟随），但如果顺手
+ * `restoreTitle()`，title 就在指针仍停在元素上时凭空出现——浏览器随后弹出的
+ * 正是那个白色方框系统提示，且不会再有 `pointerover` 让自定义气泡回来。
+ * 这是「有时触发原生样式」最常见的一条来路（滚一下侧栏就能撞上）。
+ */
+function suspend() {
+  window.clearTimeout(showTimer)
+  window.clearTimeout(hideTimer)
+  window.clearTimeout(resumeTimer)
+  pending = null
+  if (tip) tip.dataset.shown = "false"
+}
+
+/** 指针可能还压在刚才那个元素上：等交互停下来再显形；真离开了就收尾还 title。 */
+function resume() {
+  if (!target) return
+  if (!target.isConnected || !target.matches(":hover")) {
+    if (tip) tip.dataset.shown = "false"
+    restoreTitle()
+    return
+  }
+  const text = (savedTitle ?? "").trim()
+  if (text) place(target, text)
 }
 
 /** 命中最近的带 title 元素；`data-no-tooltip` 可显式关闭某一棵子树 */
@@ -72,6 +126,15 @@ function closestTitleHolder(node: EventTarget | null): HTMLElement | null {
   if (!(holder instanceof HTMLElement)) return null
   if (holder.closest("[data-no-tooltip]")) return null
   return holder
+}
+
+/**
+ * 页面可以按元素指定方向：`data-tooltip-placement="top"`。
+ * 侧栏那种下方紧贴着一串可点条目、气泡落下去就盖住邻居的位置必须朝上。
+ */
+function preferredPlacement(el: HTMLElement): "top" | "bottom" | null {
+  const want = el.dataset.tooltipPlacement
+  return want === "top" || want === "bottom" ? want : null
 }
 
 function place(el: HTMLElement, text: string) {
@@ -87,8 +150,16 @@ function place(el: HTMLElement, text: string) {
 
   const roomBelow = window.innerHeight - rect.bottom - GAP - EDGE
   const roomAbove = rect.top - GAP - EDGE
-  // 默认放下方（与 WorkBuddy 一致）；下方放不下且上方更宽裕时翻到上方
-  const placement: "bottom" | "top" = roomBelow >= th || roomBelow >= roomAbove ? "bottom" : "top"
+  const want = preferredPlacement(el)
+  let placement: "bottom" | "top"
+  if (want) {
+    // 指定了就照办，只有那一侧确实塞不下才翻边
+    const fits = want === "top" ? roomAbove >= th : roomBelow >= th
+    placement = fits ? want : want === "top" ? "bottom" : "top"
+  } else {
+    // 默认放下方（与 WorkBuddy 一致）；下方放不下且上方更宽裕时翻到上方
+    placement = roomBelow >= th || roomBelow >= roomAbove ? "bottom" : "top"
+  }
 
   const top = placement === "bottom" ? rect.bottom + GAP : rect.top - th - GAP
   const rawLeft = rect.left + rect.width / 2 - tw / 2
@@ -113,11 +184,20 @@ function open(el: HTMLElement) {
   // 摘掉 title，浏览器就不会再弹系统提示；离开时 restoreTitle() 还回去
   el.removeAttribute("title")
   place(el, text)
+  // 摘完再挂观察：框架重渲染若把 title 写回来，立刻再摘一次
+  watchTitle(el)
 }
 
 function onPointerOver(event: PointerEvent) {
   const el = closestTitleHolder(event.target)
-  if (!el || el === target || el === pending) return
+  if (!el) return
+  if (el === target) {
+    // 又滑回刚才那个元素：可能正卡在收起缓冲里，撤掉这次收起（否则气泡灭了 title 被还回去，
+    // 指针还压在上面，浏览器就自己弹原生提示）
+    window.clearTimeout(hideTimer)
+    return
+  }
+  if (el === pending) return
   // 从 A 换到 B：先收掉 A，再给 B 排一次延迟显示
   window.clearTimeout(showTimer)
   window.clearTimeout(hideTimer)
@@ -155,7 +235,16 @@ function onFocusIn(event: FocusEvent) {
 
 function onFocusOut() {
   window.clearTimeout(showTimer)
-  hide()
+  // 键盘焦点离开就收气泡；但指针若还压在这个元素上，title 不能还回去，
+  // 否则浏览器会立刻弹系统提示。这种情况留给 pointerout 收尾。
+  if (target && target.matches(":hover")) suspend()
+  else hide()
+}
+
+/** 滚动 / 按下：气泡先收，指针还压着就在交互停下后回来，全程不让 title 回 DOM */
+function onPassiveInterrupt() {
+  suspend()
+  resumeTimer = window.setTimeout(resume, 180)
 }
 
 /**
@@ -170,9 +259,13 @@ export function installTooltip() {
   document.addEventListener("pointerout", onPointerOut, true)
   document.addEventListener("focusin", onFocusIn, true)
   document.addEventListener("focusout", onFocusOut, true)
-  document.addEventListener("pointerdown", hide, true)
+  // 按下后交互多半还在继续（开菜单、切会话），气泡让位，停手再回来
+  document.addEventListener("pointerdown", onPassiveInterrupt, true)
   // 捕获阶段才能收到内部滚动容器的 scroll；气泡用 fixed 定位，不跟着滚就必须收掉
-  window.addEventListener("scroll", hide, true)
-  window.addEventListener("resize", hide)
-  window.addEventListener("blur", hide)
+  window.addEventListener("scroll", onPassiveInterrupt, true)
+  window.addEventListener("resize", onPassiveInterrupt)
+  // 失焦/回焦同样不能让 title 回到「指针还压着」的元素上：切回窗口瞬间浏览器会弹原生提示。
+  // 所以失焦只收气泡，回焦再按指针位置决定恢复。
+  window.addEventListener("blur", suspend)
+  window.addEventListener("focus", resume)
 }

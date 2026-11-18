@@ -85,7 +85,7 @@ vitaflow/
     ├── PROJECT-OVERVIEW.md        # 架构与功能总览
     ├── design-system.md           # 设计规范
     ├── 本地开发环境启动指南.md     # 启动与排障
-    ├── ai/              # AI 专题：resume-agent / ai-call-flows / ai-chat-pending-change / ai-trajectory
+    ├── ai/              # AI 专题：resume-agent / ai-call-flows / ai-chat-pending-change / ai-trajectory / rsi-plan
     ├── architecture/    # pi-agent重构设计（含旧链路回滚依据）
     ├── data/            # resume-schema：简历 JSON 契约与原子信息模型
     ├── learning/        # 面试与复盘笔记（非现状依据）

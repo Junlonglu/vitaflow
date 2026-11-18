@@ -145,6 +145,7 @@ npm run typecheck  # TypeScript 类型检查
 | AI 对话链路、提示词、技能、工具 | `docs/ai/resume-agent.md` → `docs/ai/ai-call-flows.md` | 工具白名单共 5 个，加工具需同时改 ai-service 与 Python 校验端点 |
 | 待确认变更（pending-change） | `docs/ai/ai-chat-pending-change.md` | apply/reject 决策流跨前后端，改动要两端同步 |
 | Agent 轨迹 | `docs/ai/ai-trajectory.md` | P0 已落地，P1/P2 待定 |
+| 用轨迹做改进（RSI）、评测集设计 | `docs/ai/rsi-plan.md` | 七阶段落点与"不做什么"都在里面；改动前先看 §5 评估纪律 |
 | 简历 JSON 结构、字段表 | `docs/data/resume-schema.md` | 契约在 `backend/app/core/resume_schema.py`，两边必须同步改 |
 | 前端样式、组件规范 | `docs/design-system.md` | 圆角分档、表单控件禁用 `rounded-xl` |
 | 本地起服务、排查启动失败 | `docs/本地开发环境启动指南.md` | 先确认当前是手动开发还是全栈 Docker 模式 |

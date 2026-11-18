@@ -15,6 +15,7 @@
 | 改简历 JSON 结构、加字段或加模块 | [`data/resume-schema.md`](./data/resume-schema.md) |
 | 想知道「为什么当初不用另一种方案」 | [`architecture/pi-agent重构设计.md`](./architecture/pi-agent重构设计.md) 与 `PROJECT-OVERVIEW.md` §14 |
 | 要给 Agent 加轨迹记录 / 做 RSI 前置规划 | [`ai/ai-trajectory.md`](./ai/ai-trajectory.md) |
+| 要拿轨迹做改进、设计评测集 / 判断某个改动值不值得做 | [`ai/rsi-plan.md`](./ai/rsi-plan.md) |
 
 ## 全部文档
 
@@ -26,7 +27,7 @@
 | [`design-system.md`](./design-system.md) | 设计规范：颜色、字号、圆角、间距、z-index、表单与展示组件约定、存量改造记录 |
 | [`本地开发环境启动指南.md`](./本地开发环境启动指南.md) | 两种运行模式的环境准备与启动步骤、常见启动故障排查 |
 
-### `ai/`：AI 子系统专题（4 篇）
+### `ai/`：AI 子系统专题（5 篇）
 
 | 文档 | 内容 |
 | --- | --- |
@@ -34,6 +35,7 @@
 | [`ai/ai-call-flows.md`](./ai/ai-call-flows.md) | 端到端链路（标注到行号）：一次对话从浏览器到 ai-service 再落库的完整路径 |
 | [`ai/ai-chat-pending-change.md`](./ai/ai-chat-pending-change.md) | `ai-call-flows` 的深入篇：待确认变更（pending-change）的数据流、校验与落库时机 |
 | [`ai/ai-trajectory.md`](./ai/ai-trajectory.md) | Agent 轨迹落盘格式：存了什么、缺什么，P0 已落地，P1/P2 待定 |
+| [`ai/rsi-plan.md`](./ai/rsi-plan.md) | RSI 规划：论文的七阶段框架、用 7 条真实轨迹核对出的三处硬伤（含两处对现状的纠错）、七阶段落点表、首个实验与评估纪律 |
 
 ### `architecture/`：架构决策（1 篇）
 

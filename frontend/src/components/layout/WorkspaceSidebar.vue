@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   LayoutTemplate,
   MessageSquare,
+  MessageSquarePlus,
   Pin,
   Plus,
   Search,
@@ -283,8 +284,7 @@ async function newSession(resumeId: number) {
 
 // —— 会话快捷键：⌘/Ctrl + Alt + ↑↓ 上下切换，⌘/Ctrl + Alt + N 新对话 ——
 // 只作用于当前简历；输入框里不抢键，避免和输入法/文本编辑操作打架。
-const isMac = computed(() => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform))
-const modLabel = computed(() => (isMac.value ? "⌘" : "Ctrl"))
+// 快捷键本身保留，但不再写进 tooltip 文案（按钮上的提示只留动作名）。
 
 function isEditableTarget(target: EventTarget | null) {
   const element = target as HTMLElement | null
@@ -569,20 +569,45 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
           :class="resumeRowClass(item.id)"
           @contextmenu.prevent.stop="openResumeMenu($event, item.id)"
         >
-          <button type="button" class="flex min-w-0 flex-1 items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-left" @click="openResume(item.id)">
+          <button
+            type="button"
+            class="flex min-w-0 flex-1 items-center gap-1.5 rounded-md py-1.5 pl-3 pr-0 text-left"
+            :aria-label="item.title || '无标题简历'"
+            @click="openResume(item.id)"
+          >
             <FileText class="h-3.5 w-3.5 shrink-0 text-zinc-600" />
             <span class="min-w-0 flex-1">
-              <span class="block truncate text-[13.5px] font-medium leading-5" :title="item.title || '无标题简历'">{{ item.title || "无标题简历" }}</span>
+              <!-- 父行标题不挂原生 title：hover 弹出的深色气泡会盖住紧邻的会话行（截图里直接压住了下一行）。
+                   全文只走 aria-label 这个语义出口，视觉上不再有气泡；要读全文点开简历，编辑器顶栏是完整标题。 -->
+              <span class="block truncate text-[13.5px] font-medium leading-5">{{ item.title || "无标题简历" }}</span>
             </span>
+          </button>
+          <!-- 时间戳与「新建对话」共用同一格（WorkBuddy 形态：动作挂在父行、hover 出现在展开箭头左侧）：
+               静止显示时间（仅当前简历），hover 时时间淡出、气泡加号在原位顶上。
+               两者叠在一格里而不是各占一格——并排会让父行时间戳右缘右移，与会话行错开（§6.23），
+               标题也会被多啃掉 20px。 -->
+          <span class="relative flex h-5 shrink-0 items-center pr-2">
             <span
-              class="shrink-0 text-[11.5px] tabular-nums transition-opacity"
-              :class="activeId === item.id ? 'text-zinc-400' : 'text-zinc-400 opacity-0 group-hover:opacity-100'"
+              class="touch-hide-meta text-[11.5px] tabular-nums text-zinc-400 transition-opacity"
+              :class="activeId === item.id ? 'group-hover:opacity-0' : 'opacity-0'"
             >
               {{ formatRelativeTime(item.update_time) }}
             </span>
-          </button>
+            <button
+              type="button"
+              data-new-session
+              data-tooltip-placement="top"
+              class="hit-area touch-always-visible absolute right-2 top-0 grid h-5 w-5 place-items-center rounded text-zinc-400 opacity-0 transition-opacity hover:bg-zinc-200/70 hover:text-zinc-700 focus-visible:opacity-100 group-hover:opacity-100"
+              title="新建对话"
+              aria-label="新建对话"
+              @click.stop="newSession(item.id)"
+            >
+              <MessageSquarePlus class="h-3.5 w-3.5" />
+            </button>
+          </span>
           <button
             type="button"
+            data-tooltip-placement="top"
             class="hit-area flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-zinc-200/70 hover:text-zinc-700"
             :title="isExpanded(item.id) ? '收起对话' : '展开对话'"
             @click.stop="toggleExpanded(item.id)"
@@ -664,17 +689,6 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
           >
             <span>{{ sessionPreviews[item.id]?.expanded ? "收起" : "查看更多 (" + sessionPreviews[item.id]?.hidden + ")" }}</span>
             <ChevronDown class="h-3 w-3 shrink-0 transition-transform" :class="sessionPreviews[item.id]?.expanded ? 'rotate-180' : ''" />
-          </button>
-
-          <button
-            type="button"
-            class="flex w-full items-center gap-1.5 rounded-md py-1.5 pl-3 pr-2 text-left text-[12.5px] text-zinc-400 transition-colors hover:bg-zinc-200/40 hover:text-zinc-700 disabled:opacity-60"
-            :disabled="creatingSessionFor === item.id"
-            :title="`新建对话（${modLabel} + Alt + N）`"
-            @click="newSession(item.id)"
-          >
-            <Plus class="h-3.5 w-3.5 shrink-0" />
-            <span>{{ creatingSessionFor === item.id ? "新建中" : "新对话" }}</span>
           </button>
         </div>
       </div>

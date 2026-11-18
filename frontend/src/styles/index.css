@@ -198,6 +198,12 @@ a { color: inherit; text-decoration: none; }
     visibility: visible !important;
     pointer-events: auto !important;
   }
+
+  /* 与 touch-always-visible 成对：动作被强制常显时，和它共用一格的元信息（如侧栏父行的
+     时间戳）必须让位。否则两者叠在同一个 20px 槽位里，文字会被图标压掉一截。 */
+  .touch-hide-meta {
+    opacity: 0 !important;
+  }
 }
 
 /* ============================================================

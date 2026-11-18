@@ -14,7 +14,7 @@ defineProps<{ variant?: "default" | "outline" | "ghost" | "danger"; size?: "sm" 
     :class="[
       'inline-flex select-none items-center justify-center gap-2 border font-medium transition-[color,background-color,border-color,opacity,transform] duration-100 ease-[cubic-bezier(.4,0,.2,1)] active:scale-[.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100',
       size === 'sm' ? 'h-8 rounded-md px-3 text-[13px]' : size === 'icon' ? 'h-9 w-9 rounded-lg p-0' : 'h-10 rounded-lg px-4 text-sm',
-      variant === 'outline' ? 'border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-50 active:bg-zinc-100' :
+      variant === 'outline' ? 'border-zinc-300 bg-white text-zinc-900 hover:bg-wb-hover active:bg-wb-active' :
       variant === 'ghost' ? 'border-transparent bg-transparent text-zinc-700 hover:bg-wb-hover active:bg-wb-active' :
       variant === 'danger' ? 'border-red-600 bg-red-600 text-wb-on-solid hover:bg-red-700 active:bg-red-800' :
       'border-wb-primary bg-wb-primary text-white hover:border-wb-primary-hover hover:bg-wb-primary-hover'

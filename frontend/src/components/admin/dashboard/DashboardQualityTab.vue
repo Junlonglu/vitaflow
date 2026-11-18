@@ -173,7 +173,7 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
           <div v-for="stage in stageRows" :key="stage.key">
             <button
               type="button"
-              class="flex w-full items-center gap-2 px-3 py-2.5 text-left transition hover:bg-zinc-50 sm:gap-3"
+              class="flex w-full items-center gap-2 px-3 py-2.5 text-left transition hover:bg-wb-hover sm:gap-3"
               :aria-expanded="openStages.has(stage.key)"
               @click="toggleStage(stage.key)"
             >

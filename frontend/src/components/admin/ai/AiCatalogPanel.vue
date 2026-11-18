@@ -356,7 +356,7 @@ void loadEnvKeys()
           </label>
           <div class="space-y-1.5 text-sm font-medium text-zinc-700">成员模型<span class="text-red-500">*</span>
             <div class="space-y-1.5">
-              <label v-for="option in memberOptions" :key="option.ref" class="flex cursor-pointer select-none items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition-colors" :class="groupForm.members.includes(option.ref) ? 'border-zinc-900 bg-zinc-50' : 'border-zinc-200 bg-white hover:bg-zinc-50'">
+              <label v-for="option in memberOptions" :key="option.ref" class="flex cursor-pointer select-none items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition-colors" :class="groupForm.members.includes(option.ref) ? 'border-zinc-900 bg-zinc-50' : 'border-zinc-200 bg-white hover:bg-wb-hover'">
                 <div class="relative flex h-4 w-4 shrink-0 items-center justify-center rounded border" :class="groupForm.members.includes(option.ref) ? 'border-zinc-900 bg-zinc-900' : 'border-zinc-300 bg-white'"><Check v-if="groupForm.members.includes(option.ref)" class="h-3 w-3 text-white stroke-[3]" /></div>
                 <input type="checkbox" class="sr-only" :checked="groupForm.members.includes(option.ref)" @change="toggleGroupMember(option.ref)" />
                 <span class="truncate text-zinc-800">{{ option.label }}</span>

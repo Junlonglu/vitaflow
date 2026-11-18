@@ -480,7 +480,7 @@ function addPresetField(preset: (typeof basicInfoPresets)[number]) {
               </span>
               <!-- Icon Picker -->
               <div class="relative shrink-0 icon-picker-container">
-                <button class="flex h-8 w-8 md:h-9 md:w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white hover:border-zinc-400 hover:bg-zinc-50 transition-colors" :title="item.icon" @click="activeIconPicker = activeIconPicker === itemPickerKey(item) ? '' : itemPickerKey(item)">
+                <button class="flex h-8 w-8 md:h-9 md:w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white hover:border-zinc-400 hover:bg-wb-hover transition-colors" :title="item.icon" @click="activeIconPicker = activeIconPicker === itemPickerKey(item) ? '' : itemPickerKey(item)">
                   <component :is="iconMap[item.icon] || Info" class="h-3.5 w-3.5 md:h-4 md:w-4 text-zinc-600" />
                 </button>
                 <div v-if="activeIconPicker === itemPickerKey(item)" class="absolute left-0 bottom-11 z-raised grid w-56 grid-cols-6 gap-1 rounded-xl border border-zinc-200 bg-white/95 backdrop-blur-md p-2 shadow-wb-popup">
@@ -526,7 +526,7 @@ function addPresetField(preset: (typeof basicInfoPresets)[number]) {
               v-for="preset in availableBasicPresets"
               :key="preset.key"
               type="button"
-              class="flex min-w-0 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-2.5 py-2 text-left text-xs text-zinc-600 transition hover:border-zinc-900 hover:bg-zinc-50 hover:text-zinc-900"
+              class="flex min-w-0 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-2.5 py-2 text-left text-xs text-zinc-600 transition hover:border-zinc-900 hover:bg-wb-hover hover:text-zinc-900"
               @click="addPresetField(preset)"
             >
               <component :is="iconMap[preset.icon] || Info" class="h-3.5 w-3.5 shrink-0" />

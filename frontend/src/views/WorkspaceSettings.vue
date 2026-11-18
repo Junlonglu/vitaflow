@@ -683,7 +683,7 @@ async function handleSkillFolder(event: Event) {
                     :key="option.id"
                     type="button"
                     class="flex w-full items-center gap-2 border-b border-zinc-100 px-2.5 py-2 text-left transition-colors last:border-b-0"
-                    :class="option.id === form.model ? 'bg-zinc-100' : 'hover:bg-zinc-50'"
+                    :class="option.id === form.model ? 'bg-zinc-100' : 'hover:bg-wb-hover'"
                     :aria-pressed="option.id === form.model"
                     @click="pickRemoteModel(option)"
                   >

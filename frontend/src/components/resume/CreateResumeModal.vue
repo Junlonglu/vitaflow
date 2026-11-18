@@ -162,7 +162,7 @@ watch(
                     v-for="industry in starterIndustries"
                     :key="industry.id"
                     class="h-8 truncate rounded-full border px-2 text-[13px] font-medium transition active:scale-[0.98]"
-                    :class="selectedStarterIndustryId === industry.id ? 'border-zinc-950 bg-zinc-950 text-white' : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-950'"
+                    :class="selectedStarterIndustryId === industry.id ? 'border-zinc-950 bg-zinc-950 text-white' : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-wb-hover hover:text-zinc-950'"
                     @click="emit('selectStarterIndustry', industry.id)"
                   >
                     {{ industry.name }}
@@ -189,7 +189,7 @@ watch(
                     v-for="role in selectedStarterIndustry.roles"
                     :key="role.starter_id"
                     class="group relative flex h-14 flex-col justify-center rounded-lg border px-3 py-2 text-left transition active:scale-[0.99]"
-                    :class="selectedStarterRoleId === role.starter_id ? 'border-blue-600 bg-blue-50/50' : 'border-zinc-200 bg-white hover:border-zinc-300 hover:bg-zinc-50'"
+                    :class="selectedStarterRoleId === role.starter_id ? 'border-blue-600 bg-blue-50/50' : 'border-zinc-200 bg-white hover:border-zinc-300 hover:bg-wb-hover'"
                     @click="emit('update:selectedStarterRoleId', role.starter_id)"
                   >
                     <span class="block truncate text-[13.5px] font-semibold leading-5" :class="selectedStarterRoleId === role.starter_id ? 'text-blue-900' : 'text-zinc-900'">{{ role.title }}</span>
@@ -227,7 +227,7 @@ watch(
                     </div>
                   </div>
                   <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <Button variant="outline" class="h-9 rounded-full border-zinc-200 bg-white px-4 text-[13px] text-zinc-800 hover:bg-zinc-50 sm:w-36" :disabled="starterRolesLoading || !selectedStarterRole" @click="emit('openStarterAiGenerate')">
+                    <Button variant="outline" class="h-9 rounded-full border-zinc-200 bg-white px-4 text-[13px] text-zinc-800 hover:bg-wb-hover sm:w-36" :disabled="starterRolesLoading || !selectedStarterRole" @click="emit('openStarterAiGenerate')">
                       <Sparkles class="h-3.5 w-3.5 text-blue-500" />
                       AI 智能生成
                     </Button>
@@ -251,7 +251,7 @@ watch(
           <div v-if="['import', 'blank'].includes(templateSelectMode)">
             <div class="mb-4 flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between">
               <div class="flex items-center gap-2">
-                <button class="inline-flex h-8 items-center justify-center rounded-full border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-600 transition hover:bg-zinc-50 hover:text-zinc-950" @click="emit('back')">
+                <button class="inline-flex h-8 items-center justify-center rounded-full border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-600 transition hover:bg-wb-hover hover:text-zinc-950" @click="emit('back')">
                   返回
                 </button>
                 <h3 class="text-xs font-bold uppercase tracking-wider text-zinc-400">

@@ -187,7 +187,7 @@ onMounted(async () => {
             <tr
               v-for="item in data.items"
               :key="item.id"
-              class="cursor-pointer border-b border-zinc-50 transition-colors last:border-0 hover:bg-zinc-50/70"
+              class="cursor-pointer border-b border-zinc-50 transition-colors last:border-0 hover:bg-wb-hover"
               tabindex="0"
               @click="detail = item"
               @keydown.enter.prevent="detail = item"

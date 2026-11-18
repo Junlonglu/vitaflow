@@ -569,7 +569,7 @@ function duplicate() {
       :is="provider ? 'button' : 'div'"
       :type="provider ? 'button' : undefined"
       class="flex w-full items-center gap-3 px-4 py-3 text-left"
-      :class="[open ? 'border-b border-zinc-100' : '', provider && !open ? 'transition-colors hover:bg-zinc-50' : '']"
+      :class="[open ? 'border-b border-zinc-100' : '', provider && !open ? 'transition-colors hover:bg-wb-hover' : '']"
       :aria-expanded="provider ? open : undefined"
       @click="provider && emit('toggle')"
     >
@@ -753,7 +753,7 @@ function duplicate() {
               <button
                 type="button"
                 class="h-7 rounded-lg px-2.5 transition-colors"
-                :class="tab === 'catalog' ? 'bg-zinc-100 text-zinc-900' : 'text-zinc-500 hover:bg-zinc-50'"
+                :class="tab === 'catalog' ? 'bg-zinc-100 text-zinc-900' : 'text-zinc-500 hover:bg-wb-hover'"
                 @click="switchTab('catalog')"
               >
                 已勾选 {{ draft.modelIds.length }}
@@ -761,7 +761,7 @@ function duplicate() {
               <button
                 type="button"
                 class="h-7 rounded-lg px-2.5 transition-colors"
-                :class="tab === 'remote' ? 'bg-zinc-100 text-zinc-900' : 'text-zinc-500 hover:bg-zinc-50'"
+                :class="tab === 'remote' ? 'bg-zinc-100 text-zinc-900' : 'text-zinc-500 hover:bg-wb-hover'"
                 @click="switchTab('remote')"
               >
                 所有模型

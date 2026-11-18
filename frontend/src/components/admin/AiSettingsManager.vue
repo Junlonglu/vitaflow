@@ -593,7 +593,7 @@ watch(
           { id: 'model', label: '模型配置', desc: '模型目录 + 按模型定价', icon: Settings2 },
           { id: 'rules', label: 'Flow Points', desc: '各 AI 功能扣点规则', icon: Zap },
           { id: 'codes', label: '兑换码', desc: '每人限一次，可批量管理', icon: Ticket },
-        ]" :key="item.id" class="rounded-xl border px-4 py-3 text-left transition" :class="currentTab === item.id ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'" @click="setActiveTab(item.id)">
+        ]" :key="item.id" class="rounded-xl border px-4 py-3 text-left transition" :class="currentTab === item.id ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 bg-white text-zinc-700 hover:bg-wb-hover'" @click="setActiveTab(item.id)">
           <component :is="item.icon" class="h-4 w-4" />
           <p class="mt-2 text-sm font-semibold">{{ item.label }}</p>
           <p class="mt-1 text-xs" :class="currentTab === item.id ? 'text-zinc-300' : 'text-zinc-400'">{{ item.desc }}</p>

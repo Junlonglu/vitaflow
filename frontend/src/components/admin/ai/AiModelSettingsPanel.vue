@@ -222,7 +222,7 @@ function submit() {
         </thead>
         <tbody>
           <template v-for="row in filteredRows" :key="row.ref">
-            <tr class="border-t border-zinc-100 align-middle transition-colors hover:bg-zinc-50/60">
+            <tr class="border-t border-zinc-100 align-middle transition-colors hover:bg-wb-hover">
               <td class="px-5 py-2.5">
                 <div class="flex min-w-0 items-center gap-2">
                   <button class="min-w-0 text-left" @click="row.more = !row.more">

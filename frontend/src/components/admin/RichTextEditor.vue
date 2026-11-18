@@ -319,7 +319,7 @@ onUnmounted(() => {
     </div>
     <div v-if="selectedImage" class="flex items-center gap-2 border-b border-zinc-100 bg-blue-50/70 px-3 py-2 text-xs text-zinc-600">
       <span class="mr-1 font-medium">图片宽度</span>
-      <button v-for="size in [25, 50, 75, 100]" :key="size" type="button" class="rounded-md border px-2.5 py-1 transition" :class="Number(selectedImage.dataset.size || 100) === size ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 bg-white hover:bg-zinc-50'" @click="setImageSize(size)">{{ size }}%</button>
+      <button v-for="size in [25, 50, 75, 100]" :key="size" type="button" class="rounded-md border px-2.5 py-1 transition" :class="Number(selectedImage.dataset.size || 100) === size ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 bg-white hover:bg-wb-hover'" @click="setImageSize(size)">{{ size }}%</button>
     </div>
     <div
       ref="editor"

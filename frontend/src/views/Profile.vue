@@ -333,7 +333,7 @@ const navItems = [
                   <h3 class="text-sm font-semibold text-zinc-900">反馈历史</h3>
                   <p class="mt-1 text-xs text-zinc-400">共 {{ myFeedbacks.total }} 条记录</p>
                 </div>
-                <button class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-600 transition hover:bg-zinc-50" @click="loadMyFeedbacks(myFeedbacks.page)">
+                <button class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-600 transition hover:bg-wb-hover" @click="loadMyFeedbacks(myFeedbacks.page)">
                   <RefreshCw class="h-3.5 w-3.5" :class="{ 'animate-spin': feedbacksLoading }" />
                   刷新
                 </button>
@@ -351,7 +351,7 @@ const navItems = [
 
               <div v-else class="overflow-hidden rounded-xl border border-zinc-200 bg-white">
                 <ul class="divide-y divide-zinc-100">
-                  <li v-for="item in myFeedbacks.items" :key="item.id" class="bg-white px-4 py-4 transition hover:bg-zinc-50/50 sm:px-5">
+                  <li v-for="item in myFeedbacks.items" :key="item.id" class="bg-white px-4 py-4 transition hover:bg-wb-hover sm:px-5">
                     <div class="flex flex-col">
                       <div class="flex flex-wrap items-center gap-2">
                         <span class="truncate text-sm font-semibold text-zinc-900">{{ item.category || '意见反馈' }}</span>
@@ -361,7 +361,7 @@ const navItems = [
                       <div class="mt-3.5 flex items-center justify-between gap-3 pt-3 border-t border-zinc-100/80">
                         <span class="text-xs text-zinc-400 font-medium shrink-0">{{ formatDate(item.create_time) }}</span>
                         <div class="flex items-center gap-2 shrink-0">
-                          <button class="h-8 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 active:scale-95 whitespace-nowrap shrink-0" @click="openFeedbackDialog(item, 'preview')">预览</button>
+                          <button class="h-8 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-wb-hover active:scale-95 whitespace-nowrap shrink-0" @click="openFeedbackDialog(item, 'preview')">预览</button>
                           <button
                             class="h-8 rounded-lg border px-3 text-xs font-medium transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 whitespace-nowrap shrink-0"
                             :class="item.admin_reply ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'border-zinc-200 bg-zinc-50 text-zinc-400'"

@@ -156,7 +156,7 @@ function addModule(presetType?: string) {
           :class="[
             current === element 
               ? 'border-zinc-200/80 bg-zinc-100 text-zinc-900' 
-              : 'border-transparent bg-white text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900', 
+              : 'border-transparent bg-white text-zinc-600 hover:bg-wb-hover hover:text-zinc-900', 
             !visible(element) && 'opacity-50'
           ]"
           :draggable="element !== 'basics' && !isMobile && !isTouchDevice"
@@ -191,7 +191,7 @@ function addModule(presetType?: string) {
 
         <!-- Add Custom Module Button -->
         <button
-          class="group flex h-8 shrink-0 items-center justify-center rounded-lg border border-dashed border-zinc-300 bg-transparent px-3 text-xs font-medium text-zinc-500 transition-colors duration-100 hover:border-zinc-400 hover:bg-zinc-50 hover:text-zinc-800 md:h-9 md:px-3.5 md:text-[13px]"
+          class="group flex h-8 shrink-0 items-center justify-center rounded-lg border border-dashed border-zinc-300 bg-transparent px-3 text-xs font-medium text-zinc-500 transition-colors duration-100 hover:border-zinc-400 hover:bg-wb-hover hover:text-zinc-800 md:h-9 md:px-3.5 md:text-[13px]"
           @click="showAddModuleModal = true"
         >
           <Plus class="h-3.5 w-3.5 md:h-4 md:w-4 mr-1" />
@@ -309,7 +309,7 @@ function addModule(presetType?: string) {
                   v-for="preset in presets"
                   :key="preset.type"
                   type="button"
-                  class="rounded-xl border border-zinc-200 bg-white px-3 py-3 text-left transition hover:border-zinc-900 hover:bg-zinc-50 "
+                  class="rounded-xl border border-zinc-200 bg-white px-3 py-3 text-left transition hover:border-zinc-900 hover:bg-wb-hover "
                   @click="addModule(preset.type)"
                 >
                   <div class="text-sm font-semibold text-zinc-900">{{ preset.title }}</div>

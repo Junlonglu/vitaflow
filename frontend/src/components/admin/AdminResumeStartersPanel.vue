@@ -385,7 +385,7 @@ onMounted(() => load())
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in data.items" :key="item.starter_id" class="border-b border-zinc-100 transition hover:bg-zinc-50/70 last:border-0">
+            <tr v-for="item in data.items" :key="item.starter_id" class="border-b border-zinc-100 transition hover:bg-wb-hover last:border-0">
               <td class="min-w-0 px-5 py-3">
                 <p class="truncate font-medium text-zinc-900" :title="item.role_title">{{ item.role_title }}</p>
                 <p class="mt-0.5 truncate text-xs text-zinc-400" :title="item.role_subtitle || item.starter_id">{{ item.role_subtitle || item.starter_id }}</p>
@@ -401,7 +401,7 @@ onMounted(() => load())
               <td class="px-3 py-3 text-zinc-400">{{ item.sort_order }}</td>
               <td class="px-4 py-3 text-right">
                 <div class="flex justify-end gap-2 whitespace-nowrap text-xs font-medium">
-                  <button class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 hover:text-zinc-900 active:scale-95" @click="openEditor(item)">编辑</button>
+                  <button class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-wb-hover hover:text-zinc-900 active:scale-95" @click="openEditor(item)">编辑</button>
                   <button class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 active:scale-95" @click="requestDelete(item)">删除</button>
                 </div>
               </td>
@@ -546,7 +546,7 @@ onMounted(() => load())
             </div>
 
             <div class="flex justify-end gap-2 border-t border-zinc-100 bg-zinc-50/60 px-6 py-4">
-              <button class="h-10 rounded-xl border border-zinc-200 bg-white px-5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50" @click="closeEditor">取消</button>
+              <button class="h-10 rounded-xl border border-zinc-200 bg-white px-5 text-sm font-medium text-zinc-700 transition hover:bg-wb-hover" @click="closeEditor">取消</button>
               <button class="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-wb-primary px-6 text-sm font-medium text-white transition hover:bg-wb-primary-hover disabled:cursor-not-allowed disabled:opacity-60" :disabled="saving" @click="save">
                 <RefreshCw v-if="saving" class="h-4 w-4 animate-spin" />
                 保存

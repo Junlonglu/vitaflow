@@ -152,7 +152,7 @@ const quickTimes = [
     <!-- Trigger Button -->
     <button
       type="button"
-      class="flex h-11 w-full items-center justify-between rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 transition hover:border-zinc-300 hover:bg-zinc-50/50 active:scale-[0.99] outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
+      class="flex h-11 w-full items-center justify-between rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 transition hover:border-zinc-300 hover:bg-wb-hover active:scale-[0.99] outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
       @click="open = true"
     >
       <span class="truncate font-medium" :class="modelValue ? 'text-zinc-900' : 'text-zinc-400'">{{ displayString }}</span>
@@ -194,7 +194,7 @@ const quickTimes = [
                     ? 'bg-zinc-900 text-white font-bold'
                     : day.isCurrentMonth
                       ? 'text-zinc-800 hover:bg-zinc-100'
-                      : 'text-zinc-300 hover:bg-zinc-50',
+                      : 'text-zinc-300 hover:bg-wb-hover',
                   isToday(day.date) && !isSelected(day.date) ? 'text-blue-600 font-extrabold bg-blue-50/50' : ''
                 ]"
                 @click="selectDay(day.date)"
@@ -220,7 +220,7 @@ const quickTimes = [
                   :key="qt.label"
                   type="button"
                   class="rounded-xl border py-1.5 text-xs font-medium transition-colors"
-                  :class="hour === qt.h && minute === qt.m ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50'"
+                  :class="hour === qt.h && minute === qt.m ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-wb-hover'"
                   @click="setTime(qt.h, qt.m)"
                 >
                   {{ qt.label }}

@@ -247,7 +247,7 @@ onMounted(() => load())
               <td class="px-5 py-4 text-zinc-500">{{ formatDate(item.create_time) }}</td>
               <td class="px-5 py-4 text-right">
                 <div class="flex justify-end gap-2 whitespace-nowrap text-xs font-medium">
-                  <button class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 hover:text-zinc-900 active:scale-95" @click="openFlow(item)">流水</button>
+                  <button class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-wb-hover hover:text-zinc-900 active:scale-95" @click="openFlow(item)">流水</button>
                   <button v-if="item.role !== 'admin'" class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition active:scale-95" :class="item.status === 'active' ? 'hover:border-red-200 hover:bg-red-50 hover:text-red-600' : 'hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700'" @click="requestToggle(item)">{{ item.status === 'active' ? '停用' : '恢复' }}</button>
                   <span v-else class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-100 bg-zinc-50 px-2.5 py-1.5 text-xs font-medium text-zinc-400">受保护</span>
                 </div>

@@ -59,7 +59,7 @@ onMounted(() => load())
         <div v-if="loading" class="flex h-72 items-center justify-center text-sm text-zinc-400"><RefreshCw class="mr-2 h-4 w-4 animate-spin" />正在加载公告</div>
         <div v-else-if="!data.items.length" class="flex h-72 flex-col items-center justify-center text-zinc-400"><span class="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-100"><Megaphone class="h-5 w-5" /></span><p class="text-sm">暂无历史公告</p></div>
         <div v-else class="divide-y divide-zinc-100">
-          <button v-for="item in data.items" :key="item.id" class="group flex w-full items-center gap-4 px-5 py-5 text-left transition hover:bg-zinc-50 sm:px-6" :disabled="detailLoading" @click="openDetail(item)">
+          <button v-for="item in data.items" :key="item.id" class="group flex w-full items-center gap-4 px-5 py-5 text-left transition hover:bg-wb-hover sm:px-6" :disabled="detailLoading" @click="openDetail(item)">
             <span class="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-500 sm:flex"><Megaphone class="h-4 w-4" /></span>
             <span class="min-w-0 flex-1"><span class="flex items-center justify-between gap-4"><strong class="truncate text-sm font-semibold text-zinc-900 sm:text-base">{{ item.title }}</strong><time class="shrink-0 text-xs text-zinc-400">{{ formatDate(item.published_at) }}</time></span><span class="mt-1.5 line-clamp-2 block text-sm leading-6 text-zinc-500">{{ item.summary || '点击查看公告详情' }}</span></span>
             <ChevronRight class="h-4 w-4 shrink-0 text-zinc-300 transition group-hover:translate-x-0.5 group-hover:text-zinc-600" />

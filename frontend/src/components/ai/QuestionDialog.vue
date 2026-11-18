@@ -108,7 +108,7 @@ function submit() {
             <li v-for="(item, index) in questions" :key="index">
               <button
                 type="button"
-                class="flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left transition-colors hover:bg-zinc-50"
+                class="flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left transition-colors hover:bg-wb-hover"
                 @click="step = index"
               >
                 <span class="min-w-0 flex-1 text-xs leading-relaxed text-zinc-600">

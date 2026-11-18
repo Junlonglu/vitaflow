@@ -162,7 +162,7 @@ onBeforeUnmount(unbind)
         <div class="mt-3.5 flex justify-end gap-2">
           <button
             type="button"
-            class="h-8 rounded-lg border border-zinc-200 bg-white px-3 text-[12.5px] font-medium text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
+            class="h-8 rounded-lg border border-zinc-200 bg-white px-3 text-[12.5px] font-medium text-zinc-700 transition-colors hover:bg-wb-hover hover:text-zinc-900"
             @click="close"
           >
             {{ cancelText }}

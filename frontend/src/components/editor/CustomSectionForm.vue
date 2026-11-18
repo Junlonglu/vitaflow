@@ -97,7 +97,7 @@ function displayFieldLabel(field: { key: string; label: string }) {
         </div>
       </div>
 
-      <Button size="sm" variant="outline" class="w-full mt-1 border-dashed border-zinc-300 text-zinc-500 hover:text-zinc-900 hover:border-zinc-900 hover:bg-zinc-50 bg-transparent h-10 transition-colors" @click="addItem">
+      <Button size="sm" variant="outline" class="w-full mt-1 border-dashed border-zinc-300 text-zinc-500 hover:text-zinc-900 hover:border-zinc-900 hover:bg-wb-hover bg-transparent h-10 transition-colors" @click="addItem">
         <Plus class="h-4 w-4 mr-1.5" />添加新条目
       </Button>
     </div>

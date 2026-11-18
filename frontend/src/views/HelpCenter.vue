@@ -220,7 +220,7 @@ const faqs = [
                 v-for="action in quickStartActions"
                 :key="action.title"
                 :to="action.to"
-                class="group flex items-center gap-4 rounded-2xl p-3 sm:p-4 transition-colors hover:bg-zinc-50"
+                class="group flex items-center gap-4 rounded-2xl p-3 sm:p-4 transition-colors hover:bg-wb-hover"
               >
                 <!-- 图标 -->
                 <span

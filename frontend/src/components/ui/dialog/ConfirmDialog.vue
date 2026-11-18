@@ -48,7 +48,7 @@ function confirm() {
       <div class="flex gap-3">
         <button
           @click="close"
-          class="flex-1 h-10 rounded-xl font-medium text-sm border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 transition-colors"
+          class="flex-1 h-10 rounded-xl font-medium text-sm border border-zinc-200 bg-white text-zinc-700 hover:bg-wb-hover hover:text-zinc-900 transition-colors"
         >
           {{ cancelText || '取消' }}
         </button>

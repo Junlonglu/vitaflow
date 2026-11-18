@@ -142,8 +142,8 @@ defineEmits<{
               </td>
               <td class="px-5 py-4">
                 <div class="flex items-center gap-1.5 whitespace-nowrap">
-                  <button class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 hover:text-zinc-900 active:scale-95" @click="$emit('openEditCode', item)"><Pencil class="h-3.5 w-3.5 text-zinc-500" />编辑</button>
-                  <button v-if="item.used_count < item.total_count && (!item.expire_time || new Date(item.expire_time).getTime() > Date.now())" class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 hover:text-zinc-900 active:scale-95" @click="$emit('toggleCode', item)"><EyeOff v-if="item.status === 'active'" class="h-3.5 w-3.5 text-zinc-500" /><Eye v-else class="h-3.5 w-3.5 text-zinc-500" />{{ item.status === "active" ? "下架" : "上架" }}</button>
+                  <button class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-wb-hover hover:text-zinc-900 active:scale-95" @click="$emit('openEditCode', item)"><Pencil class="h-3.5 w-3.5 text-zinc-500" />编辑</button>
+                  <button v-if="item.used_count < item.total_count && (!item.expire_time || new Date(item.expire_time).getTime() > Date.now())" class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-wb-hover hover:text-zinc-900 active:scale-95" @click="$emit('toggleCode', item)"><EyeOff v-if="item.status === 'active'" class="h-3.5 w-3.5 text-zinc-500" /><Eye v-else class="h-3.5 w-3.5 text-zinc-500" />{{ item.status === "active" ? "下架" : "上架" }}</button>
                   <button class="group inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition active:scale-95 disabled:cursor-not-allowed disabled:border-zinc-100 disabled:bg-zinc-50 disabled:text-zinc-300 disabled:active:scale-100" :class="item.used_count > 0 ? '' : 'border-zinc-200 bg-white text-zinc-700 hover:border-red-200 hover:bg-red-50 hover:text-red-600'" :title="item.used_count > 0 ? '已有兑换记录，只能下架' : '删除兑换码'" :disabled="item.used_count > 0" @click="codeToDelete = item"><Trash2 class="h-3.5 w-3.5" :class="item.used_count > 0 ? 'text-zinc-300' : 'text-zinc-500 group-hover:text-red-600'" />删除</button>
                 </div>
               </td>
@@ -181,7 +181,7 @@ defineEmits<{
             <label class="space-y-1.5 text-sm font-medium text-zinc-700">过期时间<input v-model="redeemForm.expire_time" type="datetime-local" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" /></label>
             <label class="space-y-1.5 text-sm font-medium text-zinc-700">备注<input v-model="redeemForm.note" class="block h-10 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-sm outline-none transition-colors focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900" placeholder="例如：内测用户赠送" /></label>
           </div>
-          <label class="flex cursor-pointer items-center justify-between rounded-xl border border-zinc-200/80 bg-zinc-50/50 px-4 py-3 text-sm text-zinc-700 transition-colors hover:bg-zinc-50">
+          <label class="flex cursor-pointer items-center justify-between rounded-xl border border-zinc-200/80 bg-zinc-50/50 px-4 py-3 text-sm text-zinc-700 transition-colors hover:bg-wb-hover">
             <div><span class="font-medium text-zinc-900">同一 IP 只能兑换一次</span></div>
             <input v-model="redeemForm.ip_once" type="checkbox" class="h-4 w-4 cursor-pointer rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900" />
           </label>

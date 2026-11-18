@@ -73,7 +73,7 @@ const onPageChange = (p: number) => {
         v-for="num in pageNumbers"
         :key="num"
         class="h-8 min-w-8 rounded-md border px-2 text-xs font-medium transition"
-        :class="num === page ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50'"
+        :class="num === page ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 bg-white text-zinc-600 hover:bg-wb-hover'"
         @click="onPageChange(num)"
       >
         {{ num }}

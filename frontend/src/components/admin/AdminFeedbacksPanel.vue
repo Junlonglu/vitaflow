@@ -189,7 +189,7 @@ onMounted(() => load())
               </td>
               <td class="px-5 py-4 text-zinc-500">{{ formatDate(item.create_time) }}</td>
               <td class="px-5 py-4 text-right">
-                <button class="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 hover:text-zinc-900 active:scale-95" @click="openReply(item)">处理</button>
+                <button class="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-wb-hover hover:text-zinc-900 active:scale-95" @click="openReply(item)">处理</button>
               </td>
             </tr>
           </tbody>
@@ -259,7 +259,7 @@ onMounted(() => load())
             </div>
 
             <div class="px-4 sm:px-6 py-4 bg-zinc-50/50 border-t border-zinc-100 flex flex-wrap justify-end gap-2">
-              <button @click="closeReply" class="h-10 px-4 sm:px-5 rounded-xl font-medium text-sm border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 transition-colors whitespace-nowrap shrink-0">取消</button>
+              <button @click="closeReply" class="h-10 px-4 sm:px-5 rounded-xl font-medium text-sm border border-zinc-200 bg-white text-zinc-700 hover:bg-wb-hover transition-colors whitespace-nowrap shrink-0">取消</button>
               <button @click="sendResultEmail" :disabled="emailSending || replySaving || !replyForm.admin_reply.trim()" class="inline-flex h-10 items-center justify-center gap-1.5 sm:gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 sm:px-5 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 whitespace-nowrap shrink-0">
                 <RefreshCw v-if="emailSending" class="h-4 w-4 animate-spin shrink-0" />
                 保存并发邮件

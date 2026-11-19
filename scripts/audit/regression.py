@@ -421,9 +421,20 @@ def check_review_board(browser) -> list[str]:
         if not counted.startswith(f"已选 {cards}/{cards}"):
             bad.append(f"默认应全选全部变更，实得「{counted}」")
 
+        # 每张可微调的卡都有一条「对比 / 微调」滑块，默认停在对比
+        switches = page.locator("[data-review-mode]").count()
+        if switches == 0 or switches % 2:
+            bad.append(f"呈现方式滑块数量异常: {switches} 段")
+        if page.locator('[data-review-mode="compare"][aria-pressed="true"]').count() != switches // 2:
+            bad.append("滑块默认应全部停在「对比」")
+        if not page.locator("[data-review-diff]").count():
+            bad.append("对比态没有渲染词级 diff")
+
         # 微调 → 值必须进预览请求（预览、落库共用一个合并函数）
-        page.locator('[data-review-section] button[title="微调这一条"]').first.click()
+        page.locator('[data-review-section] [data-review-mode="edit"]').first.click()
         page.wait_for_timeout(300)
+        if not page.locator('[data-review-mode="edit"][aria-pressed="true"]').count():
+            bad.append("滑块点「微调」后没有切换过去")
         field = page.locator("[data-review-section] article input[type=text], [data-review-section] article textarea").first
         if not field.count():
             bad.append("点「微调」后没有出现字段控件")
@@ -434,6 +445,16 @@ def check_review_board(browser) -> list[str]:
                 bad.append("人工微调没有进入预览请求")
             if not page.get_by_text("已微调", exact=True).count():
                 bad.append("人工微调后没有「已微调」标记")
+
+            # 切回对比：字段表收起、diff 回来，且后侧基准是人工改过的文本
+            page.locator('[data-review-section] [data-review-mode="compare"]').first.click()
+            page.wait_for_timeout(500)
+            if page.locator("[data-review-section] article input[type=text], [data-review-section] article textarea").count():
+                bad.append("切回「对比」后字段控件没有收起")
+            if not page.locator("[data-review-diff]").count():
+                bad.append("切回「对比」后 diff 没有回来")
+            if "审阅台回归：人工微调" not in page.locator("[data-review-section] article").first.inner_text():
+                bad.append("切回「对比」后看不到人工微调的内容")
 
         # 返回编辑：表单回来，顶部留一条回审阅台的入口
         page.locator('button[title="返回编辑，建议先留着"]').click()

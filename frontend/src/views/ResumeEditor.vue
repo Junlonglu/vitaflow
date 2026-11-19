@@ -989,17 +989,15 @@ async function sendInitialPrompt() {
           </div>
         </div>
 
-        <!-- Resizer Handle：可见 16px，命中区靠 ::after 外扩到 24px（WCAG 2.5.8） -->
+        <!-- 面板分隔线（§6.51）：1px 常驻细线，没有可见把手；16px 命中区靠 ::after 外扩到 24px（WCAG 2.5.8）。
+             命中区底色与左栏一致，避免中间露出父级背景色；细线贴右边缘，与预览区相接。 -->
         <div
           v-if="!isMobile"
-          class="group relative z-sticky flex h-full w-4 cursor-col-resize select-none items-center justify-center after:absolute after:inset-y-0 after:-left-1 after:-right-1 after:content-['']"
+          data-panel-splitter
+          class="group relative z-sticky h-full w-4 shrink-0 cursor-col-resize select-none bg-white after:absolute after:inset-y-0 after:-left-1 after:-right-1 after:content-['']"
           @mousedown="startResize"
         >
-           <!-- Subtle hover line -->
-           <div class="absolute inset-y-0 left-1/2 -ml-[0.5px] w-[1px] bg-wb-primary opacity-0 transition-opacity duration-100 delay-75 group-hover:opacity-100 group-active:opacity-100"></div>
-           
-           <!-- Drag pill -->
-           <div class="relative z-base flex h-8 w-1 rounded-full bg-zinc-300 ring-1 ring-black/5 transition duration-100 group-hover:scale-125 group-hover:bg-wb-primary group-active:bg-wb-primary-hover"></div>
+          <div data-splitter-line class="pointer-events-none absolute inset-y-0 right-0 w-px bg-wb-border transition-colors duration-150 group-hover:bg-wb-primary group-active:bg-wb-primary"></div>
         </div>
 
         <!-- Preview Canvas -->

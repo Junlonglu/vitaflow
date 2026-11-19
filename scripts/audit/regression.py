@@ -352,6 +352,105 @@ def _review_fixture(resume_id: int) -> tuple[dict, list, list] | None:
     return nxt, sessions, messages
 
 
+def check_splitter(browser) -> list[str]:
+    """面板分隔条（§6.51）：一条 1px 常驻细线、没有可见把手；悬停变色 + 拖拽仍改宽度。"""
+    bad: list[str] = []
+    resume_id = _review_resume_id()
+    if resume_id is None:
+        return ["分隔条检查跳过：当前账号没有简历"]
+    ctx = browser.new_context(viewport={"width": 1440, "height": 900})
+    ctx.add_init_script(
+        "localStorage.setItem('vitaflow_token', " + json.dumps(TOKEN) + ");"
+        "localStorage.setItem('vitaflow-theme', 'light');"
+    )
+    page = ctx.new_page()
+    SPLIT = "[data-panel-splitter]"
+    LINE = "[data-splitter-line]"
+    try:
+        page.goto(f"{BASE}/workspace/{resume_id}", wait_until="domcontentloaded", timeout=45000)
+        page.wait_for_selector(SPLIT, timeout=20000)
+        page.wait_for_timeout(1400)
+        page.mouse.move(8, 8)
+        page.wait_for_timeout(220)
+
+        m = page.evaluate(
+            """() => {
+          const el = document.querySelector('[data-panel-splitter]');
+          const line = el.querySelector('[data-splitter-line]');
+          const r = el.getBoundingClientRect(), lr = line.getBoundingClientRect();
+          return {
+            hitW: +r.width.toFixed(1), kids: el.children.length,
+            lineW: +lr.width.toFixed(1), lineGap: +(r.right - lr.right).toFixed(1),
+            lineH: +lr.height.toFixed(1), panelH: +r.height.toFixed(1),
+            cursor: getComputedStyle(el).cursor,
+            lineBg: getComputedStyle(line).backgroundColor,
+            hitBg: getComputedStyle(el).backgroundColor,
+          };
+        }"""
+        )
+        if m["kids"] != 1:
+            bad.append(f"分隔条只应有 1px 细线一个子元素，实得 {m['kids']} 个（可见把手回来了？）")
+        if abs(m["hitW"] - 16) > 1:
+            bad.append(f"命中区可见宽度应为 16px（::after 再外扩到 24），实得 {m['hitW']}px")
+        if abs(m["lineW"] - 1) > 0.4:
+            bad.append(f"分隔线宽度应为 1px，实得 {m['lineW']}px")
+        if abs(m["lineGap"]) > 0.4:
+            bad.append(f"分隔线应贴命中区右缘，实际距右缘 {m['lineGap']}px")
+        if abs(m["lineH"] - m["panelH"]) > 1:
+            bad.append(f"分隔线未贯穿高度（{m['lineH']} vs {m['panelH']}）")
+        if m["cursor"] != "col-resize":
+            bad.append(f"命中区 cursor 应为 col-resize，实得 {m['cursor']}")
+        if m["lineBg"] == m["hitBg"]:
+            bad.append("分隔线与命中区底色相同，等于不可见")
+
+        # 1px 线没有把手，必须靠悬停变色才能被发现
+        page.hover(SPLIT)
+        page.wait_for_timeout(280)
+        hover_bg = page.evaluate(f"() => getComputedStyle(document.querySelector('{LINE}')).backgroundColor")
+        page.mouse.move(8, 8)
+        page.wait_for_timeout(200)
+        if hover_bg == m["lineBg"]:
+            bad.append("悬停时分隔线不变色，拖拽入口不可发现")
+
+        # 拖拽仍然生效，且收尾要还原 body 选区锁
+        box = page.locator(SPLIT).bounding_box()
+        before = page.evaluate(
+            "() => document.querySelector('.workspace-surface').firstElementChild.getBoundingClientRect().width"
+        )
+        page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        page.mouse.down()
+        page.mouse.move(box["x"] + box["width"] / 2 - 90, box["y"] + box["height"] / 2, steps=6)
+        page.mouse.up()
+        page.wait_for_timeout(260)
+        after = page.evaluate(
+            "() => document.querySelector('.workspace-surface').firstElementChild.getBoundingClientRect().width"
+        )
+        if abs((before - after) - 90) > 8:
+            bad.append(f"拖拽应把左栏收窄约 90px，实得 {round(before)} → {round(after)}")
+        if page.evaluate("() => document.body.style.userSelect"):
+            bad.append("拖拽结束后 body.userSelect 未还原")
+
+        # 暗色：线要换色，且不能和命中区底色溶在一起
+        page.evaluate("() => { document.documentElement.dataset.theme = 'dark'; }")
+        page.wait_for_timeout(340)
+        dark = page.evaluate(
+            """() => {
+          const el = document.querySelector('[data-panel-splitter]');
+          const line = el.querySelector('[data-splitter-line]');
+          return {line: getComputedStyle(line).backgroundColor, hit: getComputedStyle(el).backgroundColor};
+        }"""
+        )
+        if dark["line"] == m["lineBg"]:
+            bad.append("暗色下分隔线颜色没跟随主题")
+        if dark["line"] == dark["hit"]:
+            bad.append("暗色下分隔线与命中区底色相同，等于不可见")
+    except Exception as e:  # noqa: BLE001 - 审计失败要把原因带回报告
+        bad.append(f"分隔条检查异常: {e}")
+    finally:
+        ctx.close()
+    return bad
+
+
 def check_review_board(browser) -> list[str]:
     bad: list[str] = []
     try:
@@ -1007,6 +1106,8 @@ def main() -> int:
         folding_bad = check_session_folding(browser)
         # 审阅台（§6.48）：只有存在 pending 提案时才出现，矩阵拿不到
         review_bad = check_review_board(browser)
+        # 面板分隔条（§6.51）：1px 细线取代可见把手，矩阵只量外壳
+        splitter_bad = check_splitter(browser)
         # 全站 tooltip（§6.24）：气泡只在悬停/聚焦时存在，静态矩阵量不到
         tooltip_bad = check_tooltip(browser)
         # 浮层动效与阴影分级（§6.25）：只在「打开的一瞬间」成立，矩阵也量不到
@@ -1021,6 +1122,7 @@ def main() -> int:
                           "runtime_failures": runtime_bad,
                           "folding_failures": folding_bad,
                           "review_failures": review_bad,
+                          "splitter_failures": splitter_bad,
                           "tooltip_failures": tooltip_bad,
                           "motion_failures": motion_bad,
                           "dead_class_failures": dead_bad,
@@ -1030,6 +1132,7 @@ def main() -> int:
         print(f"运行时 light→dark（不刷新）: {'✓ 稳定' if not runtime_bad else '✗ ' + '; '.join(runtime_bad)}")
         print(f"侧栏轨位 + 折叠 5→8→5 + 激活保护: {'✓ 通过' if not folding_bad else '✗ ' + '; '.join(folding_bad)}")
         print(f"审阅台（全模块成册 / 修改前只读 / 微调进预览）: {'✓ 通过' if not review_bad else '✗ ' + '; '.join(review_bad)}")
+        print(f"面板分隔线（1px 细线 / 无把手 / 悬停变色 / 可拖）: {'✓ 通过' if not splitter_bad else '✗ ' + '; '.join(splitter_bad)}")
         print(f"全站 tooltip 规格与 title 摘除/恢复: {'✓ 通过' if not tooltip_bad else '✗ ' + '; '.join(tooltip_bad)}")
         print(f"浮层动效分层 + 阴影分档 + reduced-motion: {'✓ 通过' if not motion_bad else '✗ ' + '; '.join(motion_bad)}")
         print(f"死动画类名静态扫描: {'✓ 干净' if not dead_bad else '✗ ' + '; '.join(dead_bad)}")
@@ -1037,10 +1140,11 @@ def main() -> int:
               + ("" if not runtime_bad else " · 运行时切换失败")
               + ("" if not folding_bad else " · 折叠检查失败")
               + ("" if not review_bad else " · 审阅台检查失败")
+              + ("" if not splitter_bad else " · 分隔条检查失败")
               + ("" if not tooltip_bad else " · tooltip 检查失败")
               + ("" if not motion_bad else " · 动效检查失败")
               + ("" if not dead_bad else " · 死类名残留"))
-    return 1 if (failures or runtime_bad or folding_bad or review_bad or tooltip_bad
+    return 1 if (failures or runtime_bad or folding_bad or review_bad or splitter_bad or tooltip_bad
                  or motion_bad or dead_bad) else 0
 
 

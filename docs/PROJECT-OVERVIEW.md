@@ -115,7 +115,7 @@ vitaflow/
 `GET /user-agreement`、`POST /verification-code`、`POST /password-reset-code`、`POST /register`、`POST /login`、`POST /reset-password`、`GET /me`、`PUT /profile`、`PUT /password`
 
 **简历 `resumes.py`**
-`GET /resumes`（支持 `page` / `page_size` / `keyword` 标题模糊搜索，LIKE 通配符转义 / `sort=updated|created|title`，非法值回落默认）、`POST /resumes`、`POST /resumes/from-starter`、`POST /resumes/import-file`（上传 docx/pdf/图片/txt/md 走 AI 结构化；上传导出过的 `.json` 直接回填，不调模型、不扣积分）、`GET|PUT|DELETE /resumes/{id}`、`POST /resumes/{id}/duplicate`、`POST /resumes/{id}/versions`（存版本快照）、`GET|PUT /resumes/{id}/share`（开关与 token）、`GET|POST /resumes/{id}/preview-html`（HTML 预览，POST 支持传入未保存的草稿）、`GET /resumes/{id}/preview-pdf`
+`GET /resumes`（支持 `page` / `page_size` / `keyword` 标题模糊搜索，LIKE 通配符转义 / `sort=updated|created|title`，非法值回落默认）、`POST /resumes`、`POST /resumes/from-starter`、`POST /resumes/import-file`（上传 docx/pdf/图片/txt/md 走 AI 结构化；上传导出过的 `.json` 直接回填，不调模型、不扣积分）、`GET|PUT|DELETE /resumes/{id}`、`POST /resumes/{id}/duplicate`、`GET|POST /resumes/{id}/versions`（列表只回摘要；POST 内容与上一版相同时复用旧行并回 `created=false`）、`GET /resumes/{id}/versions/{version_id}`（含整份数据，供对比）、`GET /resumes/{id}/versions/{version_id}/preview-html`（用版本自己的模板渲染）、`POST /resumes/{id}/versions/{version_id}/restore`（先自动备份当前内容再写回，`expected_update_time` 不一致回 409）、`GET|PUT /resumes/{id}/share`（开关与 token）、`GET|POST /resumes/{id}/preview-html`（HTML 预览，POST 支持传入未保存的草稿）、`GET /resumes/{id}/preview-pdf`
 
 **导出 `exports.py`**
 `POST /resumes/{id}/export/pdf`、`POST /resumes/{id}/export/json`（结构化快照，流式返回不落盘）、`POST /resumes/{id}/export/word`（已下线，返回 410）
@@ -186,7 +186,7 @@ vitaflow/
 |---|---|
 | `users` | 账号、邮箱、密码哈希、积分余额、状态、是否管理员 |
 | `resumes` | `title`、`template_id`、`template_config`(JSON)、`resume_data`(JSON)、`share_token`、是否公开 |
-| `resume_versions` | 简历快照（手动存档） |
+| `resume_versions` | 简历版本快照（整份 `resume_data` + `template_config`）。`source` 区分手动存档 / AI 修改前 / 恢复前备份；`content_hash` 与上一版相同则复用旧行；每份简历保留 50 条，手动存档不参与淘汰 |
 | `resume_templates` | 模板元数据（名称、分类、封面、启用状态） |
 | `resume_starters` / `resume_starter_industry_templates` | 行业起手式与行业→模板绑定 |
 | `export_records` | 导出流水（格式、文件、耗时、状态） |

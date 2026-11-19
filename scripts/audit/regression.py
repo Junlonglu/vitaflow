@@ -1038,6 +1038,28 @@ def check_motion_tokens(browser) -> list[str]:
     return bad
 
 
+def _token_problem() -> str | None:
+    """审计开始前先探一次登录态。
+
+    过期 token 不会让审计「报错」，只会让前端 401 跳 /login：每一格都变成白屏，
+    断言报的是「字体栈偏离 WorkBuddy: Times New Roman」「--font-sans 未接单一来源」
+    这类完全看不出根因的错，最后在某一格 evaluate 撞上导航，抛
+    `Execution context was destroyed`。这里提前把根因说清楚。
+    """
+    req = urllib.request.Request(f"{BASE}/api/resumes", headers={"Authorization": f"Bearer {TOKEN}"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            if resp.status == 200:
+                return None
+            return f"HTTP {resp.status}"
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            return f"token 被拒绝（HTTP {e.code}），多半是已过期"
+        return f"探活请求失败（HTTP {e.code}）"
+    except (urllib.error.URLError, OSError) as e:
+        return f"探活请求失败（{e}）"
+
+
 def main() -> int:
     if not TOKEN:
         print("缺少 VITAFLOW_TOKEN。请设置登录态 JWT（只写 localStorage，不落盘）：\n"
@@ -1048,6 +1070,14 @@ def main() -> int:
         urllib.request.urlopen(BASE, timeout=4)
     except (urllib.error.URLError, OSError) as e:
         print(f"dev server 不可达: {BASE} ({e})\n请先启动 frontend 的 vite dev server。")
+        return 2
+    token_problem = _token_problem()
+    if token_problem:
+        print(f"VITAFLOW_TOKEN 不可用：{token_problem}\n"
+              "token 失效时前端会 401 跳登录，矩阵每一格都会变成白屏，报出来的却是字体栈问题。\n"
+              "请重新签发（在 backend 目录下）：\n"
+              "  .venv/Scripts/python.exe -c \"from app.core.security import create_access_token;"
+              " print(create_access_token(1))\"")
         return 2
 
     mode = "quick" if QUICK else "full"

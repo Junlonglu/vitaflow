@@ -385,6 +385,7 @@ def check_splitter(browser) -> list[str]:
             cursor: getComputedStyle(el).cursor,
             lineBg: getComputedStyle(line).backgroundColor,
             hitBg: getComputedStyle(el).backgroundColor,
+            mask: getComputedStyle(line).maskImage || getComputedStyle(line).webkitMaskImage || "",
           };
         }"""
         )
@@ -402,6 +403,11 @@ def check_splitter(browser) -> list[str]:
             bad.append(f"命中区 cursor 应为 col-resize，实得 {m['cursor']}")
         if m["lineBg"] == m["hitBg"]:
             bad.append("分隔线与命中区底色相同，等于不可见")
+        # 形态：两端淡出、中段最实（照 WorkBuddy 的分隔线，§6.51）
+        if "linear-gradient" not in m["mask"]:
+            bad.append(f"分隔线缺少渐隐遮罩，两端不会淡出（mask={m['mask'] or 'none'}）")
+        elif "rgba(0, 0, 0, 0)" not in m["mask"]:
+            bad.append(f"分隔线遮罩缺少透明端点，等于没渐变（mask={m['mask']}）")
 
         # 1px 线没有把手，必须靠悬停变色才能被发现
         page.hover(SPLIT)

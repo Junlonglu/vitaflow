@@ -8,11 +8,17 @@
  * `[title]` 时用统一气泡显示文本。好处是存量与以后新增的 `title` 自动生效，
  * 组件代码一个字都不用改。
  *
- * 两个关键约定：
- * 1. 静态 DOM 始终保留 `title`。它既是读屏的兜底，也是 §6.14「无出口裁剪」的
+ * 三条关键约定：
+ * 1. **指针一进来就摘 title，离开才还**（不是等气泡打开才摘）。浏览器给原生
+ *    提示留了约 1s 的悬停判定期，只要这段时间里 title 还在 DOM 上，它就会
+ *    弹白框；而「等气泡打开再摘」把摘除挂在 120ms 的显示定时器上——那个定时器
+ *    随时可能被竞态清掉（pointerout 排的 60ms 收尾定时器晚到一拍就会清掉它），
+ *    于是 title 一直挂着、气泡却不出，指针静止 1s 后原生白框登场。这是
+ *    「有时冒出原生提示」的根因（2026-11-19 修）。
+ * 2. 静态 DOM 始终保留 `title`。它既是读屏的兜底，也是 §6.14「无出口裁剪」的
  *    判据（审计把 `title` / `aria-label` 当成文本出口）。只在悬停/聚焦期间
- *    临时摘掉，让浏览器没机会弹原生提示。
- * 2. 气泡是「浮层」，明暗主题同色（#404040 / #fff）。不能用 zinc-* 变量——
+ *    临时摘掉。
+ * 3. 气泡是「浮层」，明暗主题同色（#404040 / #fff）。不能用 zinc-* 变量——
  *    那套变量在暗色下会翻，`text-white` 更会变成深墨。样式集中在
  *    index.css 的 `.wb-tooltip` 里写字面量。
  *
@@ -23,19 +29,27 @@
 const TIP_ID = "wb-tooltip"
 /** 悬停意图延迟：太短会跟着鼠标满屏跳，太长又显得迟钝 */
 const HOVER_DELAY = 120
+/** 离开后的收尾缓冲：相邻两个图标之间移动时不至于闪烁 */
+const RELEASE_DELAY = 60
 /** 气泡与目标之间的间距 */
 const GAP = 8
 /** 气泡距视口边缘的最小安全距离 */
 const EDGE = 8
 
 let tip: HTMLDivElement | null = null
-let target: HTMLElement | null = null
-let pending: HTMLElement | null = null
-let savedTitle: string | null = null
+/** 当前被摘掉 title 的元素（指针压着它 / 它持有焦点） */
+let active: HTMLElement | null = null
+/** 上面那个元素原本的 title 文本 */
+let activeTitle: string | null = null
+/** 气泡当前指向的元素（气泡可能被被动收起了，但 active 还没释放） */
+let shownEl: HTMLElement | null = null
+let pendingEl: HTMLElement | null = null
 let showTimer = 0
-let hideTimer = 0
+let releaseTimer = 0
 let resumeTimer = 0
 let titleObserver: MutationObserver | null = null
+/** 是否已挂载：避免 HMR 重复安装出第二套监听 */
+let installed = false
 
 function ensureTip(): HTMLDivElement {
   if (tip) return tip
@@ -49,11 +63,20 @@ function ensureTip(): HTMLDivElement {
   return node
 }
 
+function clearTimers() {
+  window.clearTimeout(showTimer)
+  window.clearTimeout(releaseTimer)
+  window.clearTimeout(resumeTimer)
+  showTimer = 0
+  releaseTimer = 0
+  resumeTimer = 0
+  pendingEl = null
+}
+
 /**
  * 框架重渲染会把 title 原样写回来（`v-for` 刷新、`:title` 的依赖变了），
  * 而指针没动就不会再有 `pointerover`。此时若不管，浏览器在指针静止后
- * 会自己弹系统提示——这是「有时冒出原生白框气泡」的第二条来路。
- * 只盯当前这一个元素，收起就断开。
+ * 会自己弹系统提示。只盯当前这一个元素，释放就断开。
  */
 function watchTitle(el: HTMLElement) {
   stopWatchingTitle()
@@ -61,7 +84,7 @@ function watchTitle(el: HTMLElement) {
     const back = el.getAttribute("title")
     if (back === null) return
     el.removeAttribute("title")
-    if (back.trim()) savedTitle = back
+    if (back.trim()) activeTitle = back
   })
   titleObserver.observe(el, { attributes: true, attributeFilter: ["title"] })
 }
@@ -71,52 +94,92 @@ function stopWatchingTitle() {
   titleObserver = null
 }
 
+/** 把 title 摘掉并记住原值：从这一刻起浏览器没机会弹原生提示 */
+function strip(el: HTMLElement) {
+  unstrip()
+  const raw = el.getAttribute("title")
+  if (!raw || !raw.trim()) return
+  active = el
+  activeTitle = raw
+  el.removeAttribute("title")
+  watchTitle(el)
+}
+
 /** 把临时摘掉的 title 还回去，交给读屏和下一次悬停 */
-function restoreTitle() {
+function unstrip() {
   stopWatchingTitle()
-  if (target && savedTitle !== null && !target.hasAttribute("title")) {
-    target.setAttribute("title", savedTitle)
+  if (active && activeTitle !== null && active.isConnected && !active.hasAttribute("title")) {
+    active.setAttribute("title", activeTitle)
   }
-  target?.removeAttribute("aria-describedby")
-  target = null
-  savedTitle = null
+  active?.removeAttribute("aria-describedby")
+  active = null
+  activeTitle = null
+}
+
+function hideBubble() {
+  shownEl = null
+  if (tip) tip.dataset.shown = "false"
 }
 
 function hide() {
-  window.clearTimeout(showTimer)
-  window.clearTimeout(hideTimer)
-  window.clearTimeout(resumeTimer)
-  pending = null
-  if (tip) tip.dataset.shown = "false"
-  restoreTitle()
+  clearTimers()
+  hideBubble()
+  unstrip()
 }
 
 /**
  * 被动收起：只藏气泡，**不**把 title 还回去。
  *
- * 滚动 / 按下 / 缩放时气泡得先消失（它 fixed 定位不跟随），但如果顺手
- * `restoreTitle()`，title 就在指针仍停在元素上时凭空出现——浏览器随后弹出的
- * 正是那个白色方框系统提示，且不会再有 `pointerover` 让自定义气泡回来。
- * 这是「有时触发原生样式」最常见的一条来路（滚一下侧栏就能撞上）。
+ * 滚动 / 按下 / 缩放时气泡得先消失（它 fixed 定位不跟随），但如果顺手还
+ * title，title 就在指针仍停在元素上时凭空出现——浏览器随后弹出的正是那个
+ * 白色方框系统提示。
  */
 function suspend() {
   window.clearTimeout(showTimer)
-  window.clearTimeout(hideTimer)
+  window.clearTimeout(releaseTimer)
   window.clearTimeout(resumeTimer)
-  pending = null
-  if (tip) tip.dataset.shown = "false"
+  showTimer = 0
+  releaseTimer = 0
+  resumeTimer = 0
+  pendingEl = null
+  hideBubble()
 }
 
 /** 指针可能还压在刚才那个元素上：等交互停下来再显形；真离开了就收尾还 title。 */
 function resume() {
-  if (!target) return
-  if (!target.isConnected || !target.matches(":hover")) {
-    if (tip) tip.dataset.shown = "false"
-    restoreTitle()
+  if (!active) return
+  if (!active.isConnected || !active.matches(":hover")) {
+    hideBubble()
+    unstrip()
     return
   }
-  const text = (savedTitle ?? "").trim()
-  if (text) place(target, text)
+  const text = (activeTitle ?? "").trim()
+  if (text) place(active, text)
+}
+
+/**
+ * 离开收尾。**必须重新确认指针位置**：`pointerover` 会先清掉这个定时器，但
+ * 清不到「已经进入宏任务队列」的那一拍；那一拍若照旧执行，就会把刚排好的
+ * 显示定时器一起清掉。所以这里先看 `:hover`——指针还在就当作回来了，直接
+ * 把气泡放回去，title 继续压着不放。
+ */
+function release() {
+  releaseTimer = 0
+  if (active && active.isConnected && active.matches(":hover")) {
+    const text = (activeTitle ?? "").trim()
+    if (text) place(active, text)
+    return
+  }
+  hideBubble()
+  unstrip()
+}
+
+function scheduleRelease() {
+  window.clearTimeout(showTimer)
+  window.clearTimeout(releaseTimer)
+  showTimer = 0
+  pendingEl = null
+  releaseTimer = window.setTimeout(release, RELEASE_DELAY)
 }
 
 /** 命中最近的带 title 元素；`data-no-tooltip` 可显式关闭某一棵子树 */
@@ -174,62 +237,72 @@ function place(el: HTMLElement, text: string) {
   node.dataset.shown = "true"
 
   el.setAttribute("aria-describedby", TIP_ID)
+  shownEl = el
 }
 
-function open(el: HTMLElement) {
-  const text = (el.getAttribute("title") ?? "").trim()
-  if (!text) return hide()
-  target = el
-  savedTitle = el.getAttribute("title")
-  // 摘掉 title，浏览器就不会再弹系统提示；离开时 restoreTitle() 还回去
-  el.removeAttribute("title")
-  place(el, text)
-  // 摘完再挂观察：框架重渲染若把 title 写回来，立刻再摘一次
-  watchTitle(el)
+/** 排一次「悬停意图」后的显示；title 早在 pointerover 时就已经摘掉了 */
+function scheduleShow(el: HTMLElement) {
+  window.clearTimeout(showTimer)
+  window.clearTimeout(releaseTimer)
+  showTimer = 0
+  releaseTimer = 0
+  pendingEl = el
+  showTimer = window.setTimeout(() => {
+    showTimer = 0
+    pendingEl = null
+    if (!el.isConnected || el !== active) return
+    const text = (activeTitle ?? "").trim()
+    if (text) place(el, text)
+  }, HOVER_DELAY)
 }
 
 function onPointerOver(event: PointerEvent) {
-  const el = closestTitleHolder(event.target)
-  if (!el) return
-  if (el === target) {
-    // 又滑回刚才那个元素：可能正卡在收起缓冲里，撤掉这次收起（否则气泡灭了 title 被还回去，
-    // 指针还压在上面，浏览器就自己弹原生提示）
-    window.clearTimeout(hideTimer)
+  const node = event.target
+  // 指针回到「已被摘掉 title」的那个元素上：此时它身上没有 title，用 title 找目标会
+  // 找不到（收尾缓冲期里滑出又滑回就是这个场景），必须先按 active 认人。
+  if (active && node instanceof Node && active.contains(node)) {
+    window.clearTimeout(releaseTimer)
+    releaseTimer = 0
+    if (shownEl !== active && pendingEl !== active) scheduleShow(active)
     return
   }
-  if (el === pending) return
-  // 从 A 换到 B：先收掉 A，再给 B 排一次延迟显示
-  window.clearTimeout(showTimer)
-  window.clearTimeout(hideTimer)
-  hide()
-  pending = el
-  showTimer = window.setTimeout(() => {
-    pending = null
-    if (!el.isConnected) return
-    open(el)
-  }, HOVER_DELAY)
+  const el = closestTitleHolder(node)
+  if (!el) {
+    // 移到没有 title 的地方：当前这个排一次收尾（指针可能还会滑回来）
+    if (active) scheduleRelease()
+    return
+  }
+  window.clearTimeout(releaseTimer)
+  releaseTimer = 0
+  // 一进来就摘：不等 120ms，杜绝「定时器被清掉 → title 留在 DOM → 原生白框」
+  if (el !== active) strip(el)
+  if (shownEl === el) return
+  if (pendingEl === el) return
+  scheduleShow(el)
 }
 
 function onPointerOut(event: PointerEvent) {
   const related = event.relatedTarget
   // 在目标内部移动不算离开
-  if (target && related instanceof Node && target.contains(related)) return
-  if (pending && related instanceof Node && pending.contains(related)) return
-  window.clearTimeout(showTimer)
-  pending = null
-  // 留一帧缓冲，避免在相邻两个图标之间移动时气泡闪烁
-  hideTimer = window.setTimeout(hide, 60)
+  if (active && related instanceof Node && active.contains(related)) return
+  if (pendingEl && related instanceof Node && pendingEl.contains(related)) return
+  if (!active) return
+  scheduleRelease()
 }
 
 function onFocusIn(event: FocusEvent) {
   const el = closestTitleHolder(event.target)
   if (!el) return
   window.clearTimeout(showTimer)
-  window.clearTimeout(hideTimer)
-  hide()
+  window.clearTimeout(releaseTimer)
+  hideBubble()
+  if (el !== active) strip(el)
   // 键盘用户没有悬停意图，立即显示
   window.setTimeout(() => {
-    if (el.isConnected && (document.activeElement === el || el.contains(document.activeElement))) open(el)
+    const text = (activeTitle ?? "").trim()
+    if (el.isConnected && el === active && text && (document.activeElement === el || el.contains(document.activeElement))) {
+      place(el, text)
+    }
   }, 0)
 }
 
@@ -237,7 +310,7 @@ function onFocusOut() {
   window.clearTimeout(showTimer)
   // 键盘焦点离开就收气泡；但指针若还压在这个元素上，title 不能还回去，
   // 否则浏览器会立刻弹系统提示。这种情况留给 pointerout 收尾。
-  if (target && target.matches(":hover")) suspend()
+  if (active && active.matches(":hover")) suspend()
   else hide()
 }
 
@@ -250,9 +323,13 @@ function onPassiveInterrupt() {
 /**
  * 挂载全局 tooltip。只在支持 hover 的精确指针设备上启用——触屏上
  * `pointerover` 会在点按时触发，气泡会跟系统行为打架。
+ *
+ * 幂等：HMR 重跑 `main.ts` 时再调一次不会叠第二套监听。叠加的后果不只是
+ * 重复开销——两个实例各自摘一次 title，后跑的那个会因为「元素已经没有
+ * title」而认不出目标，气泡直接不出。
  */
 export function installTooltip() {
-  if (typeof window === "undefined") return
+  if (typeof window === "undefined" || installed) return
   if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return
 
   document.addEventListener("pointerover", onPointerOver, true)
@@ -268,4 +345,23 @@ export function installTooltip() {
   // 所以失焦只收气泡，回焦再按指针位置决定恢复。
   window.addEventListener("blur", suspend)
   window.addEventListener("focus", resume)
+  installed = true
+}
+
+/** 卸掉全部监听并复位（测试与热更新用） */
+export function uninstallTooltip() {
+  if (!installed) return
+  document.removeEventListener("pointerover", onPointerOver, true)
+  document.removeEventListener("pointerout", onPointerOut, true)
+  document.removeEventListener("focusin", onFocusIn, true)
+  document.removeEventListener("focusout", onFocusOut, true)
+  document.removeEventListener("pointerdown", onPassiveInterrupt, true)
+  window.removeEventListener("scroll", onPassiveInterrupt, true)
+  window.removeEventListener("resize", onPassiveInterrupt)
+  window.removeEventListener("blur", suspend)
+  window.removeEventListener("focus", resume)
+  hide()
+  tip?.remove()
+  tip = null
+  installed = false
 }

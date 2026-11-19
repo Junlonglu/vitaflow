@@ -469,7 +469,7 @@ def check_session_folding(browser) -> list[str]:
         page.wait_for_selector("aside", timeout=20000)
         page.wait_for_timeout(1800)
         # 先展开，让真实 fetch 完成；之后再注入才不会被接口响应覆盖回去
-        exp = page.locator('aside button[title="展开对话"]').first
+        exp = page.locator('aside button[aria-label="展开对话"]').first
         if exp.count():
             exp.click()
             page.wait_for_timeout(900)
@@ -568,6 +568,21 @@ def check_session_folding(browser) -> list[str]:
         if add_op != "1":
             bad.append(f"新建对话 hover 未显形，opacity={add_op}")
 
+        # 展开/收起箭头刻意不给 tooltip（箭头语义自明，同格已被「+」占用）。
+        # 不给 title 也顺带堵死「指针停住 → 浏览器弹原生白框」这条路。
+        chev = page.locator('aside button[aria-label="收起对话"], aside button[aria-label="展开对话"]').first
+        if not chev.count():
+            bad.append("找不到展开/收起箭头（aria-label 缺失？）")
+        else:
+            if chev.get_attribute("title"):
+                bad.append("展开箭头不应带 title：它会退回浏览器原生提示")
+            chev.hover()
+            page.wait_for_timeout(320)
+            chev_shown = page.evaluate(
+                "() => { const t = document.querySelector('#wb-tooltip'); return t ? t.dataset.shown : null; }")
+            if chev_shown == "true":
+                bad.append("展开箭头悬停不应弹气泡")
+
         s = state()
         if s["rows"] != 5 or s["more"] != "查看更多 (3)":
             bad.append(f"折叠态应为 5 行 + 查看更多 (3)，实得 {s}")
@@ -620,7 +635,7 @@ def check_tooltip(browser) -> list[str]:
         page.goto(BASE + "/workspace", wait_until="domcontentloaded", timeout=45000)
         page.wait_for_selector("aside", timeout=20000)
         page.wait_for_timeout(2000)
-        sel = 'aside button[title="展开对话"]'
+        sel = 'aside button[data-new-session]'
         if not page.locator(sel).count():
             bad.append("找不到带 title 的按钮，无法验证 tooltip")
             return bad
@@ -715,7 +730,7 @@ def check_tooltip(browser) -> list[str]:
         left = page.evaluate("""() => {
           const t = document.querySelector('#wb-tooltip');
           return { shown: t ? t.dataset.shown : null,
-                   titleBack: !!document.querySelector('aside button[title="展开对话"]') };
+                   titleBack: !!document.querySelector('aside button[data-new-session][title="新建对话"]') };
         }""")
         if left["shown"] != "false":
             bad.append(f"离开后气泡未收起（shown={left['shown']}）")
@@ -724,7 +739,7 @@ def check_tooltip(browser) -> list[str]:
 
         # 键盘聚焦也要出气泡，否则键盘用户只剩读屏一条路
         page.evaluate("""() => {
-          const b = document.querySelector('aside button[title="展开对话"]');
+          const b = document.querySelector('aside button[data-new-session]');
           b && b.focus();
         }""")
         page.wait_for_timeout(280)

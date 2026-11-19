@@ -11,10 +11,23 @@ from app.core.database import get_db
 from app.core.exceptions import AppException
 from app.core.response import success
 from app.core.security import get_current_user
+from app.core.template_config import normalize_template_config
 from app.models.ai_chat import AiChatMessage
 from app.models.ai_task import AiTask
 from app.models.user import User
-from app.schemas.resume import ResumeCreate, ResumeDuplicateRequest, ResumeOut, ResumePreviewRequest, ResumeShareUpdate, ResumeUpdate, ResumeVersionCreate, default_template_config
+from app.schemas.resume import (
+    ResumeCreate,
+    ResumeDuplicateRequest,
+    ResumeOut,
+    ResumePreviewRequest,
+    ResumeShareUpdate,
+    ResumeUpdate,
+    ResumeVersionCreate,
+    ResumeVersionDetailOut,
+    ResumeVersionRestoreRequest,
+    ResumeVersionSummaryOut,
+    default_template_config,
+)
 from app.schemas.resume_starter import ResumeStarterCreateRequest
 from app.services.ai.token_usage import build_token_usage, estimate_tokens
 from app.services.ai_config_service import get_active_ai_config
@@ -34,7 +47,10 @@ from app.services.resume_service import (
     delete_resume,
     duplicate_resume,
     get_resume,
+    get_version,
     list_resumes,
+    list_versions,
+    restore_version,
     update_resume,
 )
 from app.services.resume_starter_render import create_resume_from_starter
@@ -233,10 +249,96 @@ def duplicate(
     return success(ResumeOut.model_validate(duplicate_resume(db, current_user.id, resume_id, title)).model_dump())
 
 
+def _version_summary(version) -> dict[str, Any]:
+    """列表项：template_id 从 template_config 里取，老快照缺这个键时留空。"""
+    return ResumeVersionSummaryOut(
+        id=version.id,
+        reason=version.reason or "版本快照",
+        source=version.source or "manual",
+        template_id=str((version.template_config or {}).get("template_id") or ""),
+        size_bytes=int(version.size_bytes or 0),
+        create_time=version.create_time,
+    ).model_dump()
+
+
+@router.get("/{resume_id}/versions")
+def list_resume_versions(
+    resume_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=50),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    items, total = list_versions(db, current_user.id, resume_id, page, page_size)
+    return success(
+        {
+            "items": [_version_summary(item) for item in items],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
+    )
+
+
 @router.post("/{resume_id}/versions")
 def version(resume_id: int, payload: ResumeVersionCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    item = create_version(db, current_user.id, resume_id, payload.reason)
-    return success({"id": item.id})
+    item, created = create_version(db, current_user.id, resume_id, payload.reason)
+    # created=False：内容与上一版逐字节相同，复用旧快照，前端据此提示「没有变化」。
+    return success({"id": item.id, "created": created}, "已保存为版本" if created else "内容与上一版一致，未新增版本")
+
+
+@router.get("/{resume_id}/versions/{version_id}")
+def version_detail(
+    resume_id: int,
+    version_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    item = get_version(db, current_user.id, resume_id, version_id)
+    return success(
+        ResumeVersionDetailOut(
+            **_version_summary(item),
+            resume_data=item.resume_data,
+            template_config=item.template_config,
+        ).model_dump()
+    )
+
+
+@router.get("/{resume_id}/versions/{version_id}/preview-html", response_class=HTMLResponse)
+def version_preview_html(
+    resume_id: int,
+    version_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    resume = get_resume(db, current_user.id, resume_id)
+    version = get_version(db, current_user.id, resume_id, version_id)
+    # 用版本自己的模板配置渲染：拿当前简历的 template_id 会串模板，
+    # 对比时看到的就不是「当时的简历」。config 会插进 <style>，先过白名单
+    # （老快照可能写于规范化上线之前）。
+    config = normalize_template_config(version.template_config or {})
+    template_id = str(config.get("template_id") or resume.template_id)
+    config["template_id"] = template_id
+    html = render_resume_html(version.resume_data, template_id, config, resume.language)
+    return HTMLResponse(content=html, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/{resume_id}/versions/{version_id}/restore")
+def restore_resume_version(
+    resume_id: int,
+    version_id: int,
+    payload: ResumeVersionRestoreRequest | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    resume = restore_version(
+        db,
+        current_user.id,
+        resume_id,
+        version_id,
+        expected_update_time=payload.expected_update_time if payload else None,
+    )
+    return success(ResumeOut.model_validate(resume).model_dump(), "已恢复到该版本")
 
 
 def _share_data(resume) -> dict[str, Any]:

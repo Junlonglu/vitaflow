@@ -253,6 +253,18 @@ export const useResumeStore = defineStore("resume", {
     updateResumeData(data: ResumeData) {
       if (this.currentResume) this.currentResume.resume_data = normalizeResumeData(data, this.currentResume.language)
     },
+    /** 版本恢复：整份内容与样式以服务端返回为准，列表里的摘要也要跟着换。 */
+    applyRestoredResume(resume: ResumeItem) {
+      const next: ResumeItem = {
+        ...resume,
+        language: resolveResumeLanguage(resume.language, resume.resume_data),
+      }
+      next.resume_data = normalizeResumeData(next.resume_data, next.language)
+      next.template_config = normalizeTemplateConfig(next.template_config, next.template_id)
+      this.currentResume = next
+      const index = this.resumeList.findIndex(item => item.id === next.id)
+      if (index !== -1) this.resumeList[index] = { ...this.resumeList[index], ...next }
+    },
     updateTemplateConfig(config: TemplateConfig) {
       if (this.currentResume) this.currentResume.template_config = config
     },

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import { CheckCircle2, ChevronDown, Download, FileJson, FileText, LoaderCircle, PanelLeft, Redo2, Save, Settings, Share2, Sparkles, Trash2, Undo2, X, Edit3, Eye, Pencil, AlertCircle, LayoutTemplate, ArrowRight, Menu, Info } from "lucide-vue-next"
+import { CheckCircle2, ChevronDown, Download, FileJson, FileText, History, LoaderCircle, PanelLeft, Redo2, Save, Settings, Share2, Sparkles, Trash2, Undo2, X, Edit3, Eye, Pencil, AlertCircle, LayoutTemplate, ArrowRight, Menu, Info } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
 import ActionMenu from "@/components/ui/dropdown/ActionMenu.vue"
 import Input from "@/components/ui/input/Input.vue"
@@ -14,6 +14,7 @@ import StyleConfigPanel from "@/components/editor/StyleConfigPanel.vue"
 import A4Preview from "@/components/preview/A4Preview.vue"
 import ResumeAiChatPanel from "@/components/ai/ResumeAiChatPanel.vue"
 import { normalizeResumeData, useResumeStore } from "@/stores/resume"
+import type { ResumeItem } from "@/types/resume"
 import { useChatStore } from "@/stores/chat"
 import { useEditorStore } from "@/stores/editor"
 import { exportJsonApi, exportPdfApi } from "@/api/export"
@@ -23,6 +24,7 @@ import { listTemplatesApi, type TemplateItem } from "@/api/template"
 import TemplatePreview from "@/components/templates/TemplatePreview.vue"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
 import ResumeShareDialog from "@/components/resume/ResumeShareDialog.vue"
+import ResumeVersionDialog from "@/components/resume/ResumeVersionDialog.vue"
 import QuestionDialog from "@/components/ai/QuestionDialog.vue"
 import SaveAsResumeDialog from "@/components/ai/SaveAsResumeDialog.vue"
 import { showGlobalToast } from "@/utils/toast"
@@ -51,6 +53,7 @@ const showTemplateModal = ref(false)
 const templates = ref<TemplateItem[]>([])
 const showDeleteConfirm = ref(false)
 const showShareDialog = ref(false)
+const showVersionDialog = ref(false)
 
 function triggerDelete() {
   mobileMenuOpen.value = false
@@ -553,6 +556,30 @@ async function openShareDialog() {
   }
 }
 
+/** 版本面板里的对比基于「已保存的内容」，所以打开前先落库，避免拿草稿当基准。 */
+async function openVersionDialog() {
+  mobileMenuOpen.value = false
+  try {
+    await save({ refreshPreview: false })
+    showVersionDialog.value = true
+  } catch {
+    showGlobalToast("保存简历失败，请稍后重试", "error")
+  }
+}
+
+/** 恢复成功后整份数据以服务端返回为准：本地草稿、撤销栈和预览都要跟着重置。 */
+async function onVersionRestored(resume: ResumeItem) {
+  cancelDebouncedSave()
+  cancelHistoryCommit()
+  resumeStore.applyRestoredResume(resume)
+  commitEditorHistory("恢复到历史版本")
+  editor.setSaved(true)
+  if (!resumeStore.resumeData?.layout.section_order.includes(editor.currentSection)) {
+    editor.setCurrentSection("basics")
+  }
+  await refreshPreviewLatest()
+}
+
 /**
  * 预览可见性：桌面端右栏常驻；移动端只在「预览」tab 里；页面切到后台一律算不可见。
  * 不可见时不发请求，只记一笔欠账，等回来再补。
@@ -793,6 +820,19 @@ async function sendInitialPrompt() {
           </Button>
         </div>
 
+        <!-- 版本历史：图标入口，避免顶栏再挤一个文字按钮 -->
+        <Button
+          v-if="!isMobile"
+          size="icon"
+          variant="ghost"
+          class="h-8 w-8 rounded-lg text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900"
+          title="版本历史"
+          aria-label="版本历史"
+          @click="openVersionDialog"
+        >
+          <History class="h-4 w-4" />
+        </Button>
+
         <div v-if="!isMobile" class="h-6 w-[1px] bg-zinc-200 mx-0.5 md:mx-1"></div>
 
         <!-- Flow Points 账户余额展示（移动至右侧主功能区，支持点击保存并跳转） -->
@@ -866,6 +906,13 @@ async function sendInitialPrompt() {
           >
             <Settings class="h-4 w-4 text-zinc-500" />
             <span>设置</span>
+          </button>
+          <button
+            class="flex items-center w-full gap-2 px-2.5 py-2 rounded-xl text-zinc-700 hover:bg-zinc-100 transition-colors text-xs font-medium"
+            @click="openVersionDialog"
+          >
+            <History class="h-4 w-4 text-zinc-500" />
+            <span>版本历史</span>
           </button>
           <button
             class="flex items-center w-full gap-2 px-2.5 py-2 rounded-xl text-zinc-700 hover:bg-zinc-100 transition-colors text-xs font-medium"
@@ -1170,6 +1217,15 @@ async function sendInitialPrompt() {
       v-model:open="showShareDialog"
       :resume-id="resumeStore.currentResume.id"
       :resume-title="resumeStore.currentResume.title"
+    />
+
+    <ResumeVersionDialog
+      v-if="resumeStore.currentResume"
+      v-model:open="showVersionDialog"
+      :resume-id="resumeStore.currentResume.id"
+      :current-data="resumeStore.currentResume.resume_data"
+      :update-time="resumeStore.currentResume.update_time"
+      @restored="onVersionRestored"
     />
 
     <QuestionDialog :open="questionsDialogOpen" :questions="questionsDialogList" @close="questionsDialogOpen = false" @submit="submitQuestionAnswers" />

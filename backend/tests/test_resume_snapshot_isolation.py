@@ -11,6 +11,17 @@ from app.schemas.resume import ResumeUpdate
 from app.services import resume_service
 
 
+class _ScalarResult:
+    def __init__(self, items):
+        self._items = items
+
+    def first(self):
+        return self._items[0] if self._items else None
+
+    def __iter__(self):
+        return iter(self._items)
+
+
 class _DbStub:
     def __init__(self, resume):
         self.resume = resume
@@ -22,6 +33,16 @@ class _DbStub:
 
     def add(self, obj):
         self.added.append(obj)
+
+    def scalars(self, _stmt):
+        # create_version 会先查「最新一版」做内容去重；stub 里没有历史版本。
+        return _ScalarResult([])
+
+    def scalar(self, _stmt):
+        return 0
+
+    def flush(self):
+        pass
 
     def commit(self):
         self.commits += 1
@@ -59,8 +80,9 @@ class DuplicateIsolationTest(unittest.TestCase):
 class VersionSnapshotIsolationTest(unittest.TestCase):
     def test_version_snapshot_is_detached_from_the_live_resume(self) -> None:
         source = _source_resume()
-        version = resume_service.create_version(_DbStub(source), 1, 7, "AI 修改前")
+        version, created = resume_service.create_version(_DbStub(source), 1, 7, "AI 修改前")
 
+        self.assertTrue(created)
         source.resume_data["basics"]["name"] = "改过的名字"
         source.template_config["theme_color"] = "#111111"
 

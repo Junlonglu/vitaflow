@@ -32,6 +32,11 @@ from app.services.ai_task_service import create_ai_task, finish_ai_task
 from app.services.flow_points_service import precheck_flow_points
 from app.services.info_fragment_service import apply_proposals
 from app.services.resume_normalization import localize_ai_text, strip_thinking_text
+from app.services.resume_service import (
+    VERSION_REASON_AI,
+    VERSION_SOURCE_AI,
+    resume_version_digest,
+)
 from app.services.storage.storage_service import owned_object_names
 from app.services.user_ai_service import audit_chat_use, build_skills_payload, resolve_model_override
 
@@ -1586,12 +1591,18 @@ def _persist_resume_change(
     reason: str,
 ) -> dict[str, Any]:
     """Persist and verify one AI change before the assistant reports success."""
+    # 快照存的是「改动前」的内容，所以 reason 用「AI 修改前」而不是「采纳修改」，
+    # 否则列表里会读成「改完的样子」。
+    digest, size = resume_version_digest(resume.resume_data, resume.template_config)
     db.add(
         ResumeVersion(
             resume_id=resume.id,
             resume_data=deepcopy(resume.resume_data),
             template_config=deepcopy(resume.template_config),
-            reason=reason,
+            reason=reason or VERSION_REASON_AI,
+            source=VERSION_SOURCE_AI,
+            content_hash=digest,
+            size_bytes=size,
         )
     )
     before_data = deepcopy(resume.resume_data or {})
@@ -1656,7 +1667,7 @@ def resolve_chat_change(
                 user,
                 resume,
                 pending_data,
-                "采纳 AI 助手修改",
+                VERSION_REASON_AI,
             )
         elif not had_fragments:
             raise AppException("这次对话没有可写入的修改", 400)

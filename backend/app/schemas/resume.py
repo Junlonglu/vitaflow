@@ -157,7 +157,29 @@ class ResumeUpdate(BaseModel):
 
 
 class ResumeVersionCreate(BaseModel):
-    reason: str = "手动保存版本"
+    reason: str = Field(default="手动保存版本", max_length=60)
+
+
+class ResumeVersionSummaryOut(BaseModel):
+    """版本列表项：刻意不带 resume_data，列表一次可能返回几十条全量 JSON。"""
+
+    id: int
+    reason: str
+    source: str
+    template_id: str
+    size_bytes: int
+    create_time: Optional[datetime] = None
+
+
+class ResumeVersionDetailOut(ResumeVersionSummaryOut):
+    resume_data: dict[str, Any]
+    template_config: dict[str, Any]
+
+
+class ResumeVersionRestoreRequest(BaseModel):
+    """expected_update_time 是乐观锁：与当前简历不一致说明期间有人改过，回 409。"""
+
+    expected_update_time: Optional[datetime] = None
 
 
 class ResumePreviewRequest(BaseModel):

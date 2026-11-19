@@ -576,7 +576,7 @@ macOS 落 San Francisco + 苹方；**Windows 用 CDP `CSS.getPlatformFontsForNod
 
 - 独立于 MainLayout：自有顶栏 `h-14 md:h-16`（返回、可内联编辑的标题、保存状态指示、编辑/AI 分段切换 pill、预览/导出）。
 - 保存状态指示：`text-amber-500`（保存中）/`text-red-500`（失败）/`text-zinc-500` + `emerald-500` 图标（已保存）。
-- 编辑模式：`ModuleSidebar`（模块导航，移动端横置顶部）+ `ResumeFormPanel`（表单区）+ 右侧 A4 预览，之间是一条 1px 分隔线（`cursor-col-resize w-4` 命中区，宽度可拖、悬停变色，无可见把手，见 §6.51）。
+- 编辑模式：`ModuleSidebar`（模块导航，移动端横置顶部）+ `ResumeFormPanel`（表单区）+ 右侧 A4 预览，之间是一条 1px 分隔线（`cursor-col-resize w-4` 命中区，宽度可拖、悬停变色、两端淡出，无可见把手，见 §6.51）。
 - AI 模式：`ResumeAiChatPanel` 白底对话面板接管主区。
 - 编辑器内允许大量精细化样式（自绘阴影、`absolute` 微调），业务页面不模仿。
 
@@ -2068,7 +2068,7 @@ hide(out-timer)       → ← 60ms 那颗照旧执行，把 showTimer 一起清�
 
 用户提「这个拖拽按钮去掉，改成像 workbuddy 这样」。原来分隔条中间戳着一枚 `h-8 w-1 rounded-full bg-zinc-300` 的胶囊：常态可见、悬停放大 1.25 倍并变黑。问题不在尺寸，在**语义**——WorkBuddy 的面板之间只有一条细线，边界自己就是拖拽入口；多一枚胶囊等于告诉用户「这里有个按钮」，而它既不能点也不能聚焦，只会在两栏之间插一根停在中线的竖条。
 
-**做法**：删掉胶囊和那条「悬停才出现的 primary 线」，换成**一条常驻 1px** 的 `bg-wb-border`，`group-hover` / `group-active` 时换成 `bg-wb-primary`。命中区仍是 `w-4`（可见 16px，`after:-left-1 after:-right-1` 外扩到 24px，§6.17 的记录不变），`cursor-col-resize` 与拖拽逻辑一行没动。悬停变色是这条线唯一的发现性来源，所以它是**硬约束**，不是装饰。
+**做法**：删掉胶囊和那条「悬停才出现的 primary 线」，换成**一条常驻 1px、两端淡出**的 `bg-wb-border`，`group-hover` / `group-active` 时换成 `bg-wb-primary`。命中区仍是 `w-4`（可见 16px，`after:-left-1 after:-right-1` 外扩到 24px，§6.17 的记录不变），`cursor-col-resize` 与拖拽逻辑一行没动。悬停变色是这条线唯一的发现性来源，所以它是**硬约束**，不是装饰。
 
 **三个必须注意的点**：
 
@@ -2076,9 +2076,26 @@ hide(out-timer)       → ← 60ms 那颗照旧执行，把 showTimer 一起清�
 - **细线不要居中**。原来用 `left-1/2 -ml-[0.5px]`，16px 的一半是 8px，减 0.5 落在 **7.5px** 上，1px 线跨两个物理像素、必然发虚。改成贴边 `right-0` 落在整像素，直接清晰。
 - **不要给 `role="separator"`**。带这个角色的可拖拽分隔条按 ARIA 应当同时可聚焦、可用方向键调整，而这里只有鼠标拖拽；加了角色等于对外宣称一个不存在的键盘入口。保持纯 `div` + `@mousedown`，与原实现一致。
 
-**审计同步**（新增 `check_splitter()`：六条静态 + 五条交互）：分隔条只有 1 个 1px 子元素（防胶囊回归）、命中区可见宽度 16px（防靠缩窄命中区藏线）、线贴右缘、线贯穿高度、`cursor` 是 `col-resize`、线与命中区底色不同（否则等于隐形）；交互侧是悬停必须变色、拖拽 90px 后左栏宽度跟着变、`body.userSelect` 已还原、暗色下细线换色且不与底色溶在一起。**负向验证**：把胶囊塞回去 → 「实得 2 个」立刻红；摘掉 `group-hover:bg-wb-primary` → 「悬停不变色」立刻红。
+**渐变：两端淡出，中段最实**。用户随后贴了 WorkBuddy 的分隔线截图说「workbuddy 的是有渐变的」。采样它那条线：0% 是 `(247,252,250)`（与背景 `(247,247,247)` 几乎同色）、50% 到峰值 `(143,212,189)`、100% 又回到 `(250,253,252)`——**中段最实、两端消失**，不是均匀的 1px 边框。
 
-**实测**（1440×900）：命中区 16×836、细线 1px 贴右缘 `x=875`、常态 `#e6e6e6` / 暗色 `#2a2c31` / 悬停 `rgba(0,0,0,.9)`；拖拽 612 → 492 生效、松手 `body.userSelect` 为空。浅色与暗色下均无可见色带与半像素发虚。`vue-tsc` 0 错、vitest 238、`audit:ui` 30 格 0 失败。
+实现上选 **mask 而不是渐变背景**：
+
+```css
+.splitter-line {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 50%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 50%, transparent);
+}
+```
+
+两个理由。① **悬停变色要能过渡**：线色仍是一个 `background-color`，`transition-colors` 真的会插值；若改成 `linear-gradient(var(--c), …)` 的背景，`background-image` 不可插值，悬停时整条线会突变，原来那条 150ms 的过渡就成了摆设。② **断言口径不用改**：审计读 `backgroundColor` 判「线与命中区同色 = 不可见」仍然成立，只需再加一条「有没有渐变」。`-webkit-` 前缀照 `directives/scrollHint.ts` 的既有写法一起给。
+
+**不跟 WorkBuddy 的绿色**。它那条是品牌绿的淡版本（峰值 `#8FD4BD` 量级），我们的品牌色是中性黑，等价物就是 `--wb-border` 的淡灰。学的是「渐变」这个手法，不是它的色相——把一条绿线插进黑白灰界面里，只会变成一个第二品牌色。
+
+**采样验证**（1440×900，沿线取 14 个采样点）：常态 `255 → 230（中点 #e6e6e6）→ 255`、悬停 `255 → 25（rgba(0,0,0,.9)）→ 255`、暗色 `23 → (42,44,49)（#2a2c31）→ 23`，三组都是严格线性、峰值正好落在 50%。
+
+**审计同步**（新增 `check_splitter()`：六条静态 + 五条交互）：分隔条只有 1 个 1px 子元素（防胶囊回归）、命中区可见宽度 16px（防靠缩窄命中区藏线）、线贴右缘、线贯穿高度、`cursor` 是 `col-resize`、线与命中区底色不同（否则等于隐形）；交互侧是悬停必须变色、拖拽 90px 后左栏宽度跟着变、`body.userSelect` 已还原、暗色下细线换色且不与底色溶在一起。**形态两条**：`maskImage` 必须含 `linear-gradient`（否则两端不会淡出）、且必须含 `rgba(0, 0, 0, 0)`（否则等于没渐变）。**负向验证**：把胶囊塞回去 → 「实得 2 个」立刻红；摘掉 `group-hover:bg-wb-primary` → 「悬停不变色」立刻红；删掉 `.splitter-line` 的 mask 两行 → 「缺少渐隐遮罩（mask=none）」立刻红。
+
+**实测**（1440×900）：命中区 16×836、细线 1px 贴右缘 `x=875`、常态 `#e6e6e6` / 暗色 `#2a2c31` / 悬停 `rgba(0,0,0,.9)`；拖拽 612 → 492 生效、松手 `body.userSelect` 为空。浅色与暗色下均无可见色带与半像素发虚，渐变两端在工具栏交界与底部各淡出到不可见。`vue-tsc` 0 错、vitest 238、`vite build` 通过、`audit:ui` 30 格 0 失败。
 
 ---
 

@@ -997,7 +997,7 @@ async function sendInitialPrompt() {
           class="group relative z-sticky h-full w-4 shrink-0 cursor-col-resize select-none bg-white after:absolute after:inset-y-0 after:-left-1 after:-right-1 after:content-['']"
           @mousedown="startResize"
         >
-          <div data-splitter-line class="pointer-events-none absolute inset-y-0 right-0 w-px bg-wb-border transition-colors duration-150 group-hover:bg-wb-primary group-active:bg-wb-primary"></div>
+          <div data-splitter-line class="splitter-line pointer-events-none absolute inset-y-0 right-0 w-px bg-wb-border transition-colors duration-150 group-hover:bg-wb-primary group-active:bg-wb-primary"></div>
         </div>
 
         <!-- Preview Canvas -->
@@ -1207,6 +1207,14 @@ async function sendInitialPrompt() {
 .workspace-surface {
   transform-origin: 50% 45%;
   transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), filter 0.45s ease, opacity 0.45s ease;
+}
+
+/* 面板分隔线（§6.51）：两端淡出、中段最实，照 WorkBuddy 的分隔线形态。
+   用 mask 而不是渐变背景——底色仍是一个可过渡的 background-color，
+   悬停换成 --wb-primary 时是平滑变色，而不是整条突变。 */
+.splitter-line {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 50%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 50%, transparent);
 }
 
 .ai-launcher::before {

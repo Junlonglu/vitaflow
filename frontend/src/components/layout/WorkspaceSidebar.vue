@@ -605,11 +605,13 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
               <MessageSquarePlus class="h-3.5 w-3.5" />
             </button>
           </span>
+          <!-- 收起/展开箭头不挂 tooltip：箭头语义自明（WorkBuddy 同样不给），悬停时
+               还要被「+」的加号挡在同一格里；带 title 只会在指针停住后被浏览器弹原生白框。 -->
           <button
             type="button"
-            data-tooltip-placement="top"
             class="hit-area flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-zinc-200/70 hover:text-zinc-700"
-            :title="isExpanded(item.id) ? '收起对话' : '展开对话'"
+            :aria-label="isExpanded(item.id) ? '收起对话' : '展开对话'"
+            :aria-expanded="isExpanded(item.id)"
             @click.stop="toggleExpanded(item.id)"
           >
             <ChevronRight class="h-3.5 w-3.5 transition-transform" :class="isExpanded(item.id) ? 'rotate-90' : ''" />

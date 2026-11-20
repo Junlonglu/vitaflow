@@ -820,19 +820,6 @@ async function sendInitialPrompt() {
           </Button>
         </div>
 
-        <!-- 版本历史：图标入口，避免顶栏再挤一个文字按钮 -->
-        <Button
-          v-if="!isMobile"
-          size="icon"
-          variant="ghost"
-          class="h-8 w-8 rounded-lg text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900"
-          title="版本历史"
-          aria-label="版本历史"
-          @click="openVersionDialog"
-        >
-          <History class="h-4 w-4" />
-        </Button>
-
         <div v-if="!isMobile" class="h-6 w-[1px] bg-zinc-200 mx-0.5 md:mx-1"></div>
 
         <!-- Flow Points 账户余额展示（移动至右侧主功能区，支持点击保存并跳转） -->
@@ -849,12 +836,16 @@ async function sendInitialPrompt() {
         <div v-if="!isMobile" class="h-6 w-[1px] bg-zinc-200 mx-0.5 md:mx-1"></div>
 
         <!-- Desktop Action Buttons -->
+        <!-- 版本放这一组：原来贴在撤销/重做旁边，三个圆形箭头挨在一起，用户找不到 -->
         <div v-if="!isMobile" class="flex items-center gap-2">
           <Button size="sm" variant="outline" class="flex h-9 shrink-0 items-center justify-center border-zinc-200 px-3 text-[13px] font-medium text-zinc-600 hover:bg-wb-hover hover:text-zinc-900" @click="openTemplateModal" title="更换模板">
             <LayoutTemplate class="h-4 w-4 shrink-0 mr-1.5" /> <span>模板</span>
           </Button>
           <Button size="sm" variant="outline" class="flex h-9 shrink-0 items-center justify-center border-zinc-200 px-3 text-[13px] font-medium text-zinc-600 hover:bg-wb-hover hover:text-zinc-900" @click="openStylePanel" title="主题设置">
             <Settings class="h-4 w-4 shrink-0 mr-1.5" /> <span>设置</span>
+          </Button>
+          <Button size="sm" variant="outline" class="flex h-9 shrink-0 items-center justify-center border-zinc-200 px-3 text-[13px] font-medium text-zinc-600 hover:bg-wb-hover hover:text-zinc-900" title="版本历史" aria-label="版本历史" @click="openVersionDialog">
+            <History class="h-4 w-4 shrink-0 xl:mr-1.5" /> <span class="hidden xl:inline">版本</span>
           </Button>
           <Button size="sm" variant="outline" class="flex h-9 shrink-0 items-center justify-center border-zinc-200 px-3 text-[13px] font-medium text-zinc-600 hover:bg-wb-hover hover:text-zinc-900" @click="openShareDialog" title="分享简历">
             <Share2 class="h-4 w-4 shrink-0 mr-1.5" /> <span>分享</span>

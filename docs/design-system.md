@@ -2113,6 +2113,10 @@ hide(out-timer)       → ← 60ms 那颗照旧执行，把 showTimer 一起清�
 - **保留 50 条，手动存档不淘汰**：超限时只按 id 从旧到新回收 `source != manual` 的行。手动存档是用户的显式动作，被后台策略悄悄删掉比「存不下」更糟。
 - **恢复前先备份**：`restore` 先写一份 `source=restore` 的快照，再写回目标版本。恢复本身也要能反悔；备份写完即提交，即使随后写回失败也不会丢当前内容。
 
+**老数据的来源要回填**。0042 给历史行统一填了 `source='manual'`，但「采纳 AI 助手修改」那一批其实是 AI 应用**前**的自动快照——不纠正的话，列表里显示成「手动存档 / 采纳 AI 助手修改」，而且永远躲过保留策略。0043 只把 `source='manual' AND reason='采纳 AI 助手修改'` 的行改成 `source='ai'` + `reason='AI 修改前'`，不碰真正的手动存档。数据回填不可逆，`downgrade()` 留空并写清原因（回退条件会把迁移之后新产生的 AI 快照一起改错）。
+
+**迁移 revision id 不能超过 32 字符**。`alembic_version.version_num` 是 `VARCHAR(32)`，本轮的 id 一开始写成 `0043_resume_version_source_backfill`（33 字符），DDL 全部跑完之后才在写版本号那步炸 `1406 Data too long`，属于「最后一步失败、前面已经执行」的坑——命名时先数长度，别靠跑到一半才发现。
+
 **恢复的两道校验**：`expected_update_time` 与当前简历不一致直接 409（防止把另一标签页刚落库的修改、或刚落库的 AI 应用冲掉）；写回后 `flush + expire` 再读一遍，与目标数据不一致就回滚并 409——JSON 列的静默截断只有回读才看得见，这条口径和 AI 应用（`_persist_resume_change`）保持一致。恢复只写 `resume_data` 与 `template_config`，**不碰**标题、语言、分享开关：快照里本来就没有分享 token，别为了「完整还原」把它带进来。
 
 **预览必须用版本自己的模板**。`POST /preview-html` 用的是当前简历的 `template_id`，拿版本数据去渲染会串模板，用户看到的就不是「当时的简历」。所以版本预览单独一条路由，从 `version.template_config.template_id` 取模板。

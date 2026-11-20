@@ -13,6 +13,7 @@
 | 改 AI 对话链路、提示词、技能或工具 | [`ai/resume-agent.md`](./ai/resume-agent.md) → [`ai/ai-call-flows.md`](./ai/ai-call-flows.md) |
 | 排查「AI 改简历为什么没生效 / 待确认变更怎么走」 | [`ai/ai-chat-pending-change.md`](./ai/ai-chat-pending-change.md) |
 | 改简历 JSON 结构、加字段或加模块 | [`data/resume-schema.md`](./data/resume-schema.md) |
+| 做分阶段代码审查、需要一份可核对的架构基线 | [`code-review/00-architecture-map.md`](./code-review/00-architecture-map.md) |
 | 想知道「为什么当初不用另一种方案」 | [`architecture/pi-agent重构设计.md`](./architecture/pi-agent重构设计.md) 与 `PROJECT-OVERVIEW.md` §14 |
 | 要给 Agent 加轨迹记录 / 做 RSI 前置规划 | [`ai/ai-trajectory.md`](./ai/ai-trajectory.md) |
 | 要拿轨迹做改进、设计评测集 / 判断某个改动值不值得做 | [`ai/rsi-plan.md`](./ai/rsi-plan.md) |
@@ -69,6 +70,22 @@
 | 文档 | 内容 |
 | --- | --- |
 | [`reviews/2026-11-16-code-review.md`](./reviews/2026-11-16-code-review.md) | 全仓审查（backend / frontend / ai-service）：P0 伪造 XFF 绕过限频、PDF 导出 SSRF、后台设置存储型 XSS、积分并发扣减、私有图片可被共享缓存转发等问题的证据、影响与修复建议；末尾附三批修复进度 |
+
+### `code-review/`：分阶段代码梳理（5 篇）
+
+| 文档 | 内容 |
+| --- | --- |
+| [`code-review/00-architecture-map.md`](./code-review/00-architecture-map.md) | Phase 0 架构基线：整体/后端/AI 服务/前端模块地图、25 张表的 ER 图、11 条核心业务流程、通信矩阵、关键文件索引、初步风险观察与文档漂移清单（基线 `a8d451c`） |
+| [`code-review/01-backend-review.md`](./code-review/01-backend-review.md) | Phase 1 Backend 专项审查：API/鉴权、ORM 与迁移一致性、事务与并发、Redis 与存储、HTML/PDF 渲染、安全审计；含「预览资源地址复用 pdf_base_url」「连接池被长渲染占用」「上传先读后判大小」等 26 条 P0–P3 问题与验证方法 |
+| [`code-review/02-ai-service-review.md`](./code-review/02-ai-service-review.md) | Phase 2 AI 服务专项审查：Agent 生命周期、Prompt/Skills/Tools、10 条业务链路、Flow Points 计费审计（幂等/退款/账实一致）、安全（SSRF/令牌/注入）、并发稳定性、12 个重点场景、修复建议与测试缺口 |
+| [`code-review/03-frontend-review.md`](./code-review/03-frontend-review.md) | Phase 3 前端专项审查：组件/Store 设计、简历编辑器与自动保存（保存回写覆盖、卸载丢改动、失焦与 apply 竞争）、AI 对话流式与确认链路、前后端契约漂移、iframe/令牌安全、预览测量循环与渲染性能、29 条问题与三批修复建议 |
+| [`code-review/04-cross-service-review.md`](./code-review/04-cross-service-review.md) | Phase 4 跨服务专项审查：三端身份通道与超时预算、对话回合三次提交、状态机与幂等矩阵、账务数据流（回合级不可对账）、12 个故障注入场景、15 条跨服务问题（预扣无租约、旧提案覆盖、`status` 语义重载等）与三批修复建议 |
+
+### 最终审计（1 篇）
+
+| 文档 | 内容 |
+| --- | --- |
+| [`code-review-report.md`](./code-review-report.md) | Phase 5 交叉验证后的统一结论：66 条 `RF-xxx` 问题（去重、重新定级、排除不成立项）、架构与安全/一致性/性能总结、工程质量评分、四周修复路线图、发布前必修清单（基线 `a8d451c`）。Phase 1 补齐后已做增量合并（RF-052～RF-066、RF-036 上调 P2） |
 
 ### `archive/`：已归档（1 篇）
 

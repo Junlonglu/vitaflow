@@ -565,7 +565,13 @@ def import_fragments(
     user_id: int,
     resume: Resume,
     fragment_ids: list[int],
+    base_data: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], list[str], list[InfoFragment]]:
+    """把信息库条目并入简历快照。
+
+    ``base_data`` 是「本轮已经生成的待确认快照」：模型一轮里先改简历、再导入
+    信息库时，后者要叠在前者的结果上，而不是回到库里的旧数据重新算一遍。
+    """
     ids: list[int] = []
     for raw in fragment_ids or []:
         try:
@@ -583,7 +589,7 @@ def import_fragments(
     for fragment_id in ids:
         rows.append(_user_row(db, user_id, fragment_id))
 
-    merged, added = merge_fragments_into_resume(resume.resume_data, rows)
+    merged, added = merge_fragments_into_resume(base_data or resume.resume_data, rows)
     # 「已存在」不是错误：即便没有新增条目，也要把目标模块从 hidden_sections 里
     # 放出来并写回，否则用户看到的是「导入了但简历里找不到」。是否真的新增由
     # added 告知调用方，前端据此给出不同提示。

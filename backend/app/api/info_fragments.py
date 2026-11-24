@@ -155,7 +155,11 @@ def apply_to_resume(
         db,
         current_user.id,
         resume.id,
-        ResumeUpdate(resume_data=merged),
+        ResumeUpdate(resume_data=merged, expect_revision=resume.revision),
+        # 来源只影响快照与审计归属；写入协议（版本号 + 条件 UPDATE）四条路径共用。
+        # merged 是基于上面读到的 resume_data 算的，所以版本号也带读到的那个：
+        # 期间若有人保存过，这次导入应该 409 让用户重来，而不是把对方的改动冲掉。
+        source=resume_service.VERSION_SOURCE_IMPORT,
     )
     # 没有新增条目时不虚增使用次数；写回仍要做，因为可能刚取消了模块隐藏。
     if added:

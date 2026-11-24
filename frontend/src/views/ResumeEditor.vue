@@ -15,6 +15,7 @@ import A4Preview from "@/components/preview/A4Preview.vue"
 import ResumeAiChatPanel from "@/components/ai/ResumeAiChatPanel.vue"
 import { normalizeResumeData, useResumeStore } from "@/stores/resume"
 import type { ResumeItem } from "@/types/resume"
+import { RESUME_TITLE_MAX } from "@/types/resume"
 import { useChatStore } from "@/stores/chat"
 import { useEditorStore } from "@/stores/editor"
 import { exportJsonApi, exportPdfApi } from "@/api/export"
@@ -30,6 +31,7 @@ import SaveAsResumeDialog from "@/components/ai/SaveAsResumeDialog.vue"
 import { showGlobalToast } from "@/utils/toast"
 import { createPresetSection } from "@/utils/resumePresets"
 import { errorMessage } from "@/utils/errorText"
+import { newRequestId } from "@/utils/requestId"
 import { takeChatHandoff } from "@/utils/chatHandoff"
 import { applyResumeLanguage, normalizeResumeLanguage } from "@/utils/resumeLocale"
 import { useWorkspaceBridge } from "@/composables/useWorkspaceBridge"
@@ -38,6 +40,8 @@ import { useResumeChatStream } from "@/composables/useResumeChatStream"
 import { useChatModels } from "@/composables/useChatModels"
 import { useResumeHistory } from "@/composables/useResumeHistory"
 import { useResumePreview } from "@/composables/useResumePreview"
+import { buildSelectedResumeData, diffResume } from "@/utils/aiDiff"
+import { API_BASE_URL, isConflictError } from "@/api/request"
 
 const props = withDefaults(defineProps<{ resumeId?: number }>(), { resumeId: 0 })
 const route = useRoute()
@@ -147,6 +151,8 @@ const questionsDialogList = ref<PendingQuestion[]>([])
 const saveAsDialogOpen = ref(false)
 const saveAsTitle = ref("")
 const saveAsLoading = ref(false)
+// 「另存为新简历」的幂等键：失败重试复用同一个，不会多出一份副本。
+const saveAsRequestId = ref("")
 const jdOptimizedMessageId = ref<number | null>(null)
 // 模型选择与能力加载跟首页共用一份（composables/useChatModels.ts），绑定名保持原样。
 const {
@@ -233,6 +239,10 @@ onMounted(() => {
   window.addEventListener('resize', resizeHandler)
   window.addEventListener('keydown', handleHistoryShortcut)
   document.addEventListener('visibilitychange', refreshPreviewIfDirty)
+  // 切到后台先存一次：移动端切走后随时可能被回收，比 pagehide 更早也更可靠。
+  document.addEventListener('visibilitychange', handleHideSave)
+  window.addEventListener('pagehide', handlePageHide)
+  window.addEventListener('beforeunload', handleBeforeUnload)
   
   getFlowPointSummaryApi().then((data) => (flowPointSummary.value = data)).catch(() => null)
 })
@@ -241,6 +251,9 @@ onUnmounted(() => {
   if (resizeHandler) window.removeEventListener('resize', resizeHandler)
   window.removeEventListener('keydown', handleHistoryShortcut)
   document.removeEventListener('visibilitychange', refreshPreviewIfDirty)
+  document.removeEventListener('visibilitychange', handleHideSave)
+  window.removeEventListener('pagehide', handlePageHide)
+  window.removeEventListener('beforeunload', handleBeforeUnload)
   disposePreview()
 })
 
@@ -364,10 +377,34 @@ const {
   applyResumeSnapshot: async () => {
     if (!resumeStore.currentResume) return
     cancelDebouncedSave()
+    // 服务端刚写过，本地 revision 必须跟着新详情走；顺带清掉之前的冲突横幅。
     await resumeStore.fetchResumeDetail(resumeId.value)
+    saveConflict.value = null
     commitEditorHistory("AI 助手修改")
     editor.setSaved(true)
     showApplySuccess()
+  },
+  /**
+   * 主按钮「应用」的合并基准 = 当前简历。
+   *
+   * 全选后结果与「提案的整包快照」在没人动过的字段上完全等价（`aiDiff.spec`
+   * 里有这条断言），差别只在于提案之后用户手动改过的内容会保留下来。
+   * 想逐条取舍走审阅台，那边会显式传 merged，不走这里。
+   */
+  buildMergedResumeData: (optimized) => {
+    const current = resumeStore.resumeData
+    if (!current || !optimized) return undefined
+    const sections = diffResume(current, optimized)
+    const allIds = sections.flatMap((section) => section.changes.map((change) => change.id))
+    return buildSelectedResumeData(current, optimized, allIds, sections)
+  },
+  currentRevision: () => resumeStore.currentResume?.revision,
+  onRevisionConflict: async () => {
+    if (!resumeStore.currentResume) return
+    cancelDebouncedSave()
+    await resumeStore.fetchResumeDetail(resumeId.value)
+    saveConflict.value = null
+    editor.setSaved(true)
   },
   onPendingQuestions: (list) => {
     questionsDialogList.value = list
@@ -460,6 +497,8 @@ onMounted(async () => {
 async function loadResumeEditor() {
   try {
     await resumeStore.fetchResumeDetail(resumeId.value)
+    // 重新加载就是「以服务端为准」，之前那条冲突横幅自然失效。
+    saveConflict.value = null
     if (!resumeStore.currentResume?.resume_data.layout.section_order.includes(editor.currentSection)) {
       editor.setCurrentSection("basics")
     }
@@ -482,7 +521,9 @@ async function loadResumeEditor() {
 // 同组件路由跳转（如「另存为新简历」后跳到副本）不会重新挂载，需手动重载
 watch(resumeId, async (newId, oldId) => {
   if (!newId || newId === oldId) return
-  cancelDebouncedSave()
+  // 切简历前把上一份落库：`performSave` 用提交时捕获的 id，不会写错人。
+  // 原来是直接 cancel，防抖窗口里的改动会静默消失。
+  await flushPendingSave().catch(() => undefined)
   cancelHistoryCommit()
   editor.setCurrentSection("basics")
   resetChatSession()
@@ -491,6 +532,10 @@ watch(resumeId, async (newId, oldId) => {
 
 onBeforeUnmount(() => {
   if (applyTimer) clearTimeout(applyTimer)
+  // 路由守卫已经 flush 过时这里是空操作；非路由卸载（父级 v-if 切换、切简历换
+  // key）拦不到守卫，必须在销毁前把改动送出去。Vue 不等 onBeforeUnmount 的
+  // promise，所以只能发出去、不能保证完成后才销毁——请求本身不受影响。
+  if (!editor.saved) void flushPendingSave().catch(() => undefined)
   clearFlushSave(flushPendingSave)
   cancelDebouncedSave()
   cancelHistoryCommit()
@@ -512,23 +557,86 @@ watch(activeSessionId, async (next, prev) => {
 
 
 
-async function performSave(options: { refreshPreview?: boolean } = {}) {
+/**
+ * 保存指纹。
+ *
+ * 用来回答一个问题：「响应回来的时候，本地内容还是我发出去的那份吗？」
+ * PUT 在途期间用户继续打字是常态，服务端只存了发出那一刻的快照；不比对就
+ * `setSaved(true)`，界面会一边显示「已保存」一边丢掉这段输入。
+ */
+function contentFingerprint(resume: ResumeItem) {
+  return JSON.stringify([
+    resume.title,
+    resume.language,
+    resume.template_id,
+    resume.resume_data,
+    resume.template_config,
+  ])
+}
+
+/**
+ * 写入冲突：服务端回 409 说明「我读到的那一版已经有人改过」（另一个标签页、
+ * AI 采纳、版本恢复都可能）。
+ *
+ * 处理原则是**不静默覆盖**：暂停自动保存，把「载入最新版 / 保留我的版本」
+ * 交给用户选。自动重试会在两边都持续编辑时打成 409 风暴。
+ */
+const saveConflict = ref<{ latestRevision: number | null; message: string } | null>(null)
+
+/**
+ * 保存请求体。
+ *
+ * 与 `handlePageHide` 共用一份，避免「正常保存」和「关页兜底」提交的字段
+ * 不一致——那种偏差最难查，因为只有刷新那一下才会命中。
+ *
+ * `expectRevision: false` 用于用户明确选择「覆盖」或关页兜底：前者是用户的
+ * 决定，后者已经没有任何界面可以提示冲突了。
+ */
+function buildSavePayload(resume: ResumeItem, options: { expectRevision?: boolean } = {}) {
+  const config = resume.template_config
+  const payload: Record<string, unknown> = {
+    title: resume.title,
+    language: resume.language,
+    resume_data: resume.resume_data,
+    template_id: config.template_id,
+    template_config: config,
+  }
+  if (options.expectRevision !== false && typeof resume.revision === "number") {
+    payload.expect_revision = resume.revision
+  }
+  return payload
+}
+
+async function performSave(options: { refreshPreview?: boolean; force?: boolean } = {}) {
   if (!resumeStore.currentResume) return
-  const { refreshPreview = true } = options
+  const { refreshPreview = true, force = false } = options
+  // 冲突未解决时不自动重试：用户还在两边编辑的话，每 1.5s 撞一次 409。
+  if (saveConflict.value && !force) return
+  const target = resumeStore.currentResume
+  const targetId = target.id
+  // 模板选择器只改 template_config，落库前把 template_id 对齐，避免两个字段各说各话。
+  target.template_id = target.template_config.template_id
+  const payload = buildSavePayload(target, { expectRevision: !force })
+  const sentFingerprint = contentFingerprint(target)
   editor.setSaving(true)
   try {
-    const config = resumeStore.currentResume.template_config
-    resumeStore.currentResume.template_id = config.template_id
-    await resumeStore.updateResume({
-      title: resumeStore.currentResume.title,
-      language: resumeStore.currentResume.language,
-      resume_data: resumeStore.currentResume.resume_data,
-      template_id: resumeStore.currentResume.template_id,
-      template_config: config,
-    } as any)
+    await resumeStore.updateResume(payload, targetId)
+    // 有在途编辑（或已经切走简历）时不刷新预览、也不置「已保存」：预览拿的是
+    // 服务端的旧快照，刷了反而倒退；saved 保持 false，既有的防抖会再存一次。
+    if (target.id !== targetId || contentFingerprint(target) !== sentFingerprint) return
     if (refreshPreview) await refreshPreviewLatest()
     editor.setSaved(true)
   } catch (error) {
+    if (isConflictError(error)) {
+      const latest = Number((error.data as { latest_revision?: unknown } | null)?.latest_revision)
+      saveConflict.value = {
+        latestRevision: Number.isFinite(latest) ? latest : null,
+        message: error.message,
+      }
+      // 数据没坏，只是需要用户决定用哪一版，别把状态条打成「保存失败」。
+      editor.saveError = false
+      throw error
+    }
     editor.saveError = true
     throw error
   } finally {
@@ -536,9 +644,40 @@ async function performSave(options: { refreshPreview?: boolean } = {}) {
   }
 }
 
-function save(options: { refreshPreview?: boolean } = {}) {
+function save(options: { refreshPreview?: boolean; force?: boolean } = {}) {
   saveChain = saveChain.catch(() => undefined).then(() => performSave(options))
   return saveChain
+}
+
+/** 冲突出口 A：放弃本地改动，以服务端最新版为准。 */
+async function loadLatestResumeFromServer() {
+  if (!resumeStore.currentResume) return
+  cancelDebouncedSave()
+  cancelHistoryCommit()
+  try {
+    await resumeStore.fetchResumeDetail(resumeId.value)
+    commitEditorHistory("载入最新版本")
+    editor.setSaved(true)
+    editor.saveError = false
+    saveConflict.value = null
+    if (!resumeStore.resumeData?.layout.section_order.includes(editor.currentSection)) {
+      editor.setCurrentSection("basics")
+    }
+    showGlobalToast("已载入最新版本", "success")
+  } catch {
+    showGlobalToast("载入最新版本失败，请刷新页面重试", "error")
+  }
+}
+
+/** 冲突出口 B：用户明确要求用本地版本覆盖远端（会写出一条新版本）。 */
+function keepLocalResume() {
+  if (!resumeStore.currentResume) return
+  saveConflict.value = null
+  editor.saveError = false
+  editor.setSaved(false)
+  void save({ force: true })
+    .then(() => showGlobalToast("已用本地版本覆盖", "success"))
+    .catch(() => showGlobalToast("保存失败，请稍后重试", "error"))
 }
 
 async function saveAndGoToAiRecords() {
@@ -571,6 +710,8 @@ async function openVersionDialog() {
 async function onVersionRestored(resume: ResumeItem) {
   cancelDebouncedSave()
   cancelHistoryCommit()
+  // 恢复本身就是一次服务端写入：冲突横幅到此为止，本地以返回的新版本为准。
+  saveConflict.value = null
   resumeStore.applyRestoredResume(resume)
   commitEditorHistory("恢复到历史版本")
   editor.setSaved(true)
@@ -681,8 +822,14 @@ function handleAnswerQuestions(message: any) {
 async function confirmSaveAsNewResume(title: string) {
   if (saveAsLoading.value) return
   saveAsLoading.value = true
+  // 幂等键按「这次另存」生成：失败重试不会在列表里多出一份副本。
+  saveAsRequestId.value = saveAsRequestId.value || newRequestId()
   try {
-    const created = (await duplicateResumeApi(resumeId.value, { title })) as any
+    const created = (await duplicateResumeApi(resumeId.value, {
+      title,
+      request_id: saveAsRequestId.value,
+    })) as any
+    saveAsRequestId.value = ""
     saveAsDialogOpen.value = false
     jdOptimizedMessageId.value = null
     showGlobalToast("已另存为新简历", "success")
@@ -736,7 +883,50 @@ const initialPromptSent = ref(false)
 async function flushPendingSave() {
   cancelDebouncedSave()
   flushHistoryCommit()
+  // 冲突未解决：自动保存已暂停，这里也不重试（重试只会再撞一次）。关页时由
+  // beforeunload 拦一下，让用户知道有未保存的改动。
+  if (saveConflict.value) return
   if (!editor.saved) await save({ refreshPreview: false })
+}
+
+/** 页面被隐藏 / 关闭时的落库尝试：丢弃防抖但保留「不等结果」的语义。 */
+function handleHideSave() {
+  if (document.visibilityState !== "hidden" || editor.saved) return
+  void flushPendingSave().catch(() => undefined)
+}
+
+/**
+ * 刷新 / 关标签页的最后一道兜底：路由守卫拦不住 F5。
+ *
+ * 用 `keepalive` 让请求在文档销毁后继续发出。它没有响应回调，也无法走 axios
+ * 的 401 重登，所以只做「原样提交一次」；体积超过 60KB 就放弃——keepalive
+ * 配额约 64KB，硬发会整条失败，而截断请求体会把简历存坏。
+ */
+function handlePageHide() {
+  if (editor.saved || saveConflict.value) return
+  const resume = resumeStore.currentResume
+  const token = localStorage.getItem("vitaflow_token")
+  if (!resume || !token) return
+  // 关页没有响应可看，带版本号只会白撞一次 409（而且失败后什么都不剩），
+  // 这里按「放弃冲突保护」提交——能救回内容比协议严格更重要。
+  const body = JSON.stringify(buildSavePayload(resume, { expectRevision: false }))
+  if (new Blob([body]).size > 60000) return
+  void fetch(`${API_BASE_URL}/resumes/${resume.id}`, {
+    method: "PUT",
+    keepalive: true,
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body,
+  }).catch(() => undefined)
+}
+
+/**
+ * 冲突未解决时拦一下关页/刷新：此时自动保存是停的，用户直接关掉会丢掉
+ * 本地改动，而界面上只有一条横幅，很容易被忽略。
+ */
+function handleBeforeUnload(event: BeforeUnloadEvent) {
+  if (!saveConflict.value) return
+  event.preventDefault()
+  event.returnValue = ""
 }
 
 onMounted(() => {
@@ -781,6 +971,7 @@ async function sendInitialPrompt() {
             v-model="resumeStore.currentResume.title" 
             placeholder="无标题简历"
             size="1"
+            :maxlength="RESUME_TITLE_MAX"
             class="peer col-start-1 row-start-1 w-full min-w-0 border border-transparent bg-transparent pl-1 pr-6 md:pl-2 md:pr-8 py-1 text-[14px] sm:text-[18px] font-semibold tracking-tight text-zinc-900 hover:border-zinc-200 hover:bg-wb-hover focus:border-zinc-900 focus:bg-white transition-colors outline-none rounded-md truncate"
             @input="markChanged" 
           />
@@ -938,6 +1129,25 @@ async function sendInitialPrompt() {
         </div>
       </Transition>
     </header>
+
+    <!--
+      写入冲突条：自动保存已暂停，等用户决定保留哪一版。
+      不做成弹窗——弹窗会挡住编辑器，用户可能正想先看看两边的差异。
+    -->
+    <div
+      v-if="saveConflict"
+      role="alert"
+      class="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-amber-300/70 bg-amber-50 px-3 py-2 text-[12px] leading-5 text-amber-900 md:px-6 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200"
+    >
+      <AlertCircle class="h-4 w-4 shrink-0" aria-hidden="true" />
+      <span class="min-w-0 flex-1">
+        这份简历已在别处被更新{{ saveConflict.latestRevision != null ? `（当前第 ${saveConflict.latestRevision} 版）` : '' }}，自动保存已暂停。
+      </span>
+      <div class="flex shrink-0 items-center gap-1.5">
+        <Button size="sm" variant="outline" @click="loadLatestResumeFromServer">载入最新版</Button>
+        <Button size="sm" variant="default" @click="keepLocalResume">保留我的版本</Button>
+      </div>
+    </div>
 
     <!-- Main Workspace -->
     <div class="relative flex min-h-0 flex-1 overflow-hidden pb-0">
@@ -1215,6 +1425,7 @@ async function sendInitialPrompt() {
       v-model:open="showVersionDialog"
       :resume-id="resumeStore.currentResume.id"
       :current-data="resumeStore.currentResume.resume_data"
+      :revision="resumeStore.currentResume.revision"
       :update-time="resumeStore.currentResume.update_time"
       @restored="onVersionRestored"
     />

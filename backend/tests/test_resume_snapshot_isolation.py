@@ -27,6 +27,7 @@ class _DbStub:
         self.resume = resume
         self.added = []
         self.commits = 0
+        self.executed = []
 
     def get(self, _model, _key):
         return self.resume
@@ -41,11 +42,32 @@ class _DbStub:
     def scalar(self, _stmt):
         return 0
 
+    def execute(self, statement):
+        """把 Core UPDATE 的 SET 落到假对象上——真库里这一步由数据库完成。"""
+        self.executed.append(statement)
+        for raw_key, value in dict(getattr(statement, "_values", {})).items():
+            # SQLAlchemy 2.0 的 _values 以 Column 对象为键，不是列名字符串。
+            key = getattr(raw_key, "key", raw_key)
+            # 值被包在 BindParameter 里；revision 是 `revision + 1` 表达式，没有 .value。
+            value = getattr(value, "value", value)
+            if key == "revision":
+                # 值本身是 `revision + 1` 表达式，假对象直接按语义加一。
+                setattr(self.resume, key, int(getattr(self.resume, "revision", 0) or 0) + 1)
+            else:
+                setattr(self.resume, key, value)
+        return SimpleNamespace(rowcount=1)
+
     def flush(self):
         pass
 
     def commit(self):
         self.commits += 1
+
+    def rollback(self):
+        pass
+
+    def expire(self, _obj, _attrs=None):
+        pass
 
     def refresh(self, _obj):
         pass
@@ -60,6 +82,7 @@ def _source_resume():
         resume_data={"basics": {"name": "张三"}, "work": [{"id": "w1", "company": "A 公司"}]},
         template_id="tech",
         template_config={"template_id": "tech", "theme_color": "#2563eb", "font_family": "vf-sans"},
+        revision=0,
     )
 
 

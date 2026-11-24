@@ -4,6 +4,7 @@ import Login from "@/views/Login.vue"
 import Workspace from "@/views/Workspace.vue"
 import TemplateGallery from "@/views/TemplateGallery.vue"
 import { meApi } from "@/api/auth"
+import { useWorkspaceBridge } from "@/composables/useWorkspaceBridge"
 
 const router = createRouter({
   history: createWebHistory(),
@@ -41,7 +42,13 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach(async (to) => {
+const { flushSave } = useWorkspaceBridge()
+
+router.beforeEach(async (to, from) => {
+  // 离开编辑器前统一落库。原先只有「切简历 / 回首页 / 新建」这几个动作主动
+  // flush，点侧栏的「信息库」「模型与技能」会静默丢掉防抖窗口（1.5s）内的编辑。
+  // 编辑器没挂载时 handler 为空，这里是一次空调用。
+  if (from.path !== to.path) await flushSave()
   const publicPages = ["/", "/landing", "/login", "/register", "/templates"]
   const token = localStorage.getItem("vitaflow_token")
   const isPublicShare = to.path.startsWith("/share/")

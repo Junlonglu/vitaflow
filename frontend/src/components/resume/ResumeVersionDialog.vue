@@ -24,7 +24,9 @@ const props = defineProps<{
   resumeId: number
   /** 编辑器当前内容：用来算「恢复后会发生什么变化」。 */
   currentData: Record<string, any> | null
-  /** 打开面板时的 update_time，作为恢复接口的乐观锁。 */
+  /** 打开面板时的简历版本号，作为恢复接口的乐观锁。 */
+  revision?: number | null
+  /** 老字段：秒级时间戳，仅在拿不到 revision 时退回使用。 */
   updateTime?: string | null
 }>()
 
@@ -184,7 +186,12 @@ async function confirmRestore() {
   if (!selectedId.value) return
   restoring.value = true
   try {
-    const restored = await restoreResumeVersionApi(props.resumeId, selectedId.value, props.updateTime)
+    const restored = await restoreResumeVersionApi(
+      props.resumeId,
+      selectedId.value,
+      props.revision ?? null,
+      props.updateTime,
+    )
     emit("restored", restored)
     restoreConfirmOpen.value = false
     emit("update:open", false)

@@ -46,6 +46,8 @@ export interface ResumeVersionSummary {
   source: ResumeVersionSource
   template_id: string
   size_bytes: number
+  /** 这份快照写于简历的第几版；老快照是 0。 */
+  revision?: number
   create_time?: string | null
 }
 
@@ -62,12 +64,12 @@ export interface ResumeVersionPage {
 }
 
 export const listResumesApi = (params: ResumeListParams = {}) => request.get<ResumePage, ResumePage>("/resumes", { params })
-export const createResumeApi = (data: Partial<ResumeItem>) => request.post<any, ResumeItem>("/resumes", data)
+export const createResumeApi = (data: Partial<ResumeItem> & { request_id?: string }) => request.post<any, ResumeItem>("/resumes", data)
 export const createResumeFromStarterApi = (data: { starter_id: string; level_id: string; template_id?: string }) => request.post<any, ResumeItem>("/resumes/from-starter", data)
 export const getResumeApi = (id: number) => request.get<ResumeItem, ResumeItem>(`/resumes/${id}`)
 export const updateResumeApi = (id: number, data: Partial<ResumeItem>) => request.put<any, ResumeItem>(`/resumes/${id}`, data)
 export const deleteResumeApi = (id: number) => request.delete(`/resumes/${id}`)
-export const duplicateResumeApi = (id: number, data?: { title?: string }) => request.post<any, ResumeItem>(`/resumes/${id}/duplicate`, data)
+export const duplicateResumeApi = (id: number, data?: { title?: string; request_id?: string }) => request.post<any, ResumeItem>(`/resumes/${id}/duplicate`, data)
 
 /** 版本列表只返回摘要；内容与 diff 在打开某一版时才单独取。 */
 export const listResumeVersionsApi = (id: number, params: { page?: number; page_size?: number } = {}) =>
@@ -79,9 +81,20 @@ export const getResumeVersionApi = (id: number, versionId: number) =>
   request.get<ResumeVersionDetail, ResumeVersionDetail>(`/resumes/${id}/versions/${versionId}`)
 export const previewResumeVersionHtmlApi = (id: number, versionId: number) =>
   request.get<string, string>(`/resumes/${id}/versions/${versionId}/preview-html`, { responseType: "text" as any })
-/** expected_update_time 是乐观锁：期间简历被改过时后端回 409。 */
-export const restoreResumeVersionApi = (id: number, versionId: number, expectedUpdateTime?: string | null) =>
+/**
+ * 恢复某个版本。
+ *
+ * `expectedRevision` 是乐观锁：与当前简历不一致时后端回 409。老调用方传
+ * `expectedUpdateTime` 也能用，但那是秒级精度，同一秒内的两次写入分辨不出来。
+ */
+export const restoreResumeVersionApi = (
+  id: number,
+  versionId: number,
+  expectedRevision?: number | null,
+  expectedUpdateTime?: string | null,
+) =>
   request.post<ResumeItem, ResumeItem>(`/resumes/${id}/versions/${versionId}/restore`, {
+    expected_revision: expectedRevision ?? null,
     expected_update_time: expectedUpdateTime || null,
   })
 export const getResumeShareApi = (id: number) => request.get<ResumeShareSettings, ResumeShareSettings>(`/resumes/${id}/share`)

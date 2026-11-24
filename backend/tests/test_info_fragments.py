@@ -15,6 +15,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from tests.service_ticket_support import service_headers
 from app.api.ai import router as ai_router
 from app.api.info_fragments import router as info_router
 from app.core.database import Base, get_db
@@ -396,13 +397,13 @@ class FragmentApiTest(unittest.TestCase):
             self.assertEqual(self.client.get("/api/ai/service/tool/info-fragments/search?user_id=1").status_code, 401)
             ok = self.client.get(
                 "/api/ai/service/tool/info-fragments/search?user_id=1&query=项目",
-                headers={"X-AI-Service-Token": "test-token"},
+                headers=service_headers(1),
             ).json()
             self.assertEqual(ok["data"]["ok"], True)
 
             proposed = self.client.post(
                 "/api/ai/service/tool/info-fragments/propose",
-                headers={"X-AI-Service-Token": "test-token"},
+                headers=service_headers(1),
                 json={
                     "user_id": 1,
                     "fragments": [
@@ -424,7 +425,7 @@ class FragmentApiTest(unittest.TestCase):
             settings_mock.ai_service_token = "test-token"
             payload = self.client.post(
                 "/api/ai/service/tool/info-fragments/import",
-                headers={"X-AI-Service-Token": "test-token"},
+                headers=service_headers(1),
                 json={"user_id": 1, "resume_id": resume.id, "fragment_ids": [row.id]},
             ).json()["data"]
         self.assertTrue(payload["ok"])

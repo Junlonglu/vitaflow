@@ -199,11 +199,12 @@ export const useResumeStore = defineStore("resume", {
       }
       await this.refreshPreviewHtml()
     },
-    async createResume(templateId = "tech") {
+    async createResume(templateId = "tech", requestId?: string) {
       return await createResumeApi({
         title: "我的简历",
         template_id: templateId,
         template_config: normalizeTemplateConfig({}, templateId),
+        request_id: requestId,
       } as any)
     },
     async createResumeFromStarter(starterId: string, levelId = "junior", templateId = "__industry_default") {
@@ -213,7 +214,7 @@ export const useResumeStore = defineStore("resume", {
         template_id: templateId,
       })
     },
-    async createResumeFromAi(result: any) {
+    async createResumeFromAi(result: any, requestId?: string) {
       const rawResumeData = result?.resume_data?.resume_data || result?.resume_data || result?.optimized_resume_data || (result?.basics ? result : null)
       const language = normalizeResumeLanguage(result?.language)
       const resumeData = normalizeResumeData(rawResumeData, language)
@@ -226,18 +227,51 @@ export const useResumeStore = defineStore("resume", {
         template_id: templateId,
         resume_data: resumeData,
         template_config: normalizeTemplateConfig(result.template_config, templateId),
+        request_id: requestId,
       } as any)
     },
-    async updateResume(payload?: Partial<ResumeItem>) {
-      if (!this.currentResume) return
-      const updated = await updateResumeApi(this.currentResume.id, payload || this.currentResume)
-      updated.language = resolveResumeLanguage(updated.language, updated.resume_data)
-      updated.resume_data = normalizeResumeData(updated.resume_data, updated.language)
-      updated.template_config = normalizeTemplateConfig(updated.template_config, updated.template_id)
-      this.currentResume = updated
-      const index = this.resumeList.findIndex(item => item.id === updated.id)
+    /**
+     * 保存简历。
+     *
+     * 响应**只用来取服务端元数据**（id / user_id / 时间戳），正文与标题一律保留
+     * 本地版本。原因是 PUT 在途期间用户还在继续打字，而服务端回显的是「请求发出
+     * 那一刻」的快照：整对象回写会把这段输入擦掉，界面上却显示「已保存」。
+     *
+     * 同时刻意不替换 `currentResume` 的引用——整体换对象会让绑定在
+     * `currentResume.title` 上的输入框（以及预览侧的 computed）重挂一次。
+     *
+     * `resumeId` 由调用方显式给出：请求在途时可能已经切到另一份简历，
+     * 拿 `currentResume.id` 会把上一份的内容写到新简历上。
+     */
+    async updateResume(payload?: Partial<ResumeItem>, resumeId?: number) {
+      const targetId = resumeId ?? this.currentResume?.id
+      if (!targetId) return
+      const local = this.currentResume?.id === targetId ? this.currentResume : null
+      const body = payload || local
+      if (!body) return
+      const updated = await updateResumeApi(targetId, body)
+      if (local) {
+        Object.assign(local, {
+          id: updated.id,
+          user_id: updated.user_id,
+          create_time: updated.create_time,
+          update_time: updated.update_time,
+        })
+        // revision 是下一次写入的前提条件，漏同步会让自己的下一次保存撞自己。
+        if (typeof updated.revision === "number") local.revision = updated.revision
+      }
+      const index = this.resumeList.findIndex(item => item.id === targetId)
       if (index !== -1) {
-        this.resumeList[index] = { ...this.resumeList[index], ...updated }
+        const patch = payload || local || {}
+        this.resumeList[index] = {
+          ...this.resumeList[index],
+          title: patch.title ?? this.resumeList[index].title,
+          language: patch.language ?? this.resumeList[index].language,
+          template_id: patch.template_id ?? this.resumeList[index].template_id,
+          revision: typeof updated.revision === "number" ? updated.revision : this.resumeList[index].revision,
+          create_time: updated.create_time ?? this.resumeList[index].create_time,
+          update_time: updated.update_time ?? this.resumeList[index].update_time,
+        }
       }
     },
     async deleteResume(id: number) {
@@ -246,8 +280,8 @@ export const useResumeStore = defineStore("resume", {
       const maxPage = Math.max(1, Math.ceil(nextTotal / this.resumeListPageSize))
       await this.fetchResumeList(Math.min(this.resumeListPage, maxPage), this.resumeListPageSize)
     },
-    async duplicateResume(id: number) {
-      await duplicateResumeApi(id)
+    async duplicateResume(id: number, requestId?: string) {
+      await duplicateResumeApi(id, requestId ? { request_id: requestId } : undefined)
       await this.fetchResumeList(1, this.resumeListPageSize)
     },
     updateResumeData(data: ResumeData) {

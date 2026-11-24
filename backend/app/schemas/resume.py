@@ -5,6 +5,8 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
+from app.core.contracts import REQUEST_ID_MAX, RESUME_TITLE_MAX
+
 
 def default_resume_data() -> dict[str, Any]:
     return {
@@ -141,19 +143,24 @@ def default_template_config(template_id: str = "tech") -> dict[str, Any]:
 
 
 class ResumeCreate(BaseModel):
-    title: str = "我的简历"
+    title: str = Field(default="我的简历", max_length=RESUME_TITLE_MAX)
     language: str = "zh-CN"
     template_id: str = "tech"
     resume_data: dict[str, Any] = Field(default_factory=default_resume_data)
     template_config: dict[str, Any] = Field(default_factory=default_template_config)
+    # 幂等键：双击「新建」或超时重试时，第二次请求回放第一次的结果。
+    request_id: Optional[str] = Field(default=None, max_length=REQUEST_ID_MAX)
 
 
 class ResumeUpdate(BaseModel):
-    title: Optional[str] = None
+    title: Optional[str] = Field(default=None, max_length=RESUME_TITLE_MAX)
     language: Optional[str] = None
     resume_data: Optional[dict[str, Any]] = None
     template_id: Optional[str] = None
     template_config: Optional[dict[str, Any]] = None
+    # 乐观锁：调用方看到的是第几版。缺省表示不校验（关页兜底等没有界面可
+    # 提示冲突的场景），但服务端仍会把 revision 推进一格。
+    expect_revision: Optional[int] = Field(default=None, ge=0)
 
 
 class ResumeVersionCreate(BaseModel):
@@ -168,6 +175,8 @@ class ResumeVersionSummaryOut(BaseModel):
     source: str
     template_id: str
     size_bytes: int
+    # 这份快照写于简历的第几版；老快照是 0（迁移时统一置 0）。
+    revision: int = 0
     create_time: Optional[datetime] = None
 
 
@@ -177,8 +186,12 @@ class ResumeVersionDetailOut(ResumeVersionSummaryOut):
 
 
 class ResumeVersionRestoreRequest(BaseModel):
-    """expected_update_time 是乐观锁：与当前简历不一致说明期间有人改过，回 409。"""
+    """expected_revision 是乐观锁：与当前简历不一致说明期间有人改过，回 409。
 
+    `expected_update_time` 仅为老客户端保留（秒级，同一秒内的两次写入分辨不出来）。
+    """
+
+    expected_revision: Optional[int] = Field(default=None, ge=0)
     expected_update_time: Optional[datetime] = None
 
 
@@ -188,7 +201,8 @@ class ResumePreviewRequest(BaseModel):
 
 
 class ResumeDuplicateRequest(BaseModel):
-    title: Optional[str] = Field(default=None, max_length=120)
+    title: Optional[str] = Field(default=None, max_length=RESUME_TITLE_MAX)
+    request_id: Optional[str] = Field(default=None, max_length=REQUEST_ID_MAX)
 
 
 class ResumeShareUpdate(BaseModel):
@@ -207,6 +221,8 @@ class ResumeOut(BaseModel):
     resume_data: dict[str, Any]
     template_id: str
     template_config: dict[str, Any]
+    # 写入版本号：前端每次保存原样带回，作为下一次写入的前提条件。
+    revision: int = 0
     create_time: Optional[datetime] = None
     update_time: Optional[datetime] = None
 

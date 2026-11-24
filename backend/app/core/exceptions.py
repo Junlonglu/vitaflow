@@ -48,16 +48,19 @@ class AppException(Exception):
     「服务端炸了」，无法区分是数据不存在还是真的出错。
     """
 
-    def __init__(self, message: str, code: int = 500):
+    def __init__(self, message: str, code: int = 500, data: dict | None = None):
         self.message = message
         self.code = code
+        # 少数冲突类错误需要把「服务端现在的样子」告诉调用方（如 409 的
+        # latest_revision），否则前端只能再发一次请求去猜。
+        self.data = data
 
 
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppException)
     async def app_exception_handler(_: Request, exc: AppException):
         status_code = exc.code if 400 <= exc.code <= 599 else 200
-        return error_response(exc.message, exc.code, status_code)
+        return error_response(exc.message, exc.code, status_code, exc.data)
 
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(_: Request, exc: StarletteHTTPException):

@@ -33,9 +33,19 @@ from app.services.ai.token_usage import build_token_usage, estimate_tokens
 from app.services.ai_config_service import get_active_ai_config
 from app.services.ai_service_client import ai_service_task_result_sync
 from app.services.resume_normalization import normalize_resume_data
-from app.services.flow_points_service import POINT_ZERO, precheck_flow_points, settle_task_flow_points
+from app.services.flow_points_service import precheck_flow_points, settle_task_flow_points
+from app.services.ai_task_service import (
+    BILLING_BILLED,
+    BILLING_FAILED,
+    BILLING_UNBILLED,
+    TASK_FAILED,
+    TASK_PENDING,
+    TASK_SUCCESS,
+    finish_ai_task,
+    task_lease_deadline,
+)
 from app.services.preview_service import render_resume_html
-from app.services.pdf_export_service import get_pdf_path
+from app.services.pdf_export_service import ResumeRenderSource, get_pdf_path
 from app.services.resume_import_service import derive_imported_resume_title, extract_resume_text_from_uploads
 from app.services.resume_json_export import import_resume_from_json
 from app.services.resume_locale import detect_resume_language, normalize_resume_language
@@ -67,11 +77,15 @@ router = APIRouter(prefix="/resumes", tags=["resumes"])
 def _mark_import_task_failed(db: Session, task: AiTask | None, message: str) -> None:
     if not task:
         return
-    task.status = "failed"
-    task.error_message = message
-    task.points_used = POINT_ZERO
-    db.add(task)
-    db.commit()
+    if task.status == TASK_SUCCESS:
+        # 内容已经交付给用户了，只是后续步骤（如结算）出错：只记「账目待核」，
+        # 不改写执行结果，否则看板成功率会把这类回合算成失败（RF-017）。
+        task.billing_status = BILLING_FAILED
+        task.error_message = message
+        db.add(task)
+        db.commit()
+        return
+    finish_ai_task(db, task, TASK_FAILED, error_message=message)
 
 
 @router.get("")
@@ -99,7 +113,11 @@ def list_my_resumes(
 
 @router.post("")
 def create(payload: ResumeCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return success(ResumeOut.model_validate(create_resume(db, current_user.id, payload)).model_dump())
+    return success(
+        ResumeOut.model_validate(
+            create_resume(db, current_user.id, payload, request_id=payload.request_id)
+        ).model_dump()
+    )
 
 
 @router.post("/from-starter")
@@ -151,7 +169,9 @@ def import_resume_file(
         task = AiTask(
             user_id=current_user.id,
             task_type="import_resume",
-            status="pending",
+            status=TASK_PENDING,
+            billing_status=BILLING_UNBILLED,
+            expires_at=task_lease_deadline(),
             model_name=ai_config.model_ref or ai_config.name,
             input_data={
                 "source": "import_file",
@@ -202,7 +222,9 @@ def import_resume_file(
             ),
         )
         task.resume_id = resume.id
-        task.status = "success"
+        task.status = TASK_SUCCESS
+        # 终态不再需要租约；结算紧接着做，中间挂掉会由清扫器补账。
+        task.expires_at = None
         task.output_data = result
         task.tokens_used = int(token_usage.get("total_tokens") or 0)
         task.input_data = {**(task.input_data or {}), "token_usage": token_usage}
@@ -210,6 +232,8 @@ def import_resume_file(
         db.commit()
         db.refresh(task)
         settle_task_flow_points(db, task, description="导入简历生成结构化内容")
+        task.billing_status = BILLING_BILLED
+        db.add(task)
         db.commit()
         db.refresh(resume)
         return success(ResumeOut.model_validate(resume).model_dump(), "导入成功")
@@ -246,7 +270,12 @@ def duplicate(
     current_user: User = Depends(get_current_user),
 ):
     title = payload.title if payload else None
-    return success(ResumeOut.model_validate(duplicate_resume(db, current_user.id, resume_id, title)).model_dump())
+    request_id = payload.request_id if payload else None
+    return success(
+        ResumeOut.model_validate(
+            duplicate_resume(db, current_user.id, resume_id, title, request_id=request_id)
+        ).model_dump()
+    )
 
 
 def _version_summary(version) -> dict[str, Any]:
@@ -257,6 +286,7 @@ def _version_summary(version) -> dict[str, Any]:
         source=version.source or "manual",
         template_id=str((version.template_config or {}).get("template_id") or ""),
         size_bytes=int(version.size_bytes or 0),
+        revision=int(getattr(version, "revision", 0) or 0),
         create_time=version.create_time,
     ).model_dump()
 
@@ -337,6 +367,7 @@ def restore_resume_version(
         resume_id,
         version_id,
         expected_update_time=payload.expected_update_time if payload else None,
+        expected_revision=payload.expected_revision if payload else None,
     )
     return success(ResumeOut.model_validate(resume).model_dump(), "已恢复到该版本")
 
@@ -412,7 +443,15 @@ def preview_html(
             and message.optimized_resume_data
         ):
             data = message.optimized_resume_data
-    html = render_resume_html(data, resume.template_id, resume.template_config, resume.language)
+    # 渲染需要的四个值先取成普通对象，再结束只读事务：模板渲染虽比 Chromium 快，
+    # 但它仍在请求事务窗口内，连接池紧张时每一秒都在加重排队（RF-053）。
+    template_id, template_config, language = (
+        resume.template_id,
+        resume.template_config,
+        resume.language,
+    )
+    db.rollback()
+    html = render_resume_html(data, template_id, template_config, language)
     return HTMLResponse(content=html, headers={"Cache-Control": "no-store"})
 
 
@@ -430,12 +469,22 @@ def preview_html_by_data(
     data = normalize_resume_data(data, {"language": resume.language})
     if isinstance(titles_in, dict) and titles_in:
         data.setdefault("layout", {})["section_titles"] = {**data.get("layout", {}).get("section_titles", {}), **titles_in}
-    html = render_resume_html(data, resume.template_id, resume.template_config, resume.language)
+    template_id, template_config, language = (
+        resume.template_id,
+        resume.template_config,
+        resume.language,
+    )
+    db.rollback()
+    html = render_resume_html(data, template_id, template_config, language)
     return HTMLResponse(content=html, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/{resume_id}/preview-pdf")
 def preview_pdf(resume_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     resume = get_resume(db, current_user.id, resume_id)
-    path = get_pdf_path(resume)
+    source = ResumeRenderSource.from_resume(resume)
+    # Chromium 首次渲染要 5–60s。先结束只读事务把连接还回池里，否则 15 个并发
+    # 预览就能占满整个池，健康检查也跟着排队（RF-053）。
+    db.rollback()
+    path = get_pdf_path(source)
     return FileResponse(path, media_type="application/pdf", headers={"Cache-Control": "no-store"})

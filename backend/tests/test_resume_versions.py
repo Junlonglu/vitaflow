@@ -96,9 +96,22 @@ class _VersionDb:
     def refresh(self, _obj):
         pass
 
-    def expire(self, obj, _attrs):
+    def expire(self, _obj, _attrs=None):
         if self.corrupt_on_expire:
             self.resume.resume_data = {"basics": {"name": "写入后被截断"}}
+
+    def execute(self, statement):
+        """把 Core UPDATE 的 SET 落到假对象上——真库里这一步由数据库完成。"""
+        for raw_key, value in dict(getattr(statement, "_values", {})).items():
+            # SQLAlchemy 2.0 的 _values 以 Column 对象为键，不是列名字符串。
+            key = getattr(raw_key, "key", raw_key)
+            # 值被包在 BindParameter 里；revision 是 `revision + 1` 表达式，没有 .value。
+            value = getattr(value, "value", value)
+            if key == "revision":
+                setattr(self.resume, key, int(getattr(self.resume, "revision", 0) or 0) + 1)
+            else:
+                setattr(self.resume, key, value)
+        return SimpleNamespace(rowcount=1)
 
 
 def _resume(**overrides):
@@ -110,6 +123,7 @@ def _resume(**overrides):
         "template_id": "tech",
         "template_config": {"template_id": "tech", "theme_color": "#2563eb"},
         "update_time": datetime(2026, 1, 1, 12, 0, 0),
+        "revision": 0,
     }
     payload.update(overrides)
     return SimpleNamespace(**payload)

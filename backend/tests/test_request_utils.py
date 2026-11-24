@@ -114,10 +114,10 @@ class LoginThrottleIdentityTest(unittest.TestCase):
 
     def test_spoofed_forwarded_for_does_not_split_the_counter(self) -> None:
         client = _login_client()
-        seen: list[str] = []
+        seen: dict[str, set[str]] = {}
 
-        def record(_scope, identity, _ttl):
-            seen.append(identity)
+        def record(scope, identity, _ttl):
+            seen.setdefault(scope, set()).add(identity)
             return 1
 
         with (
@@ -133,7 +133,11 @@ class LoginThrottleIdentityTest(unittest.TestCase):
                 )
                 self.assertEqual(resp.status_code, 400)
 
-        self.assertEqual(len(set(seen)), 1, f"同一个客户端应落在同一条限频计数上，实际：{seen}")
+        # 两个维度（邮箱+IP、per-IP）各自只能有一条计数：伪造 XFF 既不拆开
+        # 「邮箱+IP」，也不拆开 per-IP。
+        self.assertEqual(set(seen), {"login", "login_ip"})
+        for scope, identities in seen.items():
+            self.assertEqual(len(identities), 1, f"{scope} 维度被拆开了：{identities}")
 
 
 if __name__ == "__main__":

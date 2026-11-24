@@ -14,6 +14,7 @@ const deps = (fetchImpl: typeof globalThis.fetch) => ({
   fetch: fetchImpl,
   fastapiBaseUrl: "http://127.0.0.1:8000/",
   serviceToken: "secret-token",
+  turnTicket: "test-ticket",
 });
 
 const payload = {

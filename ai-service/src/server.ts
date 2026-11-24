@@ -7,8 +7,11 @@
  */
 import "dotenv/config";
 import { installCachedLookup } from "./dns-lookup.js";
+import { installOutboundFetchGuard } from "./ssrf.js";
 // 必须在任何出站请求（DeepSeek、FastAPI 回调）发生前替换 dns.lookup
 installCachedLookup();
+// 给 BYOK 主机禁用重定向：公网域名 302 到内网时，这一次跳转不经过域名解析检查。
+installOutboundFetchGuard();
 import { join } from "node:path";
 import { timingSafeEqual } from "node:crypto";
 import express from "express";
@@ -36,6 +39,7 @@ import {
 } from "./catalog.js";
 import { runChat, runTask, type ChatRuntime, type ChatStreamEvent } from "./agent.js";
 import { reportUsage } from "./billing.js";
+import { runHandler, sendEvent } from "./httpErrors.js";
 import { loadConfig } from "./config.js";
 import { createFauxRuntime } from "./faux.js";
 import { enrichProviderFromModelsDev, fetchModelsDev, guessModelsDevKey } from "./modelsdev.js";
@@ -51,9 +55,10 @@ import { createTurnTrace, reportTrace, versionTag, type TraceMeta } from "./trac
 const config = loadConfig();
 const AGENT_DIR = join(process.cwd(), ".pi-agent");
 const app = express();
-// Raised above the 100kb default: a 5MB uploaded image arrives as ~6.7MB base64
-// (ticket 06). Allowed image types cap at 5MB server-side, so 20mb is safe.
-app.use(express.json({ limit: "20mb" }));
+// body 上限必须装得下「一次消息附图总量 base64 + 文本」。这个数字不是随便定的：
+// 后端 ``core/contracts.py`` 声明了附图总量上限与文本上限，启动自检会核对
+// 两边是否自洽（RF-044）。默认 32MB 对应 20MB 附图 + 8k 字符正文。
+app.use(express.json({ limit: config.bodyLimitBytes }));
 
 const TOKEN_HEADERS = ["authorization", "x-ai-service-token"] as const;
 
@@ -99,10 +104,8 @@ function authorize(req: express.Request): boolean {
   return false;
 }
 
-function sendEvent(res: express.Response, event: ChatStreamEvent): void {
-  if (res.writableEnded) return;
-  res.write(`${JSON.stringify(event)}\n`);
-}
+// （sendEvent / runHandler 见 httpErrors.ts：错误出口单独成模块，才能被单测
+// 直接覆盖，而不必把整个 express 应用拉起来。）
 
 // 健康检查只说明「进程能接请求」。不要在这里猜模型是否可用：曾经的
 // `ready: provider === "faux"` 让 real 模式永远 false，看起来像模型配错了。
@@ -111,6 +114,21 @@ function sendEvent(res: express.Response, event: ChatStreamEvent): void {
 // 需要的话走受令牌保护的 /v1/catalog（provider_mode）。
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
+});
+
+// 契约自述：后端启动时读一次，确认「Node 回合总时长 ≤ 后端代理读超时」这条链
+// 没被某一边的 env 改歪（RF-033）。放令牌后面，是因为它描述的是部署参数，
+// 和 provider/mode 一样不属于公开信息。
+app.get("/v1/contracts", (req, res) => {
+  if (!authorize(req)) {
+    res.status(401).json({ type: "error", message: "未授权：需要有效的服务令牌" });
+    return;
+  }
+  res.json({
+    turn_timeout_ms: config.turnTimeoutMs,
+    body_limit_bytes: config.bodyLimitBytes,
+    provider: config.provider,
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -604,7 +622,7 @@ app.delete("/v1/catalog/groups/:id", async (req, res) => {
   }
 });
 
-app.post("/v1/chat", async (req, res) => {
+async function handleChat(req: express.Request, res: express.Response): Promise<void> {
   console.log(`[vitaflow-ai] chat request received`);
   if (!authorize(req)) {
     res.status(401).json({ type: "error", message: "未授权：需要有效的服务令牌" });
@@ -631,7 +649,7 @@ app.post("/v1/chat", async (req, res) => {
   // platform models keep their own default (medium when reasoning is supported).
   let thinkingLevel: ThinkingLevelSetting | undefined;
   if (byok && runtime.kind === "real") {
-    const resolved = registerByokModel(runtime, byok);
+    const resolved = await registerByokModel(runtime, byok);
     if (resolved.error) {
       res.status(400).json({ type: "error", message: resolved.error });
       return;
@@ -660,6 +678,9 @@ app.post("/v1/chat", async (req, res) => {
     typeof req.body?.context === "object" && req.body.context !== null ? req.body.context : null;
   const userId = Number.isInteger(req.body?.user_id) ? req.body.user_id : 0;
   const resumeId = Number.isInteger(req.body?.resume_id) ? req.body.resume_id : 0;
+  // 回合票据（RF-008）：后端签发，绑定「用户 + 简历 + 消息」。原样回送，不解析、
+  // 不校验——校验权在后端，Node 只是个搬运工。空串表示本轮没有身份。
+  const turnTicket = typeof req.body?.turn_ticket === "string" ? req.body.turn_ticket : "";
   // 技能：用户点了技能卡或输入 /名称 时，直接在这一轮把方法注入系统提示词，
   // 用户消息换成参数（无参数则用技能自带的默认请求）。没有技能前缀时按自然语言处理，
   // 模型仍可自己调用 use_skill 取用。
@@ -694,11 +715,14 @@ app.post("/v1/chat", async (req, res) => {
       : skillCommand
         ? "skill_command"
         : "free_text";
+  // 被回复的用户消息 id：轨迹与计费都用它做「回合」的标识。计费侧靠它判重，
+  // 同一条上报重试不会二次建任务、二次扣点（RF-007）。
+  const turnId = Number.isInteger(req.body?.turn_id) ? (req.body.turn_id as number) : null;
   const turnTrace = createTurnTrace({
     user_id: userId,
     resume_id: resumeId,
     // 后端转发时带上被回复的用户消息 id 与会话 id，轨迹才能和消息表对上。
-    turn_id: Number.isInteger(req.body?.turn_id) ? (req.body.turn_id as number) : null,
+    turn_id: turnId,
     session_id: sessionId,
     trigger,
     skill: skillCommand ? { id: skillCommand.skill.id, name: skillCommand.skill.name } : null,
@@ -741,6 +765,8 @@ app.post("/v1/chat", async (req, res) => {
       modelRef,
       userId,
       resumeId,
+      turnTicket,
+      sessionId: sessionId ?? undefined,
       images,
       thinkingLevel,
       // 技能正文已经进了提示词；把技能本身也告诉 agent，好让对话里出现
@@ -765,7 +791,12 @@ app.post("/v1/chat", async (req, res) => {
   // not be billed (FastAPI would fall back to the default ai_chat rule).
   // Fire-and-forget: a billing hiccup must never fail a turn the user already
   // received, but it is still awaited briefly so process shutdown sees it.
-  const reportDeps = { fetch: globalThis.fetch, fastapiBaseUrl: config.fastapiBaseUrl, serviceToken: config.serviceToken };
+  const reportDeps = {
+    fetch: globalThis.fetch,
+    fastapiBaseUrl: config.fastapiBaseUrl,
+    serviceToken: config.serviceToken,
+    turnTicket,
+  };
   // 轨迹整包上报（P0）：事件只有个位数，一次 POST 就够；它不影响用户与结算，
   // 失败只丢分析数据，所以 reportTrace 自带日志、不向链路抛错。
   const tracePayload = turnTrace.snapshot();
@@ -776,6 +807,7 @@ app.post("/v1/chat", async (req, res) => {
       const ok = await reportUsage(reportDeps, {
         user_id: userId,
         resume_id: resumeId,
+        turn_id: turnId ?? undefined,
         usage: billableUsage,
         feature,
         tool_calls: outcome.toolCalls,
@@ -795,6 +827,7 @@ app.post("/v1/chat", async (req, res) => {
       const ok = await reportUsage(reportDeps, {
         user_id: userId,
         resume_id: resumeId,
+        turn_id: turnId ?? undefined,
         usage: [],
         feature,
         tool_calls: outcome.toolCalls,
@@ -809,14 +842,16 @@ app.post("/v1/chat", async (req, res) => {
       console.error("[vitaflow-ai] failure report failed:", err);
     }
   }
-});
+}
+
+app.post("/v1/chat", (req, res) => void runHandler("chat", res, () => handleChat(req, res)));
 
 // One-shot task endpoint (ticket 09): generate/import. The prompt lives here
 // (taskPrompts.ts); FastAPI only sends the parsed input payload. Usage rides the
 // result event — FastAPI settles the task synchronously, so unlike /v1/chat there
 // is deliberately NO reportUsage callback (avoids task_type hardcoding and the
 // import resume_id race).
-app.post("/v1/task", async (req, res) => {
+async function handleTask(req: express.Request, res: express.Response): Promise<void> {
   if (!authorize(req)) {
     res.status(401).json({ type: "error", message: "未授权：需要有效的服务令牌" });
     return;
@@ -852,6 +887,32 @@ app.post("/v1/task", async (req, res) => {
 
   await runTask({ task, message, systemPrompt, config, runtime, modelRef: taskModelRef }, (event) => sendEvent(res, event), controller.signal);
   res.end();
+}
+
+app.post("/v1/task", (req, res) => void runHandler("task", res, () => handleTask(req, res)));
+
+// 同步抛错 / 显式 next(err) 的兜底。必须注册在所有路由之后：Express 只把
+// 错误交给它之前注册的中间件。之前完全没有错误中间件，未捕获的错误会落到
+// Express 的默认处理器，响应体是 HTML 堆栈，FastAPI 侧解析不出来。
+app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error("[vitaflow-ai] unhandled express error:", err);
+  if (res.headersSent) {
+    res.end();
+    return;
+  }
+  res.status(500).json({ type: "error", message: "AI 服务内部错误" });
+});
+
+// async 路由已经经 runHandler 收口，能走到这里的是没被 await 的拒绝（后台
+// 任务、事件回调）。只记日志不退出：进程本身还健康，杀掉它会连带切断所有
+// 在途回合。真正不可恢复的错误走下面的 uncaughtException。
+process.on("unhandledRejection", (reason) => {
+  console.error("[vitaflow-ai] unhandled promise rejection:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("[vitaflow-ai] uncaught exception, shutting down:", err);
+  process.exit(1);
 });
 
 let runtime: ChatRuntime;

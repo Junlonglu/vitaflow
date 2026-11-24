@@ -93,8 +93,18 @@ export const getResumeChatMessagesApi = (resumeId: number, sessionId?: number | 
   request.get(`/ai/resume-chat/${resumeId}/messages`, { params: sessionId ? { session_id: sessionId } : {} })
 export const clearResumeChatMessagesApi = (resumeId: number, sessionId?: number | null) =>
   request.delete(`/ai/resume-chat/${resumeId}/messages`, { params: sessionId ? { session_id: sessionId } : {} })
-export const decideResumeChatChangeApi = (resumeId: number, messageId: number, action: "apply" | "reject", mergedResumeData?: any) =>
-  request.post(`/ai/resume-chat/${resumeId}/messages/${messageId}/decision`, action === "apply" && mergedResumeData ? { action, merged_resume_data: mergedResumeData } : { action })
+export const decideResumeChatChangeApi = (
+  resumeId: number,
+  messageId: number,
+  action: "apply" | "reject",
+  mergedResumeData?: any,
+  expectRevision?: number | null,
+) =>
+  request.post(`/ai/resume-chat/${resumeId}/messages/${messageId}/decision`, {
+    action,
+    ...(action === "apply" && mergedResumeData ? { merged_resume_data: mergedResumeData } : {}),
+    ...(expectRevision != null ? { expect_revision: expectRevision } : {}),
+  })
 export const getAiCapabilityApi = () => request.get<AiCapability, AiCapability>("/ai/capability")
 export const getMyAiRecordsApi = (params: Record<string, unknown>) => request.get<any, any>("/ai/records", { params })
 export const getMyAiHistoriesApi = (params: Record<string, unknown>) => request.get<any, any>("/ai/histories", { params })

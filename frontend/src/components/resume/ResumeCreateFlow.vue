@@ -9,6 +9,7 @@ import ResumeImportProgress from "@/components/resume/ResumeImportProgress.vue"
 import AiGenerateDialog from "@/components/ai/AiGenerateDialog.vue"
 import { generateResumeStreamApi, getFlowPointSummaryApi, isSilentStreamError, type FlowPointSummary } from "@/api/ai"
 import { errorMessage, isAbortError } from "@/utils/errorText"
+import { newRequestId } from "@/utils/requestId"
 import { listTemplatesApi, type TemplateItem } from "@/api/template"
 import { importResumeFileApi } from "@/api/resume"
 import {
@@ -46,6 +47,8 @@ const modalPage = ref(1)
 const isImportRendering = ref(false)
 // 从模板中心带过来的模板：空白创建直接套用，岗位起稿 / 导入沿用它而不必再选一次。
 const pendingTemplateId = ref("")
+// 空白创建的幂等键：失败重试复用，成功后清空（见 createResume）。
+const createRequestId = ref("")
 
 const templates = ref<TemplateItem[]>([])
 const templatesLoaded = ref(false)
@@ -355,8 +358,12 @@ function selectTemplate(templateId: string) {
 }
 
 async function createResume(templateId: string) {
+  // 幂等键跟着「这次创建」走：失败重试仍用同一个键，服务端就不会建出第二份；
+  // 成功后才作废，下次创建是新的动作。
+  createRequestId.value = createRequestId.value || newRequestId()
   try {
-    const item = await store.createResume(templateId)
+    const item = await store.createResume(templateId, createRequestId.value)
+    createRequestId.value = ""
     showCreate.value = false
     emit("created", item.id)
   } catch (error: unknown) {

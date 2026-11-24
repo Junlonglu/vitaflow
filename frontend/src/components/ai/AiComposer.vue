@@ -10,10 +10,10 @@ import {
   COMPOSER_TOOLBAR_CLASS,
 } from "@/components/ai/composerStyles"
 import { CHAT_SKILLS, type ChatSkill } from "@/components/ai/chatSkills"
-import { privateFileUrl } from "@/lib/fileUrl"
 import { uploadAiChatImageApi } from "@/api/file"
 import type { AiChatAttachment, AiChatModelOption } from "@/api/ai"
 import type { ChatModelChoice } from "@/composables/useChatModels"
+import { CHAT_ATTACHMENT_MAX, CHAT_ATTACHMENT_TOTAL_MAX_MB } from "@/types/chat"
 
 /**
  * 对话输入区：编辑器面板与工作区首页共用同一个组件。
@@ -61,8 +61,17 @@ const uploadingImage = ref(false)
 const uploadError = ref("")
 const showClearConfirm = ref(false)
 
-/** 一次消息最多附带的图片数（与后端 MAX_CHAT_ATTACHMENTS 对齐）。 */
-const MAX_ATTACHMENTS = 9
+/** 一次消息最多附带的图片数（与后端 MAX_CHAT_ATTACHMENTS 同源）。 */
+const MAX_ATTACHMENTS = CHAT_ATTACHMENT_MAX
+/** 附图总量预算。用字节比较，避免 0.5MB 这类小数在 MB 单位下被四舍五入抹平。 */
+const ATTACHMENT_BUDGET_BYTES = CHAT_ATTACHMENT_TOTAL_MAX_MB * 1024 * 1024
+/**
+ * 已上传图片的字节数，与 `attachments` 同序。
+ *
+ * 单独存一份是因为 `AiChatAttachment` 是接口契约，不该为了前端提示往里塞字段；
+ * 两个数组只在 push / splice / reset 三处同步修改。
+ */
+const attachmentBytes = ref<number[]>([])
 
 function adjustHeight() {
   const el = inputRef.value
@@ -78,6 +87,7 @@ function focus() {
 function reset() {
   input.value = ""
   attachments.value = []
+  attachmentBytes.value = []
   uploadError.value = ""
   if (inputRef.value) inputRef.value.style.height = "auto"
 }
@@ -86,6 +96,8 @@ function reset() {
 async function setDraft(text: string, nextAttachments: AiChatAttachment[] = []) {
   input.value = text
   attachments.value = nextAttachments.map((item) => ({ ...item }))
+  // 外部塞进来的附件没有本地 File，字节数未知：按 0 记，让后端的预算校验兜底。
+  attachmentBytes.value = nextAttachments.map(() => 0)
   uploadError.value = ""
   await nextTick()
   adjustHeight()
@@ -153,7 +165,16 @@ async function uploadImages(files: File[]) {
     uploadError.value = `一次最多附带 ${MAX_ATTACHMENTS} 张图片`
     return
   }
-  const accepted = files.slice(0, remaining)
+  // 张数够、总量爆掉是最常见的组合（9 张大图），必须在**上传之前**拦：
+  // 先传 45MB 再被后端拒，等于让用户白等一轮（RF-044）。
+  let used = attachmentBytes.value.reduce((sum, size) => sum + size, 0)
+  const withinBudget: File[] = []
+  for (const file of files.slice(0, remaining)) {
+    if (used + file.size > ATTACHMENT_BUDGET_BYTES) break
+    used += file.size
+    withinBudget.push(file)
+  }
+  const accepted = withinBudget
   uploadError.value = ""
   uploadingImage.value = true
   const failed: string[] = []
@@ -162,12 +183,14 @@ async function uploadImages(files: File[]) {
       try {
         const result = await uploadAiChatImageApi(file)
         attachments.value.push({ url: result.url, name: file.name, content_type: file.type, object_name: result.object_name })
+        attachmentBytes.value.push(file.size)
       } catch {
         failed.push(file.name || "图片")
       }
     }
     const over = files.length > remaining ? `一次最多附带 ${MAX_ATTACHMENTS} 张图片` : ""
-    const errors = [over, failed.length ? `${failed.join("、")} 上传失败` : ""].filter(Boolean)
+    const tooBig = accepted.length < Math.min(files.length, remaining) ? `图片合计不能超过 ${CHAT_ATTACHMENT_TOTAL_MAX_MB}MB` : ""
+    const errors = [over, tooBig, failed.length ? `${failed.join("、")} 上传失败` : ""].filter(Boolean)
     if (errors.length) uploadError.value = errors.join("；")
   } finally {
     uploadingImage.value = false
@@ -195,6 +218,7 @@ async function handlePaste(event: ClipboardEvent) {
 
 function removeAttachment(index: number) {
   attachments.value.splice(index, 1)
+  attachmentBytes.value.splice(index, 1)
 }
 
 function chooseImage() {
@@ -234,7 +258,7 @@ const modelOptions = computed<ChatModelChoice[]>(() => props.modelChoices ?? pla
   <form :class="COMPOSER_SHELL_CLASS" class="relative" @submit.prevent="submit">
     <div v-if="attachments.length || uploadError" class="flex flex-wrap gap-2 px-3 pt-3 sm:gap-3">
       <div v-for="(item, index) in attachments" :key="item.url" class="group relative h-14 w-14 sm:h-16 sm:w-16 shrink-0 rounded-lg border border-zinc-200/80 bg-white">
-        <img :src="privateFileUrl(item.url)" :alt="item.name || '待发送图片'" class="h-full w-full rounded-lg object-cover" />
+        <img :src="item.url" :alt="item.name || '待发送图片'" class="h-full w-full rounded-lg object-cover" />
         <button type="button" class="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-white text-zinc-400 ring-1 ring-zinc-200/80 transition hover:text-red-500 active:scale-95" title="移除图片" @click="removeAttachment(index)">
           <X class="h-3 w-3" stroke-width="2" />
         </button>

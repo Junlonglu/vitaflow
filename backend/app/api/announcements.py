@@ -2,7 +2,8 @@ import html
 import re
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -33,22 +34,50 @@ def announcement_summary(content: str, limit: int = 120) -> str:
     return text[:limit] + ("…" if len(text) > limit else "")
 
 
+def _has_read_record(db: Session, announcement_id: int, user_id: int) -> bool:
+    return (
+        db.scalar(
+            select(AnnouncementRead.id).where(
+                AnnouncementRead.announcement_id == announcement_id,
+                AnnouncementRead.user_id == user_id,
+            )
+        )
+        is not None
+    )
+
+
+def _insert_read_record(db: Session, announcement_id: int, user_id: int) -> bool:
+    """写一条已读记录；已经存在则返回 False。
+
+    「先 SELECT 判存在、再 INSERT」本身不致命，致命的是**只靠它**：两个请求
+    （双标签页 / 前端重试）同时判定未读，第二个 INSERT 撞唯一约束，未捕获就
+    变成 500。唯一约束才是正确答案，所以这里在 savepoint 里插入并捕获
+    IntegrityError——冲突时只回滚这一条插入，外层事务还能继续用。
+    """
+    try:
+        with db.begin_nested():
+            db.add(AnnouncementRead(announcement_id=announcement_id, user_id=user_id))
+        return True
+    except IntegrityError:
+        return False
+
+
 def mark_announcement_read(db: Session, user_id: int, announcement_id: int) -> int:
     announcement = db.get(Announcement, announcement_id)
     if not announcement or announcement.status != "published":
         raise AppException("公告不存在", 404)
-    exists = db.scalar(
-        select(AnnouncementRead.id).where(
-            AnnouncementRead.announcement_id == announcement_id,
-            AnnouncementRead.user_id == user_id,
+    # 已读是绝大多数请求（前端会轮询当前公告），先走一条 SELECT 的快路径，
+    # 避免每次都为「必然冲突」的插入开 savepoint。
+    if not _has_read_record(db, announcement_id, user_id) and _insert_read_record(db, announcement_id, user_id):
+        # 计数用条件自增，不做「读出来 +1 再写回」：并发两个首次已读会丢一次。
+        db.execute(
+            update(Announcement)
+            .where(Announcement.id == announcement_id)
+            .values(read_count=func.coalesce(Announcement.read_count, 0) + 1)
         )
-    )
-    if not exists:
-        db.add(AnnouncementRead(announcement_id=announcement_id, user_id=user_id))
-        announcement.read_count = int(announcement.read_count or 0) + 1
-        db.add(announcement)
         db.commit()
         announcement_cache_service.invalidate()
+        db.refresh(announcement)
     return int(announcement.read_count or 0)
 
 

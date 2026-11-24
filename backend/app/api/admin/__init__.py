@@ -16,6 +16,8 @@ from app.api.admin import (
     announcements,
     dashboard,
     feedbacks,
+    maintenance,
+    observability,
     points,
     records,
     redeem_codes,
@@ -37,5 +39,7 @@ for _module in (
     ai_configs,
     redeem_codes,
     templates,
+    maintenance,
+    observability,
 ):
     router.include_router(_module.router)

@@ -55,6 +55,25 @@ def record_failure(scope: str, identity: str, window_seconds: int) -> int:
         return 0
 
 
+def hit(scope: str, identity: str, limit: int, window_seconds: int) -> bool:
+    """记一次请求并返回是否已超限；用于给公开端点加基本速率。
+
+    与 ``record_failure`` 的区别是「成功也计数」：公开可枚举入口（如
+    ``/shares/{token}``）没有账号可锁，需要的是每 IP 的请求上限而不是失败
+    次数。同样 fail-open——Redis 故障时放行，不把公开页面一起拖死。
+    """
+    key = _key(scope, identity)
+    try:
+        with redis_client.pipeline(transaction=True) as pipe:
+            pipe.incr(key)
+            pipe.expire(key, window_seconds)
+            count, _ = pipe.execute()
+        return int(count or 0) > limit
+    except Exception:
+        logger.warning("公开端点限速计数失败：scope=%s", scope, exc_info=True)
+        return False
+
+
 def clear(scope: str, identity: str) -> None:
     try:
         redis_client.delete(_key(scope, identity))

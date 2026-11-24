@@ -14,7 +14,7 @@ interface Captured {
   body: any;
 }
 
-function buildTool(respond: () => Response | Promise<Response>) {
+function buildTool(respond: () => Response | Promise<Response>, sessionId: number | null = 55) {
   const calls: Captured[] = [];
   const state = createTurnState();
   const tool = createUpdateResumeTool({
@@ -24,8 +24,10 @@ function buildTool(respond: () => Response | Promise<Response>) {
     }) as typeof fetch,
     fastapiBaseUrl: "http://api.test",
     serviceToken: "token",
+    turnTicket: "test-ticket",
     userId: 7,
     resumeId: 9,
+    sessionId: sessionId ?? undefined,
     state,
   });
   return { tool, calls, state };
@@ -82,6 +84,7 @@ describe("update_resume", () => {
     assert.deepEqual(calls[0].body, {
       user_id: 7,
       resume_id: 9,
+      session_id: 55,
       updates: [{ section: "work", proposed: [{ id: "work_1", description: "x" }] }],
       from_library: [3],
     });
@@ -91,6 +94,64 @@ describe("update_resume", () => {
       suggestions: ["已修改：工作经历（1 条）"],
     });
     assert.match(String(result.content[0].text), /点「应用」后才写入/);
+  });
+
+  it("refuses to call the backend without a session (no silent fallback)", async () => {
+    const { tool, calls, state } = buildTool(() => ok(["x"]), null);
+    const result: any = await tool.execute(
+      "call_session",
+      { changes: [{ section: "basics", fields: { location: "深圳" } }] } as never,
+      undefined as never,
+      undefined as never,
+      undefined as never,
+    );
+    assert.equal(calls.length, 0);
+    assert.equal(result.details.ok, false);
+    assert.equal(result.details.reason, "missing_session");
+    assert.equal(state.pendingChange, null);
+  });
+
+  it("stacks a second call on the pending snapshot and keeps both summaries", async () => {
+    // 第一轮：改工作经历，后端返回整份快照。
+    const first = new Response(
+      JSON.stringify({
+        data: {
+          ok: true,
+          optimized_resume_data: { basics: { name: "张三" }, work: [{ id: "w1", position: "实习生" }] },
+          suggestions: ["已修改：工作经历（1 条）"],
+        },
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+    const second = new Response(
+      JSON.stringify({
+        data: {
+          ok: true,
+          optimized_resume_data: { basics: { name: "张三", location: "深圳" }, work: [{ id: "w1", position: "实习生" }] },
+          suggestions: ["已修改：基本信息（1 项）"],
+        },
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+    const queue = [first, second];
+    const { tool, calls, state } = buildTool(() => queue.shift()!);
+    const execute = (changes: unknown) =>
+      tool.execute("call_x", { changes } as never, undefined as never, undefined as never, undefined as never);
+
+    await execute([{ section: "work", items: [{ id: "w1", position: "实习生" }] }]);
+    // 第二次请求必须带上第一次的快照，否则后端会从库里的旧数据重算，把第一次改动丢掉。
+    assert.equal(calls[0].body.base_resume_data, undefined);
+    const secondResult: any = await execute([{ section: "basics", fields: { location: "深圳" } }]);
+    assert.deepEqual(calls[1].body.base_resume_data, {
+      basics: { name: "张三" },
+      work: [{ id: "w1", position: "实习生" }],
+    });
+    assert.deepEqual(state.pendingChange?.optimized_resume_data, {
+      basics: { name: "张三", location: "深圳" },
+      work: [{ id: "w1", position: "实习生" }],
+    });
+    assert.deepEqual(state.pendingChange?.suggestions, ["已修改：工作经历（1 条）", "已修改：基本信息（1 项）"]);
+    assert.match(String(secondResult.content[0].text), /工作经历（1 条）/);
   });
 
   it("does not call the backend when there is nothing to change", async () => {
@@ -130,8 +191,10 @@ describe("update_resume", () => {
       }) as typeof fetch,
       fastapiBaseUrl: "http://api.test",
       serviceToken: "token",
+      turnTicket: "test-ticket",
       userId: 1,
       resumeId: 1,
+      sessionId: 1,
       state,
     });
     const result: any = await tool.execute(

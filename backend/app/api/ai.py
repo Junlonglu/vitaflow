@@ -2,12 +2,14 @@ import hmac
 import json
 import logging
 from collections.abc import Callable
-from typing import Any, Literal
+from copy import deepcopy
+from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -16,6 +18,8 @@ from app.core.exceptions import AppException
 from app.core.request_utils import get_client_ip
 from app.core.response import success
 from app.core.security import get_current_user
+from app.core.service_ticket import TicketError, TurnTicket, verify_ticket
+from app.core import service_ticket
 from app.models.ai_config import FlowPointRule, FlowPointTransaction
 from app.models.ai_task import AiTask
 from app.models.ai_trace import AiAgentTrace
@@ -68,6 +72,8 @@ from app.services.ai_task_service import (
     ai_task_usage_payload,
     create_ai_task,
     finish_ai_task,
+    turn_tasks,
+    user_visible_task_clause,
 )
 from app.services.app_settings_service import get_setting
 from app.services import info_fragment_service
@@ -134,8 +140,16 @@ class UpdateResumeRequest(BaseModel):
 
     user_id: int
     resume_id: int
+    # 本轮对话所属会话：历史与待确认快照必须按这个会话取。缺省时旧版会回落
+    # 「最近活跃会话」，两个标签页交叉提问就会读到别人的上下文（RF-014），
+    # 所以这里改成必填（路由里显式报错，不用 Pydantic 的英文 422）。
+    session_id: Optional[int] = None
     updates: list[dict[str, Any]] = Field(default_factory=list)
     from_library: list[int] = Field(default_factory=list)
+    # 本轮已生成的待确认快照（Node 侧 state.pendingChange 原样回传）。模型一轮
+    # 里调两次 update_resume 时，后一次要叠在前一次的结果上，否则第一次改动
+    # 会被「从库里的旧数据重新算一遍」静默覆盖（RF-019）。
+    base_resume_data: Optional[dict[str, Any]] = None
 
 
 class SearchEvidenceItem(BaseModel):
@@ -228,6 +242,9 @@ class AiServiceUsageRequest(BaseModel):
 
     user_id: int
     resume_id: int | None = None
+    # 被回复的用户消息 id（与轨迹上报同一个键）。有它就能判定「这条上报是不是
+    # 已经结算过的回合」，重试与丢包不会二次建任务、二次扣点（RF-007）。
+    turn_id: int | None = Field(default=None, ge=1)
     feature: str | None = None
     tool_calls: int = Field(default=0, ge=0)
     status: str | None = None
@@ -276,6 +293,79 @@ def require_ai_service_token(request: Request) -> None:
     expected = settings.ai_service_token
     if not expected or not supplied or not hmac.compare_digest(supplied, expected):
         raise AppException("未授权：需要有效的服务令牌", 401)
+
+
+async def _claimed_scope(request: Request) -> tuple[int | None, int | None]:
+    """从请求里取出 Node 声称的身份：query 优先，其次 JSON body。
+
+    回调端点分两种写法（GET 用 query、POST 用 body），这里统一收口，免得每加
+    一个回调就要记得再写一次校验——「新端点忘了加检查」正是这类问题的复发方式。
+    """
+    raw_user = request.query_params.get("user_id")
+    raw_resume = request.query_params.get("resume_id")
+    if raw_user is None and request.method in {"POST", "PUT", "PATCH"}:
+        body = await request.body()
+        if body:
+            try:
+                parsed = json.loads(body)
+            except (ValueError, UnicodeDecodeError):
+                parsed = None
+            if isinstance(parsed, dict):
+                raw_user = parsed.get("user_id", raw_user)
+                raw_resume = parsed.get("resume_id", raw_resume)
+
+    def _int(value: object) -> int | None:
+        if value is None or isinstance(value, bool):
+            return None
+        try:
+            return int(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return None
+
+    return _int(raw_user), _int(raw_resume)
+
+
+async def require_turn_ticket(request: Request) -> TurnTicket:
+    """服务令牌 + 回合票据双证（依赖形式，供工具回调端点用）。
+
+    静态令牌只证明「你是 AI 服务」；票据才证明「你正在替**这个**用户办**这一**
+    回合的事」。两者缺一不可：令牌泄漏后，攻击者仍要有一张为目标准备的票据才
+    能越权（RF-008）。
+    """
+    ticket = _verify_service_ticket(request)
+    user_id, resume_id = await _claimed_scope(request)
+    guard_turn_scope(ticket, user_id=user_id, resume_id=resume_id, request=request)
+    return ticket
+
+
+def _verify_service_ticket(request: Request) -> TurnTicket:
+    """校验服务令牌与票据本身；不做作用域比对（调用方知道自己的身份）。"""
+    require_ai_service_token(request)
+    try:
+        return verify_ticket(request.headers.get(service_ticket.TICKET_HEADER) or "")
+    except TicketError as exc:
+        logger.warning("回合票据被拒（%s %s）：%s", request.method, request.url.path, exc.reason)
+        raise AppException("未授权：回合票据缺失或已失效", 401)
+
+
+def guard_turn_scope(
+    ticket: TurnTicket,
+    *,
+    user_id: int | None,
+    resume_id: int | None = None,
+    request: Request | None = None,
+) -> None:
+    """票据作用域与请求体不一致就 403。"""
+    problem = ticket.scope_problems(user_id=user_id, resume_id=resume_id)
+    if problem:
+        # 403 而不是 401：令牌和票据本身都有效，是「拿 A 的票据办 B 的事」。
+        logger.warning(
+            "回合票据越权（%s %s）：%s",
+            request.method if request is not None else "-",
+            request.url.path if request is not None else "-",
+            problem,
+        )
+        raise AppException(f"越权：{problem}", 403)
 
 
 def ai_payload(payload: Any) -> dict[str, Any]:
@@ -545,12 +635,16 @@ def my_ai_records(
 ):
     page = max(1, page)
     page_size = max(1, min(page_size, 100))
+    # 内部任务（摘要压缩）不进用户视图：用户没有发起它，也不该为它付点。
+    visibility = user_visible_task_clause()
     query = (
         select(AiTask, Resume.title)
         .outerjoin(Resume, (Resume.id == AiTask.resume_id) & (Resume.user_id == current_user.id))
-        .where(AiTask.user_id == current_user.id)
+        .where(AiTask.user_id == current_user.id, visibility)
     )
-    count_query = select(func.count()).select_from(AiTask).where(AiTask.user_id == current_user.id)
+    count_query = (
+        select(func.count()).select_from(AiTask).where(AiTask.user_id == current_user.id, visibility)
+    )
     if task_type:
         query = query.where(AiTask.task_type == task_type)
         count_query = count_query.where(AiTask.task_type == task_type)
@@ -845,12 +939,21 @@ def resume_chat_decision(
 ):
     resume = get_resume(db, current_user.id, resume_id)
     assistant_message, resume_data = resolve_chat_change(
-        db, current_user, resume, message_id, payload.action, payload.merged_resume_data
+        db,
+        current_user,
+        resume,
+        message_id,
+        payload.action,
+        payload.merged_resume_data,
+        expect_revision=payload.expect_revision,
     )
     return success(
         AiChatDecisionResponse(
             assistant_message=assistant_message,
             resume_data=resume_data,
+            # apply 没写简历时（纯 reject / 只入库信息）resume 对象可能已过期，
+            # 取它的 revision 会拿旧值；只有真的写了才回。
+            revision=int(resume.revision or 0) if resume_data is not None else None,
         ).model_dump()
     )
 
@@ -871,7 +974,7 @@ def resume_chat_clear(
 def service_update_basics_field(
     payload: UpdateBasicsFieldRequest,
     db: Session = Depends(get_db),
-    _: None = Depends(require_ai_service_token),
+    _: TurnTicket = Depends(require_turn_ticket),
 ):
     """Internal tool callback: validate the agent's field-level basics change.
 
@@ -907,7 +1010,7 @@ def service_update_basics_field(
 def service_update_section(
     payload: UpdateSectionRequest,
     db: Session = Depends(get_db),
-    _: None = Depends(require_ai_service_token),
+    _: TurnTicket = Depends(require_turn_ticket),
 ):
     """Internal tool callback: validate a section-level change.
 
@@ -945,7 +1048,7 @@ def service_update_section(
 def service_propose_change(
     payload: ProposeChangeRequest,
     db: Session = Depends(get_db),
-    _: None = Depends(require_ai_service_token),
+    _: TurnTicket = Depends(require_turn_ticket),
 ):
     """Internal tool callback: validate an atomic change spanning several sections.
 
@@ -978,7 +1081,7 @@ def service_propose_change(
 def service_update_resume(
     payload: UpdateResumeRequest,
     db: Session = Depends(get_db),
-    _: None = Depends(require_ai_service_token),
+    _: TurnTicket = Depends(require_turn_ticket),
 ):
     """Agent 的唯一写入端点：信息库导入 + 模块改动，一次合并、一次校验。
 
@@ -988,17 +1091,25 @@ def service_update_resume(
     仍然只返回待确认快照，不落库——写入永远发生在用户点「应用」之后。
     """
     resume = get_resume(db, payload.user_id, payload.resume_id)
-    data: dict[str, Any] = resume.resume_data or {}
+    if payload.session_id is None:
+        # 不回落「最近活跃会话」：两个标签页交叉提问时，回落会把别人的上下文
+        # 当成这一轮的历史喂给数值守卫，误拦/误放都无从复现（RF-014）。
+        raise AppException("工具回调缺少 session_id，无法确定本轮对话上下文", 400)
+    data: dict[str, Any] = deepcopy(payload.base_resume_data or resume.resume_data or {})
     labels: list[str] = []
 
     if payload.from_library:
-        data, added, _rows = import_info_fragments(db, payload.user_id, resume, payload.from_library)
+        data, added, _rows = import_info_fragments(
+            db, payload.user_id, resume, payload.from_library, base_data=data
+        )
         labels.extend(f"导入信息库：{label}" for label in added)
 
     if payload.updates:
         history = [
             {"role": item.role, "content": item.content}
-            for item in list_chat_messages(db, payload.user_id, payload.resume_id, limit=40)
+            for item in list_chat_messages(
+                db, payload.user_id, payload.resume_id, limit=40, session_id=payload.session_id
+            )
         ]
         user_message = next(
             (item["content"] for item in reversed(history) if item.get("role") == "user"),
@@ -1034,7 +1145,7 @@ def service_get_resume_context(
     resume_id: int,
     sections: str,
     db: Session = Depends(get_db),
-    _: None = Depends(require_ai_service_token),
+    _: TurnTicket = Depends(require_turn_ticket),
 ):
     """Internal tool callback: read the requested section(s) on demand.
 
@@ -1050,7 +1161,7 @@ def service_get_resume_context(
 @router.post("/service/tool/search-evidence")
 def service_search_evidence(
     payload: SearchEvidenceRequest,
-    _: None = Depends(require_ai_service_token),
+    _: TurnTicket = Depends(require_turn_ticket),
 ):
     """Internal tool callback: record web_search results as guard evidence.
 
@@ -1094,7 +1205,7 @@ def service_search_info_fragments(
     kinds: str = "",
     limit: int = 8,
     db: Session = Depends(get_db),
-    _: None = Depends(require_ai_service_token),
+    _: TurnTicket = Depends(require_turn_ticket),
 ):
     """内部工具回调：检索用户的原子信息库（只读）。"""
     kind_list = [item.strip() for item in str(kinds or "").split(",") if item.strip()]
@@ -1106,7 +1217,7 @@ def service_search_info_fragments(
 def service_import_info_fragments(
     payload: ServiceImportFragmentsRequest,
     db: Session = Depends(get_db),
-    _: None = Depends(require_ai_service_token),
+    _: TurnTicket = Depends(require_turn_ticket),
 ):
     """内部工具回调：把选中的信息条目合并成一份待确认的简历修改。
 
@@ -1129,7 +1240,7 @@ def service_import_info_fragments(
 def service_propose_info_fragments(
     payload: ServiceProposeFragmentsRequest,
     db: Session = Depends(get_db),
-    _: None = Depends(require_ai_service_token),
+    _: TurnTicket = Depends(require_turn_ticket),
 ):
     """内部工具回调：校验 Agent 从对话里整理出的信息条目。
 
@@ -1151,6 +1262,42 @@ def service_propose_info_fragments(
     )
 
 
+def _usage_entry_payload(task: AiTask) -> dict[str, Any]:
+    """把已落库的任务行还原成上报响应里的一条（重放路径用）。
+
+    字段口径必须与首次结算的返回值一致，否则 Node 侧看到的「重放结果」会和
+    第一次不一样，对账时无法区分。
+    """
+    data = task.input_data or {}
+    billing_mode = data.get("billing_mode") or "platform"
+    return {
+        "pi_model_ref": data.get("model"),
+        "mapped": bool(data.get("mapped")),
+        "model_config_id": data.get("model_config_id"),
+        "points_used": point_number(task.points_used),
+        "tokens_used": int(task.tokens_used or 0),
+        "requests": int(data.get("requests") or 1),
+        "billed": billing_mode == "platform",
+        "billing_mode": billing_mode,
+        "replayed": True,
+    }
+
+
+def _replay_turn_usage(db: Session, turn_id: int, user_id: int) -> list[dict[str, Any]] | None:
+    """这一回合已经结算过就返回既有结果；没结算过返回 None。
+
+    只认「带 model 的行」：失败回合同样会落一条任务行，但它没有任何用量条目，
+    重放时也应该是空的 entries，而不是伪造一条。
+    """
+    tasks = turn_tasks(db, turn_id)
+    if not tasks:
+        return None
+    if {task.user_id for task in tasks} != {user_id}:
+        # 同一个 turn_id 落在别人名下：这不是重试，而是拿错键或越权上报。
+        raise AppException("回合不属于该用户", 409)
+    return [_usage_entry_payload(task) for task in tasks if (task.input_data or {}).get("model")]
+
+
 @router.post("/service/usage")
 def report_ai_service_usage(
     payload: AiServiceUsageRequest,
@@ -1169,7 +1316,13 @@ def report_ai_service_usage(
     An unmapped ref still bills (never lose a charge) at the default ai_chat
     rule. Failed turns are never reported, matching the legacy refund rule.
     """
-    require_ai_service_token(request)
+    # 记账是最值得防的一步：令牌泄漏时，一张为别人签的票据也不该能改这里的余额。
+    guard_turn_scope(
+        _verify_service_ticket(request),
+        user_id=payload.user_id,
+        resume_id=payload.resume_id,
+        request=request,
+    )
     user = db.get(User, payload.user_id)
     if not user:
         raise AppException("用户不存在", 404)
@@ -1183,6 +1336,13 @@ def report_ai_service_usage(
     tool_quality = [step.model_dump(exclude_none=True) for step in payload.tool_quality]
     turn_timing = payload.turn_timing.model_dump(exclude_none=True) if payload.turn_timing else None
 
+    # 回合幂等：这个 turn_id 已经结算过就把当时的结果原样返回，不再建任务、
+    # 不再扣点。Node 的重试与「已 commit 但响应丢了」都走这条路。
+    if payload.turn_id:
+        replayed = _replay_turn_usage(db, payload.turn_id, user.id)
+        if replayed is not None:
+            return success({"entries": replayed, "replayed": True})
+
     # 失败回合：不结算任何积分，只落一条 failed 任务行，让成功率统计反映真实失败。
     if payload.status == "failed":
         turn_input: dict[str, Any] = {}
@@ -1192,20 +1352,28 @@ def report_ai_service_usage(
             turn_input["tool_quality"] = tool_quality
         if turn_timing:
             turn_input["turn_timing"] = turn_timing
-        task = create_ai_task(
-            db,
-            user.id,
-            "ai_chat",
-            resume_id=payload.resume_id,
-            input_data=turn_input or None,
-            model_name=None,
-            feature=feature,
-        )
+        try:
+            task = create_ai_task(
+                db,
+                user.id,
+                "ai_chat",
+                resume_id=payload.resume_id,
+                input_data=turn_input or None,
+                model_name=None,
+                feature=feature,
+                turn_id=payload.turn_id,
+            )
+        except IntegrityError:
+            # 并发重试：另一份请求已经落了同一回合，按重放返回。
+            replayed = _replay_turn_usage(db, payload.turn_id, user.id) if payload.turn_id else None
+            if replayed is None:
+                raise AppException("回合计费冲突，请重试", 409) from None
+            return success({"entries": replayed, "replayed": True})
         finish_ai_task(db, task, "failed", error_message=(payload.error_message or "AI 回合失败")[:4000])
         return success({"entries": []})
 
     entries: list[dict[str, Any]] = []
-    for item in payload.usage:
+    for slot, item in enumerate(payload.usage):
         ref = f"{item.provider.strip()}/{item.model.strip()}"
         # 用户自带模型（BYOK）：仍记一条 AI 记录用于成功率/功能统计，但不消耗
         # 平台 Flow Points —— 预扣已在对话入口跳过，这里也不能再结算。
@@ -1227,6 +1395,11 @@ def report_ai_service_usage(
             "token_usage": token_usage,
             "billing_override": config.chat_billing_override() if config else None,
             "billing_mode": billing_mode,
+            # 以下两项只为「重放」服务：同一个 turn_id 再次上报时，要从任务行
+            # 还原出与首次完全一致的响应，而不是重新判一遍映射。
+            "mapped": config is not None,
+            "model_config_id": config.id if config else None,
+            "requests": item.requests,
         }
         if payload.tool_calls:
             input_data["tool_calls"] = payload.tool_calls
@@ -1234,15 +1407,25 @@ def report_ai_service_usage(
             input_data["tool_quality"] = tool_quality
         if turn_timing and not entries:
             input_data["turn_timing"] = turn_timing
-        task = create_ai_task(
-            db,
-            user.id,
-            "ai_chat",
-            resume_id=payload.resume_id,
-            input_data=input_data,
-            model_name=input_data["model_name"],
-            feature=feature,
-        )
+        try:
+            task = create_ai_task(
+                db,
+                user.id,
+                "ai_chat",
+                resume_id=payload.resume_id,
+                input_data=input_data,
+                model_name=input_data["model_name"],
+                feature=feature,
+                turn_id=payload.turn_id,
+                turn_slot=slot,
+            )
+        except IntegrityError:
+            # 并发重试撞上 (turn_id, turn_slot) 唯一约束：说明这一回合的这部分
+            # 已经被另一份请求落库了。回滚后按重放返回，绝不重复扣点。
+            replayed = _replay_turn_usage(db, payload.turn_id, user.id) if payload.turn_id else None
+            if replayed is None:
+                raise AppException("回合计费冲突，请重试", 409) from None
+            return success({"entries": replayed, "replayed": True})
         try:
             finish_ai_task(db, task, "success", output_data={"source": "ai_service_usage"}, token_usage=token_usage, settle=billing_mode == "platform")
             if billing_mode == "byok":
@@ -1296,7 +1479,12 @@ def report_agent_trace(
     幂等：ai-service 在回合末尾整包 POST 一次并自带一次重试，重试打回来时按
     ``trace_id`` 覆盖同一行，不产生重复轨迹。
     """
-    require_ai_service_token(request)
+    guard_turn_scope(
+        _verify_service_ticket(request),
+        user_id=payload.user_id,
+        resume_id=None,
+        request=request,
+    )
 
     events = [event for event in payload.events if isinstance(event, dict)]
     values = {

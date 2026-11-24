@@ -22,11 +22,17 @@ export interface UsageReportDeps {
   fetch: typeof globalThis.fetch;
   fastapiBaseUrl: string;
   serviceToken: string;
+  /** 回合票据（RF-008）：后端据此确认「这条 usage 属于这个用户」，缺失即 401。 */
+  turnTicket: string;
 }
 
 export interface UsageReportPayload {
   user_id: number;
   resume_id: number;
+  /** Id of the user message this turn answered. FastAPI uses it as the billing
+   * idempotency key: a retried report for the same turn returns the first
+   * settlement instead of creating a second task and charging again. */
+  turn_id?: number;
   usage: ModelUsage[];
   /** Quick command the turn ran (polish/translate/…), or "chat" for free-form. */
   feature?: string;
@@ -81,6 +87,7 @@ export async function reportUsage(deps: UsageReportDeps, payload: UsageReportPay
         headers: {
           "content-type": "application/json",
           "x-ai-service-token": deps.serviceToken,
+          "x-turn-ticket": deps.turnTicket,
         },
         body: JSON.stringify(payload),
         // The chat response is already sent; never let a hung FastAPI hold the
@@ -91,7 +98,7 @@ export async function reportUsage(deps: UsageReportDeps, payload: UsageReportPay
       if (attempt === MAX_ATTEMPTS - 1) {
         console.error(
           `[vitaflow-ai] RECONCILE usage report unreachable after ${MAX_ATTEMPTS} attempts:`,
-          JSON.stringify({ user_id: payload.user_id, resume_id: payload.resume_id, feature: payload.feature, usage: usageSummary(payload.usage), error: String(err) }),
+          JSON.stringify({ user_id: payload.user_id, resume_id: payload.resume_id, turn_id: payload.turn_id, feature: payload.feature, usage: usageSummary(payload.usage), error: String(err) }),
         );
         return false;
       }
@@ -107,7 +114,7 @@ export async function reportUsage(deps: UsageReportDeps, payload: UsageReportPay
     if (attempt === MAX_ATTEMPTS - 1) {
       console.error(
         `[vitaflow-ai] RECONCILE usage report failed after ${MAX_ATTEMPTS} attempts (last status ${resp.status}):`,
-        JSON.stringify({ user_id: payload.user_id, resume_id: payload.resume_id, feature: payload.feature, usage: usageSummary(payload.usage) }),
+        JSON.stringify({ user_id: payload.user_id, resume_id: payload.resume_id, turn_id: payload.turn_id, feature: payload.feature, usage: usageSummary(payload.usage) }),
       );
       return false;
     }

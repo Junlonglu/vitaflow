@@ -19,6 +19,8 @@ export interface SearchToolDeps {
   /** FastAPI base URL for the evidence callback. */
   fastapiBaseUrl: string;
   serviceToken: string;
+  /** 回合票据（RF-008）。 */
+  turnTicket: string;
   userId: number;
   resumeId: number;
   provider: SearchProviderName;
@@ -76,7 +78,7 @@ export function createWebSearchTool(deps: SearchToolDeps) {
       try {
         await deps.fetch(`${deps.fastapiBaseUrl.replace(/\/+$/, "")}/api/ai/service/tool/search-evidence`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "X-AI-Service-Token": deps.serviceToken },
+          headers: { "Content-Type": "application/json", "X-AI-Service-Token": deps.serviceToken, "X-Turn-Ticket": deps.turnTicket },
           body: JSON.stringify({ user_id: deps.userId, resume_id: deps.resumeId, query, results: hits }),
           signal: toolHttpSignal(signal),
         });

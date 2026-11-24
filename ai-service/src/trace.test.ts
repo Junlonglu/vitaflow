@@ -119,6 +119,7 @@ const deps = (fetchImpl: typeof globalThis.fetch) => ({
   fetch: fetchImpl,
   fastapiBaseUrl: "http://127.0.0.1:8000/",
   serviceToken: "tok",
+  turnTicket: "test-ticket",
 });
 
 function payloadOf(traceEvents = 2) {

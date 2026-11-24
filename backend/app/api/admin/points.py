@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime
 from decimal import Decimal
 from typing import Literal, Optional
@@ -15,7 +16,13 @@ from app.core.security import get_current_admin
 from app.models.ai_task import AiTask
 from app.models.ai_config import FlowPointRule, FlowPointTransaction
 from app.models.user import User
-from app.services.flow_points_service import ensure_default_point_rules, invalidate_point_rule_cache, point_amount, point_number
+from app.services.flow_points_service import (
+    add_point_transaction,
+    ensure_default_point_rules,
+    invalidate_point_rule_cache,
+    point_amount,
+    point_number,
+)
 from app.api.admin.common import _ai_model_config_lookups, _ai_task_model_filter, admin_task_model_info, page_data
 
 
@@ -26,8 +33,30 @@ GRANT_ALL_BATCH_PREFIX = "全员发放批次:"
 GRANT_ALL_REVOKE_PREFIX = "撤回全员发放批次:"
 
 
-def _grant_batch_no() -> str:
+def _grant_batch_no(request_id: str | None = None) -> str:
+    """批次号。带 request_id 时由它派生，让同一次发放的重试落到同一批次。
+
+    「同一操作」的判重不需要新表：batch_no 已经写在流水 description 里，把
+    它变成请求键的纯函数之后，「这批发过没有」就是一次查询（RF-028）。
+    """
+    value = (request_id or "").strip()
+    if value:
+        return f"FG{hashlib.sha256(value.encode('utf-8')).hexdigest()[:16].upper()}"
     return f"FG{datetime.now():%Y%m%d%H%M%S}{uuid4().hex[:6].upper()}"
+
+
+def _granted_user_ids(db: Session, batch_no: str) -> set[int]:
+    """该批次已经发放过的用户 id。用于重试时跳过，也支持半途中断后续跑。"""
+    prefix = f"{GRANT_ALL_BATCH_PREFIX}{batch_no}｜"
+    return {
+        int(user_id)
+        for user_id in db.scalars(
+            select(FlowPointTransaction.user_id).where(
+                FlowPointTransaction.feature_type == "admin_grant_all",
+                FlowPointTransaction.description.like(f"{prefix}%"),
+            )
+        )
+    }
 
 
 def _batch_description(prefix: str, batch_no: str, description: str) -> str:
@@ -46,6 +75,9 @@ class UserPointsGrantAll(BaseModel):
     points: Decimal = Field(gt=0)
     description: str = "管理员统一发放 Flow Points"
     batch_size: int = Field(default=500, ge=1, le=2000)
+    # 幂等键：一次「发放」的所有重试共用一个值（弹窗打开时生成）。双击、
+    # 超时重发、刷新重试都会落到同一批次，不会重复加钱（RF-028）。
+    request_id: str | None = Field(default=None, max_length=64)
 
 
 class UserPointsGrantRevoke(BaseModel):
@@ -70,8 +102,11 @@ def grant_all_users_flow_points(
 ):
     points = point_amount(payload.points)
     description = payload.description.strip() or "管理员统一发放 Flow Points"
-    batch_no = _grant_batch_no()
+    batch_no = _grant_batch_no(payload.request_id)
     transaction_description = _batch_description(GRANT_ALL_BATCH_PREFIX, batch_no, description)
+    # 同一批次重试时，已经发过的人跳过：既避免重复加钱，也让中途失败的批次
+    # 能续跑到结束，而不是「重试一次就宣布已发过」。
+    granted_user_ids = _granted_user_ids(db, batch_no)
     total_count = 0
     batch_count = 0
     last_user_id = 0
@@ -91,20 +126,13 @@ def grant_all_users_flow_points(
 
         batch_count += 1
         for user in users:
-            user.flow_points = point_amount(point_amount(user.flow_points) + points)
-            db.add(user)
-            db.add(
-                FlowPointTransaction(
-                    user_id=user.id,
-                    feature_type="admin_grant_all",
-                    points_delta=points,
-                    balance_after=user.flow_points,
-                    tokens_used=0,
-                    description=transaction_description,
-                )
-            )
+            if int(user.id) in granted_user_ids:
+                continue
+            # 余额一律走条件 UPDATE（add_point_transaction）：这里原来是
+            # 「读出来 + 点数再写回」，与并发的消费/撤回互相覆盖（RF-015）。
+            add_point_transaction(db, user, "admin_grant_all", points, transaction_description)
+            total_count += 1
 
-        total_count += len(users)
         last_user_id = int(users[-1].id)
         db.commit()
         db.expunge_all()
@@ -112,6 +140,8 @@ def grant_all_users_flow_points(
     return success(
         {
             "count": total_count,
+            "skipped": len(granted_user_ids),
+            "replayed": bool(granted_user_ids),
             "points": point_number(points),
             "batch_size": payload.batch_size,
             "batches": batch_count,
@@ -189,17 +219,15 @@ def revoke_all_users_flow_points_grant(
             if not user:
                 continue
             revoke_points = point_amount(grant_transaction.points_delta)
-            user.flow_points = max(point_amount(point_amount(user.flow_points) - revoke_points), Decimal("0.00"))
-            db.add(user)
-            db.add(
-                FlowPointTransaction(
-                    user_id=user.id,
-                    feature_type="admin_grant_all_revoke",
-                    points_delta=-revoke_points,
-                    balance_after=user.flow_points,
-                    tokens_used=0,
-                    description=transaction_description,
-                )
+            # 撤回允许扣到 0 为止（allow_overdraft_to_zero）：余额不够时不发
+            # 负数，但仍记全额 -revoke_points，保留「本该撤回多少」的事实。
+            add_point_transaction(
+                db,
+                user,
+                "admin_grant_all_revoke",
+                -revoke_points,
+                transaction_description,
+                allow_overdraft_to_zero=True,
             )
             total_count += 1
 

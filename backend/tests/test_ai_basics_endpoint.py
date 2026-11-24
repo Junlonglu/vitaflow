@@ -15,6 +15,7 @@ from unittest.mock import patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from tests.service_ticket_support import service_headers
 from app.api import ai as ai_module
 from app.api.ai import router as ai_router
 from app.core.config import settings
@@ -81,7 +82,7 @@ class UpdateBasicsFieldEndpointTest(unittest.TestCase):
             resp = client.post(
                 "/api/ai/service/tool/update-basics-field",
                 json={"user_id": 1, "resume_id": 2, "basics": {"location": "深圳"}},
-                headers={"X-AI-Service-Token": "test-token"},
+                headers=service_headers(1, 2),
             )
         self.assertEqual(resp.status_code, 200)
         body = resp.json()
@@ -97,7 +98,7 @@ class UpdateBasicsFieldEndpointTest(unittest.TestCase):
             resp = client.post(
                 "/api/ai/service/tool/update-basics-field",
                 json={"user_id": 1, "resume_id": 2, "basics": {"phone": "13999999999"}},
-                headers={"X-AI-Service-Token": "test-token"},
+                headers=service_headers(1, 2),
             )
         self.assertEqual(resp.status_code, 200)
         body = resp.json()

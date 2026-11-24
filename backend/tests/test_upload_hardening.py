@@ -97,6 +97,50 @@ class AllowedTypesTest(unittest.TestCase):
                     self.assertEqual(getattr(ctx.exception, "code", None), 400)
 
 
+class _CountingStream:
+    """按请求的大小产出字节，并记录被读走多少；用来证明「边读边判」。"""
+
+    def __init__(self, total: int):
+        self.total = total
+        self.read_bytes = 0
+
+    def read(self, size: int = -1) -> bytes:
+        remaining = max(self.total - self.read_bytes, 0)
+        take = remaining if size is None or size < 0 else min(size, remaining)
+        self.read_bytes += take
+        return b"x" * take
+
+
+class StreamingLimitTest(unittest.TestCase):
+    """先读后判 = 上传者决定进程分配多少内存，这里固定「边读边判」的行为。"""
+
+    def test_oversized_upload_is_cut_off_before_being_buffered(self):
+        stream = _CountingStream(svc.MAX_SIZE * 8)
+        file = UploadFile(filename="big.png", file=stream, headers={"content-type": "image/png"})
+
+        with self.assertRaises(Exception) as ctx:
+            svc.upload_avatar(_Db(), 1, file)
+
+        self.assertEqual(getattr(ctx.exception, "code", None), 400)
+        self.assertLessEqual(stream.read_bytes, svc.MAX_SIZE + svc.CHUNK_SIZE)
+        self.assertLess(stream.read_bytes, stream.total, "超限后不该继续把剩余内容读进内存")
+
+    def test_declared_size_rejects_without_reading_anything(self):
+        stream = _CountingStream(svc.MAX_SIZE * 8)
+        file = UploadFile(
+            filename="big.png",
+            file=stream,
+            size=svc.MAX_SIZE + 1,
+            headers={"content-type": "image/png"},
+        )
+
+        with self.assertRaises(Exception) as ctx:
+            svc.upload_avatar(_Db(), 1, file)
+
+        self.assertEqual(getattr(ctx.exception, "code", None), 400)
+        self.assertEqual(stream.read_bytes, 0)
+
+
 class ObjectNameTest(unittest.TestCase):
     def test_avatar_object_name_carries_owner_and_suffix(self):
         db = _Db()

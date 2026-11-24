@@ -3,16 +3,20 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import BigInteger, Boolean, DateTime, JSON, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+
+# SQLite 只认 INTEGER PRIMARY KEY 的自增；with_variant 让单测能跑真实 ORM
+# （消息由服务端插入、不带 id，BigInteger 主键在 SQLite 上必然 NOT NULL 失败）。
+BIGINT_PK = BigInteger().with_variant(Integer, "sqlite")
 
 
 class AiChatSession(Base):
     __tablename__ = "ai_chat_sessions"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, index=True)
     resume_id: Mapped[int] = mapped_column(BigInteger, index=True)
     title: Mapped[str] = mapped_column(String(120), default="AI 简历助手")
@@ -29,7 +33,7 @@ class AiChatSession(Base):
 class AiChatMessage(Base):
     __tablename__ = "ai_chat_messages"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
     session_id: Mapped[int] = mapped_column(BigInteger, index=True)
     user_id: Mapped[int] = mapped_column(BigInteger, index=True)
     resume_id: Mapped[int] = mapped_column(BigInteger, index=True)

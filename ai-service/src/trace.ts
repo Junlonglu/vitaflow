@@ -309,6 +309,8 @@ export interface TraceReportDeps {
   fetch: typeof globalThis.fetch;
   fastapiBaseUrl: string;
   serviceToken: string;
+  /** 回合票据（RF-008）。 */
+  turnTicket: string;
 }
 
 const MAX_ATTEMPTS = 2;
@@ -325,7 +327,7 @@ export async function reportTrace(deps: TraceReportDeps, payload: TurnTracePaylo
     try {
       resp = await deps.fetch(url, {
         method: "POST",
-        headers: { "content-type": "application/json", "x-ai-service-token": deps.serviceToken },
+        headers: { "content-type": "application/json", "x-ai-service-token": deps.serviceToken, "x-turn-ticket": deps.turnTicket },
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(5_000),
       });

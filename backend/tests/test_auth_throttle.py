@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.auth import router as auth_router
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.exceptions import register_exception_handlers
 from app.services.verification_code_service import VerificationCodeService
@@ -172,6 +173,7 @@ class _StubUser(SimpleNamespace):
                 "password_hash": "x",
                 "status": "active",
                 "role": "user",
+                "token_version": 0,
                 **overrides,
             }
         )
@@ -208,7 +210,27 @@ class LoginThrottleTest(unittest.TestCase):
             resp = client.post("/api/auth/login", json={"email": "user@example.com", "password": "wrong"})
 
         self.assertEqual(resp.status_code, 400)
-        record.assert_called_once()
+        # 两个维度都要记：邮箱+IP 与 per-IP。
+        self.assertEqual(record.call_count, 2)
+        self.assertEqual({call.args[0] for call in record.call_args_list}, {"login", "login_ip"})
+
+    def test_per_ip_limit_blocks_rotating_emails(self) -> None:
+        """换邮箱不能绕开限频：这是没加 per-IP 之前的核心问题。"""
+
+        def counts(scope, _identity):
+            return 0 if scope == "login" else settings.auth_login_ip_max_attempts
+
+        client = _login_client(_StubUser())
+        with (
+            patch("app.api.auth.failure_count", side_effect=counts),
+            patch("app.api.auth.verify_password") as verify,
+        ):
+            resp = client.post("/api/auth/login", json={"email": "another@example.com", "password": "wrong"})
+
+        self.assertEqual(resp.status_code, 429)
+        # 被 per-IP 拦下时不该再跑 bcrypt（这正是这条限频存在的目的）。
+        verify.assert_not_called()
+        self.assertIn("该网络", resp.json()["message"])
 
     def test_successful_login_clears_the_counter(self) -> None:
         client = _login_client(_StubUser())
@@ -221,7 +243,9 @@ class LoginThrottleTest(unittest.TestCase):
             resp = client.post("/api/auth/login", json={"email": "user@example.com", "password": "right"})
 
         self.assertEqual(resp.status_code, 200)
+        # 只清「邮箱+IP」；per-IP 计数保留，否则单账号即可洗白整台机器的额度。
         clear.assert_called_once()
+        self.assertEqual(clear.call_args.args[0], "login")
 
 
 if __name__ == "__main__":

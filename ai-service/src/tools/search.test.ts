@@ -28,6 +28,7 @@ function deps(overrides: Partial<SearchToolDeps>, fetch: typeof globalThis.fetch
     fetch,
     fastapiBaseUrl: "http://backend.test:8000",
     serviceToken: "svc-token",
+    turnTicket: "test-ticket",
     userId: 7,
     resumeId: 3,
     provider: "bocha",

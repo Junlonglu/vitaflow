@@ -8,17 +8,17 @@ from copy import deepcopy
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
+from app.core import contracts
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.exceptions import AppException
 from app.core.resume_schema import normalize_resume_document, schema_compact
 from app.models.ai_chat import AiChatMessage, AiChatSession
 from app.models.resume import Resume
-from app.models.resume import ResumeVersion
 from app.models.user import User
 from app.schemas.ai_chat import AiChatMessageOut
 from app.services.ai.token_usage import build_token_usage
@@ -35,15 +35,33 @@ from app.services.resume_normalization import localize_ai_text, strip_thinking_t
 from app.services.resume_service import (
     VERSION_REASON_AI,
     VERSION_SOURCE_AI,
-    resume_version_digest,
+    persist_resume_data,
+    stage_version,
 )
-from app.services.storage.storage_service import owned_object_names
+from app.services.storage.storage_service import (
+    owned_object_names,
+    owned_upload_total_bytes,
+    sign_private_url,
+)
 from app.services.user_ai_service import audit_chat_use, build_skills_payload, resolve_model_override
 
 logger = logging.getLogger(__name__)
 
 # 单次摘要压缩最多并入的消息条数：更早的留给下一轮增量压缩，避免 token 爆炸。
 _COMPACT_MAX_MESSAGES = 200
+
+# 待确认提案的状态机：pending → applying → applied / rejected。
+# superseded 表示「被更新的方案取代，永远不能再应用」；stale 表示应用过程中
+# 进程消失了、无法确认是否已写入，只能人工看。前端只对 pending 渲染按钮。
+ACTION_NONE = "none"
+ACTION_PENDING = "pending"
+ACTION_APPLYING = "applying"
+ACTION_APPLIED = "applied"
+ACTION_REJECTED = "rejected"
+ACTION_SUPERSEDED = "superseded"
+ACTION_STALE = "stale"
+# 演示态之外的「可收尾」状态：清扫器只把 pending 过期成 superseded。
+ACTION_TERMINAL = frozenset({ACTION_NONE, ACTION_APPLIED, ACTION_REJECTED, ACTION_SUPERSEDED, ACTION_STALE})
 
 
 SECTION_LABELS = {
@@ -84,13 +102,52 @@ def _sanitize_attachments(db: Session, user_id: int, attachments: list[Any] | No
     return kept
 
 
+def _attachment_budget_issue(db: Session, user_id: int, attachments: list[dict[str, Any]]) -> str | None:
+    """一次消息的附图总量是否超预算。
+
+    单张 5MB × 9 张 = 45MB，base64 后约 60MB——远超 Node 的 body 上限。若不在
+    落库前拦下，Node 会先 413，而用户消息已经写进库里，于是留下一轮「有提问、
+    无回复」的死回合（RF-044）。预算值与 Node body 上限同源，见 core.contracts。
+    """
+    names = [
+        item["object_name"]
+        for item in attachments
+        if isinstance(item.get("object_name"), str) and item["object_name"]
+    ]
+    if not names:
+        return None
+    total = owned_upload_total_bytes(db, user_id, names)
+    if total <= contracts.CHAT_ATTACHMENT_TOTAL_MAX_BYTES:
+        return None
+    return (
+        f"一次消息的图片合计不能超过 {contracts.CHAT_ATTACHMENT_TOTAL_MAX_MB}MB"
+        f"（当前约 {total // (1024 * 1024)}MB），请分批发送"
+    )
+
+
+def _signed_attachments(items: list[Any] | None) -> list[dict[str, Any]]:
+    """返回给前端前给私有附件补短签名。
+
+    落库的是不带签名的 URL（上传时就签会过期）；每次读消息重新签，浏览器拿到的
+    永远是一段几小时后失效、只对这几张图有效的凭据。
+    """
+    signed: list[dict[str, Any]] = []
+    for raw in items or []:
+        item = dict(_attachment_data(raw))
+        object_name = item.get("object_name")
+        if isinstance(object_name, str) and object_name:
+            item["url"] = sign_private_url(str(item.get("url") or ""), object_name)
+        signed.append(item)
+    return signed
+
+
 def _message_out(message: AiChatMessage) -> AiChatMessageOut:
     return AiChatMessageOut.model_validate(
         {
             "id": message.id,
             "role": message.role,
             "content": strip_thinking_text(message.content or "") if message.role == "assistant" else message.content,
-            "attachments": message.attachments or [],
+            "attachments": _signed_attachments(message.attachments),
             "suggestions": message.suggestions or [],
             "optimized_resume_data": message.optimized_resume_data,
             # 单测里常用 SimpleNamespace 造消息桩，缺新字段时按空处理
@@ -400,6 +457,19 @@ def _save_assistant_message(
     pending_info_fragments: list[dict[str, Any]] | None = None,
 ) -> AiChatMessageOut:
     reply = strip_thinking_text(localize_ai_text(reply or "")).strip()
+    has_proposal = bool(optimized_resume_data or pending_info_fragments)
+    if has_proposal:
+        # 同一会话只允许存在一条待确认提案：新的方案一落地，旧的就失效。
+        # 否则用户停留在旧提案上点「应用」，会把之后的新结果整份覆盖回去（RF-006）。
+        db.execute(
+            update(AiChatMessage)
+            .where(
+                AiChatMessage.session_id == session.id,
+                AiChatMessage.action_status == ACTION_PENDING,
+            )
+            .values(action_status=ACTION_SUPERSEDED, update_time=datetime.now())
+            .execution_options(synchronize_session=False)
+        )
     assistant_message = AiChatMessage(
         session_id=session.id,
         user_id=user.id,
@@ -412,7 +482,7 @@ def _save_assistant_message(
         tool_trace=tool_trace or None,
         timing=timing or None,
         pending_questions=pending_questions or None,
-        action_status="pending" if (optimized_resume_data or pending_info_fragments) else "none",
+        action_status=ACTION_PENDING if has_proposal else ACTION_NONE,
     )
     session.update_time = datetime.now()
     db.add(assistant_message)
@@ -865,6 +935,12 @@ async def _stream_chat_turn(
 
     # 附件对象名来自前端，先按归属收一遍，再落库/转发给 AI 服务。
     attachments = _sanitize_attachments(db, user.id, attachments)
+    # 总量预算必须在落库之前判：走 Node 的 body 上限会 413，而那时用户消息
+    # 已经写进库了，只剩一个永远等不到回复的回合。
+    budget_issue = _attachment_budget_issue(db, user.id, attachments)
+    if budget_issue:
+        yield {"type": "error", "message": budget_issue}
+        return
 
     model_config = _resolve_turn_model_config(db, user, model_config_id)
     # 用户自带模型（BYOK）与启用中的技能每轮解析一次：关闭或密钥失效时自动
@@ -986,6 +1062,10 @@ async def _regenerate_turn(
         )
         if not next_content and not next_attachments:
             yield {"type": "error", "message": "重新生成内容不能为空"}
+            return
+        budget_issue = _attachment_budget_issue(db, user.id, next_attachments)
+        if budget_issue:
+            yield {"type": "error", "message": budget_issue}
             return
 
     # 守卫与点数预检必须先于删除：余额不足、图片不被模型支持等失败不能
@@ -1589,38 +1669,59 @@ def _persist_resume_change(
     resume: Resume,
     optimized_data: dict[str, Any],
     reason: str,
+    expect_revision: int | None = None,
 ) -> dict[str, Any]:
     """Persist and verify one AI change before the assistant reports success."""
-    # 快照存的是「改动前」的内容，所以 reason 用「AI 修改前」而不是「采纳修改」，
-    # 否则列表里会读成「改完的样子」。
-    digest, size = resume_version_digest(resume.resume_data, resume.template_config)
-    db.add(
-        ResumeVersion(
-            resume_id=resume.id,
-            resume_data=deepcopy(resume.resume_data),
-            template_config=deepcopy(resume.template_config),
-            reason=reason or VERSION_REASON_AI,
-            source=VERSION_SOURCE_AI,
-            content_hash=digest,
-            size_bytes=size,
-        )
-    )
     before_data = deepcopy(resume.resume_data or {})
     # Pending AI changes are stored as a fully validated resume snapshot.
     next_data = deepcopy(_unwrap_resume_data(optimized_data))
     if next_data == before_data:
         raise AppException("本次方案没有产生实际内容变化，请重新生成修改", 400)
-    resume.resume_data = next_data
-    flag_modified(resume, "resume_data")
-    resume.update_by = user.id
-    db.add(resume)
-    db.flush()
-    db.expire(resume, ["resume_data"])
-    persisted_data = deepcopy(resume.resume_data or {})
-    if persisted_data != next_data:
-        db.rollback()
-        raise AppException("修改写入校验失败，简历未发生变化，请重试", 409)
-    return persisted_data
+    # 快照存的是「改动前」的内容，所以 reason 用「AI 修改前」而不是「采纳修改」，
+    # 否则列表里会读成「改完的样子」。暂存不提交：写简历撞 409 时这份备份
+    # 必须一起回滚，否则版本列表里会多一条没有对应改动的孤儿。
+    stage_version(db, resume, reason or VERSION_REASON_AI, VERSION_SOURCE_AI)
+    persist_resume_data(
+        db,
+        resume,
+        next_data,
+        source=VERSION_SOURCE_AI,
+        expect_revision=expect_revision,
+        user_id=user.id,
+    )
+    return deepcopy(resume.resume_data or {})
+
+
+def _claim_pending_message(db: Session, message_id: int) -> bool:
+    """把 pending 抢占成 applying；只有 rowcount==1 的调用方可以继续。
+
+    先读后写挡不住并发：两个标签页同时点「应用」，两边都读到 pending、
+    都往下走，于是同一份提案被写两次、状态与内容各说各话（RF-006）。
+    """
+    claimed = db.execute(
+        update(AiChatMessage)
+        .where(AiChatMessage.id == message_id, AiChatMessage.action_status == ACTION_PENDING)
+        .values(action_status=ACTION_APPLYING, update_time=datetime.now())
+        .execution_options(synchronize_session=False)
+    )
+    db.commit()
+    return bool(claimed.rowcount)
+
+
+def _release_claim(db: Session, message_id: int, status: str) -> None:
+    """把 applying 落到终态（或退回 pending，让用户可以重试）。"""
+    values: dict[str, Any] = {"action_status": status, "update_time": datetime.now()}
+    if status in (ACTION_APPLIED, ACTION_REJECTED):
+        # 提案内容已经消费掉：清空能避免它被后续逻辑误认为「还有待确认的导入」，
+        # 也顺带释放这份 JSON 的体积。
+        values["pending_info_fragments"] = None
+    db.execute(
+        update(AiChatMessage)
+        .where(AiChatMessage.id == message_id, AiChatMessage.action_status == ACTION_APPLYING)
+        .values(**values)
+        .execution_options(synchronize_session=False)
+    )
+    db.commit()
 
 
 def resolve_chat_change(
@@ -1630,6 +1731,7 @@ def resolve_chat_change(
     message_id: int,
     action: str,
     merged_resume_data: dict[str, Any] | None = None,
+    expect_revision: int | None = None,
 ) -> tuple[AiChatMessageOut, dict[str, Any] | None]:
     message = db.get(AiChatMessage, message_id)
     if (
@@ -1639,47 +1741,67 @@ def resolve_chat_change(
         or message.role != "assistant"
     ):
         raise AppException("待确认修改不存在", 404)
-    if message.action_status != "pending":
+    if message.action_status != ACTION_PENDING:
+        raise AppException("这次修改已经处理过了", 409)
+    # 兜住历史数据：新方案落库会把旧的置 superseded，但本次改动之前产生的
+    # 多条 pending 还在库里，它们不能越过更新的那条被应用。
+    newer_pending = db.scalar(
+        select(func.max(AiChatMessage.id)).where(
+            AiChatMessage.session_id == message.session_id,
+            AiChatMessage.role == "assistant",
+            AiChatMessage.action_status == ACTION_PENDING,
+        )
+    )
+    if newer_pending and int(newer_pending) > int(message.id):
+        raise AppException("已生成更新的修改方案，请处理最新那条", 409)
+
+    if not _claim_pending_message(db, message.id):
         raise AppException("这次修改已经处理过了", 409)
 
     resume_data: dict[str, Any] | None = None
-    if action == "apply":
-        # 信息库提案和简历修改可以同时存在（Agent 一轮里既整理信息又改简历）：
-        # 先入库，再写简历；两者都没有才是非法确认。
-        pending_fragments = getattr(message, "pending_info_fragments", None)
-        had_fragments = bool(pending_fragments)
-        if had_fragments:
-            apply_proposals(db, user.id, pending_fragments)
-            message.pending_info_fragments = None
-        if message.optimized_resume_data:
-            # 审阅模式部分采纳：前端把勾选的变更合并到「当前」简历数据后提交；
-            # 缺省走整包快照（整包替换会冲掉提案之后的手动编辑）。
-            # 标题属于内容（翻译/重命名后与简历 language 列无关），规范化后必须原样保留，
-            # 否则已知默认标题（Basic Information 等）会被本地化重置回简历原语言。
-            if merged_resume_data is not None:
-                if not isinstance(merged_resume_data, dict) or not merged_resume_data:
-                    raise AppException("提交的修改数据无效", 400)
-                pending_data = _normalize_keeping_section_titles(deepcopy(merged_resume_data), {"language": resume.language})
-            else:
-                pending_data = message.optimized_resume_data
-            resume_data = _persist_resume_change(
-                db,
-                user,
-                resume,
-                pending_data,
-                VERSION_REASON_AI,
-            )
-        elif not had_fragments:
-            raise AppException("这次对话没有可写入的修改", 400)
-        message.action_status = "applied"
-    elif action == "reject":
-        message.pending_info_fragments = None
-        message.action_status = "rejected"
-    else:
-        raise AppException("不支持的确认操作", 400)
+    try:
+        if action == "apply":
+            # 信息库提案和简历修改可以同时存在（Agent 一轮里既整理信息又改简历）：
+            # 先入库，再写简历；两者都没有才是非法确认。
+            pending_fragments = getattr(message, "pending_info_fragments", None)
+            had_fragments = bool(pending_fragments)
+            if had_fragments:
+                apply_proposals(db, user.id, pending_fragments)
+            if message.optimized_resume_data:
+                # 审阅模式部分采纳：前端把勾选的变更合并到「当前」简历数据后提交；
+                # 缺省走整包快照（整包替换会冲掉提案之后的手动编辑）。
+                # 标题属于内容（翻译/重命名后与简历 language 列无关），规范化后必须原样保留，
+                # 否则已知默认标题（Basic Information 等）会被本地化重置回简历原语言。
+                if merged_resume_data is not None:
+                    if not isinstance(merged_resume_data, dict) or not merged_resume_data:
+                        raise AppException("提交的修改数据无效", 400)
+                    pending_data = _normalize_keeping_section_titles(
+                        deepcopy(merged_resume_data), {"language": resume.language}
+                    )
+                else:
+                    pending_data = message.optimized_resume_data
+                resume_data = _persist_resume_change(
+                    db,
+                    user,
+                    resume,
+                    pending_data,
+                    VERSION_REASON_AI,
+                    expect_revision=expect_revision,
+                )
+            elif not had_fragments:
+                raise AppException("这次对话没有可写入的修改", 400)
+            final_status = ACTION_APPLIED
+        elif action == "reject":
+            final_status = ACTION_REJECTED
+        else:
+            raise AppException("不支持的确认操作", 400)
+    except Exception:
+        # 写简历撞 409 这类失败是「可以重试」的：把状态退回 pending，
+        # 否则用户处理完冲突后这条提案就永远应用不了了。
+        _release_claim(db, message.id, ACTION_PENDING)
+        raise
 
-    db.add(message)
-    db.commit()
+    _release_claim(db, message.id, final_status)
     db.refresh(message)
     return _message_out(message), resume_data
 

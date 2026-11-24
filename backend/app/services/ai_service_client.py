@@ -23,6 +23,7 @@ import anyio
 import httpx
 
 from app.core.config import settings
+from app.core.service_ticket import issue_ticket
 from app.services.storage.storage_service import read_uploaded_file
 
 
@@ -43,8 +44,15 @@ def _extract_error(raw: bytes) -> str:
 
 
 def _http_timeout() -> httpx.Timeout:
-    # Generous read timeout: the AI service streams over a long agent turn.
-    return httpx.Timeout(connect=5, read=180, write=10, pool=5)
+    # 读超时来自 core.contracts 的超时链：必须比 Node 的回合总时长多出一个余量，
+    # 否则 Node 还没来得及发自己的错误事件，代理就先断流，前端只能看到
+    # 「没有结束原因的断流」（RF-033）。三档关系由启动自检校验。
+    return httpx.Timeout(
+        connect=5,
+        read=settings.ai_proxy_read_timeout_ms / 1000,
+        write=10,
+        pool=5,
+    )
 
 
 async def _attachment_image_blocks(
@@ -128,6 +136,10 @@ async def ai_service_chat_events(
     # its update_basics_field tool fires. Only the proxy knows the real user/resume.
     if user_id is not None:
         payload["user_id"] = user_id
+        # 回合票据：把「这一轮属于谁」签进去。Node 把它放进每次回调的
+        # `x-turn-ticket` 头，后端据此拒绝「令牌合法但身份不符」的请求（RF-008）。
+        # 只在有 user_id 时签——没有身份的回合本来就没有可越权的对象。
+        payload["turn_ticket"] = issue_ticket(user_id=user_id, resume_id=resume_id, turn_id=turn_id)
     if resume_id is not None:
         payload["resume_id"] = resume_id
     # Uploaded images → base64 ImageContent blocks so the agent sees them natively

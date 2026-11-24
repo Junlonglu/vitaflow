@@ -5,7 +5,6 @@ import Button from "@/components/ui/button/Button.vue"
 import AiComposer from "@/components/ai/AiComposer.vue"
 import { CHAT_SKILLS, type ChatSkill } from "@/components/ai/chatSkills"
 import { renderMarkdown } from "@/lib/markdown"
-import { privateFileUrl } from "@/lib/fileUrl"
 import { showGlobalToast } from "@/utils/toast"
 import type { AiChatAttachment, AiChatModelOption, ToolStep } from "@/api/ai"
 import type { ChatMessage } from "@/types/chat"
@@ -130,6 +129,21 @@ function resultText(message: ChatMessage) {
   return message.optimized_resume_data ? "修改已生效" : "信息已保存到信息库"
 }
 
+/**
+ * 提案不再可操作时的说明。
+ *
+ * `superseded` 是后端在生成新方案时打上的：旧提案的内容已经过期，
+ * 再应用会把新结果覆盖回去（RF-006）。`stale` 表示应用过程被打断，
+ * 无法确认是否已写入，只能重新生成。
+ */
+const PENDING_SHELF = ["pending", "applying", "superseded", "stale"]
+
+function pendingHint(message: ChatMessage) {
+  if (message.action_status === "superseded") return "已被更新的修改方案取代"
+  if (message.action_status === "stale") return "上次处理未完成，请重新生成"
+  return "已有更新版本的修改待处理"
+}
+
 /** 只有最新一条 pending 提案可以审阅；更早的提示已被新版本取代。 */
 const latestPendingId = computed<number | string | null>(() => {
   for (let index = props.messages.length - 1; index >= 0; index--) {
@@ -232,7 +246,7 @@ watch(
                     填写补充信息
                   </Button>
                 </div>
-                <div v-if="message.role === 'assistant' && !message.streaming && ['pending', 'applying'].includes(actionStatus(message))" class="mt-4 flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-4">
+                <div v-if="message.role === 'assistant' && !message.streaming && PENDING_SHELF.includes(actionStatus(message))" class="mt-4 flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-4">
                   <template v-if="message.id === latestPendingId">
                     <div class="mr-auto min-w-[180px]">
                       <p class="text-xs md:text-[13px] font-medium text-zinc-600">{{ pendingSummary(message) }}</p>
@@ -269,7 +283,7 @@ watch(
                       {{ pendingActionLabel(message) }}
                     </Button>
                   </template>
-                  <span v-else class="text-xs md:text-[13px] font-medium text-zinc-400">已有更新版本的修改待处理</span>
+                  <span v-else class="text-xs md:text-[13px] font-medium text-zinc-400">{{ pendingHint(message) }}</span>
                 </div>
                 <div v-else-if="message.role === 'assistant' && actionStatus(message) === 'applied'" class="mt-4 flex items-center gap-2 border-t border-zinc-100 pt-3 text-xs md:text-[13px] font-medium text-emerald-600">
                   <CheckCircle2 class="h-4 w-4" /> {{ resultText(message) }}
@@ -278,8 +292,8 @@ watch(
                   <X class="h-4 w-4" /> {{ message.optimized_resume_data ? "修改已取消" : "已忽略" }}
                 </div>
                 <div v-if="message.attachments?.length" class="mt-3 flex flex-wrap gap-2">
-                  <button v-for="item in message.attachments" :key="item.url" type="button" class="block h-20 w-20 sm:h-24 sm:w-24 shrink-0 cursor-zoom-in overflow-hidden rounded-lg border border-zinc-200/70 bg-white transition-colors hover:border-zinc-300 active:scale-95" @click="openPreview(privateFileUrl(item.url))">
-                    <img :src="privateFileUrl(item.url)" :alt="item.name || '对话图片'" class="h-full w-full object-cover" />
+                  <button v-for="item in message.attachments" :key="item.url" type="button" class="block h-20 w-20 sm:h-24 sm:w-24 shrink-0 cursor-zoom-in overflow-hidden rounded-lg border border-zinc-200/70 bg-white transition-colors hover:border-zinc-300 active:scale-95" @click="openPreview(item.url)">
+                    <img :src="item.url" :alt="item.name || '对话图片'" class="h-full w-full object-cover" />
                   </button>
                 </div>
               </div>

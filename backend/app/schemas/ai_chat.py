@@ -5,6 +5,8 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from app.core import contracts
+
 
 class AiChatAttachment(BaseModel):
     url: str
@@ -13,10 +15,11 @@ class AiChatAttachment(BaseModel):
     object_name: Optional[str] = None
 
 
-# 与前端 MAX_ATTACHMENTS 对齐；后端兜底防绕过。
-MAX_CHAT_ATTACHMENTS = 9
+# 与前端 MAX_ATTACHMENTS 对齐；后端兜底防绕过。值来自 core.contracts，
+# 前端同名常量、Node body 上限与这里同源（契约测试会比对）。
+MAX_CHAT_ATTACHMENTS = contracts.CHAT_ATTACHMENT_MAX
 # 消息正文上限（约万字以内），防超长文本打爆模型上下文与计费。
-MAX_CHAT_CONTENT_LENGTH = 8000
+MAX_CHAT_CONTENT_LENGTH = contracts.CHAT_CONTENT_MAX
 
 
 class AiChatSendRequest(BaseModel):
@@ -30,7 +33,7 @@ class AiChatSendRequest(BaseModel):
 
 
 # 会话标题上限，与 ai_chat_sessions.title 的 String(120) 留出余量。
-MAX_CHAT_SESSION_TITLE_LENGTH = 60
+MAX_CHAT_SESSION_TITLE_LENGTH = contracts.CHAT_SESSION_TITLE_MAX
 
 
 class AiChatSessionCreateRequest(BaseModel):
@@ -74,6 +77,8 @@ class AiChatDecisionRequest(BaseModel):
     action: Literal["apply", "reject"]
     # 审阅模式部分采纳：前端勾选变更后合并到当前简历数据提交；缺省走整包快照
     merged_resume_data: Optional[dict[str, Any]] = None
+    # 乐观锁：前端看到的是第几版。缺省不校验（老客户端）。
+    expect_revision: Optional[int] = Field(default=None, ge=0)
 
 
 class AiChatMessageOut(BaseModel):
@@ -101,3 +106,6 @@ class AiChatSendResponse(BaseModel):
 class AiChatDecisionResponse(BaseModel):
     assistant_message: AiChatMessageOut
     resume_data: Optional[dict[str, Any]] = None
+    # 写入后的新版本号。前端必须把它同步到本地，否则下一次自动保存会拿旧
+    # 版本号去比，立刻 409。
+    revision: Optional[int] = None

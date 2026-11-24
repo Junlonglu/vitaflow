@@ -111,6 +111,20 @@ describe("buildSelectedResumeData", () => {
     expect(merged.work[1].highlights).toEqual(["参与报表"])
   })
 
+  it("全选时结果等于提案本身（主按钮与整包快照等价）", () => {
+    const before = resumeFixture()
+    const after = resumeFixture()
+    after.summary.content = "<p>五年后端经验</p>"
+    after.work[0].highlights = ["新版描述"]
+    after.work[1].position = "高级后端"
+    const sections = diffResume(before, after)
+    const all = sections.flatMap((section) => section.changes).map((change) => change.id)
+
+    // 「应用」主按钮默认走全选合并；这条不变量保证它与旧的整包写入等价，
+    // 二者只在「提案之后用户又改过」时才产生差异（那正是要保留的部分）。
+    expect(buildSelectedResumeData(before, after, all, sections)).toEqual(after)
+  })
+
   it("不修改传入的原始数据", () => {
     const before = resumeFixture()
     const snapshot = JSON.stringify(before)

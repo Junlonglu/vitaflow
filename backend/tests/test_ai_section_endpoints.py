@@ -12,6 +12,7 @@ from unittest.mock import patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from tests.service_ticket_support import service_headers
 from app.api import ai as ai_module
 from app.api.ai import router as ai_router
 from app.core.config import settings
@@ -58,7 +59,7 @@ class SectionToolEndpointTest(unittest.TestCase):
         settings.ai_service_token = self._original_token
 
     def _auth_headers(self):
-        return {"X-AI-Service-Token": "test-token"}
+        return service_headers(1, 2)
 
     def test_update_section_rejects_missing_token(self):
         client = _make_client()

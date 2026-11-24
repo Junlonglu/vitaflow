@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from io import BytesIO
 from typing import Iterator
 from uuid import uuid4
@@ -7,19 +8,24 @@ from uuid import uuid4
 from fastapi import UploadFile
 from fastapi.responses import StreamingResponse
 from minio import Minio
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core import contracts
 from app.core.config import settings
+from app.core.signed_url import append_signature
 from app.core.exceptions import AppException
 from app.models.resume import UploadedFile
 
 
+logger = logging.getLogger(__name__)
+
 ALLOWED_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
 # 三个图片上传口（头像 / 公告图 / 对话图）共用这一个上限，别再各写一个字面量。
-MAX_SIZE = 5 * 1024 * 1024
+# 值来自 core.contracts：前端附件校验与 Node 的 body 上限都按它推导。
+MAX_SIZE = contracts.UPLOAD_MAX_BYTES
 # 报错文案跟着常量走，改上限时不会漏改提示语。
-MAX_SIZE_MB = MAX_SIZE // (1024 * 1024)
+MAX_SIZE_MB = contracts.UPLOAD_MAX_MB
 # 一个账号最多保留多少张头像。头像库的「删除」只清索引不删对象，所以这里限制的
 # 是可选项数量，避免用户反复上传把库和存储都堆满。
 MAX_AVATARS_PER_USER = 30
@@ -66,6 +72,24 @@ def owned_object_names(db: Session, user_id: int, object_names: list[str]) -> se
         )
     )
     return set(rows.all())
+
+
+def owned_upload_total_bytes(db: Session, user_id: int, object_names: list[str]) -> int:
+    """这些对象里属于该用户的那些，合计多少字节。
+
+    只用来判断「一次消息的附图总量」是否超预算（RF-044）。用 SQL 求和而不是
+    把行读回来：一条消息最多引用 9 个对象，但路径可能是重试，没必要为此多拉数据。
+    """
+    candidates = {name for name in object_names if name}
+    if not candidates:
+        return 0
+    total = db.scalar(
+        select(func.coalesce(func.sum(UploadedFile.file_size), 0)).where(
+            UploadedFile.user_id == user_id,
+            UploadedFile.object_name.in_(candidates),
+        )
+    )
+    return int(total or 0)
 
 
 def _provider() -> str:
@@ -158,12 +182,37 @@ def _upload_aliyun_oss(object_name: str, content: bytes, content_type: str) -> N
         raise AppException(f"阿里云 OSS 上传失败，状态码：{status}", 502)
 
 
+def read_upload_within_limit(file: UploadFile, message: str) -> bytes:
+    """分块读取上传体，累计超过 MAX_SIZE 立刻拒绝。
+
+    顺序必须是「边读边判」，不能「先全读进内存再判长度」：后者等于让上传者
+    决定进程要分配多少内存——直连 8000（没有 Nginx 的 client_max_body_size）
+    时一个几百 MB 的请求就能把容器打到 OOM。分块后峰值内存是 MAX_SIZE 加
+    一个块，与请求体大小无关。
+
+    先看一眼 ``size``（Starlette 从 multipart 的 Content-Length 填）是快路径，
+    免得为必然被拒的请求真的读满 5MB；它可能为 None，所以不能只靠它。
+    """
+    declared = getattr(file, "size", None)
+    if isinstance(declared, int) and declared > MAX_SIZE:
+        raise AppException(message, 400)
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = file.file.read(CHUNK_SIZE)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_SIZE:
+            raise AppException(message, 400)
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 def upload_avatar(db: Session, user_id: int, file: UploadFile) -> dict[str, str]:
     if file.content_type not in ALLOWED_TYPES:
         raise AppException("头像仅支持 jpg、jpeg、png、webp", 400)
-    content = file.file.read()
-    if len(content) > MAX_SIZE:
-        raise AppException(f"头像不能超过 {MAX_SIZE_MB}MB", 400)
+    content = read_upload_within_limit(file, f"头像不能超过 {MAX_SIZE_MB}MB")
     existing = (
         db.query(UploadedFile)
         .filter(UploadedFile.user_id == user_id, UploadedFile.file_type == "avatar")
@@ -193,15 +242,14 @@ def upload_avatar(db: Session, user_id: int, file: UploadFile) -> dict[str, str]
         )
     )
     db.commit()
-    return {"url": url, "object_name": object_name, "provider": _provider()}
+    # 返回给浏览器的是签名 URL：前端不再需要把登录 token 拼进图片地址。
+    return {"url": sign_private_url(url, object_name), "object_name": object_name, "provider": _provider()}
 
 
 def upload_announcement_image(db: Session, user_id: int, file: UploadFile) -> dict[str, str]:
     if file.content_type not in ALLOWED_TYPES:
         raise AppException("公告图片仅支持 jpg、jpeg、png、webp", 400)
-    content = file.file.read()
-    if len(content) > MAX_SIZE:
-        raise AppException(f"公告图片不能超过 {MAX_SIZE_MB}MB", 400)
+    content = read_upload_within_limit(file, f"公告图片不能超过 {MAX_SIZE_MB}MB")
 
     suffix = ALLOWED_TYPES[file.content_type]
     object_name = f"announcement/{uuid4().hex}{suffix}"
@@ -229,9 +277,7 @@ def upload_announcement_image(db: Session, user_id: int, file: UploadFile) -> di
 def upload_ai_chat_image(db: Session, user_id: int, file: UploadFile) -> dict[str, str]:
     if file.content_type not in ALLOWED_TYPES:
         raise AppException("AI 对话图片仅支持 jpg、jpeg、png、webp", 400)
-    content = file.file.read()
-    if len(content) > MAX_SIZE:
-        raise AppException(f"AI 对话图片不能超过 {MAX_SIZE_MB}MB", 400)
+    content = read_upload_within_limit(file, f"AI 对话图片不能超过 {MAX_SIZE_MB}MB")
 
     suffix = ALLOWED_TYPES[file.content_type]
     object_name = f"ai-chat/{user_id}_{uuid4().hex}{suffix}"
@@ -254,6 +300,17 @@ def upload_ai_chat_image(db: Session, user_id: int, file: UploadFile) -> dict[st
     )
     db.commit()
     return {"url": url, "object_name": object_name, "provider": _provider()}
+
+
+def sign_private_url(url: str, object_name: str) -> str:
+    """给私有对象 URL 补上短签名；非私有对象原样返回。
+
+    序列化路径（上传响应、历史消息）都过这里，所以浏览器拿到的永远是「只对这张图、
+    几小时内有效」的凭据，而不是一整个登录态。
+    """
+    if not url or not is_private_object_name(object_name):
+        return url
+    return append_signature(url, object_name)
 
 
 def _iter_oss_object(obj) -> Iterator[bytes]:
@@ -305,3 +362,50 @@ def read_uploaded_file(object_name: str) -> tuple[bytes, str]:
     finally:
         response.close()
         response.release_conn()
+
+
+# ---- 运维清扫用：列举与删除（不在请求路径上，只由 maintenance_service 调用）----
+
+def list_object_names(prefix: str, *, before) -> list[str]:
+    """列出前缀下「最后修改早于 before」的对象名。
+
+    仅供清扫器使用：整桶列举的成本与对象总量线性相关，绝不能出现在请求路径里。
+    任何存储侧异常都按「没有对象」处理——清扫失败不该比漏扫更糟。
+    """
+    names: list[str] = []
+    if prefix not in ALLOWED_OBJECT_PREFIXES:
+        return names
+    try:
+        if _provider() == "aliyun_oss":
+            bucket = get_aliyun_oss_bucket()
+            for item in bucket.list_objects(prefix=prefix, max_keys=1000).object_list or []:
+                if item.last_modified < before:
+                    names.append(item.key)
+            return names
+        client = get_minio_client()
+        for item in client.list_objects(settings.minio_bucket, prefix=prefix, recursive=True):
+            # MinIO 返回的 last_modified 是 UTC aware，比较前统一去掉时区。
+            modified = item.last_modified
+            if modified is not None and modified.replace(tzinfo=None) < before:
+                names.append(item.object_name)
+    except Exception:  # noqa: BLE001 - 清扫是尽力而为
+        logger.warning("列举存储对象失败：%s", prefix, exc_info=True)
+    return names
+
+
+def delete_object_names(names: list[str]) -> int:
+    """按对象名删除，返回成功条数。先过业务前缀白名单。"""
+    deleted = 0
+    provider = _provider()
+    for name in names:
+        if not is_allowed_object_name(name):
+            continue
+        try:
+            if provider == "aliyun_oss":
+                get_aliyun_oss_bucket().delete_object(name)
+            else:
+                get_minio_client().remove_object(settings.minio_bucket, name)
+            deleted += 1
+        except Exception:  # noqa: BLE001 - 单个对象失败不影响其余
+            logger.warning("删除存储对象失败：%s", name, exc_info=True)
+    return deleted

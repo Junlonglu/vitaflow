@@ -22,6 +22,7 @@ from app.api import ai as ai_module
 from app.api.ai import router as ai_router
 from app.core.config import settings
 from app.core.database import get_db
+from tests.service_ticket_support import service_headers
 from app.core.exceptions import AppException, register_exception_handlers
 
 _PI_REF = "deepseek/deepseek-v4-flash-vision-exp"
@@ -82,8 +83,13 @@ class AiServiceUsageEndpointTest(unittest.TestCase):
         settings.ai_service_token = self._original_token
 
     def _post(self, token: str | None = "test-token", payload: dict | None = None):
-        headers = {"x-ai-service-token": token} if token else {}
-        return self.client.post("/api/ai/service/usage", json=payload or _USAGE_PAYLOAD, headers=headers)
+        body = payload or _USAGE_PAYLOAD
+        headers = (
+            service_headers(int(body["user_id"]), body.get("resume_id"), turn_id=body.get("turn_id"), token=token)
+            if token
+            else {}
+        )
+        return self.client.post("/api/ai/service/usage", json=body, headers=headers)
 
     def test_rejects_unauthenticated_calls(self):
         resp = self._post(token="wrong-token")
@@ -104,7 +110,7 @@ class AiServiceUsageEndpointTest(unittest.TestCase):
         task = _stub_task()
         created: dict = {}
 
-        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None):
+        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None, turn_id=None, turn_slot=None):
             created.update(
                 user_id=user_id,
                 task_type=task_type,
@@ -212,7 +218,7 @@ class AiServiceUsageEndpointTest(unittest.TestCase):
         created: dict = {}
         finished: dict = {}
 
-        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None):
+        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None, turn_id=None, turn_slot=None):
             created.update(user_id=user_id, task_type=task_type, resume_id=resume_id, feature=feature)
             return _stub_task()
 
@@ -254,7 +260,7 @@ class AiServiceUsageEndpointTest(unittest.TestCase):
 
         with patch.object(ai_module, "get_ai_config_by_model_ref", return_value=None):
             resp = TestClient(app).post(
-                "/api/ai/service/usage", json=_USAGE_PAYLOAD, headers={"x-ai-service-token": "test-token"}
+                "/api/ai/service/usage", json=_USAGE_PAYLOAD, headers=service_headers(7, 3)
             )
         self.assertEqual(resp.status_code, 404)
 
@@ -290,7 +296,7 @@ class ToolQualityPersistenceTest(unittest.TestCase):
             "usage": [_USAGE_PAYLOAD["usage"][0], {**_USAGE_PAYLOAD["usage"][0], "model": "other-model"}],
         }
 
-        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None):
+        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None, turn_id=None, turn_slot=None):
             created.append({"input_data": input_data, "model_name": model_name})
             return _stub_task()
 
@@ -299,7 +305,7 @@ class ToolQualityPersistenceTest(unittest.TestCase):
             patch.object(ai_module, "create_ai_task", side_effect=fake_create_ai_task),
             patch.object(ai_module, "finish_ai_task", side_effect=lambda db, t, status, **kw: None),
         ):
-            resp = self.client.post("/api/ai/service/usage", json=multi_model, headers={"x-ai-service-token": "test-token"})
+            resp = self.client.post("/api/ai/service/usage", json=multi_model, headers=service_headers(7, 3))
 
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(len(created), 2)
@@ -316,7 +322,7 @@ class ToolQualityPersistenceTest(unittest.TestCase):
         }
         created: dict = {}
 
-        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None):
+        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None, turn_id=None, turn_slot=None):
             created.update(input_data=input_data)
             return _stub_task()
 
@@ -325,7 +331,7 @@ class ToolQualityPersistenceTest(unittest.TestCase):
             patch.object(ai_module, "create_ai_task", side_effect=fake_create_ai_task),
             patch.object(ai_module, "finish_ai_task", side_effect=lambda db, t, status, **kw: None),
         ):
-            resp = self.client.post("/api/ai/service/usage", json=payload, headers={"x-ai-service-token": "test-token"})
+            resp = self.client.post("/api/ai/service/usage", json=payload, headers=service_headers(7, 3))
 
         self.assertEqual(resp.status_code, 200)
         step = created["input_data"]["tool_quality"][0]
@@ -334,7 +340,7 @@ class ToolQualityPersistenceTest(unittest.TestCase):
     def test_failed_turn_stores_quality_on_failed_task_row(self):
         created: dict = {}
 
-        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None):
+        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None, turn_id=None, turn_slot=None):
             created.update(input_data=input_data)
             return _stub_task()
 
@@ -353,7 +359,7 @@ class ToolQualityPersistenceTest(unittest.TestCase):
                     "usage": [],
                     "tool_quality": [{"name": "web_search", "status": "end", "ok": True, "duration_ms": 800}],
                 },
-                headers={"x-ai-service-token": "test-token"},
+                headers=service_headers(7, 3),
             )
 
         self.assertEqual(resp.status_code, 200)
@@ -367,7 +373,7 @@ class ToolQualityPersistenceTest(unittest.TestCase):
         }
         created: dict = {}
 
-        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None):
+        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None, turn_id=None, turn_slot=None):
             created.update(input_data=input_data)
             return _stub_task()
 
@@ -376,7 +382,7 @@ class ToolQualityPersistenceTest(unittest.TestCase):
             patch.object(ai_module, "create_ai_task", side_effect=fake_create_ai_task),
             patch.object(ai_module, "finish_ai_task", side_effect=lambda db, t, status, **kw: None),
         ):
-            resp = self.client.post("/api/ai/service/usage", json=payload, headers={"x-ai-service-token": "test-token"})
+            resp = self.client.post("/api/ai/service/usage", json=payload, headers=service_headers(7, 3))
 
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(len(created["input_data"]["tool_quality"]), 50)
@@ -389,7 +395,7 @@ class ToolQualityPersistenceTest(unittest.TestCase):
         }
         created: list[dict] = []
 
-        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None):
+        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None, turn_id=None, turn_slot=None):
             created.append({"input_data": input_data, "model_name": model_name})
             return _stub_task()
 
@@ -398,7 +404,7 @@ class ToolQualityPersistenceTest(unittest.TestCase):
             patch.object(ai_module, "create_ai_task", side_effect=fake_create_ai_task),
             patch.object(ai_module, "finish_ai_task", side_effect=lambda db, t, status, **kw: None),
         ):
-            resp = self.client.post("/api/ai/service/usage", json=multi_model, headers={"x-ai-service-token": "test-token"})
+            resp = self.client.post("/api/ai/service/usage", json=multi_model, headers=service_headers(7, 3))
 
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(len(created), 2)
@@ -409,7 +415,7 @@ class ToolQualityPersistenceTest(unittest.TestCase):
         timing = {"first_token_ms": 1240, "tool_ms": 45, "total_ms": 8300, "loader_ms": 6, "session_create_ms": 4, "provider_ttfb_ms": 1180}
         created: dict = {}
 
-        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None):
+        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None, turn_id=None, turn_slot=None):
             created.update(input_data=input_data)
             return _stub_task()
 
@@ -429,7 +435,7 @@ class ToolQualityPersistenceTest(unittest.TestCase):
                     "tool_calls": 1,
                     "turn_timing": timing,
                 },
-                headers={"x-ai-service-token": "test-token"},
+                headers=service_headers(7, 3),
             )
 
         self.assertEqual(resp.status_code, 200)
@@ -444,7 +450,7 @@ class ToolQualityPersistenceTest(unittest.TestCase):
         }
         created: dict = {}
 
-        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None):
+        def fake_create_ai_task(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None, turn_id=None, turn_slot=None):
             created.update(input_data=input_data)
             return _stub_task()
 
@@ -453,7 +459,7 @@ class ToolQualityPersistenceTest(unittest.TestCase):
             patch.object(ai_module, "create_ai_task", side_effect=fake_create_ai_task),
             patch.object(ai_module, "finish_ai_task", side_effect=lambda db, t, status, **kw: None),
         ):
-            resp = self.client.post("/api/ai/service/usage", json=payload, headers={"x-ai-service-token": "test-token"})
+            resp = self.client.post("/api/ai/service/usage", json=payload, headers=service_headers(7, 3))
 
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(created["input_data"]["turn_timing"], {"total_ms": -5, "first_token_ms": 1.5})
@@ -479,8 +485,8 @@ class ByokUsageBillingTest(unittest.TestCase):
         created: dict = {}
         finished: dict = {}
 
-        def fake_create(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None):
-            created.update(input_data=input_data, model_name=model_name)
+        def fake_create(db, user_id, task_type, resume_id=None, input_data=None, model_name=None, feature=None, turn_id=None, turn_slot=None):
+            created.update(input_data=input_data, model_name=model_name, turn_id=turn_id)
             return task
 
         def fake_finish(db, task_arg, status, **kwargs):
@@ -492,7 +498,7 @@ class ByokUsageBillingTest(unittest.TestCase):
             patch.object(ai_module, "create_ai_task", side_effect=fake_create),
             patch.object(ai_module, "finish_ai_task", side_effect=fake_finish),
         ):
-            resp = self.client.post("/api/ai/service/usage", json=payload, headers={"x-ai-service-token": "test-token"})
+            resp = self.client.post("/api/ai/service/usage", json=payload, headers=service_headers(7, 3))
 
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(finished["settle"], False)
@@ -509,7 +515,7 @@ class ByokUsageBillingTest(unittest.TestCase):
             patch.object(ai_module, "create_ai_task", side_effect=lambda db, user_id, task_type, **kwargs: _stub_task()),
             patch.object(ai_module, "finish_ai_task", side_effect=lambda db, t, status, **kw: finished.update(settle=kw.get("settle", True))),
         ):
-            self.client.post("/api/ai/service/usage", json=_USAGE_PAYLOAD, headers={"x-ai-service-token": "test-token"})
+            self.client.post("/api/ai/service/usage", json=_USAGE_PAYLOAD, headers=service_headers(7, 3))
         self.assertEqual(finished["settle"], True)
 
 

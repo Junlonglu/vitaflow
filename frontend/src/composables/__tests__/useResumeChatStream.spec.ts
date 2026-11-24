@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { computed, defineComponent, h } from "vue"
 import { flushPromises, mount } from "@vue/test-utils"
 
-import { sendResumeChatMessageStreamApi } from "@/api/ai"
+import { decideResumeChatChangeApi, sendResumeChatMessageStreamApi } from "@/api/ai"
 import { useResumeChatStream, type ResumeChatStreamOptions } from "@/composables/useResumeChatStream"
 
 vi.mock("@/stores/chat", () => ({
@@ -67,11 +67,11 @@ function createOptions(): ResumeChatStreamOptions {
   }
 }
 
-function mountStream() {
+function mountStream(options: ResumeChatStreamOptions = createOptions()) {
   let stream!: ReturnType<typeof useResumeChatStream>
   const Harness = defineComponent({
     setup() {
-      stream = useResumeChatStream(createOptions())
+      stream = useResumeChatStream(options)
       return () => h("div")
     },
   })
@@ -152,5 +152,61 @@ describe("isAbortError wiring", () => {
     await stream.send("你好")
 
     expect(stream.messages.value.length).toBeGreaterThan(0)
+  })
+})
+
+describe("decide · 应用提案的合并基准", () => {
+  const pendingMessage = (optimized: unknown) => ({
+    id: 5,
+    role: "assistant" as const,
+    content: "",
+    action_status: "pending" as const,
+    optimized_resume_data: optimized,
+  })
+
+  beforeEach(() => {
+    vi.mocked(decideResumeChatChangeApi).mockReset()
+    vi.mocked(decideResumeChatChangeApi).mockResolvedValue({
+      assistant_message: { id: 5, action_status: "applied" },
+    } as any)
+  })
+
+  it("主按钮没带数据时，现场把提案合并进当前简历再提交", async () => {
+    const optimized = { basics: { name: "AI 版" } }
+    const merged = { basics: { name: "合并版" } }
+    const buildMergedResumeData = vi.fn(() => merged)
+    const { stream } = mountStream({ ...createOptions(), buildMergedResumeData })
+    stream.messages.value = [pendingMessage(optimized)]
+
+    await stream.decide(stream.messages.value[0], "apply")
+
+    expect(buildMergedResumeData).toHaveBeenCalledWith(optimized)
+    // 第 4 个参数就是 merged_resume_data：传了它，后端才不走整包快照
+    expect(vi.mocked(decideResumeChatChangeApi).mock.calls[0][3]).toEqual(merged)
+  })
+
+  it("审阅台显式传入的逐条勾选结果优先，不再二次合并", async () => {
+    const explicit = { basics: { name: "只勾了一条" } }
+    const buildMergedResumeData = vi.fn(() => ({ basics: { name: "不该用到" } }))
+    const { stream } = mountStream({ ...createOptions(), buildMergedResumeData })
+    stream.messages.value = [pendingMessage({ basics: { name: "AI 版" } })]
+
+    await stream.decide(stream.messages.value[0], "apply", explicit)
+
+    expect(buildMergedResumeData).not.toHaveBeenCalled()
+    expect(vi.mocked(decideResumeChatChangeApi).mock.calls[0][3]).toEqual(explicit)
+  })
+
+  it("驳回与「只有信息库提案」都不触发合并", async () => {
+    const buildMergedResumeData = vi.fn(() => ({ basics: {} }))
+    const { stream } = mountStream({ ...createOptions(), buildMergedResumeData })
+    stream.messages.value = [pendingMessage({ basics: { name: "AI 版" } })]
+
+    await stream.decide(stream.messages.value[0], "reject")
+    stream.messages.value = [{ ...pendingMessage(undefined), id: 6 }]
+    await stream.decide(stream.messages.value[0], "apply")
+
+    expect(buildMergedResumeData).not.toHaveBeenCalled()
+    expect(vi.mocked(decideResumeChatChangeApi).mock.calls[1][3]).toBeUndefined()
   })
 })

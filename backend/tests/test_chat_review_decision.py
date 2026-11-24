@@ -25,6 +25,7 @@ from app.services.ai_chat_service import resolve_chat_change
 def _message_stub(**overrides):
     base = dict(
         id=5,
+        session_id=11,
         user_id=7,
         resume_id=3,
         role="assistant",
@@ -46,9 +47,10 @@ class _DbStub:
     def __init__(self, message):
         self._message = message
         self.added = []
+        self.resume = None
 
     def get(self, model, pk):
-        return self._message
+        return self._message if model is AiChatMessage else self.resume
 
     def add(self, obj):
         self.added.append(obj)
@@ -62,7 +64,30 @@ class _DbStub:
     def flush(self):
         pass
 
-    def expire(self, obj, attrs):
+    def scalars(self, _stmt):
+        # 版本快照去重要查「最新一版」；stub 里没有历史版本。
+        return SimpleNamespace(first=lambda: None)
+
+    def scalar(self, _stmt):
+        # 「有没有更新的 pending 提案」这类聚合查询：stub 里没有，返回 None。
+        return None
+
+    def execute(self, statement):
+        """把 Core UPDATE 的 SET 落到对应的假对象上——真库里这一步由数据库完成。"""
+        table = getattr(getattr(statement, "table", None), "name", "")
+        target = self._message if table == "ai_chat_messages" else self.resume
+        for raw_key, value in dict(getattr(statement, "_values", {})).items():
+            # SQLAlchemy 2.0 的 _values 以 Column 对象为键，不是列名字符串。
+            key = getattr(raw_key, "key", raw_key)
+            # 值被包在 BindParameter 里；revision 是 `revision + 1` 表达式，没有 .value。
+            value = getattr(value, "value", value)
+            if key == "revision":
+                setattr(target, key, int(getattr(target, "revision", 0) or 0) + 1)
+            else:
+                setattr(target, key, value)
+        return SimpleNamespace(rowcount=1)
+
+    def expire(self, obj, attrs=None):
         pass
 
     def rollback(self):
@@ -72,10 +97,12 @@ class _DbStub:
 def _resume_stub(resume_data=None):
     return SimpleNamespace(
         id=3,
+        user_id=7,
         language="zh-CN",
         resume_data=resume_data if resume_data is not None else {"basics": {"name": "旧名"}},
         template_config={},
         update_by=None,
+        revision=0,
     )
 
 
@@ -83,10 +110,12 @@ class ResolveChatChangeMergedTest(unittest.TestCase):
     def setUp(self):
         self.user = SimpleNamespace(id=7)
 
-    def _run(self, message, resume, merged=None, action="apply"):
+    def _run(self, message, resume, merged=None, action="apply", expect_revision=None):
         db = _DbStub(message)
-        with patch("app.services.ai_chat_service.flag_modified"):
-            out, resume_data = resolve_chat_change(db, self.user, resume, message.id, action, merged)
+        db.resume = resume
+        out, resume_data = resolve_chat_change(
+            db, self.user, resume, message.id, action, merged, expect_revision=expect_revision
+        )
         return db, out, resume_data
 
     def test_apply_with_merged_persists_merged_data(self):

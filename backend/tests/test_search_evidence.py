@@ -10,6 +10,7 @@ from unittest.mock import patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from tests.service_ticket_support import service_headers
 from app.api import ai as ai_module
 from app.api.ai import router as ai_router
 from app.core.config import settings
@@ -120,7 +121,7 @@ class SearchEvidenceEndpointTest(unittest.TestCase):
                 "query": "前端 薪资",
                 "results": [{"title": "行业报告", "url": "https://a", "snippet": "S"}],
             },
-            headers={"X-AI-Service-Token": "test-token"},
+            headers=service_headers(1, 2),
         )
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(resp.json()["data"]["ok"])

@@ -17,6 +17,7 @@ function buildTools(respond: (call: { url: string; body?: any }) => Response | P
     }) as typeof fetch,
     fastapiBaseUrl: "http://api.test/",
     serviceToken: "token",
+    turnTicket: "test-ticket",
     userId: 7,
     resumeId: 9,
     state,

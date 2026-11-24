@@ -45,8 +45,16 @@ export interface ResumeToolsDeps {
   fastapiBaseUrl: string;
   /** Shared secret sent as X-AI-Service-Token; FastAPI verifies it against AI_SERVICE_TOKEN. */
   serviceToken: string;
+  /** 回合票据：与令牌一起证明「这一轮属于这个用户」，缺了后端会 401。 */
+  turnTicket: string;
   userId: number;
   resumeId: number;
+  /**
+   * 本轮对话所属会话。默认路径由代理层解析后传入（前端不传 session_id 时后端
+   * 会先建/取会话再转发），所以这里缺省只可能是调用方接错了线——此时宁可报错，
+   * 也不能让后端回落「最近活跃会话」拿错上下文（RF-014）。
+   */
+  sessionId?: number;
   state: TurnState;
 }
 
@@ -99,6 +107,16 @@ export function toUpdates(changes: ResumeChange[]): Array<{ section: string; pro
 export function normalizeFragmentIds(value: unknown): number[] {
   if (!Array.isArray(value)) return [];
   return value.map((item) => Number(item)).filter((item) => Number.isFinite(item) && item > 0);
+}
+
+/** 累积本轮改动摘要：保序去重，空串/非字符串一律丢掉。 */
+function mergeSuggestions(previous: string[] | undefined, next: string[]): string[] {
+  const merged: string[] = [];
+  for (const item of [...(previous ?? []), ...next]) {
+    const text = String(item ?? "").trim();
+    if (text && !merged.includes(text)) merged.push(text);
+  }
+  return merged;
 }
 
 export function createUpdateResumeTool(deps: ResumeToolsDeps): ToolDefinition {
@@ -166,18 +184,36 @@ export function createUpdateResumeTool(deps: ResumeToolsDeps): ToolDefinition {
           details: { ok: false },
         };
       }
+      if (!Number.isInteger(deps.sessionId) || (deps.sessionId ?? 0) <= 0) {
+        // 契约错误而不是业务错误：本轮没有会话就无法确定校验用的历史。
+        return {
+          content: [
+            {
+              type: "text",
+              text: `这次修改没有提交成功：本轮缺少会话标识。${categoryGuidance("infra")}`,
+            },
+          ],
+          details: { ok: false, reason: "missing_session", category: "infra" },
+        };
+      }
 
       const url = `${deps.fastapiBaseUrl.replace(/\/+$/, "")}/api/ai/service/tool/update-resume`;
       let resp: Response;
       try {
         resp = await deps.fetch(url, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "X-AI-Service-Token": deps.serviceToken },
+          headers: { "Content-Type": "application/json", "X-AI-Service-Token": deps.serviceToken, "X-Turn-Ticket": deps.turnTicket },
           body: JSON.stringify({
             user_id: deps.userId,
             resume_id: deps.resumeId,
+            session_id: deps.sessionId,
             updates,
             from_library: fromLibrary,
+            // 本轮已有待确认快照时带上它：后端从这份快照起算，同一轮里第二次
+            // 改动才叠在第一次上面，而不是回到库里的旧数据（RF-019）。
+            ...(deps.state.pendingChange
+              ? { base_resume_data: deps.state.pendingChange.optimized_resume_data }
+              : {}),
           }),
           signal: toolHttpSignal(signal),
         });
@@ -208,9 +244,13 @@ export function createUpdateResumeTool(deps: ResumeToolsDeps): ToolDefinition {
         };
       }
 
-      const suggestions = Array.isArray(data.suggestions)
+      const freshSuggestions = Array.isArray(data.suggestions)
         ? (data.suggestions as string[]).filter((item) => typeof item === "string")
         : [];
+      // 一轮里可能调用多次（先改工作、再改项目）。待确认快照以后端返回的为准——
+      // 它已经叠在前一次的结果上；摘要累积去重，否则模型只汇报最后一次，用户
+      // 以为另一处没改（RF-019）。
+      const suggestions = mergeSuggestions(deps.state.pendingChange?.suggestions, freshSuggestions);
       deps.state.pendingChange = { optimized_resume_data: data.optimized_resume_data, suggestions };
       const summary = suggestions.join("；") || "简历修改";
       return {

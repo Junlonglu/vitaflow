@@ -118,6 +118,30 @@ describe("ResumeAiChatPanel 双通道待确认卡", () => {
     expect(text).toContain("已忽略")
   })
 
+  it("被新方案取代的提案不能再操作，只留一句说明", async () => {
+    // 后端在新方案落库时把旧提案置 superseded：内容已过期，再应用会覆盖新结果。
+    const wrapper = mountPanel([
+      { id: 8, role: "assistant", content: "方案 A", optimized_resume_data: { skills: [] }, action_status: "superseded" },
+      { id: 9, role: "assistant", content: "方案 B", optimized_resume_data: { skills: ["Go"] }, action_status: "pending" },
+    ])
+    await flushPromises()
+
+    const text = wrapper.text()
+    expect(text).toContain("已被更新的修改方案取代")
+    // 只有最新那条带「应用」按钮，旧提案一个可点的操作都没有
+    expect(wrapper.findAll("button").filter((button) => button.text() === "应用")).toHaveLength(1)
+  })
+
+  it("应用中断的提案提示重新生成", async () => {
+    const wrapper = mountPanel([
+      { id: 10, role: "assistant", content: "方案", optimized_resume_data: { skills: [] }, action_status: "stale" },
+    ])
+    await flushPromises()
+
+    expect(wrapper.text()).toContain("上次处理未完成，请重新生成")
+    expect(wrapper.findAll("button").filter((button) => button.text() === "应用")).toHaveLength(0)
+  })
+
   it("助手消息顶部带本轮用时，且位置在思考/工具之前", async () => {
     const wrapper = mountPanel([
       { id: 7, role: "assistant", content: "改好了。", timing: { total_ms: 8400 }, streaming: false },

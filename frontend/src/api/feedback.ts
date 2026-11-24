@@ -4,6 +4,8 @@ export type FeedbackPayload = {
   category?: string
   content: string
   contact?: string
+  /** 幂等键：一次提交一个，失败重试复用，成功后作废。 */
+  request_id?: string
 }
 
 export interface FeedbackItem {

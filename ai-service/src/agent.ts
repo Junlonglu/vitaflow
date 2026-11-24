@@ -62,6 +62,18 @@ export interface AgentInput {
   userId: number;
   resumeId: number;
   /**
+   * 回合票据（RF-008）：后端签发，绑死「用户 + 简历 + 消息」。每次回调都带上它，
+   * 后端据此拒绝「服务令牌合法但身份不符」的请求。空串表示本轮没有身份
+   * （纯对话、无简历），此时回调会被后端 401 —— 那正是期望行为。
+   */
+  turnTicket: string;
+  /**
+   * 本轮对话所属会话（与 turn_id 一起从 FastAPI 转发进来）。工具回调必须带上它：
+   * 没有会话维度时后端只能回落「最近活跃会话」，两个标签页交叉提问就会拿错
+   * 数值守卫用的用户消息（RF-014）。
+   */
+  sessionId?: number;
+  /**
    * Only used by the Faux provider: the canned tool call(s) the deterministic model
    * should make this turn (a single plan or a multi-step sequence). Undefined for
    * the real provider, which decides its own tool calls.
@@ -190,7 +202,7 @@ function buildAssistantMessage(text: string, now: number) {
  * legacy billing rule that failed turns are never charged.
  */
 export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSignal): Promise<ChatTurnOutcome> {
-  const { message, systemPrompt, config, runtime, modelRef, userId, resumeId, toolPlan, images } = input;
+  const { message, systemPrompt, config, runtime, modelRef, userId, resumeId, sessionId, toolPlan, images } = input;
   // 轨迹的回合级计数器；提前建好是为了让"模型都解析失败"这种早期返回也能收尾，
   // 否则这类失败在轨迹里会永远停在 turn_start，看不出结局。
   const trace = input.trace;
@@ -239,8 +251,10 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
     fetch: globalThis.fetch,
     fastapiBaseUrl: config.fastapiBaseUrl,
     serviceToken: config.serviceToken,
+    turnTicket: input.turnTicket,
     userId,
     resumeId,
+    sessionId,
     state: toolState,
   };
   const resumeTool = createUpdateResumeTool(toolDeps);
@@ -253,6 +267,7 @@ export async function runChat(input: AgentInput, emit: Emit, signal?: AbortSigna
         fetch: globalThis.fetch,
         fastapiBaseUrl: config.fastapiBaseUrl,
         serviceToken: config.serviceToken,
+        turnTicket: input.turnTicket,
         userId,
         resumeId,
         // isSearchEnabled 已排除 "none"，这里收窄类型

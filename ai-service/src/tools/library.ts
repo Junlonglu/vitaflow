@@ -16,6 +16,8 @@ export interface LibraryToolsDeps {
   fetch: typeof globalThis.fetch;
   fastapiBaseUrl: string;
   serviceToken: string;
+  /** 回合票据（RF-008）：证明「这一轮属于这个用户」，回调必须带上。 */
+  turnTicket: string;
   userId: number;
   resumeId: number;
   state: TurnState;
@@ -61,7 +63,7 @@ export function createLibraryTools(deps: LibraryToolsDeps): ToolDefinition[] {
       let resp: Response;
       try {
         resp = await deps.fetch(url, {
-          headers: { "X-AI-Service-Token": deps.serviceToken },
+          headers: { "X-AI-Service-Token": deps.serviceToken, "X-Turn-Ticket": deps.turnTicket },
           signal: toolHttpSignal(signal),
         });
       } catch (err) {
@@ -127,7 +129,7 @@ export function createLibraryTools(deps: LibraryToolsDeps): ToolDefinition[] {
       try {
         resp = await deps.fetch(`${base}/api/ai/service/tool/info-fragments/propose`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "X-AI-Service-Token": deps.serviceToken },
+          headers: { "Content-Type": "application/json", "X-AI-Service-Token": deps.serviceToken, "X-Turn-Ticket": deps.turnTicket },
           body: JSON.stringify({ user_id: deps.userId, resume_id: deps.resumeId, fragments: items }),
           signal: toolHttpSignal(signal),
         });

@@ -12,6 +12,7 @@ import {
   type ToolStep,
 } from "@/api/ai"
 import { useChatStore } from "@/stores/chat"
+import { isConflictError } from "@/api/request"
 import { errorMessage, isAbortError } from "@/utils/errorText"
 import type { ChatMessage } from "@/types/chat"
 
@@ -32,6 +33,28 @@ export interface ResumeChatStreamOptions {
   beforeRequest: () => Promise<void>
   /** 用后端返回的最新简历刷新编辑器与撤销栈。 */
   applyResumeSnapshot: () => Promise<void>
+  /**
+   * 「应用」时把待确认提案合并进当前简历。
+   *
+   * 不注入的话，应用会把提案那一刻的整包快照写回去——提案之后用户手动补的
+   * 内容会被一并回滚，而界面上看不出异常。页面注入后默认走「当前数据 + 全选
+   * 变更」；返回 undefined 时退回整包（降级路径，不要静默吞掉）。
+   */
+  buildMergedResumeData?: (optimizedResumeData: any) => unknown
+  /**
+   * 「应用」时带上当前简历的版本号。
+   *
+   * 与编辑器保存共用同一把乐观锁：拿不到（详情还没加载完）就不带，服务端
+   * 按「放弃冲突保护」处理，而不是拿一个猜的值去撞。
+   */
+  currentRevision?: () => number | undefined
+  /**
+   * 「应用」撞上 409（期间保存/另一标签页已经写过）时的收尾。
+   *
+   * 由页面负责把本地同步到服务端最新版，让用户可以直接再点一次，而不是
+   * 卡在「一直失败」的状态里。
+   */
+  onRevisionConflict?: () => Promise<void> | void
   onPendingQuestions: (questions: PendingQuestion[]) => void
   onJdOptimized: (messageId: number | null) => void
   onPointsUsed: (points: number, kind: TurnKind) => void
@@ -336,6 +359,12 @@ export function useResumeChatStream(options: ResumeChatStreamOptions) {
   async function decide(message: ChatMessage, action: "apply" | "reject", mergedResumeData?: any) {
     if (!message?.id || decisionLoadingId.value !== null) return
     if (action === "apply") options.flushHistory()
+    // 主按钮的语义是「全部采纳」，但基准必须是**当前**简历而不是提案时的快照：
+    // 显式传入（审阅台逐条勾选）优先，否则现场算合并结果。
+    const merged =
+      action === "apply" && mergedResumeData === undefined && message.optimized_resume_data
+        ? options.buildMergedResumeData?.(message.optimized_resume_data)
+        : mergedResumeData
     const previousStatus = message.action_status || "pending"
     decisionLoadingId.value = message.id
     message.action_status = "applying"
@@ -345,14 +374,21 @@ export function useResumeChatStream(options: ResumeChatStreamOptions) {
         options.resumeId.value,
         Number(message.id),
         action,
-        mergedResumeData,
+        merged,
+        action === "apply" ? options.currentRevision?.() : undefined,
       )
       if (response?.assistant_message) Object.assign(message, response.assistant_message)
       if (action === "apply" && response?.resume_data) await options.applyResumeSnapshot()
       options.onDecisionApplied?.(message, action, response)
     } catch (err: unknown) {
       message.action_status = previousStatus
-      error.value = errorMessage(err, action === "apply" ? "修改写入失败" : "取消修改失败")
+      if (isConflictError(err)) {
+        // 写入撞车：先把本地同步到最新版，否则用户重试还是同一个旧版本号。
+        await options.onRevisionConflict?.()
+        error.value = "简历已在别处更新，已同步最新内容，请重新应用"
+      } else {
+        error.value = errorMessage(err, action === "apply" ? "修改写入失败" : "取消修改失败")
+      }
     } finally {
       decisionLoadingId.value = null
     }

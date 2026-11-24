@@ -12,6 +12,7 @@ from unittest.mock import patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from tests.service_ticket_support import service_headers
 from app.api import ai as ai_module
 from app.api.ai import router as ai_router
 from app.core.config import settings
@@ -61,7 +62,7 @@ class UpdateResumeEndpointTest(unittest.TestCase):
         settings.ai_service_token = self._original_token
 
     def _headers(self):
-        return {"X-AI-Service-Token": "test-token"}
+        return service_headers(1, 2)
 
     def test_rejects_missing_token(self):
         resp = _make_client().post(
@@ -78,6 +79,7 @@ class UpdateResumeEndpointTest(unittest.TestCase):
                 json={
                     "user_id": 1,
                     "resume_id": 2,
+                    "session_id": 11,
                     "updates": [
                         {"section": "work", "proposed": [{"id": "work_1", "position": "实习生"}]},
                         {"section": "summary", "proposed": {"content": "三句话简介"}},
@@ -102,6 +104,7 @@ class UpdateResumeEndpointTest(unittest.TestCase):
                 json={
                     "user_id": 1,
                     "resume_id": 2,
+                    "session_id": 11,
                     "updates": [{"section": "basics", "proposed": {"location": "深圳"}}],
                 },
                 headers=self._headers(),
@@ -123,6 +126,7 @@ class UpdateResumeEndpointTest(unittest.TestCase):
                 json={
                     "user_id": 1,
                     "resume_id": 2,
+                    "session_id": 11,
                     "from_library": [3],
                     "updates": [{"section": "summary", "proposed": {"content": "新的简介"}}],
                 },
@@ -141,7 +145,7 @@ class UpdateResumeEndpointTest(unittest.TestCase):
         with stack[0], stack[1], stack[2]:
             resp = _make_client().post(
                 "/api/ai/service/tool/update-resume",
-                json={"user_id": 1, "resume_id": 2},
+                json={"user_id": 1, "resume_id": 2, "session_id": 11},
                 headers=self._headers(),
             )
         data = resp.json()["data"]
@@ -156,6 +160,7 @@ class UpdateResumeEndpointTest(unittest.TestCase):
                 json={
                     "user_id": 1,
                     "resume_id": 2,
+                    "session_id": 11,
                     "updates": [{"section": "not_a_section", "proposed": {"x": 1}}],
                 },
                 headers=self._headers(),
@@ -163,3 +168,62 @@ class UpdateResumeEndpointTest(unittest.TestCase):
         data = resp.json()["data"]
         self.assertFalse(data["ok"])
         self.assertIn("不支持修改的简历模块", data["reason"])
+
+    def test_missing_session_id_is_rejected_instead_of_falling_back(self):
+        """RF-014：没有会话就不知道该用哪段历史，回落「最近活跃」会拿错上下文。"""
+        stack = _patch()
+        with stack[0], stack[1] as mock_messages, stack[2]:
+            resp = _make_client().post(
+                "/api/ai/service/tool/update-resume",
+                json={
+                    "user_id": 1,
+                    "resume_id": 2,
+                    "updates": [{"section": "summary", "proposed": {"content": "新的简介"}}],
+                },
+                headers=self._headers(),
+            )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("session_id", resp.json()["message"])
+        mock_messages.assert_not_called()
+
+    def test_history_is_scoped_to_the_turn_session(self):
+        stack = _patch()
+        with stack[0], stack[1] as mock_messages, stack[2]:
+            _make_client().post(
+                "/api/ai/service/tool/update-resume",
+                json={
+                    "user_id": 1,
+                    "resume_id": 2,
+                    "session_id": 42,
+                    "updates": [{"section": "summary", "proposed": {"content": "新的简介"}}],
+                },
+                headers=self._headers(),
+            )
+        self.assertEqual(mock_messages.call_args.kwargs["session_id"], 42)
+
+    def test_second_call_stacks_on_the_pending_snapshot(self):
+        """RF-019：模型一轮里调两次，第二次要叠在第一次的结果上。"""
+        pending = {
+            **_RESUME_DATA,
+            "work": [
+                {"id": "work_1", "company": "A 公司", "position": "实习生", "start_date": "2020.07"},
+                {"id": "work_2", "company": "B 公司", "position": "前端", "start_date": "2021.07"},
+            ],
+        }
+        stack = _patch()
+        with stack[0], stack[1], stack[2]:
+            resp = _make_client().post(
+                "/api/ai/service/tool/update-resume",
+                json={
+                    "user_id": 1,
+                    "resume_id": 2,
+                    "session_id": 11,
+                    "base_resume_data": pending,
+                    "updates": [{"section": "basics", "proposed": {"location": "深圳"}}],
+                },
+                headers=self._headers(),
+            )
+        data = resp.json()["data"]
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["optimized_resume_data"]["work"][0]["position"], "实习生", "第一次改动不能丢")
+        self.assertEqual(data["optimized_resume_data"]["basics"]["location"], "深圳")

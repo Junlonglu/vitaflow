@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from tests.service_ticket_support import service_headers
 from app.api.ai import router as ai_router
 from app.core.config import settings
 from app.core.database import get_db
@@ -70,7 +71,10 @@ class AgentTraceEndpointTest(unittest.TestCase):
 
     def _post(self, db, payload=None):
         client = _make_client(db)
-        return client.post("/api/ai/service/trace", json=payload or _TRACE_PAYLOAD, headers={"x-ai-service-token": "test-token"})
+        body = payload or _TRACE_PAYLOAD
+        return client.post(
+            "/api/ai/service/trace", json=body, headers=service_headers(int(body["user_id"]), body.get("resume_id"))
+        )
 
     def test_persists_one_row_per_turn(self):
         db = _DbStub()

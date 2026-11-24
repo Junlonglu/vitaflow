@@ -7,11 +7,15 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 
+# SQLite 只认 INTEGER PRIMARY KEY 的自增；with_variant 让单测能跑真实 ORM
+# （已读记录不允许显式给 id，否则就测不到「并发插入撞唯一约束」这条路径）。
+BIGINT_PK = BigInteger().with_variant(Integer, "sqlite")
+
 
 class Announcement(Base):
     __tablename__ = "announcements"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(120))
     content: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), default="draft", index=True)
@@ -26,7 +30,7 @@ class AnnouncementRead(Base):
     __tablename__ = "announcement_reads"
     __table_args__ = (UniqueConstraint("announcement_id", "user_id", name="uq_announcement_read"),)
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
     announcement_id: Mapped[int] = mapped_column(BigInteger, index=True)
     user_id: Mapped[int] = mapped_column(BigInteger, index=True)
     create_time: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

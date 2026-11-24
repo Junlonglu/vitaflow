@@ -57,6 +57,8 @@ describe("agent loop -> update_resume tool (Faux)", () => {
         config,
         runtime,
         userId: 7,
+        turnTicket: "test-ticket",
+        sessionId: 21,
         resumeId: 3,
         toolPlan: { name: "update_resume", args: { changes: [{ section: "basics", fields: { location: "深圳" } }] } },
       });
@@ -66,6 +68,7 @@ describe("agent loop -> update_resume tool (Faux)", () => {
       assert.deepEqual(calls[0].body, {
         user_id: 7,
         resume_id: 3,
+        session_id: 21,
         updates: [{ section: "basics", proposed: { location: "深圳" } }],
         from_library: [],
       });
@@ -123,6 +126,8 @@ describe("agent loop -> update_resume tool (Faux)", () => {
         config,
         runtime,
         userId: 7,
+        turnTicket: "test-ticket",
+        sessionId: 21,
         resumeId: 3,
         toolPlan: { name: "update_resume", args: { changes: [{ section: "work", items: [{ id: "work_1", position: "实习生" }] }] } },
       });
@@ -130,6 +135,7 @@ describe("agent loop -> update_resume tool (Faux)", () => {
       assert.deepEqual(postedBody, {
         user_id: 7,
         resume_id: 3,
+        session_id: 21,
         updates: [{ section: "work", proposed: [{ id: "work_1", position: "实习生" }] }],
         from_library: [],
       });
@@ -171,6 +177,8 @@ describe("agent loop -> natural language drives the same tool (Faux)", () => {
         config,
         runtime,
         userId: 7,
+        turnTicket: "test-ticket",
+        sessionId: 21,
         resumeId: 3,
       });
 
@@ -199,6 +207,8 @@ describe("agent loop -> token usage aggregation (ticket 07)", () => {
           config,
           runtime,
           userId: 7,
+          turnTicket: "test-ticket",
+          sessionId: 21,
           resumeId: 3,
         },
         () => {},
@@ -234,6 +244,8 @@ describe("agent loop -> token usage aggregation (ticket 07)", () => {
         runtime,
         modelRef: "no-such-provider/no-such-model",
         userId: 7,
+        turnTicket: "test-ticket",
+        sessionId: 21,
         resumeId: 3,
       },
       (event) => events.push(event),
@@ -280,6 +292,8 @@ NkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
         config,
         runtime,
         userId: 7,
+        turnTicket: "test-ticket",
+        sessionId: 21,
         resumeId: 3,
         images: [{ type: "image", data: imageBase64, mimeType: "image/png" }],
       });
@@ -318,6 +332,8 @@ NkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
         config,
         runtime,
         userId: 7,
+        turnTicket: "test-ticket",
+        sessionId: 21,
         resumeId: 3,
       });
 
@@ -345,6 +361,8 @@ describe("skill activation rides the same activity trace as tool steps", () => {
         config,
         runtime,
         userId: 7,
+        turnTicket: "test-ticket",
+        sessionId: 21,
         resumeId: 3,
         skill: { id: "diagnose", name: "诊断" },
       });
@@ -419,6 +437,8 @@ describe("turn trace (P0, docs/ai/ai-trajectory.md)", () => {
         config,
         runtime,
         userId: 7,
+        turnTicket: "test-ticket",
+        sessionId: 21,
         resumeId: 3,
         toolPlan: { name: "update_resume", args: { changes: [{ section: "basics", fields: { location: "深圳" } }] } },
         trace,

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { errorMessage } from "@/utils/errorText"
+import { newRequestId } from "@/utils/requestId"
 import { onMounted, ref, watch } from "vue"
 import { useRoute } from "vue-router"
 import WorkspacePage from "@/components/workspace/WorkspacePage.vue"
@@ -37,6 +38,8 @@ const feedbackCategory = ref("简历编辑")
 const feedbackContent = ref("")
 const feedbackContact = ref("")
 const feedbackSubmitting = ref(false)
+// 幂等键：提交失败后重试复用同一个，服务端不会多开一张工单。
+const feedbackRequestId = ref("")
 const feedbacksLoading = ref(false)
 const feedbackView = ref<"submit" | "history">("submit")
 const myFeedbacks = ref<FeedbackPageData<FeedbackItem>>({ items: [], total: 0, page: 1, page_size: 10 })
@@ -80,12 +83,14 @@ async function savePassword() {
     if (passwordForm.value.new_password.length < 6) {
       throw new Error("新密码长度不能少于6位")
     }
-    await changePasswordApi({
+    const { access_token } = await changePasswordApi({
       current_password: passwordForm.value.current_password,
       new_password: passwordForm.value.new_password,
     })
+    // 旧 token 已被吊销，留着它下一个请求就 401；换成后端刚签发的那份。
+    if (access_token) user.setToken(access_token)
     passwordForm.value = { current_password: "", new_password: "", confirm_password: "" }
-    showGlobalToast("密码已成功修改", "success")
+    showGlobalToast("密码已成功修改，其他设备需重新登录", "success")
   } catch (e: unknown) {
     showGlobalToast(errorMessage(e, "修改密码失败，请核对当前密码"), "error")
   } finally {
@@ -97,12 +102,15 @@ async function submitFeedback() {
   const content = feedbackContent.value.trim()
   if (!content || feedbackSubmitting.value) return
   feedbackSubmitting.value = true
+  feedbackRequestId.value = feedbackRequestId.value || newRequestId()
   try {
     await submitFeedbackApi({
       category: feedbackCategory.value,
       content,
       contact: feedbackContact.value.trim() || undefined,
+      request_id: feedbackRequestId.value,
     })
+    feedbackRequestId.value = ""
     showGlobalToast("反馈已提交，我们会尽快处理。", "success")
     feedbackContent.value = ""
     feedbackContact.value = ""

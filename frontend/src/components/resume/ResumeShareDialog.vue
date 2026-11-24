@@ -222,7 +222,7 @@ watch(
                   class="min-w-0 flex-1 bg-transparent text-xs text-zinc-700 outline-none"
                 />
               </div>
-              <p class="mt-1.5 text-xs leading-5 text-zinc-500">3–64 位，字母或数字开头</p>
+              <p class="mt-1.5 text-xs leading-5 text-zinc-500">8–64 位，字母或数字开头（太短容易被猜中）</p>
             </div>
 
             <div v-if="config?.token && config.enabled" class="space-y-3 rounded-2xl border border-blue-100 bg-blue-50/40 p-4">

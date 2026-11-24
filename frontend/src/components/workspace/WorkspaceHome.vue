@@ -9,6 +9,7 @@ import { useChatModels } from "@/composables/useChatModels"
 import { useWorkspaceDrawer } from "@/composables/useWorkspaceDrawer"
 import { useWorkspaceCreate, type CreateEntry } from "@/composables/useWorkspaceCreate"
 import { writeChatHandoff } from "@/utils/chatHandoff"
+import { newRequestId } from "@/utils/requestId"
 import { showGlobalToast } from "@/utils/toast"
 import type { AiChatAttachment } from "@/api/ai"
 
@@ -21,6 +22,9 @@ const { selectedKey, modelChoices, supportsImages, load: loadChatModels } = useC
 
 const composerRef = ref<InstanceType<typeof AiComposer> | null>(null)
 const busy = ref(false)
+// 首页发起的「新建 + 带着提示词进编辑器」：失败重试复用同一个幂等键，
+// 否则重试会在列表里多出一份空简历。
+const createRequestId = ref("")
 
 const selectedModelId = computed({
   get: () => selectedKey.value,
@@ -60,8 +64,10 @@ async function submit(content: string, attachments: AiChatAttachment[]) {
     return
   }
   busy.value = true
+  createRequestId.value = createRequestId.value || newRequestId()
   try {
-    const created = (await store.createResume("tech")) as { id: number }
+    const created = (await store.createResume("tech", createRequestId.value)) as { id: number }
+    createRequestId.value = ""
     writeChatHandoff({ prompt: text, attachments, modelKey: selectedKey.value })
     composerRef.value?.reset()
     await router.push(`/workspace/${created.id}`)

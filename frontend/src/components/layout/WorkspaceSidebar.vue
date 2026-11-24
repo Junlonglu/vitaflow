@@ -32,6 +32,10 @@ import { useWorkspaceBridge } from "@/composables/useWorkspaceBridge"
 import { useWorkspaceDrawer } from "@/composables/useWorkspaceDrawer"
 import { useWorkspaceCreate, type CreateEntry } from "@/composables/useWorkspaceCreate"
 import { showGlobalToast } from "@/utils/toast"
+import { newRequestId } from "@/utils/requestId"
+
+/** 复制中的幂等键（按简历 id）：连点两次不会复制出两份。 */
+const duplicateRequestIds = new Map<number, string>()
 import type { AiChatSession, AiChatSessionSearchItem } from "@/api/ai"
 
 const route = useRoute()
@@ -432,8 +436,12 @@ async function menuDuplicateResume() {
   const id = resumeMenu.value.resumeId
   closeResumeMenu()
   if (!id) return
+  // 同一份简历的重复点击走同一个幂等键：后端回放第一次的结果而不是再建一份。
+  const requestId = duplicateRequestIds.get(id) || newRequestId()
+  duplicateRequestIds.set(id, requestId)
   try {
-    await store.duplicateResume(id)
+    await store.duplicateResume(id, requestId)
+    duplicateRequestIds.delete(id)
     showGlobalToast("已复制一份", "success")
   } catch {
     showGlobalToast("复制失败，请重试", "error")

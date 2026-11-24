@@ -57,6 +57,16 @@ const statusOptions = [
 const showPointsModal = ref(false)
 const pointsModalMode = ref<"single" | "all">("single")
 const pointsTargetUser = ref<AdminUser | null>(null)
+// 一次「全员发放」的幂等键：弹窗打开时生成一次，重试 / 双击都复用同一个值，
+// 后端据此把批次号算成确定值，重复提交不会二次加钱。
+const grantRequestId = ref("")
+const grantSubmitting = ref(false)
+
+function newGrantRequestId(): string {
+  const cryptoObj = globalThis.crypto
+  if (cryptoObj && typeof cryptoObj.randomUUID === "function") return cryptoObj.randomUUID()
+  return `grant-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
 
 /* ---------- 停用 / 恢复 ---------- */
 
@@ -114,21 +124,40 @@ function adjustPoints(user: AdminUser) {
 
 function grantAllPoints() {
   pointsModalMode.value = "all"
+  grantRequestId.value = newGrantRequestId()
   showPointsModal.value = true
 }
 
 async function executePointsAdjust(points: number, description: string) {
   showPointsModal.value = false
   if (pointsModalMode.value === "all") {
+    // 双击 / 连点：第二次直接忽略，前后端各挡一道。
+    if (grantSubmitting.value) return
+    grantSubmitting.value = true
     try {
-      const result = (await grantAllUsersFlowPointsApi({ points, description })) as unknown as {
+      const result = (await grantAllUsersFlowPointsApi({
+        points,
+        description,
+        request_id: grantRequestId.value || undefined,
+      })) as unknown as {
         batches?: number
         count?: number
+        skipped?: number
+        replayed?: boolean
       }
-      showGlobalToast(`已分 ${result?.batches ?? 0} 批向 ${result?.count ?? 0} 个用户发放 ${points} 点`)
+      const count = result?.count ?? 0
+      showGlobalToast(
+        result?.replayed
+          ? `该批次已发放过：本次新增 ${count} 人，跳过已发放的 ${result?.skipped ?? 0} 人`
+          : `已分 ${result?.batches ?? 0} 批向 ${count} 个用户发放 ${points} 点`,
+      )
+      grantRequestId.value = ""
       await load(data.value.page)
     } catch (err: unknown) {
+      // 失败时保留 request_id：用户重试走同一批次，已发过的人不会再加一次。
       showGlobalToast(err instanceof Error ? err.message : "全员发放失败", "error")
+    } finally {
+      grantSubmitting.value = false
     }
     return
   }

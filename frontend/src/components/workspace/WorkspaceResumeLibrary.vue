@@ -18,7 +18,11 @@ import { SIDEBAR_PAGE_SIZE, useResumeStore } from "@/stores/resume"
 import { useWorkspaceCreate } from "@/composables/useWorkspaceCreate"
 import { useWorkspaceDrawer } from "@/composables/useWorkspaceDrawer"
 import { templateNames } from "@/utils/templateNames"
+import { newRequestId } from "@/utils/requestId"
 import { showGlobalToast } from "@/utils/toast"
+
+/** 复制中的幂等键（按简历 id）：连点两次不会复制出两份。 */
+const duplicateRequestIds = new Map<number, string>()
 
 /**
  * 工作区里的「全部简历」管理面板（原 `/resumes` 页收编进来的）。
@@ -152,8 +156,13 @@ function showToast(message: string, ok = true) {
 }
 
 async function handleDuplicate(id: number) {
+  // 幂等键按简历缓存：同一份简历连点「复制」只会得到一份副本，
+  // 成功（或彻底放弃）后清掉，下次是新的动作。
+  const requestId = duplicateRequestIds.get(id) || newRequestId()
+  duplicateRequestIds.set(id, requestId)
   try {
-    await duplicateResumeApi(id)
+    await duplicateResumeApi(id, { request_id: requestId })
+    duplicateRequestIds.delete(id)
     await load(1)
     syncSidebar()
     showToast("复制成功")

@@ -20,6 +20,7 @@ from app.models.resume import Resume, UploadedFile
 from app.models.user import User
 from app.services.ai.token_usage import normalize_token_usage
 from app.services.flow_points_service import point_amount, point_number
+from app.services.reconciliation_service import turn_success
 
 
 router = APIRouter(prefix="", tags=["admin"], dependencies=[Depends(get_current_admin)])
@@ -404,6 +405,13 @@ def dashboard(window: str = Query("7d", alias="range"), db: Session = Depends(ge
     window_ai_success = _count(AiTask, AiTask.create_time >= start, AiTask.status == "success")
     prev_ai = _count(AiTask, AiTask.create_time >= prev_start, AiTask.create_time < start)
     prev_ai_failed = _count(AiTask, AiTask.create_time >= prev_start, AiTask.create_time < start, AiTask.status == "failed")
+
+    # 回合口径（RF-018）：一个回合命中多个模型就是多行任务，按行统计会把
+    # 「回合数」吹大、把成功率变成「模型成功率」。口径实现只放在
+    # reconciliation_service 里一份，看板和运维页不会各算一套。
+    turns = turn_success(db, since=start)
+    turn_total = turns["turns"]
+    turn_delivered = turns["delivered"]
     window_resumes = _count(Resume, Resume.create_time >= start)
     prev_resumes = _count(Resume, Resume.create_time >= prev_start, Resume.create_time < start)
     window_exports = _count(ExportRecord, ExportRecord.create_time >= start)
@@ -691,8 +699,38 @@ def dashboard(window: str = Query("7d", alias="range"), db: Session = Depends(ge
                 "exports": _count(ExportRecord, ExportRecord.create_time >= today),
             },
             "rates": {
+                # 行口径：一行任务一个样本，受多模型回合影响（一个回合两行）
                 "ai_success": round(window_ai_success * 100 / window_ai, 1) if window_ai else 0,
+                # 回合口径：去重 turn_id，这才是「用户点了一次、拿到结果了吗」
+                "ai_turn_success": round(turn_delivered * 100 / turn_total, 1) if turn_total else 0,
                 "export_success": round(window_exports_success * 100 / window_exports, 1) if window_exports else 0,
+            },
+            # 回合数与任务数并列展示：两者不相等是常态（多模型回合），
+            # 不等于就说明「按行统计」和「按回合统计」会给出不同的结论。
+            "turns": {
+                "total": int(turn_total),
+                "delivered": int(turn_delivered),
+                "tasks_per_turn": round(window_ai / turn_total, 2) if turn_total else 0,
+            },
+            # 计费是独立口径：success 但 billing_status 不是 billed 的任务，
+            # 表示「用户已经拿到结果、平台没记上账」，与执行失败不能混为一谈（RF-017）。
+            "billing": {
+                "delivered_unbilled": _count(
+                    AiTask,
+                    AiTask.create_time >= start,
+                    AiTask.status == "success",
+                    AiTask.billing_status == "unbilled",
+                ),
+                "failed": _count(
+                    AiTask,
+                    AiTask.create_time >= start,
+                    AiTask.billing_status == "failed",
+                ),
+                "refunded": _count(
+                    AiTask,
+                    AiTask.create_time >= start,
+                    AiTask.billing_status == "refunded",
+                ),
             },
             "tokens": {
                 **token_summary,

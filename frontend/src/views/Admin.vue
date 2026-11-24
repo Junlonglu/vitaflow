@@ -17,6 +17,7 @@ import AdminFeedbacksPanel from "@/components/admin/AdminFeedbacksPanel.vue"
 import AdminAiTasksPanel from "@/components/admin/AdminAiTasksPanel.vue"
 import AdminPointTransactionsPanel from "@/components/admin/AdminPointTransactionsPanel.vue"
 import AdminResumeStartersPanel from "@/components/admin/AdminResumeStartersPanel.vue"
+import AdminObservabilityPanel from "@/components/admin/AdminObservabilityPanel.vue"
 import AnnouncementManager from "@/components/admin/AnnouncementManager.vue"
 import AiSettingsManager from "@/components/admin/AiSettingsManager.vue"
 import RichTextEditor from "@/components/admin/RichTextEditor.vue"
@@ -33,7 +34,7 @@ import {
 } from "@/utils/adminFormat"
 import { showGlobalToast } from "@/utils/toast"
 
-type Section = "dashboard" | "announcements" | "users" | "resumes" | "ai" | "point-transactions" | "ai-models" | "point-rules" | "redeem-codes" | "system-settings" | "feedbacks" | "exports" | "templates" | "industry-templates"
+type Section = "dashboard" | "announcements" | "users" | "resumes" | "ai" | "point-transactions" | "ai-models" | "point-rules" | "redeem-codes" | "system-settings" | "feedbacks" | "exports" | "templates" | "industry-templates" | "health"
 
 const section = ref<Section>("dashboard")
 const loading = ref(false)
@@ -43,6 +44,8 @@ const dashboard = ref<DashboardData | null>(null)
 // 看板时间窗口由面板上的分段控件改，页面只负责按新窗口重新取数
 const dashboardRange = ref("7d")
 const templates = ref<PageData<AdminTemplate>>({ items: [], total: 0, page: 1, page_size: ADMIN_PAGE_SIZE_DEFAULT })
+// 健康与对账页自己拉两个接口，外壳只负责通知它「该刷新了」
+const healthRefresh = ref(0)
 
 const settingsForm = ref({
   signup_gift_points: 0,
@@ -86,6 +89,7 @@ const navGroups = [
       { id: "system-settings", label: "系统设置", icon: Settings },
       { id: "templates", label: "模板设置", icon: LayoutTemplate },
       { id: "industry-templates", label: "岗位预设", icon: Briefcase },
+      { id: "health", label: "健康与对账", icon: ShieldCheck },
     ],
   },
 ]
@@ -126,6 +130,7 @@ async function load(page = 1) {
       }
     }
     if (section.value === "templates") templates.value = await getAdminTemplatesApi({ page, page_size: pageSize.value })
+    if (section.value === "health") healthRefresh.value += 1
   } catch (err: unknown) {
     error.value = errorMessage(err, "数据加载失败")
   } finally {
@@ -298,6 +303,7 @@ onMounted(() => load())
         <AdminPointTransactionsPanel v-else-if="section === 'point-transactions'" />
 
         <AdminResumeStartersPanel v-else-if="section === 'industry-templates'" />
+        <AdminObservabilityPanel v-else-if="section === 'health'" :refresh-token="healthRefresh" />
 
         <template v-else>
           <div class="overflow-hidden rounded-xl border border-zinc-200 bg-white">

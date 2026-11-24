@@ -37,7 +37,10 @@ export interface DashboardData {
   }
   totals: { users: number; resumes: number; ai_tasks: number; exports: number; storage_bytes: number; operating_days: number; launch_date?: string | null }
   today: { users: number; active_users: number; resumes: number; ai_tasks: number; exports: number }
-  rates: { ai_success: number; export_success: number }
+  // ai_success 是行口径（一个回合多个模型算多行），ai_turn_success 是回合口径
+  rates: { ai_success: number; ai_turn_success: number; export_success: number }
+  /** 回合数去重后与任务数的对比：两者不等说明有多模型回合 */
+  turns: { total: number; delivered: number; tasks_per_turn: number }
   tokens: { total: number; today: number; input: number; output: number; avg_per_task: number }
   points: { consumed: number; today_consumed: number; recharged: number }
   revenue: { redeemed: number; window_redeemed: number; today_redeemed: number }
@@ -349,6 +352,86 @@ export interface AdminSettings {
   user_agreement: string
 }
 
+/** 一段耗时的滚动快照：`count` 是累计次数，其余只代表最近 512 次采样。 */
+export interface AdminLatencySnapshot {
+  label: string
+  samples: number
+  count: number
+  avg_ms: number
+  p95_ms: number
+  max_ms: number
+}
+
+export interface AdminMetrics {
+  runtime: {
+    db_pool: {
+      status: string
+      size?: number
+      checkedout?: number
+      checkedin?: number
+      wait: AdminLatencySnapshot
+    }
+    // 没有事件循环时（脚本/冷启动）后端只回 available=false
+    threads: { available: boolean; total?: number; borrowed?: number; idle?: number }
+    pdf: { active: number; waiting: number; wait: AdminLatencySnapshot }
+    counters: Record<string, number>
+  }
+  tasks: {
+    pending: {
+      total: number
+      buckets: { lt_1m: number; lt_5m: number; lt_15m: number; gte_15m: number }
+      overdue: number
+      no_lease: number
+      long_running: number
+      longest_seconds: number
+    }
+    turns: { turns: number; delivered: number; failed: number; success_rate: number }
+    window_hours: number
+  }
+  maintenance: { finished_at?: string; counts?: Record<string, number> }
+}
+
+/** 一个回合的四张表快照。`state` 为 ok 之外的都值得点进去看。 */
+export interface AdminLedgerRow {
+  turn_id: number
+  session_id: number
+  user_id: number
+  time: string | null
+  state: "ok" | "missing_reply" | "missing_task" | "unbilled" | "billing_failed" | "pending"
+  replies: number
+  tasks: number
+  tasks_pending: number
+  tasks_failed: number
+  points_used: number
+  points_delta: number
+  /** 声明该扣的 + 实际扣的；不为 0 说明这笔账自己就不平 */
+  points_gap: number
+}
+
+export interface AdminReconciliation {
+  window: { hours: number; since: string; until: string; limit: number }
+  turns: { rows: AdminLedgerRow[]; summary: Record<string, number> }
+  missing_billing: { total: number; items: Array<{ turn_id: number; message_id: number; session_id: number; user_id: number; time: string | null }> }
+  delivered_unbilled: {
+    total: number
+    items: Array<{ task_id: number; turn_id: number | null; user_id: number; task_type: string; billing_status: string; points_used: number; time: string | null }>
+  }
+  ghost_tasks: { total: number; items: Array<{ task_id: number; turn_id: number; user_id: number; task_type: string; time: string | null }> }
+  balance: {
+    mismatched: number
+    users: Array<{ user_id: number; balance: number; ledger: number; gap: number }>
+  }
+  pending_tasks: AdminMetrics["tasks"]["pending"]
+  /** 每项的含义就是「本该为 0」，前端只标红非零项 */
+  unhealthy: Record<string, number>
+  healthy: boolean
+}
+
+export interface AdminSweepResult {
+  counts: Record<string, number>
+  last: { finished_at?: string; counts?: Record<string, number> } | null
+}
+
 export interface AdminFlowPointTransaction {
   id: number
   user_id: number
@@ -391,7 +474,13 @@ export const getAdminDashboardApi = (range: string) =>
 export const getAdminUsersApi = (params: Record<string, unknown>) => request.get<PageData<AdminUser>, PageData<AdminUser>>("/admin/users", { params })
 export const updateAdminUserStatusApi = (id: number, status: "active" | "disabled") => request.patch(`/admin/users/${id}/status`, { status })
 export const updateAdminUserFlowPointsApi = (id: number, data: { points_delta: number; description?: string }) => request.patch(`/admin/users/${id}/flow-points`, data)
-export const grantAllUsersFlowPointsApi = (data: { points: number; description?: string; batch_size?: number }) => request.post("/admin/users/flow-points/grant-all", data)
+export const grantAllUsersFlowPointsApi = (data: {
+  points: number
+  description?: string
+  batch_size?: number
+  /** 幂等键：同一次发放的所有重试复用同一个值，后端据此判重（RF-028）。 */
+  request_id?: string
+}) => request.post("/admin/users/flow-points/grant-all", data)
 /** 撤回全员发放的回包：分了几批、退了多少人。 */
 export interface AdminGrantRevokeResult {
   count: number
@@ -625,6 +714,11 @@ export const updateAdminRedeemCodeBatchPriceApi = (data: { note?: string; batch_
 export const exportAdminRedeemCodesApi = (params: Record<string, unknown> = {}) =>
   request.get<string, string>("/admin/redeem-codes/export", { params, responseType: "text" } as any)
 export const getAdminSettingsApi = () => request.get<AdminSettings, AdminSettings>("/admin/settings")
+// 指标与对账是两个接口：前者要秒回、每次刷新都拉，后者要扫表、只在排查时拉。
+export const getAdminMetricsApi = () => request.get<AdminMetrics, AdminMetrics>("/admin/observability/metrics")
+export const getAdminReconciliationApi = (hours = 24) =>
+  request.get<AdminReconciliation, AdminReconciliation>("/admin/observability/reconciliation", { params: { hours } })
+export const runAdminSweepApi = () => request.post<AdminSweepResult, AdminSweepResult>("/admin/maintenance/sweep")
 export const updateAdminSettingsApi = (data: { signup_gift_points: number; ai_records_hint: string; feedback_notify_email: string; redeem_daily_attempt_limit: number; user_agreement: string }) => request.put<AdminSettings, AdminSettings>("/admin/settings", data)
 export const getAdminFeedbacksApi = (params: Record<string, unknown>) => request.get<PageData<AdminFeedback>, PageData<AdminFeedback>>("/admin/feedbacks", { params })
 

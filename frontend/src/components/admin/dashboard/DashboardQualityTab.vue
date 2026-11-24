@@ -130,6 +130,11 @@ const activeStageFailures = (stage: StageEntry) => (stage.failures ?? []).filter
               {{ hasAiCalls ? `${dashboard.rates.ai_success}%` : "—" }}
             </p>
             <p class="mt-0.5 text-[11px] text-zinc-400">本周期失败 {{ formatNumber(dashboard.kpi.failed_calls.value) }} 次</p>
+            <!-- 行口径只算「任务」；多模型回合会拉低它。回合口径才是「用户点了一次有没有结果」 -->
+            <p class="mt-0.5 text-[11px] text-zinc-400">
+              回合口径 {{ dashboard.turns.total ? `${dashboard.rates.ai_turn_success}%` : "—" }}
+              <span v-if="dashboard.turns.total">（{{ formatNumber(dashboard.turns.total) }} 回合）</span>
+            </p>
           </div>
           <div class="min-w-0 rounded-lg bg-zinc-50 p-3.5">
             <p class="text-[11px] text-zinc-400">文件导出成功率</p>

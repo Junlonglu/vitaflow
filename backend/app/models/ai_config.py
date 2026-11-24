@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, DateTime, Index, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -53,8 +53,14 @@ class FlowPointRule(Base):
 
 class FlowPointTransaction(Base):
     __tablename__ = "flow_point_transactions"
+    # 点数流水页与对账都是「按用户取最近 N 条」，单列 user_id 索引会把每次
+    # 翻页变成一次回表排序（RF-061）。
+    __table_args__ = (Index("ix_flow_point_tx_user_created", "user_id", "create_time"),)
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # SQLite 只对 INTEGER PRIMARY KEY 自增，BIGINT 主键插入必失败。单测里要跑
+    # 真实的「写流水」路径（退款、发放），所以在这里声明 sqlite 变体；生产
+    # MySQL 的列类型不变，仍是 BIGINT。
+    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, index=True)
     task_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
     feature_type: Mapped[str] = mapped_column(String(50), index=True)
@@ -111,9 +117,14 @@ class AppSetting(Base):
 
 class UserFeedback(Base):
     __tablename__ = "user_feedbacks"
+    # 反馈是「提交一次」的动作：重复提交（双击/重试）不该产生两条工单。
+    __table_args__ = (UniqueConstraint("user_id", "request_id", name="uq_user_feedbacks_user_request"),)
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True
+    )
     user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     category: Mapped[str] = mapped_column(String(50), default="general", index=True)
     content: Mapped[str] = mapped_column(Text)
     contact: Mapped[str | None] = mapped_column(String(120), nullable=True)

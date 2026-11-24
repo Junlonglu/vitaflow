@@ -4,6 +4,8 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.core import contracts
+
 
 DEFAULT_JWT_SECRET_KEY = "please_change_this_secret_key"
 
@@ -46,6 +48,11 @@ class Settings(BaseSettings):
     db_password: str = "123456"
     db_name: str = "vitaflow"
     db_charset: str = "utf8mb4"
+    # 连接池显式配置。吃 SQLAlchemy 默认的 5+10/30s 时，15 个并发导出就能把
+    # 全站接口排队 30s 再 500（RF-053）。默认值来自 core.contracts。
+    db_pool_size: int = Field(default=contracts.DB_POOL_SIZE, ge=1)
+    db_max_overflow: int = Field(default=contracts.DB_MAX_OVERFLOW, ge=0)
+    db_pool_timeout: int = Field(default=contracts.DB_POOL_TIMEOUT_SECONDS, ge=1)
 
     redis_url: str = "redis://127.0.0.1:6379/0"
     redis_key_prefix: str = "vitaflow"
@@ -79,9 +86,11 @@ class Settings(BaseSettings):
     # 直接作废已发验证码，必须重新获取。
     email_code_max_verify_attempts: int = Field(default=5, ge=1, le=20)
 
-    # 登录失败限频（按 邮箱+IP 计数）。命中上限后在窗口内一律拒绝，
-    # 避免在线爆破密码。
+    # 登录失败限频。两个维度必须同时存在：只按「邮箱+IP」时，限频键里含
+    # 攻击者可控的 email——固定 IP 换着邮箱试，每个邮箱都是新配额，bcrypt
+    # 照样被打满；只按 IP 又会在 NAT 下误伤整栋楼。
     auth_login_max_attempts: int = Field(default=5, ge=1, le=50)
+    auth_login_ip_max_attempts: int = Field(default=30, ge=1, le=500)
     auth_login_lock_seconds: int = Field(default=600, gt=0)
 
     # Node「AI 服务」（pi-agent 旁路服务）：AI 对话与一次性任务（生成/导入）
@@ -95,9 +104,30 @@ class Settings(BaseSettings):
     # AI 服务上下文注入上限：从 MySQL 读取最近 N 条历史注入 prompt。
     ai_service_context_messages: int = Field(default=12, ge=1, le=40)
     ai_chat_change_timeout: int = Field(default=180, gt=0)
+    # 超时链：Node 回合总时长 ≤ 后端代理读超时 ≤ Nginx 读超时。
+    # 三档默认值都在 core.contracts 里，同一语义只写一次；相互关系由
+    # startup_checks 在启动时校验（相等或颠倒都会在边界上互相抢断，RF-033）。
+    ai_turn_timeout_ms: int = Field(default=contracts.AI_TURN_TIMEOUT_MS, gt=0)
+    ai_proxy_read_timeout_ms: int = Field(default=contracts.AI_PROXY_READ_TIMEOUT_MS, gt=0)
+    nginx_proxy_read_timeout_ms: int = Field(default=contracts.NGINX_PROXY_READ_TIMEOUT_MS, gt=0)
     ai_model_io_log_enabled: bool = True
     ai_model_io_log_path: str = "logs/ai_model_io.log"
     ai_model_io_log_max_chars: int = Field(default=200000, gt=0)
+
+    # ---- 生命周期清扫（M3）----
+    # 非终态必须有租约：任务建好后超过 lease 仍未结算，视为执行方已失联。
+    ai_task_lease_seconds: int = Field(default=900, ge=60)
+    # 待确认提案的存活时间：过期的提案不能再被「应用」，否则会覆盖之后的新结果。
+    ai_pending_proposal_ttl_hours: int = Field(default=24, ge=1)
+    # 用户消息超过这个时间还没有助手消息、也没有任务行，才算孤儿回合。
+    # 必须明显大于「一个回合可能持续的最长时间」（Node 侧总超时 300s + 收尾），
+    # 否则正在慢速生成的回合会被误判成中断、被补一条 failed 占位任务。
+    ai_orphan_turn_grace_seconds: int = Field(default=600, ge=60)
+    maintenance_sweep_enabled: bool = True
+    maintenance_sweep_interval_seconds: int = Field(default=300, ge=30)
+    # 存储侧孤儿对象的真实删除默认关闭：只统计不删。头像对象即便索引行已删
+    # 也可能仍被分享简历引用，自动删会直接打断外部访客看到的页面。
+    maintenance_orphan_delete_enabled: bool = False
 
     storage_provider: str = "minio"
     storage_public_url_mode: str = "proxy"

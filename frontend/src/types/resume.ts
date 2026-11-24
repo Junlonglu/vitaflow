@@ -1,3 +1,7 @@
+/** 简历标题上限。与后端 `backend/app/core/contracts.py::RESUME_TITLE_MAX` 一致：
+ *  列宽、后端校验、输入框截断必须是同一个数，否则长标题会在写库时 500。 */
+export const RESUME_TITLE_MAX = 100
+
 export interface ResumeItem {
   id: number
   user_id: number
@@ -6,6 +10,8 @@ export interface ResumeItem {
   resume_data: ResumeData
   template_id: string
   template_config: TemplateConfig
+  /** 写入版本号：保存时原样带回，服务端据此判断有没有人在中途改过。 */
+  revision?: number
   create_time?: string
   update_time?: string
 }

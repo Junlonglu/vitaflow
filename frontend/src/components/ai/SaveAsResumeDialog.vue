@@ -2,6 +2,7 @@
 import { ref, watch } from "vue"
 import { X } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
+import { RESUME_TITLE_MAX } from "@/types/resume"
 
 /** JD优化确认写入后的「另存为新简历」对话框：标题预填可改。 */
 const props = defineProps<{
@@ -45,7 +46,7 @@ function confirm() {
           id="save-as-title"
           v-model="title"
           type="text"
-          maxlength="120"
+          :maxlength="RESUME_TITLE_MAX"
           class="mt-1.5 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-zinc-900"
           placeholder="输入新简历标题"
           @keydown.enter="confirm"

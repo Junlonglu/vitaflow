@@ -5,10 +5,56 @@
 """
 
 import unittest
+from pathlib import Path
 
+from app.core.config import settings
 from app.core.template_config import ALLOWED_FONT_FAMILIES, normalize_template_config
 from app.schemas.resume import default_resume_data
+from app.services import preview_service
 from app.services.preview_service import FONT_PRESETS, css_font_family, render_resume_html
+
+
+class FontAssetUrlTest(unittest.TestCase):
+    """字体地址跟着消费者走：浏览器相对、PDF 绝对。
+
+    仓库里通常不带 woff2，所以这条测试用临时 backend_root 造一个字体文件，
+    否则过滤器里的循环一次都不执行，前缀逻辑等于没被测到。
+    """
+
+    def setUp(self) -> None:
+        import tempfile
+
+        self._tmp = tempfile.TemporaryDirectory()
+        root = Path(self._tmp.name)
+        fonts = root / "app" / "static" / "fonts"
+        fonts.mkdir(parents=True)
+        (fonts / "Probe.woff2").write_bytes(b"wOF2")
+        self._root = root
+        self._original_files = preview_service.FONT_FACE_FILES
+        preview_service.FONT_FACE_FILES = {"vf-sans": [("Probe Sans", 400, "Probe.woff2")]}
+
+    def tearDown(self) -> None:
+        preview_service.FONT_FACE_FILES = self._original_files
+        self._tmp.cleanup()
+
+    def _render(self, *, absolute: bool) -> str:
+        original = type(settings).backend_root
+        type(settings).backend_root = property(lambda _self: self._root)
+        try:
+            return render_resume_html(
+                default_resume_data(), "classic", {"font_family": "vf-sans"}, "zh-CN", absolute_assets=absolute
+            )
+        finally:
+            type(settings).backend_root = original
+
+    def test_browser_font_url_is_relative(self) -> None:
+        html = self._render(absolute=False)
+        self.assertIn("url('/api/files/font-assets/Probe.woff2')", html)
+        self.assertNotIn(settings.pdf_base_url, html)
+
+    def test_pdf_font_url_is_absolute(self) -> None:
+        html = self._render(absolute=True)
+        self.assertIn(f"{settings.pdf_base_url.rstrip('/')}/api/files/font-assets/Probe.woff2", html)
 
 
 class NormalizeTemplateConfigTest(unittest.TestCase):

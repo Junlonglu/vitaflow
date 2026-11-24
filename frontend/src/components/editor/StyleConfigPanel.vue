@@ -39,10 +39,11 @@ const fieldLabels: Record<string, string> = {
   section_margin_bottom: "模块下间距",
   section_title_margin_bottom: "模块标题间距",
 }
+// 模板名与后端注册表一致（见 utils/templateNames.ts 的说明）。
 const templates = [
   { value: "classic", label: "经典单栏" },
-  { value: "tech", label: "技术蓝线" },
-  { value: "modern", label: "现代侧栏" },
+  { value: "tech", label: "技术岗位" },
+  { value: "modern", label: "现代双栏" },
   { value: "blue_timeline", label: "蓝色时间轴" },
   { value: "minimal_light", label: "极简明亮" },
   { value: "minimal_mono", label: "极简单色" },

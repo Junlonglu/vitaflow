@@ -100,7 +100,7 @@ flowchart TB
 | --- | --- | --- |
 | 浏览器 ↔ FastAPI | 清晰 | 浏览器不直连 Node；流式也经 FastAPI 中继 |
 | FastAPI ↔ Node | 清晰 | Node 不连 MySQL/Redis；`package.json` 仅 4 个运行依赖 |
-| Node ↔ FastAPI 回调 | **模糊** | 身份是明文整数 + 共享令牌，无回合凭证（RF-008） |
+| Node ↔ FastAPI 回调 | 清晰（2026-11-22 收紧） | 静态服务令牌 + 短期回合票据双证，票据绑定 user/resume/turn；越权 403（RF-008，S2-M6） |
 | 渲染 ↔ 数据 | 清晰 | 预览/PDF/分享共用 `render_resume_html` |
 | 计费 ↔ 业务 | **耦合且单向** | 业务先完成，计费由 Node 事后回调（RF-007/009） |
 
@@ -154,7 +154,7 @@ flowchart TB
 - **实际影响**：请求窗口内的输入从界面消失，且头部显示「已自动保存」；防抖的下一次保存写的是回显后的旧值。**用户无法感知，也无法撤回**。
 - **修复**：响应只更新元数据（`update_time`/`title`/`template_id`），正文保留本地版本；或用「请求序号 + dirty 标记」丢弃过期响应。修复必须同时覆盖 `fetchResumeDetail` 在 AI 刷新路径上的同类替换（见 RF-002）。
 - **验证方式**：延迟 PUT 响应 500ms，在延迟窗口内输入第二个字段，观察是否回退并显示已保存。
-- **状态**：已确认（静态读代码 + 时序推导；未跑浏览器）。
+- **状态**：已确认（静态读代码 + 时序推导；未跑浏览器）。**已于 2026-11-20 修复**：`stores/resume.ts::updateResume` 只回写元数据并保留 `currentResume` 引用；`performSave` 用提交指纹判断在途编辑，有改动时不置「已保存」、不刷预览。浏览器实测：PUT 延迟 2.5s，期间继续输入，第二次 PUT 的正文含新输入；改回整对象回写后同一探针立刻变红。
 
 #### RF-002 默认「应用」用整包快照，覆盖提案之后的已保存编辑（已确认）
 
@@ -166,7 +166,7 @@ flowchart TB
 - **实际影响**：提案之后的所有修改被回滚。界面按覆盖后的数据渲染，用户看不出异常；版本历史里只有「AI 修改前」一份，恢复它同样会丢掉中间态。
 - **修复**：主按钮默认提交「当前数据 + 全选 diff」的合并结果（复用 `buildSelectedResumeData`）；或把主按钮改为「审阅后应用」，整包快照只保留给无冲突场景。后端在无 `merged` 时应校验 `resume.update_time` 与提案时一致，否则 409 提示先审阅。
 - **验证方式**：构造「提案后改手机号并保存 → 应用」用例，断言手机号保留。
-- **状态**：已确认。
+- **状态**：已确认。**已于 2026-11-20 修复**：主按钮在无显式合并结果时，由页面注入的 `buildMergedResumeData` 用 `diffResume` + 全选 `buildSelectedResumeData` 现算「当前数据 + 全部变更」并提交，审阅台显式传入的结果仍然优先。新增不变量用例：全选合并结果必须等于提案本身，保证与原整包写入等价；提案之后的手动编辑只有在被同一字段覆盖时才会让位。
 
 #### RF-003 生产环境弱默认 JWT 密钥的启动校验被 BYOK 配置绕过（已确认，条件触发）
 
@@ -177,7 +177,7 @@ flowchart TB
 - **实际影响**：`JWT_SECRET_KEY=please_change_this_secret_key`（`.env.example` 的原值）下，任何人都能签出 `sub=<任意用户 id>` 的令牌；若该用户被 `ADMIN_EMAILS` 提升过，直接获得管理员权限。属于**完全账户接管**。
 - **修复**：在生产环境无条件拒绝默认/短于 32 字节的 `JWT_SECRET_KEY`（与 BYOK 解耦）；启动日志输出密钥指纹（非明文）便于核对；`.env.example` 改为必填并给出生成命令。
 - **验证方式**：`APP_ENV=production` + 独立 BYOK 密钥 + 默认 JWT 密钥启动，断言进程应拒绝；用默认密钥签 token 调 `/auth/me` 验证是否 200。
-- **状态**：已确认（代码路径）；是否已在任何部署中发生属**待验证**。
+- **状态**：已确认（代码路径）；是否已在任何部署中发生属**待验证**。**已于 2026-11-20 修复**：`core/security.py` 新增独立的 `validate_jwt_secret`（默认值/空/短于 32 字节），`main.py` 启动时无条件调用、生产直接拒绝启动；`.env.example` 的误导注释已改。
 
 ### 3.2 P1（高优先级）
 
@@ -191,7 +191,7 @@ flowchart TB
 - **实际影响**：改动静默丢失。由于 `editor.saved` 在卸载时不再有意义，用户重进后看到的是旧内容。
 - **修复**：卸载钩子改为 `await flushPendingSave()`；在路由器 `beforeEach` 对「离开编辑器」统一 flush；补 `pagehide` + 同步 `sendBeacon` 兜底。
 - **验证方式**：输入后 200ms 触发路由跳转，断言 PUT 已发出且内容落库。
-- **状态**：已确认。
+- **状态**：已确认。**已于 2026-11-20 修复**：路由 `beforeEach` 对跨路径导航统一 `await flushSave()`；`onBeforeUnmount` 与切简历的 `watch` 改为先 flush 再销毁（原先直接 cancel）；补 `pagehide` 与 `visibilitychange→hidden` 的落库，关页用 `keepalive` fetch（超 60KB 放弃，避免截断存坏简历）。浏览器实测：输入后立即刷新，内容落库；去掉 pagehide 监听后同一探针立刻变红。注：点击侧栏导航原本会被 `focusout` 的 50ms 保存兜住，真正的空洞是刷新/关页与不带焦点的跳转。
 
 #### RF-005 失焦即整份 PUT，且与 AI 应用形成无版本保护的写写竞争（高可信）
 
@@ -203,7 +203,7 @@ flowchart TB
 - **实际影响**：无论谁后到，两份修改必丢一份；前端只按 apply 响应刷新，因此界面与库可能长期不一致。
 - **修复**：前端失焦只调 `flushPendingSave()`（复用串行链），不另发 PUT；`PUT /resumes/{id}` 增加可选 `expected_update_time`，冲突 409；`_persist_resume_change` 同样校验。
 - **验证方式**：拦截 PUT 延迟 800ms，点应用，观察最终库内容与界面是否一致。
-- **状态**：高可信（时序依赖网络，代码无任何排序保护）。
+- **状态**：高可信（时序依赖网络，代码无任何排序保护）。**已于 2026-11-21 修复**：`resumes.revision` + 条件 `UPDATE ... WHERE id=? AND revision=?`，四条写路径统一走 `persist_resume_data`，rowcount=0 返回 409 并带 `latest_revision`。前端保存带版本号；409 时暂停自动保存并弹出「载入最新版 / 保留我的版本」，不再静默覆盖。浏览器实测（两个标签页同开一份简历）：A 先保存 → B 再存得到 409 + 横幅，冲突后继续打字 PUT 次数仍是 1（不刷 409 风暴）；「载入最新版」拉回 A 的内容，「保留我的版本」把 B 写回库。负向：去掉 WHERE 里的版本判断，pytest 与探针同时变红。
 
 #### RF-006 旧 pending 提案可覆盖新结果；apply 与 reject 并发无行锁（已确认）
 
@@ -215,7 +215,7 @@ flowchart TB
 - **实际影响**：旧快照整份写回，新结果丢失；apply/reject 并发时状态与内容各说各话（界面显示已取消，正文却已改写）。
 - **修复**：`UPDATE ... WHERE id=? AND action_status='pending'`（rowcount 决定成败）；apply 前比对 `MAX(id) WHERE action_status='pending'`，旧提案需显式 `force`；或应用时带 `expected_update_time`。
 - **验证方式**：构造两条 pending，先应用新、再应用旧，断言旧请求 409。
-- **状态**：已确认（多条 pending 的堆积也已确认：无 TTL、无 supersede）。
+- **状态**：已确认（多条 pending 的堆积也已确认：无 TTL、无 supersede）。**2026-11-21 部分收窄**：apply 现在带 `expect_revision`，写写竞争不会再静默丢数据；但「旧提案的内容本身已经过期」没有解决——前端 apply 时带的是**当前**版本号，所以旧提案仍能覆盖新结果。需要 supersede 旧提案 + `UPDATE ... WHERE action_status='pending'`，并入 S2-M3。**2026-11-21 已关闭（S2-M3）**：① 新方案落库时把同会话的旧 `pending` 置 `superseded`——旧提案从源头不再可应用，前端对它只显示「已被更新的修改方案取代」，不渲染按钮；② 应用/放弃改成 `UPDATE ... WHERE id=? AND action_status='pending'` 抢占（`pending → applying → applied/rejected`），`rowcount=0` → 409，并发两个请求只有一个能往下写；③ 应用失败（如写简历撞 409）退回 `pending`，用户处理后仍可重试；④ 清扫器把应用中途失联的 `applying`（超过 15 分钟）置 `stale`、把超过 24 小时的 `pending` 置 `superseded`。代价是 `action_status` 新增两个值（`superseded`/`stale`），前端类型与文案已同步。
 
 #### RF-007 AI 用量回调无幂等键、无回合关联（已确认）
 
@@ -227,7 +227,7 @@ flowchart TB
 - **实际影响**：重复建任务 + 重复扣点（用户被多扣）；或两条 usage 无法判断归属。**账本级能对上，回合级永远对不上。**
 - **修复**：`turn_id`（复用被回复的 `ai_chat_messages.id`）随 usage 上报；`ai_tasks.turn_id` 唯一索引；命中即返回已有结果。轨迹已有 `trace_id` upsert，直接复用同一套模式。
 - **验证方式**：同一 `turn_id` 连发两次 usage，断言只产生一条任务与一条扣点流水。
-- **状态**：已确认。
+- **状态**：已确认。**已于 2026-11-21 修复**：`ai_tasks` 加 `turn_id`（被回复的消息 id，Node 侧本来就有）与 `turn_slot`，唯一约束落在 `(turn_id, turn_slot)`——一个回合可能有多个模型，单列唯一会误伤路由组；`/service/usage` 命中已结算回合直接按任务行还原首次响应（`replayed=true`），并发撞唯一约束同样回落到重放，`turn_id` 落在别人名下返回 409。迁移 `0044_ai_task_turn_id` 已在 MySQL 上跑通 upgrade/downgrade。运行时实测：同一 `turn_id` 连发 3 次 → 1 条任务、1 条流水、余额只扣一次（100→93.50）。负向：去掉重放分支或唯一约束，对应用例立刻变红。
 
 #### RF-008 服务间身份只有静态令牌与明文 user_id，且端口对外发布（已确认）
 
@@ -251,7 +251,7 @@ flowchart TB
 - **实际影响**：点数被占用、任务停在 pending，用户拿不到内容，也没有任何自动退款。运营只能手工查库。
 - **修复**：`ai_tasks` 增 `expires_at`；启动与每 5 分钟清扫「超过 15 分钟仍 pending」的任务并退款（退款走 `_apply_balance_delta`）；预扣改成「冻结 + 结算」两段。
 - **验证方式**：请求 `/generate-resume/stream` 后立即断开客户端，10 分钟后查任务状态与余额。
-- **状态**：高可信（Starlette 是否启动生成器取决于断开时机，需运行时确认）。
+- **状态**：高可信（Starlette 是否启动生成器取决于断开时机，需运行时确认）。**已于 2026-11-21 修复**：`ai_tasks` 增 `expires_at`（`create_ai_task` 按 `AI_TASK_LEASE_SECONDS` 默认 900 秒写租约）与 `billing_status`；清扫器每 5 分钟把「`status='pending'` 且 `expires_at < now`」的条件 UPDATE 成 failed 并退款，`rowcount=0` 的一方不退款，所以重复清扫、多实例清扫都只退一次。**「冻结 + 结算」没有改成两段式**：现有实现是「预扣（负数流水）+ 结算差额」，退款复用同一套 `add_point_transaction`，账本只有一套而不是两套；冻结态由「任务未终态 + 有租约」表达。运行时实测：预扣 7.50 → 手动清扫 → 任务 `failed/refunded`、余额回到原值、第二轮清扫计数为 0。
 
 #### RF-010 Node 异步处理无错误出口，未捕获拒绝可致进程退出（已确认）
 
@@ -263,7 +263,7 @@ flowchart TB
 - **实际影响**：单个异常请求可让整个 AI 服务退出，同进程内所有在途回合一起断；compose 会重启，但用户侧全是半截回答。
 - **修复**：两个 handler 包 try/catch 并在未 flush 时返回 JSON 错误；补 `process.on('unhandledRejection')` 记日志后优雅退出；加全局错误中间件。
 - **验证方式**：注入一个必抛的 BYOK 配置，观察进程是否退出。
-- **状态**：已确认。
+- **状态**：已确认。**已于 2026-11-21 修复**：`/v1/chat` 与 `/v1/task` 都改成「函数体 + `runHandler` 注册」，错误出口单独放在 `ai-service/src/httpErrors.ts`（可被单测直接覆盖）：未 flush 时返回 500 JSON，已 flush 时补一个 `error` 事件再 `end()`。另补 Express 全局错误中间件与 `uncaughtException`（记日志后退出）。`unhandledRejection` 只记日志**不退出**——async 路由已经收口，走到那里的是没被 await 的拒绝，杀掉进程会连带切断所有在途回合。实测：注入必抛 → 该请求 500 `{"type":"error"}`、`/health` 仍 200；去掉包装后同一请求直接挂住（curl 超时无响应），只剩一条 unhandledRejection 日志。
 
 #### RF-011 faux 是进程级共享队列，且 compose 默认就是 faux（已确认）
 
@@ -287,7 +287,7 @@ flowchart TB
 - **实际影响**：AI 服务可被用作内网探测/请求代理，响应内容进入模型上下文。
 - **修复**：每轮请求前解析并拒绝私网结果（或解析后固定 IP）；禁用重定向；只允许 443/80。
 - **验证方式**：用 `nip.io`/自建 DNS 指向 127.0.0.1 的地址保存并对话，观察是否连通内网。
-- **状态**：已确认（机制）；实际可达性取决于 Node 所在网络。
+- **状态**：**已修复（2026-11-22，S2-M6）**。`ai-service/src/ssrf.ts` 三层：`registerByokModel` 每轮解析目标域名并拒绝私网/回环；`dns-lookup.ts` 在拨号那次解析上再过滤私网地址，`BlockedTargetError` 阻断系统解析回落；`installOutboundFetchGuard` 对 BYOK 主机禁重定向。平台自托管 provider 不受限。`ssrf.test.ts` 用可注入解析器验证私网/回环/DNS rebinding/重定向各路径；生产环境 `STORAGE_PUBLIC_URL_MODE=public` 也被启动自检拒绝。
 
 #### RF-013 四条写简历路径的安全垫不一致（已确认）
 
@@ -299,7 +299,7 @@ flowchart TB
 - **实际影响**：AI 写进去的内容在下次保存时被静默改写（截断/去注释/标题本地化）；信息库导入误操作没有版本可回退。
 - **修复**：抽出单一 `persist_resume_data(db, resume, data, source)`：统一 normalize、统一写前快照、统一乐观锁；四条路径只传 source。
 - **验证方式**：让 AI 写入一段带 HTML 注释的长文本，手动保存后比对字段。
-- **状态**：已确认。
+- **状态**：已确认。**已于 2026-11-21 修复**：抽出单一 `persist_resume_data(db, resume, data, *, source, expect_revision, values)`——规范化仍在各调用方（恢复要保留快照里人手改过的模块标题，这个差异不该藏进写函数），但版本号、时间戳、条件 UPDATE、回读比对只在这里有一份。四条路径只传 `source`：`manual` / `ai` / `import` / `restore`。恢复路径的秒级 `expected_update_time` 换成 `expected_revision`（老字段保留，只作兼容）；快照改为 `stage_version` 暂存，与写入同事务。
 
 #### RF-014 工具回调缺少 session_id，校验上下文可能取错会话（已确认）
 
@@ -311,7 +311,7 @@ flowchart TB
 - **实际影响**：数值反幻觉守卫用错用户消息，导致误拦或误放；建议文案引用别的会话内容。
 - **修复**：`/service/tool/update-resume` 请求体增加 `session_id`（或 `turn_id`），后端按会话取历史；不传时明确报错而不是回落。
 - **验证方式**：两会话交叉提问，断言校验用的是当前会话最后一条用户消息。
-- **状态**：已确认。
+- **状态**：已确认。**已于 2026-11-21 修复**：`session_id` 全线贯通——代理层派发前先 `get_or_create_chat_session` 定下会话并随 `/v1/chat` 传给 Node（`ai_service_client.py` 原本就带，只是工具没接），Node 写进工具回调体，后端 `UpdateResumeRequest.session_id` 缺省时**返回 400**「工具回调缺少 session_id」而不是回落最近活跃会话；历史与数值守卫只看该会话。Node 侧缺 session 时直接拒绝回调、不发请求。`get_or_create_chat_session` 的回落分支保留，只服务尚未迁移的内部调用。
 
 #### RF-040 一次对话回合的三次提交互不补偿（已确认）
 
@@ -323,7 +323,7 @@ flowchart TB
 - **实际影响**：出现三种残缺态——有用户消息无助手消息（孤儿回合）、有助手消息无任务（漏记）、有任务无消息（幽灵计费）。当前没有任何查询能把三者对上（缺 `turn_id`，见 RF-007）。
 - **修复**：以 `turn_id` 串起三张表；回合失败时写一条 `failed` 占位任务；增加「孤儿回合」巡检（用户消息超过 N 分钟无助手消息且无任务）。
 - **验证方式**：在 `result` 到达前强制 kill 后端，观察重启后的三表状态。
-- **状态**：已确认（机制）；实际发生率**待验证**。
+- **状态**：已确认（机制）；实际发生率**待验证**。**2026-11-21 部分收窄（S2-M3）**：`turn_id` 已把「用户消息 / 助手消息 / 任务」串起来（RF-007），清扫器每分钟级的巡检会给「超过 10 分钟没有助手回复且没有任务行」的孤儿回合补一条 `failed` 占位任务（`input_data.reason=orphan_turn`），因此「有用户消息、无回复、无账」这一种残缺态不再存在。**2026-11-22 补齐（S2-M5）**：`services/reconciliation_service.py` 提供回合级 join（`TURN_LEDGER_SQL`，一条 SQL 出每个回合的用户消息 / 助手消息 / 任务 / 已扣点数 / 差额），并覆盖三种残缺态——`missing_reply`（有任务无回复）、`missing_task`（有回复无任务）、`unbilled`（有任务有回复但没结算）；管理端 `GET /admin/observability/reconciliation` 与「健康与对账」页直接消费它。实测：造一次「回复已落库、usage 回调丢失」，对账页在不知情的前提下命中了回合 id、残缺类型与 2.0 点差额。
 
 #### RF-052 一个 `pdf_base_url` 同时供 Chromium 与浏览器使用，远程部署下预览与分享页的头像/字体全部裂（已确认）
 
@@ -335,7 +335,7 @@ flowchart TB
 - **实际影响**：PDF 导出正常、屏幕预览与分享页异常——这正是最难被运维发现的一类：导出验证通过，线上页面却是坏的。分享页是商业化功能，外部访客看到的是裂图。
 - **修复**：`render_resume_html` 增加 `for_browser` 参数；预览/分享走 `browser_url`，PDF 走 `render_url`；`@font-face` 同样改成相对路径（`/api/files/font-assets/...`），Chromium 侧由已存在的请求拦截/基址补全。或让前端在 `patchHtml` 里把 `pdf_base_url` 替换为同源相对路径（代价是多一处隐式耦合，不推荐）。
 - **验证方式**：另一台机器打开 `/workspace/resume/{id}` 预览与公开分享链接，Network 面板检查图片与 `.woff2` 请求的主机名；或直接断言 `/preview-html` 响应体内不含 `127.0.0.1`。
-- **状态**：已确认（代码路径确定；是否已在生产暴露取决于访问方式，属**部署条件触发**）。
+- **状态**：已确认（代码路径确定；是否已在生产暴露取决于访问方式，属**部署条件触发**）。**已于 2026-11-20 修复**：`render_resume_html(..., absolute_assets=False)`，浏览器路径用 `browser_url` + 相对 `@font-face`，PDF 路径显式传 `absolute_assets=True`；compose 的 `PDF_BASE_URL` 改为可被环境变量覆盖。
 
 #### RF-053 请求级 Session 跨长耗时渲染持有连接，连接池用默认 5+10（已确认）
 
@@ -347,7 +347,7 @@ flowchart TB
 - **实际影响**：不是慢，是**整站不可用**。且导入链路（RF-029）与预览共享同一个池，会互相放大。
 - **修复**：渲染前显式 `db.commit()`（结束只读事务、归还连接）或先用短会话把 `resume_data` 读成普通 dict 再渲染；同时显式配置 `pool_size=10, max_overflow=20, pool_timeout=5` 并加连接池饱和度指标。
 - **验证方式**：`pg_stat_activity`/`SHOW PROCESSLIST` 观察导出期间的连接占用；或 20 并发 `curl /preview-pdf` 后立刻请求 `/api/health`，测量延迟。
-- **状态**：已确认（机制）；触发阈值取决于实际池参数，**需运行时确认**。
+- **状态**：已确认（机制）；触发阈值取决于实际池参数，**需运行时确认**。**已于 2026-11-22 修复（S2-M4）**：两处一起改。(1) `core/database.py` 显式配置 `pool_size=10 / max_overflow=20 / pool_timeout=5`（默认值来自 `core/contracts.py`，SQLite 单测不传池参数）；`pool_timeout` 从默认 30s 降到 5s——池满时快速失败，好过把请求堆在池外连带拖垮健康检查。(2) 渲染前结束只读事务：`preview_pdf` / `preview_html` / `preview_html_by_data` / `export_pdf` 都是先把渲染所需字段取成普通对象（`ResumeRenderSource` 快照），再 `db.rollback()` 归还连接，渲染期间不再占池；导出把「渲染」与「写导出流水」分成两段，不再用一条长事务包住整个 Chromium 渲染。`tests/test_render_connection_release.py` 断言的是**顺序**（render 被调用时 rollback 已经发生），渲染之后才 rollback 同样算错。连接池饱和度指标留给 M5。
 
 #### RF-054 三个上传接口先全量 `read()` 进内存、后校验大小（已确认）
 
@@ -358,7 +358,7 @@ flowchart TB
 - **根因**：校验与读取顺序颠倒，且未使用流式写入。
 - **修复**：先查 `Content-Length` 并拒绝超额，再分块读写到对象存储；`MAX_SIZE` 在读取循环内累计判断。
 - **验证方式**：直连 `:8000` 上传 500MB 文件，观察 RSS 与响应码。
-- **状态**：已确认；实际内存峰值**需运行时测量**。
+- **状态**：已确认；实际内存峰值**需运行时测量**。**已于 2026-11-20 修复**：`storage_service.read_upload_within_limit()` 先看 `UploadFile.size`（快路径），再按 `CHUNK_SIZE` 分块读取、累计超限立即 400，峰值内存与请求体大小无关；三个上传口共用。实测：8001 上传 6MB → 400「头像不能超过 5MB」，1MB → 200。负向：改回 `file.file.read()` 后 `StreamingLimitTest` 立刻变红。
 
 ### 3.3 P2（中优先级）
 
@@ -372,7 +372,7 @@ flowchart TB
 - **实际影响**：少退/多退；`balance_after` 与真实余额不一致。
 - **修复**：三处统一改 `add_point_transaction`（内部走条件 UPDATE），不要在调用方赋值 `flow_points`。
 - **验证方式**：并发两个失败任务，断言退款总额等于扣款总额。
-- **状态**：已确认。
+- **状态**：已确认。**已于 2026-11-21 修复**：三处（任务失败退款、全员发放、全员撤回）全部改走 `add_point_transaction`（内部 `_apply_balance_delta` 条件 UPDATE），调用方不再给 `flow_points` 赋值，全仓已搜不到 `\.flow_points = ` 这种写法。撤回仍保留「扣到 0 为止」语义（`allow_overdraft_to_zero=True`）。用例用「DB 已变成 95、内存对象还是 100」模拟并发：退款后余额必须是 100 而不是 105。`FlowPointTransaction.id` 补 `with_variant(Integer, "sqlite")`，让单测能跑真实写流水路径（生产 DDL 不变）。
 
 #### RF-016 透支钳零导致流水 delta 与 balance_after 不自洽（已确认，影响面有限）
 
@@ -396,7 +396,7 @@ flowchart TB
 - **实际影响**：看板成功率与真实交付不一致；`points_used=0` 掩盖「已交付未计费」。
 - **修复**：拆 `status` + `billing_status`；看板按 `status` 统计，结算失败只改 `billing_status` 并保留应收金额。
 - **验证方式**：mock 结算抛错，断言 `status` 仍为 success、`billing_status=failed`。
-- **状态**：已确认（行为确定）；是否算「缺陷」取决于统计口径——本报告将其定性为**口径缺陷**，不是功能 bug。
+- **状态**：已确认（行为确定）；是否算「缺陷」取决于统计口径——本报告将其定性为**口径缺陷**，不是功能 bug。**已于 2026-11-21 修复（S2-M3）**：`ai_tasks` 增 `billing_status`（`unbilled/billed/refunded/failed/none`），`status` 只表示执行结果；结算与交付分两个事务落地，结算抛错只写 `billing_status=failed`，`status` 保持 `success`；导入简历的 `_mark_import_task_failed` 同理（已成功交付的行不再被改写成 failed）；用户自带模型的任务显式写 `none`，不会被误判成「待补结算」而被清扫器补扣。看板新增 `billing` 口径（`delivered_unbilled` / `failed` / `refunded`），成功率继续按 `status` 统计。
 
 #### RF-018 用户 AI 记录暴露内部任务，且多模型回合按行计数（已确认）
 
@@ -408,7 +408,10 @@ flowchart TB
 - **实际影响**：用户看到 "chat_summary" 这种内部行；后台把「任务数」当「回合数」，多模型时翻倍。
 - **修复**：`my_ai_records` 默认排除 `chat_summary`（或加 `internal` 列）；看板按 `turn_id` 去重统计回合。
 - **验证方式**：产生一次摘要压缩，检查用户记录列表。
-- **状态**：已确认。
+- **状态**：**已修复（2026-11-22，S2-M5）**。
+  - `AI_INTERNAL_TASK_TYPES = ("chat_summary",)` 收敛在 `ai_task_service`，`my_ai_records` 的列表与计数**同一个过滤条件**（两处分开写是这类问题的经典复发点）。
+  - 看板新增**回合口径**：`count(distinct turn_id)` 算回合总数与交付数，`rates.ai_turn_success` 与行口径 `rates.ai_success` 并列展示；`turns.tasks_per_turn` 直接暴露「一个回合几个模型」。
+  - 用例 `tests/test_ai_records_visibility.py`（4 条）。
 
 #### RF-019 一轮内多次 `update_resume` 只保留最后一次（已确认）
 
@@ -420,7 +423,7 @@ flowchart TB
 - **实际影响**：第一次改动静默消失，模型却据此向用户汇报「已改 A 和 B」。
 - **修复**：按 section 合并多个 pending（或直接累积 updates 列表），result 里回传合并后的快照。
 - **验证方式**：faux 计划两步工具调用，断言 result 同时包含两处改动。
-- **状态**：已确认。
+- **状态**：已确认。**已于 2026-11-21 修复**：`TurnState.pendingChange` 保持单槽位，但每次调用都把已有快照作为 `base_resume_data` 回传，后端从该快照起算（`import_fragments` 同样接受 `base_data`），于是「库里的旧数据」不再是第二次调用的起点——本质是按 section 叠加。摘要按顺序累积去重，工具返回给模型的文本包含本轮全部改动，避免模型只汇报最后一次。注：`base_resume_data` 是内部令牌保护的服务间字段，不做内容校验（它来自上一轮同一端点的响应）。
 
 #### RF-020 带图片的回合整体关闭数值反幻觉守卫（已确认）
 
@@ -489,7 +492,7 @@ flowchart TB
 - **实际影响**：token 进入浏览器历史、代理/网关访问日志、错误上报；有效期 24h，泄漏即账户接管。
 - **修复**：改成短时效签名 URL（`?sig=&exp=`），或后端下发一次性图片 token。
 - **验证方式**：抓包/看 nginx access log 是否出现 `token=`。
-- **状态**：已确认。
+- **状态**：**已修复（2026-11-22，S2-M6）**。`core/signed_url.py` 用 JWT 密钥派生 HMAC 签 `sig`+`exp`（6h）；上传响应与历史附件读取都重新签，前端删掉 `fileUrl.ts` 不再拼 token；`api/files.py` 不再接受 query token，只认短签名或 Bearer。生产 `STORAGE_PUBLIC_URL_MODE=public` 启动自检拒绝。`test_signed_file_url.py` 11 条覆盖验签、对象名绑定、过期、边界。
 
 #### RF-026 预览失败被当作「简历不存在」；apply 刷新失败被报成写入失败（已确认）
 
@@ -510,7 +513,7 @@ flowchart TB
 - **实际影响**：旧会话在 24h 内继续有效；改密无法踢出攻击者。
 - **修复**：`users.token_version` 入 JWT claim，改密/重置时自增；或维护 Redis 吊销表。
 - **验证方式**：登录拿 token → 改密 → 用旧 token 调 `/auth/me`，断言 401。
-- **状态**：已确认。
+- **状态**：**已修复（2026-11-22，S2-M6）**。`users.token_version` + JWT `tv` claim，`get_current_user` / `user_from_token` 校验一致；改密、重置都自增并给当前会话签新 token。无 `tv` 的历史 token 放行以平滑升级。迁移 `0048_token_version`。`test_token_revocation.py` 8 条覆盖改密/重置吊销、跨账号隔离、畸形 claim。运行时实测：改密后旧 token 401。
 
 #### RF-028 全员发放积分没有幂等保护（已确认）
 
@@ -521,7 +524,7 @@ flowchart TB
 - **实际影响**：全体用户被重复加积分，且无法用「撤回批次」精确回滚（会产生两个批次）。
 - **修复**：前端提交幂等键（`request_id`），后端唯一约束；或发放前要求二次确认并展示影响人数。
 - **验证方式**：同一 `request_id` 连发两次，断言只发放一批。
-- **状态**：已确认。
+- **状态**：已确认。**已于 2026-11-21 修复**：`grant-all` 接受 `request_id`，`batch_no` 由它派生（`FG + sha256 前 16 位`），于是「这批发过没有」变成一次 `description LIKE` 查询；已发放的用户 id 直接跳过，所以**半途中断的批次能续跑**，而不是重试一次就宣布已发。前端在弹窗打开时生成一次 `request_id`、失败重试复用同一个值，并加提交中互斥。未新增表：批次号本来就写在流水 `description` 里。
 
 #### RF-029 同步导入占用线程池 180s，AI 端点无并发限制（已确认）
 
@@ -561,7 +564,7 @@ flowchart TB
 - **为什么上调**：Phase 3/5 把它归为「前端无 maxlength 的体验问题」，但这不是体验问题——后端契约允许的值，落在自己数据库列宽之外，是一条**确定性 5xx**，且用户重试永远失败（复制是唯一入口）。
 - **修复**：三处收敛到同一常量（建议 100，与列宽一致）；`title[:120]` 改 `[:100]`；前端 `maxlength=100` + 计数提示；`ResumeUpdate` 补 `max_length`。
 - **验证方式**：`POST /resumes/{id}/duplicate` 传 110 字符标题，断言 200 而非 500。
-- **状态**：已确认（静态；列宽以模型定义为准）。
+- **状态**：已确认（静态；列宽以模型定义为准）。**已于 2026-11-20 修复**：新增 `core/contracts.py::RESUME_TITLE_MAX=100`，模型列宽、`ResumeCreate/Update/DuplicateRequest` 校验、service 截断与前端 `maxlength` 全部引用同一常量；复制兜底标题改为「裁源标题、保留『副本』后缀」，避免源标题顶到上限时再次超长。
 
 #### RF-055 登录限频只有「邮箱+IP」维度，换邮箱即可无限触发 bcrypt（已确认）
 
@@ -573,7 +576,7 @@ flowchart TB
 - **实际影响**：不需要爆破成功即可造成登录不可用；叠加默认单 worker，影响面是全站。
 - **修复**：加 per-IP 计数（`login_ip` scope）与全站失败率熔断；对同一 IP 的登录尝试做速率限制而非失败计数；bcrypt 前置一个轻量存在性检查（注意不要重新引入时序泄露）。
 - **验证方式**：同一 IP 用 100 个不同邮箱各试 1 次错误密码，断言第 N 次开始返回 429；同时测登录 P95。
-- **状态**：已确认（代码路径）；阈值影响**需压测**。
+- **状态**：已确认（代码路径）；阈值影响**需压测**。**已于 2026-11-20 修复**：`login` 增加 `login_ip` 维度（`AUTH_LOGIN_IP_MAX_ATTEMPTS`，默认 30 / 同一窗口），与「邮箱+IP」并存；成功登录只清前者，不清 per-IP（否则单账号即可洗白整台机器的额度）。负向：去掉 per-IP 判断后 `test_per_ip_limit_blocks_rotating_emails` 立刻变红。全站失败率熔断与 bcrypt 前置存在性检查**未做**（前者依赖全局状态，后者有时序泄露风险），留给后续。
 
 #### RF-056 「隐藏敏感信息」只清理 `basics`，自我介绍与自定义模块里的联系方式仍然公开（已确认）
 
@@ -584,7 +587,7 @@ flowchart TB
 - **实际影响**：简历自我介绍里写「联系方式：138xxxxxxxx」是常见写法（AI 生成时尤其容易带上）；用户以为已脱敏，实际手机号在公开页面上。这是**用户明确表达过意愿之后**的信息泄露。
 - **修复**：脱敏范围从字段白名单改成「全文正则 + 结构化字段」双策略：对 `summary`、`custom_sections[].items`、`experience/projects` 的文本做手机号/邮箱/IP 模式掩码；或在 UI 上明确写「仅隐藏基本信息区的联系方式」。
 - **验证方式**：构造 summary 含手机号的简历 → 开启脱敏 → 断言 `/share/{token}` 响应不含该号码。
-- **状态**：已确认（静态）。
+- **状态**：已确认（静态）。**已于 2026-11-20 修复**：清空 `basics` 之后对整份 `resume_data` 递归掩码手机号 / 固话 / 邮箱（`CONTACT_PATTERNS`），覆盖 `summary.content`、`work/projects.description`、`custom_sections[].items` 等自由文本；年份、规模等无关数字不动。实测（8001 + `blue_timeline`，该模板会渲染简介与经历描述）：开启脱敏后分享页 0 处联系方式，`1200 万` / `2020-2023` 保留。
 
 #### RF-057 版本创建「先查后插」无锁，并发可产生重复快照；恢复的乐观锁存在 TOCTOU（已确认）
 
@@ -595,7 +598,7 @@ flowchart TB
 - **实际影响**：版本列表出现重复项（用户看到「两个一模一样的历史版本」，去重逻辑失效）；恢复可能覆盖刚刚的保存。
 - **修复**：`resume_versions` 加 `(resume_id, content_digest)` 唯一索引并捕获 `IntegrityError` 当作「已存在」；恢复改成 `UPDATE ... WHERE id=? AND update_time=?` 的条件更新，影响行数为 0 时返回 409。
 - **验证方式**：两线程同时 `PUT` 相同内容，断言只产生一条快照。
-- **状态**：已确认（机制）。
+- **状态**：已确认（机制）。**2026-11-21 部分修复**：（b）恢复的 TOCTOU 已关闭——版本判断下沉到 `UPDATE ... WHERE revision = ?`，rowcount 是唯一裁决点；快照写入改为 `stage_version` 暂存，与简历写入同事务，撞 409 时「恢复前备份」一起回滚（否则版本列表里会多一条没有对应改动的孤儿）。（a）`(resume_id, content_digest)` 唯一索引仍未加，并发重复快照留给 M3。
 
 #### RF-058 公告首次已读是 check-then-insert，并发会撞唯一约束返回 500（已确认）
 
@@ -605,7 +608,7 @@ flowchart TB
 - **触发**：同一用户双标签页同时打开公告，或前端重试 → 两个请求都判定「未读」→ 第二个 `INSERT` 撞 `(announcement_id, user_id)` 唯一约束 → 未捕获 `IntegrityError` → 500。
 - **实际影响**：弹窗报错、公告未标已读（用户反复看到），刷新后自愈。属体验级，但 500 会进错误率统计。
 - **修复**：改用 `INSERT ... ON DUPLICATE KEY UPDATE`（或 `INSERT IGNORE`）；或捕获 `IntegrityError` 后 `rollback` 并当成功返回。
-- **状态**：已确认（静态）。
+- **状态**：已确认（静态）。**已于 2026-11-20 修复**：保留一条 `SELECT` 快路径（已读是轮询里的绝大多数请求），未读时才在 savepoint 内插入并捕获 `IntegrityError`——冲突即视为已读，冲突的那条只回滚 savepoint；`read_count` 同时从「读改写」改成条件自增，避免并发首次已读丢计数。`AnnouncementRead.id` 补 `with_variant(Integer, "sqlite")`，让单测能跑真实 ORM 插入。负向：把捕获改回不处理，`test_second_insert_returns_false_instead_of_raising` 立刻变红。
 
 #### RF-059 自定义分享链接最短 3 位，且公开端点无限频（已确认）
 
@@ -615,7 +618,7 @@ flowchart TB
 - **触发**：用户把分享链接设为 `abc`、`cv`、`job` 一类短词 → 他人用字典枚举 3 位 token → 命中已公开的简历。
 - **实际影响**：**只影响用户主动公开的简历**，不是越权读取私有数据；但公开≠愿意被随意翻到，尤其含真实姓名与工作经历。属低频高误解风险。
 - **修复**：自定义长度下限提到 8 位；对 `/share/{token}` 加 per-IP 速率限制与 404 计数告警。
-- **状态**：已确认（静态）。
+- **状态**：已确认（静态）。**已于 2026-11-20 修复**：正则改为 8–64 位（消息与前端提示同步，已存在的短 token 仍可读，只限制新设置）；`core/throttle.py` 新增 `hit()`（成功也计数，fail-open），`/shares/{token}` 按 IP 120 次/分钟限速，超限先于查库返回 429。404 计数告警**未做**（需要监控侧配合）。
 
 ### 3.4 P3（低优先级）
 
@@ -625,7 +628,7 @@ flowchart TB
 | RF-033 | 超时语义错位 | `ai_service_client.py:45-47`；`config.ts:34`；`docker-compose.yml:90` | 代理 180s 是**空闲**、Node 300s 是**总时长**、代码默认 60s；长时间无 delta 的阶段会被代理先断，且用户只看到笼统错误 |
 | RF-034 | PDF 缓存签名不全 | `pdf_export_service.py:465-490`；`models/export_record.py` | 不含 Chromium 版本；模板哈希 `lru_cache(1)`；`ExportRecord` 不记渲染引擎；删简历后记录成死链 |
 | RF-035 | PDF 生成锁是进程内锁 | `pdf_export_service.py:40-60` | **下调**：默认 `uvicorn` 单 worker，当前部署下成立；多 worker/多副本时失效 |
-| RF-037 | 容器以 root 运行 | `backend/Dockerfile:56`；`ai-service/Dockerfile:16` | 无 `USER`；建议非特权用户 + 只读根文件系统 |
+| RF-037 | 容器以 root 运行 | `backend/Dockerfile`；`ai-service/Dockerfile` | **已修复（S2-M6）**：backend `USER app`（uid 10001，storage 可写）、ai-service `USER node`（uid 1000）；实测容器uid 正确且 storage 可写。只读根文件系统未做 |
 | RF-038 | 邮箱可枚举 | `api/auth.py:62-73,82-86` | 重置密码明确返回「尚未注册」，注册返回「邮箱已存在」；有 Redis 限频兜底。**注意**：兜底维度可被换邮箱绕过，见 RF-055 |
 | RF-039 | 全员撤回不支持断点续跑 | `api/admin/points.py:130-158` | 任一批 commit 后重试会被「已撤回」挡住，剩余用户无法继续 |
 | RF-060 | `/templates` 每请求同步 DB 并渲染 12 份完整预览 | `api/templates.py`；`services/template_service.py:260-320` | 公开端点、无鉴权、无缓存；单次请求触发 12 次 Jinja 全量渲染，可被外部反复调用打 CPU（01-B-11） |
@@ -636,7 +639,13 @@ flowchart TB
 | RF-065 | 创建/复制简历、提交反馈无幂等键 | `api/resumes.py:100-113`；`api/feedback.py:48` | 双击/网关重试产生重复简历；属**幂等缺失的第三处表现**（与 RF-007/RF-028 同族）（01-B-22） |
 | RF-066 | 手动版本不受 50 条保留策略约束；`/docs`、`/openapi.json` 默认公开 | `services/resume_service.py:231-253`；`main.py:56` | 手动版本每份都是全量 JSON，无总量配额；生产建议关闭文档端点（01-B-23/B-24） |
 
-> RF-036 原列在本表，Phase 1 复核后**上调至 P2**，见 §3.3（标题 101–120 字符时复制必然 500）。
+> RF-036 原列在本表，Phase 1 复核后**上调至 P2**，见 §3.3（标题 101–120 字符时完全复制必然 500）。
+>
+> RF-033 已于 2026-11-22 关闭（S2-M4）：三档超时收敛到 `core/contracts.py` 的单一来源——Node 回合总时长 300s ≤ 后端代理读超时 330s ≤ Nginx 读超时 360s，相邻两档留 30s 余量。后端不再硬编码 180s（`ai_service_client._http_timeout()` 读 `AI_PROXY_READ_TIMEOUT_MS`）；Node 的代码默认值从 60s 改为 300s，避免「本地能跑、线上超时」；后端启动时通过 `GET /v1/contracts` 读 Node 自报的回合时长再核一次链，**相等或颠倒都拒绝启动**（`startup_checks.timeout_chain_problems`）。负向：把代理读超时改成 200s，`test_timeout_chain_is_monotonic` 与启动自检同时变红。
+>
+> RF-065 已于 2026-11-21 关闭（S2-M3）：新建/复制简历、提交反馈都接受可选 `request_id`，唯一约束 `(user_id, request_id)` 兜底——先查一次（普通重试的快路径），插入撞约束说明是并发双击，回滚后回读赢家那一行；前端在「一次用户动作」内复用同一个键（成功才作废），失败重试不会再产生第二份。实测：同键两次请求返回同一个 id；不带键时行为不变（仍是两份）。
+>
+> RF-061 已于 2026-11-22 关闭（S2-M5）：迁移 `0047_reconcile_indexes` 给 `ai_tasks` / `resumes` / `flow_point_transactions` 各补 `(user_id, create_time)` 组合索引（本地 MySQL upgrade → downgrade → upgrade 已验，索引名统一 `ix_*_user_created`）。「全量拉进 Python 统计」这一侧没有改成纯 SQL 聚合：看板需要多口径同比与分桶，改写后 SQL 会比现在的 Python 更难核对，而索引到位后扫描量已不是瓶颈；对账页的新查询**全部**是 SQL 聚合（`reconciliation_service`），不读全表进内存。
 
 ### 3.5 补充条目（前序 P2/P3 的归并，按 RF 续号）
 
@@ -653,6 +662,8 @@ flowchart TB
 | RF-049 | 文档与帮助中心仍宣传已不存在的命令/功能 | P3 | `ai-service/README.md`；`HelpCenter.vue:96`；`02-D1/D2/D3/B9/L10` | 误导用户与运维，且 `system_prompt` 覆盖路径无人调用 |
 | RF-050 | 轨迹 error 截断 400 字符，可能含模型输出片段 | P3 | `trace.ts:284` | 复核后仅保留提示；属低概率 PII（02-S3） |
 | RF-051 | 长会话摘要压缩无条数/Token 预算 | P3 | `ai_chat_service.py:46,497-530` | 超长会话可能压缩失败并每轮重试，挤占回合延迟（02-R5） |
+
+> RF-044 已于 2026-11-22 关闭（S2-M4）：问题不在「20MB 太小」，而在**只声明了单张上限、没声明一次消息的总量**——9 张 × 5MB = 45MB，base64 后约 60MB，怎么调 body 上限都不对。现在三层各有明确预算并互相约束：附图总量 20MB（`CHAT_ATTACHMENT_TOTAL_MAX_BYTES`）→ Node body 32MB（`AI_BODY_LIMIT_MB`）→ Nginx `client_max_body_size` 40MB。顺序是刻意的：内层必须先拒，才能返回前端可展示的 JSON 错误；反过来用户只会看到 Nginx 的 HTML 413。总字节数由 `uploaded_files.file_size` 求和后判定，**在用户消息落库之前**，不再出现「有提问、无回复」的死回合；前端输入区在上传前也按同一预算拦一次（`AiComposer.vue` + `types/chat.ts::CHAT_ATTACHMENT_TOTAL_MAX_MB`）。顺带修掉一处真实的错配：Nginx 原来只有 25m，**比 20MB 附图 base64 后的 27MB 还小**——所有超过 18MB 附图的请求都会在外层被挡。负向：把 Nginx 改回 20m、把前端张数改成 8，对应契约测试立刻变红。
 
 ### 3.6 去重与重新归类
 

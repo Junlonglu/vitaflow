@@ -12,7 +12,7 @@ ResumeFlow 是一个面向求职者的智能简历生成与优化平台，提供
 - 多套简历模板，支持字体、颜色、间距、头像显示等样式配置
 - 后端 HTML 预览，浏览器预览与 PDF 导出共用渲染服务
 - AI 统一对话入口：修改、润色、翻译、JD 优化、生成都在同一条对话里完成，AI 产出需用户确认后才写入简历
-- 简历中英互译：自动识别原文语言，保持模块结构与富文本格式，翻译记录可在 AI 记录中查看并单独计费
+- 简历中英互译：自动识别原文语言，保持模块结构与富文本格式，翻译轮次在「AI 记录」中可见并按 `feature=translate` 单独计费（注意「生成历史」页里的翻译页签只聚合 LangChain 旧链路记录，新链路轮次请到 AI 记录查看）
 - Flow Points 点数、AI 使用记录、兑换码与点数流水
 - PDF 导出，默认使用 Playwright + Chromium，支持 WeasyPrint 兜底（Word 导出已下线，见下文）
 - JSON 导出：完整快照（标题、语言、模板与样式配置、简历数据），可再导入回填成一份新简历，不消耗点数
@@ -191,7 +191,7 @@ npm run dev
 | `TRUSTED_PROXY_NETWORKS` | 采信 `X-Forwarded-For` 的反向代理网段，默认回环 + Docker 私网。超范围时一律以 TCP 对端地址为准 |
 | `DB_*` | MySQL 连接 |
 | `REDIS_URL`、`REDIS_KEY_PREFIX` | Redis 连接、验证码、限频、缓存和并发锁 |
-| `JWT_SECRET_KEY`、`JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | 登录令牌签名与过期时间 |
+| `JWT_SECRET_KEY`、`JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | 登录令牌签名与过期时间。生产环境必须 ≥32 字节且不能是示例默认值，否则服务拒绝启动 |
 | `ADMIN_EMAILS` | 管理员邮箱白名单，多个邮箱用英文逗号分隔 |
 | `SMTP_*` | 邮箱验证码和反馈回复邮件 |
 | `AI_SERVICE_URL`、`AI_SERVICE_TOKEN` | ai-service 旁路地址与共享调用令牌 |
@@ -200,7 +200,7 @@ npm run dev
 | `STORAGE_PROVIDER` | `minio` 或 `aliyun_oss` |
 | `STORAGE_PUBLIC_URL_MODE` | `proxy` 或 `public` |
 | `EXPORT_DIR`、`UPLOAD_DIR` | 导出文件和上传文件目录 |
-| `PDF_BASE_URL` | PDF 渲染时访问后端静态资源的基础地址 |
+| `PDF_BASE_URL` | 只给服务端渲染（PDF 的 Chromium/WeasyPrint）取图片与字体用；浏览器预览与分享页走相对地址，不依赖它 |
 | `PDF_RENDERER` | `chromium`、`auto` 或 `weasyprint` |
 | `PDF_CHROMIUM_EXECUTABLE_PATH` | 系统 Chromium 可执行文件路径，可留空使用 Playwright 自带浏览器 |
 | `VITE_API_BASE_URL` | 前端访问的 API 地址 |

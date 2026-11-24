@@ -126,6 +126,11 @@ interface ResumeSkill {
 
 ## 4. 工具契约（5 个 + 可选 1 个）
 
+下表的端点**就是模型这一轮能触达的全部后端能力**。注意 `backend/app/api/ai.py` 里
+还有 `update-basics-field`、`update-section`、`propose-change`、`get-resume-context`、
+`info-fragments/import` 等 LangChain 旧链路遗留端点——它们仍在代码里、有测试，
+但**没有任何 Node 侧调用方**。数端点数量时不要把它们算进来。
+
 | 工具 | 参数 | 端点 | 结果去向 |
 |---|---|---|---|
 | `update_resume` | `changes[]`、`from_library[]` | `POST /api/ai/service/tool/update-resume` | `state.pendingChange` |

@@ -47,7 +47,7 @@ Node ai-service :8300  ── pi-agent 运行时，无数据库权限
    └──────────────► 回到 FastAPI
 ```
 
-依赖中间件：MySQL 3306（事实源）、Redis 6379（验证码/限频/公告缓存）、MinIO 9000（头像、公告图、AI 对话图、导出文件）。
+依赖中间件：MySQL 3306（事实源）、Redis 6379（验证码/限频/公告缓存）、MinIO 9000（头像、公告图、AI 对话图三类图片；导出 PDF 不落 MinIO，缓存在本机 `export_dir/pdf_cache`）。
 
 三种端口布局：开发态 `5173 / 8000 / 8300`；全栈态 `8080(Nginx) / 8000 / 8300`，Nginx 把 `/api` 反代到 backend。
 
@@ -59,22 +59,22 @@ Node ai-service :8300  ── pi-agent 运行时，无数据库权限
 
 ```
 vitaflow/
-├── AGENTS.md              # 仓库级开发约束（代码代理必读，但 AI 技术栈段落已过时）
+├── AGENTS.md              # 仓库级开发约束（代码代理必读）
 ├── CONTEXT.md             # 领域术语表
 ├── README.md              # 总入口
 ├── docker-compose.yml
-├── backend/               # FastAPI，约 13k 行 Python
+├── backend/               # FastAPI，约 21.8k 行 Python（backend/app，不含测试与迁移）
 │   ├── app/
 │   │   ├── api/           # 13 个路由模块，只做参数解析与编排
-│   │   ├── services/      # 24 个业务服务
-│   │   ├── models/        # 10 个 SQLAlchemy 模块
-│   │   ├── schemas/       # 11 个 Pydantic 模块
-│   │   ├── core/          # config / security / response / exceptions / database / resume_schema（简历 JSON 契约）
+│   │   ├── services/      # 31 个业务服务
+│   │   ├── models/        # 11 个 SQLAlchemy 模块
+│   │   ├── schemas/       # 8 个 Pydantic 模块
+│   │   ├── core/          # config / security / response / exceptions / database / contracts（跨层上限）/ startup_checks（启动自检）/ resume_schema（简历 JSON 契约）
 │   │   ├── templates/resume/  # 12 套 Jinja2 简历模板
 │   │   └── main.py
-│   ├── alembic/versions/  # 39 个迁移
-│   └── tests/             # 25 个测试文件
-├── frontend/              # Vue 3，约 17k 行
+│   ├── alembic/versions/  # 46 个迁移
+│   └── tests/             # 64 个测试文件
+├── frontend/              # Vue 3，约 30.1k 行（src，不含测试）
 │   └── src/{views,components,stores,api,router,types,utils}/
 ├── ai-service/            # Node 旁路服务
 │   ├── src/{server,agent,prompt,skills,taskPrompts,catalog,billing,usage,config,real,faux}.ts
@@ -128,7 +128,7 @@ vitaflow/
 - 会话搜索（跨简历，命中标题或任意消息内容）：`GET /ai/resume-chat/sessions/search?q=&limit=`，结果带 `resume_title`
 - 变更决策：`POST /ai/resume-chat/{resume_id}/messages/{message_id}/decision`（apply / reject）、`DELETE /ai/resume-chat/{resume_id}/messages?session_id=`
 - 历史：`GET /ai/resume-chat/{resume_id}/messages?session_id=`（省略 session_id 时落在该简历最近一次会话，兼容旧前端）
-- **服务间回调（供 ai-service 调用）**：`POST /ai/service/tool/update-basics-field`、`POST /ai/service/tool/update-section`、`POST /ai/service/tool/propose-change`、`GET /ai/service/tool/get-resume-context`、`POST /ai/service/tool/search-evidence`、`GET /ai/service/tool/info-fragments/search`（按关键词/分类检索用户信息库）、`POST /ai/service/tool/info-fragments/import`（生成待确认的简历修改，不落库）、`POST /ai/service/tool/info-fragments/propose`（生成待确认的信息条目，不落库）、`POST /ai/service/usage`
+- **服务间回调**：ai-service 当前**实际调用**的只有 6 个——`POST /ai/service/tool/update-resume`（唯一的简历写入工具）、`GET /ai/service/tool/search-evidence`、`GET /ai/service/tool/info-fragments/search`、`POST /ai/service/tool/info-fragments/propose`、`POST /ai/service/usage`（结算）、`POST /ai/service/trace`（轨迹）。`POST /ai/service/tool/update-basics-field`、`POST /ai/service/tool/update-section`、`POST /ai/service/tool/propose-change`、`GET /ai/service/tool/get-resume-context`、`POST /ai/service/tool/info-fragments/import` 是 LangChain 旧链路的遗留端点，仍保留但**没有 Node 侧调用方**，不要按它们理解现在的工具集（工具白名单见 `docs/ai/resume-agent.md`）。
 
 **信息库（原子信息）`info_fragments.py`**
 - 列表：`GET /info-fragments`（`kind` / `q` 关键词 / `tag` / `page` / `page_size`，返回 `items` + `total` + 各分类 `counts`）、`GET /info-fragments/meta`（分类定义、字段表、上限）
@@ -199,7 +199,7 @@ vitaflow/
 | 表 | 说明 |
 |---|---|
 | `ai_chat_sessions` | 会话（按 user + resume 组织，一份简历可有多条对话），`is_pinned` 置顶标记，含滚动摘要 `context_summary` 与其覆盖到的 `summary_message_id` |
-| `ai_chat_messages` | 消息；assistant 消息可带 `optimized_resume_data`(待确认的简历变更)、`pending_info_fragments`(待确认入库的信息条目)、`suggestions`(变更摘要)、`action_status`(pending/applied/rejected)、usage 字段 |
+| `ai_chat_messages` | 消息；assistant 消息可带 `optimized_resume_data`(待确认的简历变更)、`pending_info_fragments`(待确认入库的信息条目)、`suggestions`(变更摘要)、`action_status`(pending/applying/applied/rejected/superseded/stale)。**本表没有 usage 列**：token 用量落在 `ai_tasks.input_data.token_usage`，由 `ai_task_service.finish_ai_task` 写入 |
 | `info_fragments` | **信息库（原子信息）**：用户级的一条事实。`kind`(15 类，决定落到简历哪个模块)、`title`、`summary`、`payload`(JSON，复用简历条目字段)、`tags`(JSON)、`search_text`(扁平检索列)、`fingerprint`(sha1 去重)、`source`(manual/resume/ai)、`enabled`、`usage_count`、`last_used_time`；每用户上限 500 条 |
 | `ai_tasks` | 一次性任务记录（类型、输入、输出、状态、错误、耗时、token） |
 | `ai_model_configs` | **业务策略**：`model_ref` 指向模型目录中的 provider/model；含 `name`、`context_messages`、`is_chat_selectable`、`sort_order`、`is_active`，以及三种费率 `chat_points_per_call` / `chat_points_per_million_input_tokens` / `chat_points_per_million_output_tokens` |
@@ -499,7 +499,11 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 
 ### 8.5 编辑器状态流
 
-表单编辑 → 更新 `editor` store 中的 `resumeData` → 标脏 → 防抖自动保存（`PUT /resumes/{id}`）→ 预览区通过 `POST /resumes/{id}/preview-html` 传入**当前未保存数据**刷新，保证预览与表单实时一致。
+简历正文在 **`resume` store**（`currentResume.resume_data`）；`editor` store 只管视图态（`previewScale` / `previewScaleMode` 等），不持有简历数据。
+
+表单编辑 → 更新 `resume` store 的 `resumeData` → 标脏 → 防抖自动保存（`PUT /resumes/{id}`）→ 保存完成后预览区用 **`GET /resumes/{id}/preview-html`** 取回已保存数据渲染。也就是说普通预览看到的是**已落库版本**，不是正在输入的草稿。
+
+只有**审阅模式**（AI 提案待确认）走 `POST /resumes/{id}/preview-html`：`useResumePreview.fetchPreviewHtmlLatest` 把「当前数据 + 已勾选变更 + 人工微调」用 `buildSelectedResumeData` 合并后传给后端，保证勾选与预览实时一致。
 
 AI 对话产生的 pending change 在右侧面板展示 diff，用户「应用」后调用 `decision` 接口，后端合并落库并返回新简历，前端整体替换 store 数据。
 
@@ -566,7 +570,7 @@ docker compose --profile full up -d --build
 
 | 项 | 位置 | 说明 |
 |---|---|---|
-| 超大文件 | `ai_chat_service.py` 1675 行、`api/admin/dashboard.py` 748 行、`ResumeEditor.vue` 1357 行 | 与「路由不堆业务、视图不堆表单」的自我约束有张力；`ai_chat_service.py` 同时管会话、上下文、模型选择、校验、合并、决策，改动易牵一发动全身。`Admin.vue` 已从 1599 行拆到 364 行（面板化，§6.37/§6.39），看板聚合单独成 `dashboard.py` |
+| 超大文件 | `ai_chat_service.py` 1788 行、`api/admin/dashboard.py` 768 行、`ResumeEditor.vue` 1573 行 | 与「路由不堆业务、视图不堆表单」的自我约束有张力；`ai_chat_service.py` 同时管会话、上下文、模型选择、校验、合并、决策，改动易牵一发动全身。`Admin.vue` 已从 1599 行拆到 364 行（面板化，§6.37/§6.39），看板聚合单独成 `dashboard.py` |
 | settings 未固定 | `ai-service/src/agent.ts` | 两处 `createAgentSession` 都未传 `settingsManager`，会读 `<cwd>/.pi-agent/settings.json`，导致 compaction/retry 行为受部署目录影响、不可复现。建议改 `SettingsManager.inMemory({ compaction, retry })` |
 | thinking 逐 token 穿两跳 | `agent.ts` → NDJSON → FastAPI → 浏览器 | 每次 1–3 字符，一次响应上百条，每条都要一次 `JSON.parse` + `res.write` + 前端状态更新。建议 Node 侧 80–120ms 节流合并；同时 `res.write` 未处理背压（未监听 `drain`） |
 | 工具回调往返 | 每个工具一次跨进程 HTTP | 一轮可能 3 次往返。优化方向：上下文里预置 section 只读快照，让 `get_resume_context` 本地返回 |

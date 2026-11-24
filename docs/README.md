@@ -14,6 +14,7 @@
 | 排查「AI 改简历为什么没生效 / 待确认变更怎么走」 | [`ai/ai-chat-pending-change.md`](./ai/ai-chat-pending-change.md) |
 | 改简历 JSON 结构、加字段或加模块 | [`data/resume-schema.md`](./data/resume-schema.md) |
 | 做分阶段代码审查、需要一份可核对的架构基线 | [`code-review/00-architecture-map.md`](./code-review/00-architecture-map.md) |
+| 审查做完了，要知道先修什么、怎么验收 | [`code-review/05-improvement-plan.md`](./code-review/05-improvement-plan.md) |
 | 想知道「为什么当初不用另一种方案」 | [`architecture/pi-agent重构设计.md`](./architecture/pi-agent重构设计.md) 与 `PROJECT-OVERVIEW.md` §14 |
 | 要给 Agent 加轨迹记录 / 做 RSI 前置规划 | [`ai/ai-trajectory.md`](./ai/ai-trajectory.md) |
 | 要拿轨迹做改进、设计评测集 / 判断某个改动值不值得做 | [`ai/rsi-plan.md`](./ai/rsi-plan.md) |
@@ -71,7 +72,7 @@
 | --- | --- |
 | [`reviews/2026-11-16-code-review.md`](./reviews/2026-11-16-code-review.md) | 全仓审查（backend / frontend / ai-service）：P0 伪造 XFF 绕过限频、PDF 导出 SSRF、后台设置存储型 XSS、积分并发扣减、私有图片可被共享缓存转发等问题的证据、影响与修复建议；末尾附三批修复进度 |
 
-### `code-review/`：分阶段代码梳理（5 篇）
+### `code-review/`：分阶段代码梳理（6 篇）
 
 | 文档 | 内容 |
 | --- | --- |
@@ -80,6 +81,7 @@
 | [`code-review/02-ai-service-review.md`](./code-review/02-ai-service-review.md) | Phase 2 AI 服务专项审查：Agent 生命周期、Prompt/Skills/Tools、10 条业务链路、Flow Points 计费审计（幂等/退款/账实一致）、安全（SSRF/令牌/注入）、并发稳定性、12 个重点场景、修复建议与测试缺口 |
 | [`code-review/03-frontend-review.md`](./code-review/03-frontend-review.md) | Phase 3 前端专项审查：组件/Store 设计、简历编辑器与自动保存（保存回写覆盖、卸载丢改动、失焦与 apply 竞争）、AI 对话流式与确认链路、前后端契约漂移、iframe/令牌安全、预览测量循环与渲染性能、29 条问题与三批修复建议 |
 | [`code-review/04-cross-service-review.md`](./code-review/04-cross-service-review.md) | Phase 4 跨服务专项审查：三端身份通道与超时预算、对话回合三次提交、状态机与幂等矩阵、账务数据流（回合级不可对账）、12 个故障注入场景、15 条跨服务问题（预扣无租约、旧提案覆盖、`status` 语义重载等）与三批修复建议 |
+| [`code-review/05-improvement-plan.md`](./code-review/05-improvement-plan.md) | Phase 6 问题归因与整体改进方案：把 66 条缺陷收敛为六个横切机制（写入语义 / 回合身份 / 生命周期 / 参数来源 / 可证明性 / 信任模型），给出 S0 事实定格 → S1 止血 → S2 机制 → S3 防复发的分层方案、验收场景、代码护栏与「不做的事」 |
 
 ### 最终审计（1 篇）
 

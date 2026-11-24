@@ -31,7 +31,24 @@ SENSITIVE_BASIC_FIELDS = {
     "id_card",
 }
 
-CUSTOM_SHARE_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$")
+# 下限 8 位：3 位 token（abc / cv / job）可以被字典直接枚举命中，而分享链接
+# 是公开可读的。已存在的短 token 仍然可读（get_shared_resume 不限长度），
+# 只限制「新设置」的动作，避免把老链接改坏。
+CUSTOM_SHARE_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{7,63}$")
+CUSTOM_SHARE_TOKEN_MIN = 8
+CUSTOM_SHARE_TOKEN_MAX = 64
+
+# 字段白名单只覆盖 basics，但「联系方式：138xxxxxxxx」写在自我介绍里是常见
+# 写法（AI 生成时尤其容易带上）。用户勾了「隐藏敏感信息」之后，这些文本里的
+# 号码仍然是公开的——所以再叠一层全文模式掩码。
+CONTACT_PATTERNS = (
+    # 中国大陆手机号，允许 +86 / 86 前缀与空格、短横线分隔。
+    re.compile(r"(?<!\d)(?:\+?86[\s-]?)?1[3-9]\d{9}(?!\d)"),
+    # 固话：区号 0xx(x) + 7~8 位号码。
+    re.compile(r"(?<!\d)0\d{2,3}[\s-]?\d{7,8}(?!\d)"),
+    re.compile(r"[\w.+-]+@[\w-]+\.[A-Za-z]{2,}"),
+)
+MASKED_TEXT = "***"
 
 
 def normalize_expire_time(value: datetime | None) -> datetime | None:
@@ -60,7 +77,10 @@ def normalize_custom_share_token(db: Session, value: str | None, resume_id: int 
     if not token:
         return None
     if not CUSTOM_SHARE_TOKEN_PATTERN.fullmatch(token):
-        raise AppException("自定义链接仅支持 3-64 位字母、数字、短横线或下划线，且需以字母或数字开头", 400)
+        raise AppException(
+            f"自定义链接需 {CUSTOM_SHARE_TOKEN_MIN}-{CUSTOM_SHARE_TOKEN_MAX} 位字母、数字、短横线或下划线，且需以字母或数字开头",
+            400,
+        )
     query = select(Resume.id).where(Resume.share_token == token)
     if resume_id is not None:
         query = query.where(Resume.id != resume_id)
@@ -77,6 +97,24 @@ def get_shared_resume(db: Session, token: str) -> Resume:
     if not resume or not resume.share_enabled or share_is_expired(resume.share_expire_time):
         raise AppException("分享不存在或已失效", 404)
     return resume
+
+
+def _mask_contact_text(value: Any) -> Any:
+    """递归遍历简历数据，把文本字段里的联系方式替换成掩码。
+
+    只认「看起来像联系方式」的串，不动其它数字：年份、项目规模、GPA 之类不该
+    被误伤。字典的键（字段名）不参与匹配，值才匹配。
+    """
+    if isinstance(value, str):
+        masked = value
+        for pattern in CONTACT_PATTERNS:
+            masked = pattern.sub(MASKED_TEXT, masked)
+        return masked
+    if isinstance(value, list):
+        return [_mask_contact_text(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _mask_contact_text(item) for key, item in value.items()}
+    return value
 
 
 def prepare_public_share_content(resume: Resume) -> tuple[dict[str, Any], dict[str, Any], str]:
@@ -96,4 +134,7 @@ def prepare_public_share_content(resume: Resume) -> tuple[dict[str, Any], dict[s
         basics[field] = ""
     basics["custom_fields"] = []
     template_config["show_avatar"] = False
+    # 结构化字段清空之后再过一遍全文：summary、自定义模块、经历描述里的
+    # 手机号/邮箱同样是「用户以为已经脱敏」的部分。
+    resume_data = _mask_contact_text(resume_data)
     return resume_data, template_config, labels["anonymous_resume"]

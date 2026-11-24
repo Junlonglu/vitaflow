@@ -61,10 +61,18 @@ def browser_url(object_name: str) -> str:
     return f"/api/files/{object_name}"
 
 
-def resolve_for_render(value: Any) -> str:
-    """把简历里的头像值解析成可渲染的地址；认不出来就原样返回。"""
+def resolve_for_render(value: Any, *, absolute: bool = True) -> str:
+    """把简历里的头像值解析成可渲染的地址；认不出来就原样返回。
+
+    ``absolute=True`` 给服务器端渲染（Chromium / WeasyPrint）用：渲染进程没有
+    页面上下文，必须给能直接请求的绝对地址。``absolute=False`` 给浏览器用：
+    预览与分享页都以 ``iframe srcdoc`` 交给浏览器，相对地址会跟随页面源站，
+    既不会被写死的 ``pdf_base_url`` 带到 127.0.0.1，换域名也不用改配置。
+    """
     object_name = avatar_object_name(value)
-    return render_url(object_name) if object_name else str(value or "").strip()
+    if not object_name:
+        return str(value or "").strip()
+    return render_url(object_name) if absolute else browser_url(object_name)
 
 
 def _avatar_query(db: Session, user_id: int):

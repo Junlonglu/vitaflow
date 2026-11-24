@@ -6,6 +6,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.response import success
 from app.core.security import get_current_admin, get_current_user, user_from_token
+from app.core.signed_url import verify_signature
 from app.models.user import User
 from app.services.storage.storage_service import (
     is_allowed_object_name,
@@ -56,21 +57,25 @@ def get_font_asset(file_name: str):
     return FileResponse(file_path, media_type="font/woff2")
 
 
-def _request_token(request: Request, query_token: str | None) -> str:
-    """图片请求只能用 query token（<img> 带不了 Authorization 头），
-    但接口调用方习惯用 Bearer，两种都收。"""
+def _bearer_token(request: Request) -> str:
+    """只从 Authorization 头取令牌。
+
+    `<img>` 带不了头，所以图片走 URL 签名（`sig` + `exp`），**不再接受 query 里的
+    登录 token**——那等于把 24 小时有效的账号凭据写进浏览器历史与代理日志（RF-025）。
+    """
     header = request.headers.get("authorization") or ""
     if header.lower().startswith("bearer "):
         return header[7:].strip()
-    return (query_token or "").strip()
+    return ""
 
 
 @router.get("/{object_name:path}")
 def get_uploaded_file(
     object_name: str,
     request: Request,
-    token: str | None = None,
     db: Session = Depends(get_db),
+    sig: str | None = None,
+    exp: str | None = None,
 ):
     """上传对象代理。
 
@@ -81,8 +86,10 @@ def get_uploaded_file(
     if not is_allowed_object_name(object_name):
         raise HTTPException(status_code=404, detail="文件不存在")
     if is_private_object_name(object_name):
-        user = user_from_token(db, _request_token(request, token))
-        # 未登录与「不是你的文件」返回同一个 404，不泄露对象是否存在。
-        if user is None or object_name not in owned_object_names(db, user.id, [object_name]):
-            raise HTTPException(status_code=404, detail="文件不存在")
+        # 两条合法路径：URL 短签名（浏览器 <img> 用），或 Bearer 令牌（接口调用）。
+        if not verify_signature(object_name, sig, exp):
+            user = user_from_token(db, _bearer_token(request))
+            # 未授权与「不是你的文件」返回同一个 404，不泄露对象是否存在。
+            if user is None or object_name not in owned_object_names(db, user.id, [object_name]):
+                raise HTTPException(status_code=404, detail="文件不存在")
     return stream_uploaded_file(object_name)

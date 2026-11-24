@@ -5,17 +5,20 @@ import hashlib
 import importlib.metadata
 import json
 import logging
+import time
 from contextlib import contextmanager
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from threading import Lock
+from typing import Iterator, Union
 from urllib.parse import unquote, urlparse
-from typing import Iterator
 from uuid import uuid4
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.core import metrics
 from app.core.config import settings
 from app.core.url_guard import probe_public_url
 from app.models.export_record import ExportRecord
@@ -46,10 +49,17 @@ def _pdf_lock(key: str) -> Iterator[None]:
     with _pdf_locks_guard:
         lock, users = _pdf_locks.get(key, (Lock(), 0))
         _pdf_locks[key] = (lock, users + 1)
+    # 队列深度只在这里能看见：同一份简历并发导出会串行，排队长度直接决定
+    # 「点导出没反应」的时长，而日志里什么都看不出来。
+    metrics.pdf_render_waiting()
+    pending_since = time.perf_counter()
     lock.acquire()
+    metrics.pdf_wait.record(time.perf_counter() - pending_since)
+    metrics.pdf_render_started()
     try:
         yield
     finally:
+        metrics.pdf_render_finished()
         lock.release()
         # 计数包含还在等待的人，所以这里读到 1 才代表「没人持有也没人排队」。
         with _pdf_locks_guard:
@@ -474,7 +484,7 @@ def _renderer_signature() -> str:
     return digest.hexdigest()
 
 
-def _pdf_fingerprint(resume: Resume, renderer: str) -> str:
+def _pdf_fingerprint(resume: Union[Resume, ResumeRenderSource], renderer: str) -> str:
     payload = {
         "cache_version": PDF_CACHE_VERSION,
         "pdf_base_url": settings.pdf_base_url,
@@ -510,7 +520,7 @@ def _renderer_order() -> list[str]:
     return ["chromium"]
 
 
-def _cache_path(resume: Resume, renderer: str) -> Path:
+def _cache_path(resume: Union[Resume, ResumeRenderSource], renderer: str) -> Path:
     fingerprint = _pdf_fingerprint(resume, renderer)
     return _cache_dir() / f"resume_{resume.id}_{renderer}_{fingerprint}.pdf"
 
@@ -575,26 +585,68 @@ def _render_pdf_file(renderer: str, html: str, file_path: Path) -> None:
         _render_pdf_with_weasyprint(html, file_path)
 
 
-def get_pdf_path(resume: Resume) -> Path:
-    candidates = [(renderer, _cache_path(resume, renderer)) for renderer in _renderer_order()]
+@dataclass(frozen=True)
+class ResumeRenderSource:
+    """渲染所需的最小字段快照。
+
+    渲染（Chromium 5–60s）期间不能占着数据库连接：请求级 Session 的只读事务
+    会一直持有连接直到请求结束，15 个并发导出就能把连接池占满、全站排队
+    （RF-053）。调用方先用 ``from_resume`` 取快照，再 ``db.rollback()`` 结束
+    只读事务把连接还回池里，渲染阶段就与连接无关了。
+    """
+
+    id: int
+    resume_data: dict
+    template_id: str
+    template_config: dict | None
+    language: str
+
+    @classmethod
+    def from_resume(cls, resume: Resume) -> "ResumeRenderSource":
+        return cls(
+            id=resume.id,
+            resume_data=resume.resume_data,
+            template_id=resume.template_id,
+            template_config=resume.template_config,
+            language=resume.language,
+        )
+
+
+def _render_source(resume: Union[Resume, ResumeRenderSource]) -> ResumeRenderSource:
+    if isinstance(resume, ResumeRenderSource):
+        return resume
+    return ResumeRenderSource.from_resume(resume)
+
+
+def get_pdf_path(resume: Union[Resume, ResumeRenderSource]) -> Path:
+    # 只读快照字段：渲染期间不再回表，也就不再释放/重借连接。
+    source = _render_source(resume)
+    candidates = [(renderer, _cache_path(source, renderer)) for renderer in _renderer_order()]
     for _, file_path in candidates:
         if file_path.exists() and file_path.stat().st_size > 0:
             return file_path
 
-    lock_key = f"resume-{resume.id}"
+    lock_key = f"resume-{source.id}"
     with _pdf_lock(lock_key):
         for _, file_path in candidates:
             if file_path.exists() and file_path.stat().st_size > 0:
                 return file_path
 
-        html = render_resume_html(resume.resume_data, resume.template_id, resume.template_config, resume.language)
+        html = render_resume_html(
+            source.resume_data,
+            source.template_id,
+            source.template_config,
+            source.language,
+            # PDF 由服务端 Chromium/WeasyPrint 打开，图片与字体必须是绝对地址。
+            absolute_assets=True,
+        )
         errors = []
         for renderer, file_path in candidates:
             tmp_path = file_path.with_suffix(f".{uuid4().hex}.tmp")
             try:
                 _render_pdf_file(renderer, html, tmp_path)
                 tmp_path.replace(file_path)
-                _cleanup_old_cached_pdfs(resume.id, file_path)
+                _cleanup_old_cached_pdfs(source.id, file_path)
                 return file_path
             except Exception as exc:
                 errors.append(f"{renderer}: {exc}")
@@ -604,16 +656,22 @@ def get_pdf_path(resume: Resume) -> Path:
     raise HTTPException(status_code=500, detail=f"PDF 生成失败：{'；'.join(errors)}")
 
 
-def render_pdf_bytes(resume: Resume) -> bytes:
+def render_pdf_bytes(resume: Union[Resume, ResumeRenderSource]) -> bytes:
     return get_pdf_path(resume).read_bytes()
 
 
 def export_pdf(db: Session, user_id: int, resume: Resume) -> Path:
-    file_path = get_pdf_path(resume)
+    # 渲染前先结束只读事务：`get_resume` 的 SELECT 已经把连接借出来了，而
+    # Chromium 渲染要 5–60s。这段时间里连接一直挂在池外，并发导出会把池打满、
+    # 全站接口跟着排队（RF-053）。快照到手后立刻 rollback 归还连接，渲染完
+    # 再用一条短事务写导出流水。
+    source = _render_source(resume)
+    db.rollback()
+    file_path = get_pdf_path(source)
     db.add(
         ExportRecord(
             user_id=user_id,
-            resume_id=resume.id,
+            resume_id=source.id,
             file_type="pdf",
             file_name=file_path.name,
             file_path=str(file_path),

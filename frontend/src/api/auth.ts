@@ -30,7 +30,9 @@ export function updateProfileApi(data: { username: string }) {
 }
 
 export function changePasswordApi(data: { current_password: string; new_password: string }) {
-  return request.put<unknown, null>("/auth/password", data)
+  // 改密会自增 token_version，旧 token 立即失效；后端顺手给当前会话签发新的，
+  // 前端必须替换掉本地那份，否则下一个请求就 401。
+  return request.put<{ access_token: string }, { access_token: string }>("/auth/password", data)
 }
 
 export function getUserAgreementApi() {

@@ -77,7 +77,10 @@ services:
     image: vitaflow-ai-service:latest
     container_name: vitaflow-ai-service
     ports:
-      - "${AI_SERVICE_PORT:-8300}:8300"
+      # 只绑回环：这个端口是服务间回调口，没有浏览器会直连它。发布到 0.0.0.0
+      # 等于把「静态令牌 + 明文 user_id」的接口放到宿主机与同网段可达处（RF-008）。
+      # 本地调试需要外部访问时临时改这一行，别改回永久发布。
+      - "127.0.0.1:${AI_SERVICE_PORT:-8300}:8300"
     # 直连公共 DNS：容器内置 DNS（127.0.0.11）转发宿主机解析器时偶发 8s+ 超时
     # （EAI_AGAIN），是空闲后首个对话回合首字延迟 10s+ 的根因
     dns:
@@ -88,6 +91,10 @@ services:
       AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       AI_TURN_TIMEOUT_MS: ${AI_TURN_TIMEOUT_MS:-300000}
+      # 请求体上限（MB）。必须装得下一次消息的附图总量 base64 之后的结果，
+      # 且必须小于 Nginx 的 client_max_body_size（40m）——内层先拒才能返回
+      # JSON 错误。后端启动自检会通过 /v1/contracts 核对这三个数（RF-044）。
+      AI_BODY_LIMIT_MB: ${AI_BODY_LIMIT_MB:-32}
       # 工具回调/计费回调指向宿主机 FastAPI（Windows/macOS Docker Desktop 内置该域名）。
       # 全栈模式下 backend 也发布 8000，因此该值在两种模式都成立。
       PI_FASTAPI_BASE_URL: ${PI_FASTAPI_BASE_URL:-http://host.docker.internal:8000}
@@ -152,8 +159,9 @@ services:
       AI_SERVICE_URL: http://ai-service:8300
       # 令牌以根目录 .env 为准，强制两边一致
       AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-}
-      # Chromium 与 uvicorn 同容器，可用 127.0.0.1；该值同时参与 PDF 缓存指纹
-      PDF_BASE_URL: http://127.0.0.1:8000
+      # 只给服务端渲染（PDF/Chromium）用，浏览器预览与分享页走相对地址。
+      # Chromium 与 uvicorn 同容器时 127.0.0.1 即可；拆开部署时改成容器可达地址。
+      PDF_BASE_URL: ${PDF_BASE_URL:-http://127.0.0.1:8000}
       # 宿主若配置了 Windows Chromium 路径，容器内必须置空改用 Playwright 自带浏览器
       PDF_CHROMIUM_EXECUTABLE_PATH: ""
       EXPORT_DIR: storage/exports

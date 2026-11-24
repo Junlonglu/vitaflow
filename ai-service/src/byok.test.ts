@@ -5,11 +5,12 @@
  * untrusted JSON must be validated before it reaches ModelRuntime, and skill
  * text must be appended *after* (never above) the platform rules.
  */
-import { describe, it } from "node:test";
+import { beforeEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { appendSkillsToPrompt, DEFAULT_SYSTEM_PROMPT, parseSkills } from "./prompt.js";
 import { normalizeReasoningEffort, parseByokOverride, registerByokModel, type RealRuntime } from "./real.js";
+import { setTargetResolver } from "./ssrf.js";
 
 async function runtime(): Promise<RealRuntime> {
   return { kind: "real", modelRuntime: await ModelRuntime.create({ modelsPath: null, allowModelNetwork: false }) };
@@ -48,13 +49,16 @@ describe("parseByokOverride", () => {
 });
 
 describe("registerByokModel", () => {
+  // https://api.example.com 不解析；BYOK 现在每轮都要解析目标地址（RF-012），
+  // 单测注入一个固定的公网地址，避免用例依赖网络。
+  beforeEach(() => setTargetResolver(async () => ["93.184.216.34"]));
   it("no-op without an override", async () => {
-    assert.deepEqual(registerByokModel(await runtime(), undefined), {});
+    assert.deepEqual(await registerByokModel(await runtime(), undefined), {});
   });
 
   it("registers an isolated provider with the user's key and capabilities", async () => {
     const rt = await runtime();
-    const result = registerByokModel(rt, override);
+    const result = await registerByokModel(rt, override);
     assert.ok(result.modelRef?.startsWith("byok-42-"));
     assert.ok(!result.error);
     const [providerId, modelId] = result.modelRef!.split("/");
@@ -69,9 +73,9 @@ describe("registerByokModel", () => {
 
   it("is idempotent for the same config but isolates a changed key", async () => {
     const rt = await runtime();
-    const first = registerByokModel(rt, override);
-    assert.equal(registerByokModel(rt, { ...override }).modelRef, first.modelRef);
-    const second = registerByokModel(rt, { ...override, api_key: "sk-rotated" });
+    const first = await registerByokModel(rt, override);
+    assert.equal((await registerByokModel(rt, { ...override })).modelRef, first.modelRef);
+    const second = await registerByokModel(rt, { ...override, api_key: "sk-rotated" });
     assert.notEqual(second.modelRef, first.modelRef);
     const [oldId] = first.modelRef!.split("/");
     const [newId] = second.modelRef!.split("/");
@@ -80,20 +84,20 @@ describe("registerByokModel", () => {
   });
 
   it("rejects a non-http base url", async () => {
-    const result = registerByokModel(await runtime(), { ...override, base_url: "ftp://example.com" });
+    const result = await registerByokModel(await runtime(), { ...override, base_url: "ftp://example.com" });
     assert.match(result.error ?? "", /http/);
   });
 
   it("text-only model drops image input", async () => {
     const rt = await runtime();
-    const result = registerByokModel(rt, { ...override, supports_image: false });
+    const result = await registerByokModel(rt, { ...override, supports_image: false });
     const [providerId, modelId] = result.modelRef!.split("/");
     assert.deepEqual(rt.modelRuntime.getModel(providerId, modelId)?.input, ["text"]);
   });
 
   it("reasoning strength registers a reasoning model and returns a thinking level", async () => {
     const rt = await runtime();
-    const result = registerByokModel(rt, { ...override, reasoning_effort: "high" });
+    const result = await registerByokModel(rt, { ...override, reasoning_effort: "high" });
     assert.ok(!result.error);
     assert.equal(result.thinkingLevel, "high");
     const [providerId, modelId] = result.modelRef!.split("/");
@@ -104,8 +108,8 @@ describe("registerByokModel", () => {
 
   it("changing effort isolates the provider registration", async () => {
     const rt = await runtime();
-    const high = registerByokModel(rt, { ...override, reasoning_effort: "high" });
-    const low = registerByokModel(rt, { ...override, reasoning_effort: "low" });
+    const high = await registerByokModel(rt, { ...override, reasoning_effort: "high" });
+    const low = await registerByokModel(rt, { ...override, reasoning_effort: "low" });
     assert.equal(low.thinkingLevel, "low");
     assert.notEqual(high.modelRef, low.modelRef);
   });
@@ -113,7 +117,7 @@ describe("registerByokModel", () => {
   it("auto and off never send reasoning_effort", async () => {
     const rt = await runtime();
     for (const effort of ["auto", "off"] as const) {
-      const result = registerByokModel(rt, { ...override, reasoning_effort: effort });
+      const result = await registerByokModel(rt, { ...override, reasoning_effort: effort });
       assert.equal(result.thinkingLevel, undefined);
       const [providerId, modelId] = result.modelRef!.split("/");
       assert.equal(rt.modelRuntime.getModel(providerId, modelId)?.reasoning, false);

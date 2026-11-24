@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { Model } from "@earendil-works/pi-ai/compat";
+import { assertPublicTarget } from "./ssrf.js";
 
 export interface RealRuntime {
   kind: "real";
@@ -132,7 +133,10 @@ function clampInt(value: unknown, fallback: number, min: number, max: number): n
   return Number.isFinite(num) ? Math.min(max, Math.max(min, Math.trunc(num))) : fallback;
 }
 
-export function registerByokModel(runtime: RealRuntime, override: ByokOverride | undefined): ByokResolution {
+export async function registerByokModel(
+  runtime: RealRuntime,
+  override: ByokOverride | undefined,
+): Promise<ByokResolution> {
   if (!override || typeof override !== "object") return {};
   const model = String(override.model ?? "").trim();
   const baseUrl = String(override.base_url ?? "").trim().replace(/\/+$/, "");
@@ -142,6 +146,12 @@ export function registerByokModel(runtime: RealRuntime, override: ByokOverride |
   }
   if (!/^https?:\/\//i.test(baseUrl)) {
     return { error: "自定义模型接入地址必须以 http(s):// 开头" };
+  }
+  // 每轮都解析一次（RF-012）：保存时的字面量校验拦不住「域名解析到内网」。
+  // 顺带把主机登记进 outbound guard，连接时的解析与重定向策略都由它兜住。
+  const target = await assertPublicTarget(baseUrl);
+  if (!target.ok) {
+    return { error: target.error ?? "自定义模型接入地址不可用" };
   }
 
   const owner = String(override.provider ?? "byok-user").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40) || "byok-user";

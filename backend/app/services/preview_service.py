@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 from typing import Any
 
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+from jinja2 import Environment, FileSystemLoader, pass_context, select_autoescape
 from markupsafe import Markup
 
 from app.core.config import settings
@@ -114,14 +114,23 @@ def css_font_family(value: Any) -> Markup:
 env.filters["css_font_family"] = css_font_family
 
 
-def font_face_css(value: Any) -> Markup:
+@pass_context
+def font_face_css(context: Any, value: Any) -> Markup:
+    """字体地址按消费者分流。
+
+    PDF 由 Chromium 在服务端打开，只能用绝对地址（``PDF_BASE_URL``）；预览与
+    分享页交给浏览器，用相对地址跟随页面源站。过去两者共用 ``PDF_BASE_URL``，
+    远程访问时浏览器会去请求**访客自己机器**的 127.0.0.1，表现为字体回退 +
+    头像裂图，而 PDF 一切正常。
+    """
     raw = str(value or "").strip()
+    prefix = settings.pdf_base_url.rstrip("/") if context.get("absolute_assets") else ""
     faces = []
     for family, weight, file_name in FONT_FACE_FILES.get(raw, []):
         file_path = settings.backend_root / "app" / "static" / "fonts" / file_name
         if not file_path.is_file():
             continue
-        url = f"{settings.pdf_base_url.rstrip('/')}/api/files/font-assets/{file_name}"
+        url = f"{prefix}/api/files/font-assets/{file_name}"
         faces.append(
             "@font-face { "
             f"font-family: {_quote_font(family)}; "
@@ -183,7 +192,9 @@ def _has_text(value: Any) -> bool:
     return bool(value)
 
 
-def _prepare_resume_data(resume_data: dict[str, Any], language: str = "zh-CN") -> dict[str, Any]:
+def _prepare_resume_data(
+    resume_data: dict[str, Any], language: str = "zh-CN", *, absolute_assets: bool = True
+) -> dict[str, Any]:
     data = deepcopy(resume_data or {})
     normalized_language = resolve_resume_language(language, data)
     data["_language"] = normalized_language
@@ -193,7 +204,7 @@ def _prepare_resume_data(resume_data: dict[str, Any], language: str = "zh-CN") -
         # 简历里存的是对象名（新版）或完整 URL（旧数据 / 用户填的外链）。渲染前
         # 统一解析成渲染进程能取到的地址；认不出来的外链原样保留，交给
         # pdf_export_service 的资源白名单做 SSRF 校验。
-        basics["avatar"] = resolve_for_render(basics["avatar"])
+        basics["avatar"] = resolve_for_render(basics["avatar"], absolute=absolute_assets)
     layout = data.setdefault("layout", {})
     skills_options = layout.get("skills_options")
     if not isinstance(skills_options, dict):
@@ -253,7 +264,15 @@ def render_resume_html(
     template_id: str,
     template_config: dict[str, Any],
     language: str = "zh-CN",
+    *,
+    absolute_assets: bool = False,
 ) -> str:
+    """渲染简历 HTML。
+
+    ``absolute_assets=False``（默认）给浏览器：预览、分享页、模板预览都是
+    ``iframe srcdoc``，相对地址跟随页面源站。``True`` 给服务端渲染（PDF），
+    必须锚定到 ``PDF_BASE_URL``，渲染进程才有办法取到图片与字体。
+    """
     safe_template = template_id if template_id in AVAILABLE_TEMPLATES else "classic"
     template = env.get_template(f"resume/{safe_template}.html")
     # 渲染前统一收敛：这份 dict 会被直接插进 <style>，也是 PDF（Chromium）
@@ -262,7 +281,8 @@ def render_resume_html(
     config = normalize_template_config(template_config)
     config["template_id"] = safe_template
     return template.render(
-        resume=_prepare_resume_data(resume_data, language),
+        resume=_prepare_resume_data(resume_data, language, absolute_assets=absolute_assets),
         config=config,
+        absolute_assets=absolute_assets,
         static_base=str(settings.backend_root / "app" / "static"),
     )

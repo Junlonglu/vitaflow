@@ -19,6 +19,11 @@ export const useUserStore = defineStore("user", {
       this.userInfo = null
       localStorage.removeItem("vitaflow_token")
     },
+    /** 改密后接住新签发的 token：旧 token 已被版本号吊销。 */
+    setToken(token: string) {
+      this.token = token
+      localStorage.setItem("vitaflow_token", token)
+    },
     async getUserInfo() {
       this.userInfo = await meApi()
     },

@@ -48,6 +48,14 @@ RUN python -m playwright install --with-deps chromium \
 
 COPY . .
 
+# 非 root 运行（RF-037）：镜像里带 Chromium 与 Tesseract，被攻破时不该顺带拿到 root。
+# uid 10001 刻意避开系统账号区间与常见基础镜像的 1000，减少与宿主 uid 撞车的概率。
+# 只有 storage/ 需要可写（PDF 缓存、导出、上传落盘都在这下面），其余目录只读也不影响。
+RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin app \
+    && mkdir -p /app/storage/exports /app/storage/uploads \
+    && chown -R app:app /app/storage
+USER app
+
 EXPOSE 8000
 
 # 显式 --log-level：容器 env_file 会注入 UVICORN_LOG_LEVEL=INFO，而 uvicorn 的

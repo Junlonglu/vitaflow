@@ -14,6 +14,7 @@
  */
 import { lookup as systemLookup, promises as dnsPromises } from "node:dns";
 import { createRequire } from "node:module";
+import { BlockedTargetError, isGuardedHost, isPrivateAddress } from "./ssrf.js";
 
 const CACHE_TTL_MS = 5 * 60_000;
 
@@ -57,6 +58,16 @@ function resolveEntries(hostname: string): Promise<AddressEntry[]> {
       ...v6.map((address) => ({ address, family: 6 as const })),
     ];
     if (!entries.length) throw new Error(`no addresses for ${hostname}`);
+    // BYOK 主机（RF-012）：这次解析就是拨号要用的那次，私网地址在这里挡掉，
+    // DNS rebinding 就没有「第一次查公网、第二次连内网」的窗口。
+    if (isGuardedHost(hostname)) {
+      const safe = entries.filter((entry) => !isPrivateAddress(entry.address));
+      if (!safe.length) {
+        throw new BlockedTargetError(`refusing to connect ${hostname} to a private address`);
+      }
+      cache.set(hostname, { entries: safe, expires: Date.now() + CACHE_TTL_MS });
+      return safe;
+    }
     const elapsed = Date.now() - startedAt;
     if (elapsed > 1000) console.warn(`[dns] cold resolve ${hostname} took ${elapsed}ms (v4=${v4.length} v6=${v6.length})`);
     cache.set(hostname, { entries, expires: Date.now() + CACHE_TTL_MS });
@@ -116,7 +127,14 @@ export function installCachedLookup(): void {
           (callback as LookupCallback)(null, entries[0].address, entries[0].family);
         }
       },
-      () => systemLookup(hostname, opts, callback as never),
+      (err) => {
+        // 策略拒绝必须原样抛给调用方：回落系统解析等于把刚挡下的地址又放行一次。
+        if (err instanceof BlockedTargetError) {
+          (callback as unknown as (e: Error) => void)(err);
+          return;
+        }
+        systemLookup(hostname, opts, callback as never);
+      },
     );
   };
   (patched as unknown as Record<string, unknown>).__cachedLookup = true;

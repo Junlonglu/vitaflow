@@ -100,15 +100,28 @@ class AvatarObjectNameTest(unittest.TestCase):
             svc.resolve_for_render("avatar/1_a.jpg"),
             f"{settings.pdf_base_url.rstrip('/')}/api/files/avatar/1_a.jpg",
         )
+        # 浏览器侧用相对地址：换域名、远程访问都不会被带到 127.0.0.1。
+        self.assertEqual(svc.resolve_for_render("avatar/1_a.jpg", absolute=False), "/api/files/avatar/1_a.jpg")
 
 
 class AvatarRenderTest(unittest.TestCase):
-    def test_preview_rewrites_object_name_to_absolute_url(self):
+    def test_preview_uses_relative_url(self):
         html = render_resume_html(
             {"basics": {"name": "张三", "avatar": "avatar/1_a.jpg"}},
             "classic",
             {"show_avatar": True},
             "zh-CN",
+        )
+        self.assertIn('src="/api/files/avatar/1_a.jpg"', html)
+        self.assertNotIn(settings.pdf_base_url, html, "预览交给浏览器，不能出现服务端内网地址")
+
+    def test_pdf_render_uses_absolute_url(self):
+        html = render_resume_html(
+            {"basics": {"name": "张三", "avatar": "avatar/1_a.jpg"}},
+            "classic",
+            {"show_avatar": True},
+            "zh-CN",
+            absolute_assets=True,
         )
         self.assertIn(f"{settings.pdf_base_url.rstrip('/')}/api/files/avatar/1_a.jpg", html)
 

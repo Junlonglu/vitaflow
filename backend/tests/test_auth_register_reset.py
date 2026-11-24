@@ -66,6 +66,8 @@ def _user(**overrides):
         "status": "active",
         "role": "user",
         "register_ip": None,
+        # 改密/重置会自增它；stub 也得有这个字段，否则模拟的是「模型缺列」。
+        "token_version": 0,
     }
     base.update(overrides)
     return SimpleNamespace(**base)

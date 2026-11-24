@@ -120,17 +120,29 @@ def register(payload: RegisterRequest, request: Request, db: Session = Depends(g
 @router.post("/login")
 def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
     email = normalize_email(payload.email)
-    # 按 邮箱+IP 计数：只按邮箱会被用来锁死别人账号，只按 IP 在 NAT 下误伤。
-    throttle_id = f"{email}|{get_client_ip(request)}"
+    client_ip = get_client_ip(request)
+    # 两级计数：
+    # - 邮箱+IP：防「盯着一个账号试」，同时不会因为别人的失败锁死自己的账号；
+    # - per-IP：防「同一个 IP 换着邮箱试」。后者以前没有，而每次请求都要跑一遍
+    #   bcrypt（成本 12 ≈ 100–300ms CPU），不需要猜中就能把登录拖垮。
+    throttle_id = f"{email}|{client_ip}"
     if failure_count("login", throttle_id) >= settings.auth_login_max_attempts:
         raise AppException(f"登录失败次数过多，请 {lock_remaining_minutes('login', throttle_id)} 分钟后再试", 429)
+    if failure_count("login_ip", client_ip) >= settings.auth_login_ip_max_attempts:
+        raise AppException(
+            f"该网络登录失败次数过多，请 {lock_remaining_minutes('login_ip', client_ip)} 分钟后再试",
+            429,
+        )
 
     user = db.scalar(select(User).where(func.lower(User.email) == email))
     if not user or not verify_password(payload.password, user.password_hash):
         record_failure("login", throttle_id, settings.auth_login_lock_seconds)
+        record_failure("login_ip", client_ip, settings.auth_login_lock_seconds)
         raise AppException("邮箱或密码错误", 400)
     if user.status != "active":
         raise AppException("账号已被停用", 403)
+    # 只清「邮箱+IP」：per-IP 计数如果也清，攻击者拿一个自己的有效账号就能
+    # 反复把 IP 额度洗白，等于没加。
     clear_throttle("login", throttle_id)
     if user.email.lower() in settings.admin_email_list and user.role != "admin":
         user.role = "admin"
@@ -139,7 +151,7 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
     db.add(user)
     db.commit()
     db.refresh(user)
-    token = create_access_token(user.id)
+    token = create_access_token(user.id, token_version=user.token_version)
     return success(TokenOut(access_token=token, user=UserOut.model_validate(user)).model_dump())
 
 
@@ -158,6 +170,9 @@ def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db))
 
         verification_code_service.verify_password_reset_code(email, payload.verification_code)
         user.password_hash = get_password_hash(payload.new_password)
+        # 重置密码的人未必是账号主人（可能是被盗后找回），所以连当前登录的
+        # 会话一起踢掉：所有旧 token 的 tv 都会对不上。
+        user.token_version = int(user.token_version or 0) + 1
         db.add(user)
         db.commit()
         verification_code_service.invalidate_password_reset_codes(email)
@@ -198,5 +213,11 @@ def change_password(
     if payload.current_password == payload.new_password:
         raise AppException("新密码不能与当前密码相同", 400)
     current_user.password_hash = get_password_hash(payload.new_password)
+    # 改密即吊销：自增版本号让所有旧 token 失效（含攻击者手上的那一份）。
+    # 同时顺手签发一个新 token 返回，让「正在改密的这个会话」不必重新登录——
+    # 否则用户改完密码就被踢出去，会以为是自己把账号弄坏了。
+    current_user.token_version = int(current_user.token_version or 0) + 1
     db.commit()
-    return success(message="密码已修改")
+    db.refresh(current_user)
+    token = create_access_token(current_user.id, token_version=current_user.token_version)
+    return success({"access_token": token}, "密码已修改，其他设备需重新登录")

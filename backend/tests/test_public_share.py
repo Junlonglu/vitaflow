@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import json
 import unittest
 from datetime import datetime, timedelta
 from types import SimpleNamespace
@@ -153,17 +154,84 @@ class MaskingTest(unittest.TestCase):
         self.assertIsInstance(data.get("basics"), dict)
         self.assertEqual(data["basics"]["phone"], "")
 
+    def test_masking_masks_contacts_written_into_free_text(self):
+        """自我介绍里写「联系方式：138…」是常见写法，只清 basics 等于没脱敏。"""
+        resume = _resume(
+            share_mask_sensitive=True,
+            resume_data={
+                "basics": {"name": "张三", "phone": "13800000000", "email": "zhangsan@example.com"},
+                # summary 是对象而不是字符串，这是简历数据的真实结构。
+                "summary": {"content": "五年后端经验，联系方式 13800001111 或 lisi@example.com，也可打 010-88886666。"},
+                "work": [
+                    {
+                        "company": "某公司",
+                        "position": "后端工程师",
+                        "description": "支撑 1200 万日活的网关，2020-2023 年在职，内推联系 13900002222。",
+                        "highlights": ["把 P99 从 800ms 降到 120ms"],
+                    }
+                ],
+                "custom_sections": [
+                    {
+                        "title": "实习经历",
+                        "preset_type": "internships",
+                        "items": [{"company": "某研究所", "description": "微信同手机 13700003333"}],
+                    }
+                ],
+            },
+        )
+        data, _, _ = svc.prepare_public_share_content(resume)
+
+        raw = json.dumps(data, ensure_ascii=False)
+        for leaked in ("13800001111", "lisi@example.com", "010-88886666", "13900002222", "13700003333"):
+            self.assertNotIn(leaked, raw, leaked)
+        # 非联系方式的数字要留住，否则整份简历就没信息量了。
+        self.assertIn("1200 万", data["work"][0]["description"])
+        self.assertIn("2020-2023", data["work"][0]["description"])
+        self.assertEqual(data["work"][0]["highlights"], ["把 P99 从 800ms 降到 120ms"])
+
+    def test_masked_html_renders_without_contacts(self):
+        """blue_timeline 是少数会渲染 summary / 经历描述的模板，按最终 HTML 断言一次。"""
+        from app.services.preview_service import render_resume_html
+
+        resume = _resume(
+            share_mask_sensitive=True,
+            template_id="blue_timeline",
+            template_config={"show_avatar": True},
+            resume_data={
+                "basics": {"name": "张三"},
+                "summary": {"content": "联系方式 13800001111，邮箱 lisi@example.com"},
+                "work": [{"company": "某公司", "description": "内推 13900002222"}],
+            },
+        )
+        data, config, _ = svc.prepare_public_share_content(resume)
+        html = render_resume_html(data, resume.template_id, config, resume.language)
+
+        for leaked in ("13800001111", "lisi@example.com", "13900002222"):
+            self.assertNotIn(leaked, html, leaked)
+
+    def test_unmasked_share_keeps_free_text_untouched(self):
+        resume = _resume(
+            share_mask_sensitive=False,
+            resume_data={"basics": {}, "summary": {"content": "联系方式 13800001111"}},
+        )
+        data, _, _ = svc.prepare_public_share_content(resume)
+        self.assertIn("13800001111", data["summary"]["content"])
+
 
 class CustomTokenTest(unittest.TestCase):
     def test_empty_returns_none(self):
         self.assertIsNone(svc.normalize_custom_share_token(_Db(), "  "))
 
     def test_rejects_illegal_patterns(self):
-        for value in ("ab", "x" * 65, "-abc", "_abc", "a b", "中文链接"):
+        # 3–7 位的短词可被字典枚举命中，所以下限是 8 位。
+        for value in ("ab", "abcd", "a-b-c-d", "x" * 65, "-abc", "_abcdefg", "a b", "中文链接"):
             with self.subTest(value=value):
                 with self.assertRaises(Exception) as ctx:
                     svc.normalize_custom_share_token(_Db(), value)
                 self.assertEqual(ctx.exception.code, 400)
+
+    def test_accepts_eight_characters(self):
+        self.assertEqual(svc.normalize_custom_share_token(_Db(None), "cv-2026x"), "cv-2026x")
 
     def test_conflict_with_other_resume_is_409(self):
         with self.assertRaises(Exception) as ctx:
@@ -202,6 +270,20 @@ class ShareEndpointTest(unittest.TestCase):
         resp = TestClient(app).get("/api/shares/nope")
         self.assertEqual(resp.status_code, 404)
         self.assertEqual(resp.json()["code"], 404)
+
+    def test_rate_limited_lookups_return_429(self):
+        # 公开端点是可枚举的：命中每 IP 上限后必须拒绝，且不再拿 token 去查库。
+        db = _Db(_resume())
+        app = FastAPI()
+        register_exception_handlers(app)
+        app.include_router(shares_router, prefix="/api")
+        app.dependency_overrides[get_db] = lambda: db
+        with patch("app.api.shares.hit", return_value=True):
+            resp = TestClient(app).get("/api/shares/abc123")
+
+        self.assertEqual(resp.status_code, 429)
+        self.assertEqual(resp.json()["code"], 429)
+        self.assertEqual(db.queries, 0)
 
 
 if __name__ == "__main__":

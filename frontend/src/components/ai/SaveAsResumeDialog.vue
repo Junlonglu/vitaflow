@@ -4,6 +4,9 @@ import { X } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
 import { RESUME_TITLE_MAX } from "@/types/resume"
 
+// 模板根是 Teleport，attrs 会停在传送门上、到不了可见面板；关掉自动继承并绑到面板 div。
+defineOptions({ inheritAttrs: false })
+
 /** JD优化确认写入后的「另存为新简历」对话框：标题预填可改。 */
 const props = defineProps<{
   open: boolean
@@ -33,7 +36,7 @@ function confirm() {
 <template>
   <Teleport to="body">
     <div v-if="open" class="fixed inset-0 z-modal flex items-center justify-center bg-black/50 p-4" @click.self="emit('close')">
-      <div class="w-full max-w-md rounded-2xl bg-white p-5 shadow-wb-popup">
+      <div v-bind="$attrs" class="w-full max-w-md rounded-2xl bg-white p-5 shadow-wb-popup">
         <div class="flex items-center gap-2">
           <h3 class="flex-1 text-sm font-semibold text-zinc-900">另存为新简历</h3>
           <button type="button" class="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700" title="关闭" aria-label="关闭" @click="emit('close')">

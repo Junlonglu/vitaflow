@@ -25,6 +25,10 @@ import {
 import AiProviderCard from "@/components/admin/ai/AiProviderCard.vue"
 import type { ProviderSavePayload, ProviderSeed } from "@/components/admin/ai/providerDraft"
 
+// 模板是多根（根 div + Teleport + ConfirmDialog）：Vue 不会自动透传 attrs，
+// 关掉自动继承并绑到根 div，否则调用方传的 class/style 会被静默丢弃。
+defineOptions({ inheritAttrs: false })
+
 const props = defineProps<{
   providers: AdminCatalogProvider[]
   groups: AdminRoutingGroup[]
@@ -259,7 +263,7 @@ void loadEnvKeys()
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div v-bind="$attrs" class="space-y-4">
     <div class="flex items-center justify-between gap-3">
       <h3 class="font-semibold text-zinc-900">服务商接入</h3>
       <div class="flex shrink-0 items-center gap-2">

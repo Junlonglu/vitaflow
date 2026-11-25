@@ -4,6 +4,10 @@ import type { ToolStep } from "@/api/ai"
 import LiveRegion from "@/components/ai/LiveRegion.vue"
 import ToolStepRow from "@/components/ai/ToolStepRow.vue"
 
+// 模板是多根的 v-if / v-else-if 链（三种形态各占一个根）：attrs 必须绑在每个分支上，
+// 否则只绑第一个的话，切到「平铺 / 折叠」形态时调用方传的 class 就没了。
+defineOptions({ inheritAttrs: false })
+
 /**
  * 一轮对话里的「活动时间线」：技能加载、工具执行、当前阶段全部套进同一种行
  * （状态点 + 一句话 + 右侧耗时 + 下方结果摘要），不再分成两个视觉体系。
@@ -46,18 +50,18 @@ const headerText = computed(() => {
 </script>
 
 <template>
-  <div v-if="!steps.length && streaming" class="mb-2">
+  <div v-if="!steps.length && streaming" v-bind="$attrs" class="mb-2">
     <div class="flex items-center gap-2 text-xs">
       <span class="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-blue-500" aria-hidden="true" />
       <span class="text-blue-500/80">{{ status || "正在处理" }}</span>
     </div>
   </div>
 
-  <div v-else-if="flat" class="mb-2">
+  <div v-else-if="flat" v-bind="$attrs" class="mb-2">
     <ToolStepRow :step="steps[0]" />
   </div>
 
-  <LiveRegion v-else-if="steps.length" :streaming="streaming" :watch="lastChange()" max-height="max-h-40" :fullscreen="false">
+  <LiveRegion v-else-if="steps.length" v-bind="$attrs" :streaming="streaming" :watch="lastChange()" max-height="max-h-40" :fullscreen="false">
     <template #header>
       <span>{{ headerText }}</span>
     </template>

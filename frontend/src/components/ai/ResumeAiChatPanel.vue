@@ -13,6 +13,10 @@ import ToolSteps from "@/components/ai/ToolSteps.vue"
 import ThinkingProcess from "@/components/ai/ThinkingProcess.vue"
 import ChatTurnMeta from "@/components/ai/ChatTurnMeta.vue"
 
+// 模板是多根（根 div + 图片预览的 Teleport）：不关自动继承的话，父组件传的
+// class/style 会被 Vue 直接丢弃，面板宽度、内边距这类外部约束全部静默失效。
+defineOptions({ inheritAttrs: false })
+
 const props = defineProps<{
   messages: ChatMessage[]
   loading?: boolean
@@ -193,10 +197,10 @@ watch(
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col gap-4 relative overflow-x-hidden">
+  <div v-bind="$attrs" class="flex h-full min-h-0 flex-col gap-4 relative overflow-x-hidden">
     <section class="chat-stage relative flex min-h-0 flex-1 flex-col bg-transparent z-base">
       <div ref="listRef" class="relative min-h-0 flex-1 flex flex-col overflow-y-auto px-4 py-4 md:px-6 md:py-8 thin-scrollbar">
-        <section v-if="!messages.length && !loading" class="mx-auto flex w-full min-h-full max-w-3xl flex-col items-center justify-center py-6 text-center">
+        <section v-if="!messages.length && !loading" class="mx-auto flex w-full min-h-full max-w-[700px] flex-col items-center justify-center py-6 text-center">
           <h3 class="text-[19px] font-medium tracking-tight text-zinc-900 sm:text-[21px]">想改哪一部分？</h3>
           <p class="mt-1.5 text-[12.5px] text-zinc-400">选一个技能，或直接说你看到了什么问题</p>
 
@@ -221,7 +225,7 @@ watch(
           </div>
         </section>
 
-        <TransitionGroup name="message-list" tag="div" class="mx-auto w-full max-w-3xl space-y-5 md:space-y-6">
+        <TransitionGroup name="message-list" tag="div" class="mx-auto w-full max-w-[700px] space-y-5 md:space-y-6">
           <article v-for="(message, index) in messages" :key="message.id" class="group relative flex gap-2 md:gap-4" :class="message.role === 'user' ? 'justify-end' : 'justify-start'">
             <div v-if="message.role === 'assistant'" class="absolute opacity-0 pointer-events-none md:relative md:opacity-100 md:pointer-events-auto self-start mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded bg-zinc-100 text-zinc-500" :style="index === lastAssistantIndex ? 'view-transition-name: ai-hero-icon;' : ''">
               <Bot class="h-3.5 w-3.5" stroke-width="1.75" />
@@ -308,22 +312,27 @@ watch(
         </TransitionGroup>
       </div>
 
-      <AiComposer
-        ref="composerRef"
-        class="mx-auto mb-18 mt-1 w-[calc(100%-1.5rem)] max-w-3xl shrink-0 sm:mb-4 sm:w-[calc(100%-2rem)]"
-        :loading="loading"
-        :model-choices="modelChoices"
-        :chat-models="chatModels"
-        :has-messages="messages.length > 0"
-        :regenerate="Boolean(regenerateSource)"
-        :selected-model-id="selectedModelId"
-        :supports-multimodal="supportsMultimodal"
-        @send="handleComposerSend"
-        @clear="emit('clear')"
-        @new-session="emit('new-session')"
-        @cancel-regenerate="cancelRegenerate"
-        @update:selected-model-id="(value) => emit('update:selectedModelId', value)"
-      />
+      <!-- 左右留白交给外层 padding，列宽与上方消息列表同源（同为 700px 上限）。
+           注意 AiComposer 有两个根节点，宽度类能落到 form 上靠的是组件内
+           `inheritAttrs: false` + `v-bind="$attrs"`，别在组件里删掉那两行。 -->
+      <div class="shrink-0 px-4 md:px-6">
+        <AiComposer
+          ref="composerRef"
+          class="mx-auto mb-18 mt-1 w-full max-w-[700px] sm:mb-4"
+          :loading="loading"
+          :model-choices="modelChoices"
+          :chat-models="chatModels"
+          :has-messages="messages.length > 0"
+          :regenerate="Boolean(regenerateSource)"
+          :selected-model-id="selectedModelId"
+          :supports-multimodal="supportsMultimodal"
+          @send="handleComposerSend"
+          @clear="emit('clear')"
+          @new-session="emit('new-session')"
+          @cancel-regenerate="cancelRegenerate"
+          @update:selected-model-id="(value) => emit('update:selectedModelId', value)"
+        />
+      </div>
     </section>
   </div>
 

@@ -34,6 +34,10 @@ import { useWorkspaceCreate, type CreateEntry } from "@/composables/useWorkspace
 import { showGlobalToast } from "@/utils/toast"
 import { newRequestId } from "@/utils/requestId"
 
+// 模板是多根（aside + Teleport + ConfirmPopover）：Vue 不会自动把 attrs 透传到任何一个根，
+// 关掉自动继承、在 aside 上显式绑定，否则调用方传的 class/style 会被静默丢弃。
+defineOptions({ inheritAttrs: false })
+
 /** 复制中的幂等键（按简历 id）：连点两次不会复制出两份。 */
 const duplicateRequestIds = new Map<number, string>()
 import type { AiChatSession, AiChatSessionSearchItem } from "@/api/ai"
@@ -479,8 +483,11 @@ function sessionSnippet(session: { last_message?: string; message_count?: number
 </script>
 
 <template>
+  <!-- 侧栏不是浮层：桌面下是 static 分栏，移动端抽屉全宽时也压在内容上，
+       两种情况都不该有投影（已有 border-r 分界）。阴影只给真正的浮层（§6.25）。 -->
   <aside
-    class="fixed inset-y-0 left-0 z-drawer flex h-full w-[272px] shrink-0 select-none flex-col border-r border-zinc-200/60 bg-zinc-50 shadow-wb-popup transition-transform duration-150 ease-out md:static md:z-auto md:w-[248px] md:translate-x-0 md:bg-zinc-50/60 "
+    v-bind="$attrs"
+    class="fixed inset-y-0 left-0 z-drawer flex h-full w-[272px] shrink-0 select-none flex-col border-r border-zinc-200/60 bg-zinc-50 transition-transform duration-150 ease-out md:static md:z-auto md:w-[248px] md:translate-x-0 md:bg-zinc-50/60 "
     :class="drawerOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'"
   >
     <div class="shrink-0 px-3 pt-3">

@@ -3,6 +3,11 @@ import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { X } from "lucide-vue-next"
 import { createDialogHandle } from "./dialogState"
 
+// 模板根是 Teleport，透传下去的 attrs 会停在 Teleport 上、到不了真正可见的面板，
+// 所以关掉自动继承，把 $attrs 绑到下面那层面板 div（class/style/id 才有落点）。
+// 遮罩不接 attrs：外部改样式应该改面板，不该改全屏遮罩。
+defineOptions({ inheritAttrs: false })
+
 const props = withDefaults(
   defineProps<{
     open: boolean
@@ -128,7 +133,7 @@ onBeforeUnmount(() => {
          再靠外层 opacity 把整棵子树一起压淡。 -->
     <Transition leave-active-class="wb-leaving transition-opacity duration-100 ease-in" leave-to-class="opacity-0">
       <div v-if="open" class="wb-anim-scrim fixed inset-0 z-modal flex items-center justify-center p-4 bg-wb-scrim/40 backdrop-blur-sm" role="dialog" aria-modal="true" :aria-label="title || undefined" @click.self="onOverlayClick">
-        <div ref="panelEl" tabindex="-1" class="wb-anim-panel flex max-h-[90vh] w-full flex-col overflow-hidden rounded-2xl bg-white shadow-wb-dialog outline-none" :class="[maxWidthClass, panelClass]">
+        <div ref="panelEl" v-bind="$attrs" tabindex="-1" class="wb-anim-panel flex max-h-[90vh] w-full flex-col overflow-hidden rounded-2xl bg-white shadow-wb-dialog outline-none" :class="[maxWidthClass, panelClass]">
           <slot name="header">
             <div class="flex shrink-0 items-start justify-between gap-4 px-5 py-4" :class="headerClass">
               <div class="flex min-w-0 items-start gap-3">

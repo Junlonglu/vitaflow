@@ -4,6 +4,9 @@ import { ArrowLeft, ArrowRight, CircleCheck, X } from "lucide-vue-next"
 import Button from "@/components/ui/button/Button.vue"
 import type { PendingQuestion, QuestionAnswer } from "@/api/ai"
 
+// 模板根是 Teleport，attrs 会停在传送门上、到不了可见面板；关掉自动继承并绑到面板 div。
+defineOptions({ inheritAttrs: false })
+
 /**
  * 补充信息对话框（ask_user_questions 的问答 UI）：
  * - 一次显示一条问题，进度点可点回跳；「跳过此问题」清空当前答案并前进；
@@ -66,7 +69,7 @@ function submit() {
 <template>
   <Teleport to="body">
     <div v-if="open" class="fixed inset-0 z-modal flex items-center justify-center bg-black/50 p-4" @click.self="emit('close')">
-      <div class="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup">
+      <div v-bind="$attrs" class="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-wb-popup">
         <div class="flex items-center gap-2 border-b border-zinc-100 px-5 py-4">
           <div class="flex-1">
             <h3 class="text-sm font-semibold text-zinc-900">补充岗位相关信息</h3>

@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, ref, watch } from "vue"
 
+// 模板根是 Teleport，attrs 会停在传送门上、到不了可见气泡；关掉自动继承并绑到气泡 div。
+// 绑定写在 :style 之前：定位用的 left/top/width 由组件算，外部传 style 不能把它冲掉。
+defineOptions({ inheritAttrs: false })
+
 /**
  * 锚定式二次确认气泡。
  *
@@ -142,6 +146,7 @@ onBeforeUnmount(unbind)
     <div v-if="open" class="fixed inset-0 z-overlay" @mousedown.self="close" @contextmenu.prevent="close">
       <div
         ref="cardRef"
+        v-bind="$attrs"
         class="wb-anim-popover fixed rounded-xl border border-zinc-200 bg-white p-4 shadow-wb-dropdown"
         :style="{ width: `${CARD_WIDTH}px`, left: `${pos.left}px`, top: `${pos.top}px`, visibility: ready ? 'visible' : 'hidden' }"
         role="dialog"

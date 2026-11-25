@@ -19,6 +19,10 @@ import { diffResume, type SectionDiff } from "@/utils/aiDiff"
 import { errorMessage } from "@/utils/errorText"
 import { showGlobalToast } from "@/utils/toast"
 
+// 模板是多根（AppDialog + ConfirmDialog）：不关自动继承的话，外部传的 class 会被
+// Vue 直接丢弃（弹窗收不到任何 attrs）。转发给 AppDialog，由它落到内部面板。
+defineOptions({ inheritAttrs: false })
+
 const props = defineProps<{
   open: boolean
   resumeId: number
@@ -222,6 +226,7 @@ watch(
 
 <template>
   <AppDialog
+    v-bind="$attrs"
     :open="open"
     title="版本历史"
     description="恢复会改写当前简历，但会先自动备份现在的内容。"

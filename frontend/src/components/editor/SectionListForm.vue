@@ -5,6 +5,10 @@ import Button from "@/components/ui/button/Button.vue"
 import ConfirmDialog from "@/components/ui/dialog/ConfirmDialog.vue"
 import SectionFields from "./SectionFields.vue"
 
+// 模板是多根（根 div + ConfirmDialog）：Vue 不会自动透传 attrs，
+// 关掉自动继承并绑到根 div，否则调用方传的 class/style 会被静默丢弃。
+defineOptions({ inheritAttrs: false })
+
 const props = defineProps<{
   sectionKey: string
   items: any[]
@@ -93,7 +97,7 @@ const activeItem = computed(() => props.items.find(i => i.id === activeItemId.va
 </script>
 
 <template>
-  <div :class="isWide ? 'flex gap-6 items-start' : 'space-y-4'">
+  <div v-bind="$attrs" :class="isWide ? 'flex gap-6 items-start' : 'space-y-4'">
     
     <!-- List Column -->
     <div :class="isWide ? 'w-[320px] shrink-0 flex flex-col gap-3 sticky top-4' : 'flex flex-col gap-3'">

@@ -9,6 +9,10 @@ import RichTextEditor from "./RichTextEditor.vue"
 import RichTextListEditor from "./RichTextListEditor.vue"
 import EditableFieldLabel from "./EditableFieldLabel.vue"
 import { createPresetItem, modulePresetByType, presetItemSubtitle, presetItemTitle } from "@/utils/resumePresets"
+
+// 模板是多根（div v-if / div v-else / ConfirmDialog）：条件分支各自是独立根，
+// attrs 要绑在每个可能渲染的根上，否则另一条分支拿到的是空 attrs。
+defineOptions({ inheritAttrs: false })
 const props = defineProps<{
   section: any
   isWide?: boolean
@@ -68,7 +72,7 @@ function displayFieldLabel(field: { key: string; label: string }) {
 }
 </script>
 <template>
-  <div v-if="preset" :class="isWide ? 'flex gap-6 items-start' : 'space-y-4'">
+  <div v-if="preset" v-bind="$attrs" :class="isWide ? 'flex gap-6 items-start' : 'space-y-4'">
     <div :class="isWide ? 'w-[320px] shrink-0 flex flex-col gap-3 sticky top-4' : 'flex flex-col gap-3'">
       <div v-for="(item, i) in section.items" :key="item.id" class="flex flex-col">
         <div
@@ -195,7 +199,7 @@ function displayFieldLabel(field: { key: string; label: string }) {
     </div>
   </div>
 
-  <div v-else class="space-y-3">
+  <div v-else v-bind="$attrs" class="space-y-3">
     <Button size="sm" variant="outline" @click="section.items.push({ id: `item_${Date.now()}`, title: '', content: '' }); $emit('change')"><Plus class="h-4 w-4" />新增内容</Button>
     <div v-for="(item, i) in section.items" :key="item.id" class="rounded-lg border border-zinc-200 p-4">
       <div class="mb-3 flex justify-between"><Label>标题</Label><Button size="icon" variant="ghost" @click="triggerDelete(i)"><Trash2 class="h-4 w-4" /></Button></div>

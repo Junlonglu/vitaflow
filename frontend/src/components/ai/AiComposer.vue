@@ -8,6 +8,7 @@ import {
   COMPOSER_SEND_CLASS,
   COMPOSER_SHELL_CLASS,
   COMPOSER_TOOLBAR_CLASS,
+  COMPOSER_TOOL_BUTTON_CLASS,
 } from "@/components/ai/composerStyles"
 import { CHAT_SKILLS, type ChatSkill } from "@/components/ai/chatSkills"
 import { uploadAiChatImageApi } from "@/api/file"
@@ -22,6 +23,10 @@ import { CHAT_ATTACHMENT_MAX, CHAT_ATTACHMENT_TOTAL_MAX_MB } from "@/types/chat"
  * 附件入口，或者两边快捷键不一样），用户从首页进编辑器会觉得换了套东西。
  * 这里只负责「把话和附件交出去」，发出去之后的业务（建简历、跳转、扣点）由页面决定。
  */
+// 模板有两个根（form + ConfirmDialog），Vue 不会自动把 class/style 透传到根元素：
+// 不透传的话调用方写的 `class="mx-auto max-w-3xl"` 会被静默丢弃，输入框退化成撑满父容器。
+// 所以关掉自动继承，把它显式绑到 form 上（弹窗不该收这些属性）。
+defineOptions({ inheritAttrs: false })
 const props = withDefaults(
   defineProps<{
     loading?: boolean
@@ -73,11 +78,14 @@ const ATTACHMENT_BUDGET_BYTES = CHAT_ATTACHMENT_TOTAL_MAX_MB * 1024 * 1024
  */
 const attachmentBytes = ref<number[]>([])
 
+/** 输入区最大高度：超过后改为内部滚动，两端一致。 */
+const INPUT_MAX_HEIGHT = 200
+
 function adjustHeight() {
   const el = inputRef.value
   if (!el) return
   el.style.height = "auto"
-  el.style.height = Math.min(el.scrollHeight, 160) + "px"
+  el.style.height = Math.min(el.scrollHeight, INPUT_MAX_HEIGHT) + "px"
 }
 
 function focus() {
@@ -255,7 +263,7 @@ const modelOptions = computed<ChatModelChoice[]>(() => props.modelChoices ?? pla
 </script>
 
 <template>
-  <form :class="COMPOSER_SHELL_CLASS" class="relative" @submit.prevent="submit">
+  <form v-bind="$attrs" :class="COMPOSER_SHELL_CLASS" class="relative" @submit.prevent="submit">
     <div v-if="attachments.length || uploadError" class="flex flex-wrap gap-2 px-3 pt-3 sm:gap-3">
       <div v-for="(item, index) in attachments" :key="item.url" class="group relative h-14 w-14 sm:h-16 sm:w-16 shrink-0 rounded-lg border border-zinc-200/80 bg-white">
         <img :src="item.url" :alt="item.name || '待发送图片'" class="h-full w-full rounded-lg object-cover" />
@@ -288,7 +296,7 @@ const modelOptions = computed<ChatModelChoice[]>(() => props.modelChoices ?? pla
         :placeholder="placeholder"
         rows="1"
         :class="COMPOSER_INPUT_CLASS"
-        class="min-h-[40px] max-h-[100px] sm:min-h-[46px] sm:max-h-[160px]"
+        class="min-h-[56px] max-h-[140px] sm:min-h-[68px] sm:max-h-[200px]"
         style="scrollbar-width: none"
         @input="adjustHeight"
         @compositionstart="composing = true"
@@ -301,20 +309,20 @@ const modelOptions = computed<ChatModelChoice[]>(() => props.modelChoices ?? pla
     <div :class="COMPOSER_TOOLBAR_CLASS">
       <input ref="fileInputRef" type="file" accept="image/png,image/jpeg,image/webp" multiple class="hidden" @change="handleImageChange" />
       <!-- 左：添加附件（图片） -->
-      <button v-if="supportsMultimodal" type="button" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 active:scale-95 disabled:opacity-40" :disabled="loading || uploadingImage" title="添加图片" @click="chooseImage">
+      <button v-if="supportsMultimodal" type="button" :class="COMPOSER_TOOL_BUTTON_CLASS" class="text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900" :disabled="loading || uploadingImage" title="添加图片" @click="chooseImage">
         <LoaderCircle v-if="uploadingImage" class="h-4 w-4 animate-spin" stroke-width="1.75" />
         <Plus v-else class="h-4 w-4" stroke-width="1.75" />
       </button>
 
       <!-- 左：模型选择（图标 + 名称 + 展开箭头，无边框） -->
-      <div v-if="modelOptions.length" class="flex min-w-0 items-center rounded-lg px-1.5 h-8 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900">
+      <div v-if="modelOptions.length" class="flex h-9 min-w-0 items-center rounded-lg px-2 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900">
         <Sparkles class="mr-1 h-3.5 w-3.5 shrink-0 text-zinc-400" stroke-width="1.75" />
         <Select
           :model-value="selectedModelId || ''"
           :options="modelOptions"
           :disabled="loading"
           ghost
-          class="!h-8 !max-w-[190px] !rounded-none !p-0 !text-[12.5px] !font-medium"
+          class="!h-9 !max-w-[190px] !rounded-none !p-0 !text-[12.5px] !font-medium"
           @change="(value) => emit('update:selectedModelId', value || null)"
         />
       </div>
@@ -323,14 +331,14 @@ const modelOptions = computed<ChatModelChoice[]>(() => props.modelChoices ?? pla
       <!-- 右：新对话 / 清空 / 发送 -->
       <div class="ml-auto flex shrink-0 items-center gap-0.5">
         <template v-if="showSessionActions">
-          <button v-if="!loading && !regenerate" type="button" class="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 active:scale-95" title="新对话" @click="emit('new-session')">
+          <button v-if="!loading && !regenerate" type="button" :class="COMPOSER_TOOL_BUTTON_CLASS" class="text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700" title="新对话" @click="emit('new-session')">
             <SquarePen class="h-4 w-4" stroke-width="1.75" />
           </button>
-          <button v-if="hasMessages && !loading && !regenerate" type="button" class="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-500 active:scale-95" @click="showClearConfirm = true" title="清空对话">
+          <button v-if="hasMessages && !loading && !regenerate" type="button" :class="COMPOSER_TOOL_BUTTON_CLASS" class="text-zinc-400 hover:bg-red-50 hover:text-red-500" @click="showClearConfirm = true" title="清空对话">
             <Trash2 class="h-4 w-4" stroke-width="1.75" />
           </button>
         </template>
-        <button v-if="regenerate" type="button" class="flex h-8 items-center justify-center rounded-lg px-2.5 text-[12.5px] font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 active:scale-95" title="取消重新生成" @click="emit('cancel-regenerate')">
+        <button v-if="regenerate" type="button" class="flex h-9 items-center justify-center rounded-lg px-2.5 text-[12.5px] font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 active:scale-95" title="取消重新生成" @click="emit('cancel-regenerate')">
           取消
         </button>
         <!-- 只靠 form submit 触发：按钮再挂 @click 会连发两次（第二次恰好被空输入挡住，看着没事，改天就成双发） -->

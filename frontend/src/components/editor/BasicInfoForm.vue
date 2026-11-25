@@ -13,6 +13,10 @@ import { listAvatarsApi, type AvatarItem } from "@/api/avatar"
 import { avatarObjectName, avatarSrc, AVATAR_MAX_BYTES, AVATAR_MAX_LABEL } from "@/utils/avatar"
 import { basicInfoPresets } from "@/utils/resumePresets"
 
+// 模板是多根（根 div + ConfirmDialog + AvatarCropperModal）：Vue 不会自动透传 attrs，
+// 关掉自动继承并绑到根 div，否则调用方传的 class/style 会被静默丢弃。
+defineOptions({ inheritAttrs: false })
+
 const props = defineProps<{ basics: Record<string, any> }>()
 const emit = defineEmits(["change", "update:avatar"])
 
@@ -381,7 +385,7 @@ function addPresetField(preset: (typeof basicInfoPresets)[number]) {
 }
 </script>
 <template>
-  <div class="space-y-4 md:space-y-6 max-w-3xl mx-auto py-1 md:py-2">
+  <div v-bind="$attrs" class="space-y-4 md:space-y-6 max-w-3xl mx-auto py-1 md:py-2">
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-5">
       <div v-for="field in coreFields" :key="field.key">
         <Label class="text-xs md:text-[13px] text-zinc-600 mb-1 md:mb-1.5 block font-medium">{{ field.label }}</Label>

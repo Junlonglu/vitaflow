@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { CheckCircle2, FileUp, Sparkles } from "lucide-vue-next"
 
+// 模板根是 Teleport，attrs 会停在传送门上、到不了可见面板；关掉自动继承并绑到面板 section。
+defineOptions({ inheritAttrs: false })
+
 withDefaults(defineProps<{
   open: boolean
   progress: number
@@ -16,7 +19,7 @@ withDefaults(defineProps<{
   <Teleport to="body">
     <Transition name="resume-import-progress">
       <div v-if="open" class="fixed inset-0 z-overlay flex items-center justify-center bg-wb-scrim/45 p-4 backdrop-blur-sm">
-        <section class="w-full max-w-[520px] rounded-2xl border border-zinc-200 bg-white p-7 shadow-wb-popup sm:p-8">
+        <section v-bind="$attrs" class="w-full max-w-[520px] rounded-2xl border border-zinc-200 bg-white p-7 shadow-wb-popup sm:p-8">
           <div class="flex items-center justify-between gap-4">
             <div class="flex min-w-0 items-center gap-4">
               <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-zinc-900 text-white ">

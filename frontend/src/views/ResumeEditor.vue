@@ -1067,7 +1067,7 @@ async function sendInitialPrompt() {
 
       <!-- Mobile Dropdown Menu -->
       <Transition name="modal-fade">
-        <div v-if="isMobile && mobileMenuOpen" class="absolute top-[calc(100%-4px)] right-2 z-popover w-40 space-y-0.5 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-wb-popup">
+        <div v-if="isMobile && mobileMenuOpen" class="absolute top-[calc(100%_-_4px)] right-2 z-popover w-40 space-y-0.5 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-wb-popup">
           <div v-if="flowPointSummary" class="flex items-center justify-between px-2.5 py-2 rounded-xl bg-zinc-100/70 text-zinc-700 text-xs font-medium mb-1 cursor-pointer hover:bg-zinc-200/50 transition-colors" @click="saveAndGoToAiRecords">
             <div class="flex items-center gap-1.5">
               <FlowPointIcon class="h-3.5 w-3.5 text-zinc-600" />

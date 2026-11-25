@@ -29,7 +29,7 @@ const options = [
   >
     <span
       aria-hidden="true"
-      class="absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] rounded-md bg-white transition-transform duration-200 ease-out motion-reduce:transition-none dark:bg-zinc-300"
+      class="absolute inset-y-0.5 left-0.5 w-[calc(50%_-_2px)] rounded-md bg-white transition-transform duration-200 ease-out motion-reduce:transition-none dark:bg-zinc-300"
       :class="props.modelValue === 'edit' ? 'translate-x-full' : ''"
     />
     <button

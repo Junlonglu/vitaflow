@@ -81,7 +81,7 @@ async function submit(content: string, attachments: AiChatAttachment[]) {
 
 <template>
   <div class="thin-scrollbar flex h-full min-w-0 flex-1 overflow-y-auto px-6 py-8">
-    <div class="m-auto w-full max-w-[760px]">
+    <div class="m-auto w-full max-w-[800px]">
       <div class="mb-6 flex items-center justify-between md:hidden">
         <div class="flex items-center gap-1">
           <button

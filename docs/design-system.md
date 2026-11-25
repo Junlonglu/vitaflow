@@ -103,6 +103,19 @@ macOS 落 San Francisco + 苹方；**Windows 用 CDP `CSS.getPlatformFontsForNod
 
 **对话输入区（composer）的结构基线**（对齐 WorkBuddy）：外层 `rounded-2xl border border-zinc-200` + 极轻阴影，聚焦时只把边框提到 `zinc-300` 并加 `ring-2 ring-zinc-900/[0.04]`；底部工具条左起为「`+` 加附件 → 图标+模型名+⌄ 的纯文字 Select」，右侧为「新对话 / 清空 / 圆形发送（`rounded-full bg-zinc-900`，禁用变 `bg-zinc-200`）」；输入区与工具条之间不留分隔线。
 
+**composer 尺寸基线**（2026-11-24 上调，此前 13px 字 + 单行高度放在这么宽的列里明显偏小）：输入区 `px-4 pt-3.5 text-[14px]`，`sm:` 升到 `px-5 pt-4 text-[15px]`；文本域初始 `min-h-[56px] sm:min-h-[68px]`、上限 `sm:max-h-[200px]`（超出转内部滚动）；工具条 `px-2.5 pb-2.5 pt-1 sm:px-3`；工具条内的图标按钮、ghost Select 与发送键**统一 36px（`h-9`）**，同一行不出现三种高度。文案值都在 `components/ai/composerStyles.ts`，两端只引用、不各写一份。
+
+**宽度由宿主决定，不由 composer 决定**：首页列宽 800px；编辑器对话列 700px 且左右各留一档 padding（`px-4 md:px-6`），与上方消息列表同宽同对齐。
+
+**不透传 attrs 的组件，外部 `class` 会被静默丢弃**（2026-11-24 实际踩到，全仓修了 15 个）。两类中招：
+1. **多根模板**（如 `form` + `ConfirmDialog`）——Vue 不知道该合并到哪个根，直接丢弃；
+2. **根只有 `<Teleport>`**（各类弹窗）——attrs 停传送门上，到不了可见面板。
+
+表现都一样：不报错、不警告，只是**样式没生效**（输入框撑满父容器、贴死两边；传 `class="mt-5"` 毫无反应）。修法：组件内 `defineOptions({ inheritAttrs: false })` + 在语义根（面板层，不是遮罩）上 `v-bind="$attrs"`；有 `v-if`/`v-else` 多分支的要**逐分支绑定**。给组件传 `class`/`style`/`id` 前，先确认它有没有 `inheritAttrs: false`。
+
+
+另：`w-[calc(100%-2rem)]` 这种减号不带空格的写法**是有效的**——Tailwind 编译（Lightning CSS）会把任意值规范化成 `calc(100% - 2rem)`。排查宽度异常时不要往这上面归因，先看元素上的 `className` 里到底有没有那条类。写法上仍推荐 `w-[calc(100%_-_2rem)]`（下划线代替空格），成文即合法，不依赖构建链的隐式修补。
+
 **Button 的圆角覆盖坑**：`Button.vue` 基础类已含 `rounded-lg`，调用处**不要再写 `rounded-md`**（Tailwind 同组工具类按尺度排序，基础类会盖掉它，代码与实际渲染不一致）。需要更圆时写 `rounded-xl`（大于基础档才生效），需要更方时只能改基础类。
 
 **阴影阶梯**：默认**无阴影**（静态卡片用 `ring-1 ring-zinc-200/70` 或 `border-zinc-200` 表达边界）；浮层一律用 `shadow-wb-popup`（下拉、弹窗、抽屉、toast），不再出现 `shadow-xl` / `shadow-2xl`。聚焦态用 `ring-1 ring-zinc-300`、`focus-within:ring-2 ring-zinc-900/[0.04]` 表达，不用彩色 glow。编辑器画布内允许自绘 rgba 阴影，业务页面不允许。
@@ -320,7 +333,7 @@ macOS 落 San Francisco + 苹方；**Windows 用 CDP `CSS.getPlatformFontsForNod
 | Switch | `ui/switch/Switch.vue` | 布尔开关 |
 | DateTimePicker | `ui/DateTimePicker.vue` | 日期时间选择 |
 
-**规则**：表单控件高度统一 `h-10`（ghost 档 `h-8` 仅用于工具栏内嵌；设置页这类密集表单允许整页降到 `h-9`，但必须与同页 `Button size="sm"` 对齐）；圆角统一 `rounded-lg`（8px 控件档）——原先 Input/Textarea 用 `rounded-xl`（12px）与 Button 的 8px 并排时不协调，已收敛；表单标签一律配 `Label` 或带 `for` 的 `<label>`；错误文案 `text-sm text-red-600 mt-1.5`；表单纵向间距 `space-y-4` 起步。多行文本一律用 `Textarea` 组件；仅在透明底内嵌、等宽小字配置、需用户拖拽高度或复杂键盘交互（如 AI 对话输入框）时才手写 `<textarea>`，此时仍须遵循上面的边框与圆角规范，不要再用 `rounded-xl`。
+**规则**：表单控件高度统一 `h-10`（ghost 档 `h-8` 仅用于工具栏内嵌，composer 工具条内为 `h-9` 以对齐 36px 圆钮；设置页这类密集表单允许整页降到 `h-9`，但必须与同页 `Button size="sm"` 对齐）；圆角统一 `rounded-lg`（8px 控件档）——原先 Input/Textarea 用 `rounded-xl`（12px）与 Button 的 8px 并排时不协调，已收敛；表单标签一律配 `Label` 或带 `for` 的 `<label>`；错误文案 `text-sm text-red-600 mt-1.5`；表单纵向间距 `space-y-4` 起步。多行文本一律用 `Textarea` 组件；仅在透明底内嵌、等宽小字配置、需用户拖拽高度或复杂键盘交互（如 AI 对话输入框）时才手写 `<textarea>`，此时仍须遵循上面的边框与圆角规范，不要再用 `rounded-xl`。
 
 ### 3.4 展示组件
 

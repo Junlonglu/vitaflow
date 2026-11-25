@@ -30,6 +30,7 @@ npm test          # vitest 单元测试
 - 编辑器使用 VueUse 防抖自动保存；右侧 A4 预览通过后端 `preview-html` 接口获取 HTML，PDF 导出前会先保存当前简历。
 - 路由守卫在 `src/router/index.ts`：未登录跳 `/login`，管理员页额外校验 `requiresAdmin`（后端仍会再校验一次，前端隐藏不是安全边界）。
 - 样式只用 Tailwind 原子类，色彩、圆角、弹窗结构等规则见 [`../docs/design-system.md`](../docs/design-system.md)。
+- 组件模板有**多个根节点**、或根只有 `<Teleport>`（各类弹窗）时，外部传的 `class` / `style` / `id` 会被 Vue **静默丢弃**——不报错、界面也没变化，极易被误判成样式优先级问题。这类组件必须 `defineOptions({ inheritAttrs: false })` 并在语义根（面板层，不是遮罩）上 `v-bind="$attrs"`；有 `v-if` / `v-else` 多分支的要逐分支绑定。新增组件前先确认自己属于哪一类。
 
 ## 目录约定
 

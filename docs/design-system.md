@@ -107,7 +107,7 @@ macOS 落 San Francisco + 苹方；**Windows 用 CDP `CSS.getPlatformFontsForNod
 
 **宽度由宿主决定，不由 composer 决定**：首页列宽 800px；编辑器对话列 700px 且左右各留一档 padding（`px-4 md:px-6`），与上方消息列表同宽同对齐。
 
-**不透传 attrs 的组件，外部 `class` 会被静默丢弃**（2026-11-24 实际踩到，全仓修了 15 个）。两类中招：
+**不透传 attrs 的组件，外部 `class` 会被静默丢弃**（2026-11-24 实际踩到，全仓逐个修正 14 个）。两类中招：
 1. **多根模板**（如 `form` + `ConfirmDialog`）——Vue 不知道该合并到哪个根，直接丢弃；
 2. **根只有 `<Teleport>`**（各类弹窗）——attrs 停传送门上，到不了可见面板。
 

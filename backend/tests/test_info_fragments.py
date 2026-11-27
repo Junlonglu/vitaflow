@@ -267,6 +267,95 @@ class FragmentServiceTest(unittest.TestCase):
         self.assertEqual(added, [])
         self.assertNotIn("work", merged["layout"]["hidden_sections"])
 
+    def test_basic_fingerprint_uses_identity_not_target_role(self):
+        """同一个人换求职方向不应变成两条个人信息。
+
+        历史数据里 id 52/62 除 title 外完全一致，就是因为指纹把整条 payload
+        算进去了；这里锁住「身份相同 → 合并」。
+        """
+        first, created = svc.create_fragment(
+            self.db,
+            1,
+            "basic",
+            {"name": "卢俊隆", "email": "lujunlong631@163.com", "phone": "13727784150", "title": "多模态算法"},
+        )
+        self.assertTrue(created)
+        second, created_again = svc.create_fragment(
+            self.db,
+            1,
+            "basic",
+            {
+                "name": "卢俊隆",
+                "email": "lujunlong631@163.com",
+                "phone": "13727784150",
+                "title": "Agent开发工程师",
+                "location": "广州",
+            },
+        )
+        self.assertFalse(created_again)
+        self.assertEqual(second.id, first.id)
+        rows = svc.list_fragments(self.db, 1, kind="basic", page_size=50)[0]
+        self.assertEqual(len(rows), 1)
+        # 条目标题就是姓名；求职方向留在 payload 里，已有内容不被覆盖，新字段补进来
+        self.assertEqual(rows[0].title, "卢俊隆")
+        self.assertEqual(rows[0].payload.get("title"), "多模态算法")
+        self.assertEqual(rows[0].payload.get("location"), "广州")
+
+    def test_first_basic_is_default_and_can_be_switched(self):
+        first, _ = svc.create_fragment(self.db, 1, "basic", {"name": "张三", "email": "a@b.com"})
+        self.assertTrue(first.is_default)
+
+        other, _ = svc.create_fragment(self.db, 1, "basic", {"name": "Zhang San", "email": "c@d.com"})
+        self.assertFalse(other.is_default, "同一用户只应有一条默认")
+        self.assertEqual(svc.resolve_default_basic(self.db, 1).id, first.id)
+
+        svc.set_default_fragment(self.db, 1, other.id)
+        rows = {row.id: row for row in svc.list_fragments(self.db, 1, kind="basic", page_size=50)[0]}
+        self.assertFalse(rows[first.id].is_default)
+        self.assertTrue(rows[other.id].is_default)
+        self.assertEqual(svc.resolve_default_basic(self.db, 1).id, other.id)
+
+        # 删掉默认条目后自动接替，不能让「自动补基本信息」静默失效
+        svc.delete_fragment(self.db, 1, other.id)
+        self.assertEqual(svc.resolve_default_basic(self.db, 1).id, first.id)
+
+    def test_only_basic_can_be_default(self):
+        project, _ = svc.create_fragment(self.db, 1, "project", {"name": "简历系统"})
+        with self.assertRaises(Exception):
+            svc.set_default_fragment(self.db, 1, project.id)
+
+    def test_basics_import_replaces_template_but_not_real_values(self):
+        from app.schemas.resume import default_resume_data
+
+        reader, _ = svc.create_fragment(
+            self.db, 1, "basic", {"name": "卢俊隆", "email": "lujunlong631@163.com", "location": "广州"}
+        )
+
+        template_resume = _resume(self.db)
+        template_resume.resume_data = normalize_resume_document(default_resume_data())
+        merged, added = svc.merge_fragments_into_resume(template_resume.resume_data, [reader])
+        self.assertEqual(len(added), 1)
+        self.assertEqual(merged["basics"]["name"], "卢俊隆", "模板占位值要被真实信息替换")
+        self.assertEqual(merged["basics"]["email"], "lujunlong631@163.com")
+        self.assertEqual(merged["basics"]["location"], "广州")
+        # 条目没提供的字段保持原样，不会被清空
+        self.assertEqual(merged["basics"]["highest_degree"], "本科")
+
+        real_resume = _resume(self.db, resume_id=2)
+        real_resume.resume_data["basics"].update(
+            {"name": "张三", "email": "zhangsan@real.com", "phone": "13911112222", "location": "北京"}
+        )
+        kept, added_kept = svc.merge_fragments_into_resume(real_resume.resume_data, [reader])
+        self.assertEqual(added_kept, [])
+        self.assertEqual(kept["basics"]["name"], "张三")
+        self.assertEqual(kept["basics"]["location"], "北京")
+
+        # 显式关掉覆盖时保持旧行为：只填空白
+        no_overwrite, _ = svc.merge_fragments_into_resume(
+            template_resume.resume_data, [reader], overwrite_placeholders=False
+        )
+        self.assertEqual(no_overwrite["basics"]["name"], "Elliot")
+
     def test_search_for_agent_ranks_and_falls_back(self):
         svc.create_fragment(self.db, 1, "project", {"name": "VitaFlow 简历系统", "description": "AI 简历"})
         svc.create_fragment(self.db, 1, "project", {"name": "日志平台", "description": "监控"})
@@ -347,6 +436,50 @@ class FragmentApiTest(unittest.TestCase):
         self.assertEqual(self.client.put(f"/api/info-fragments/{fragment_id}", json={"title": "越权"}).status_code, 404)
         self.user = SimpleNamespace(id=1, email="me@example.com", role="user")
         self.assertEqual(self.client.delete(f"/api/info-fragments/{fragment_id}").json()["code"], 200)
+
+    def test_default_basic_endpoint(self):
+        first = self.client.post(
+            "/api/info-fragments", json={"kind": "basic", "payload": {"name": "张三", "email": "a@b.com"}}
+        ).json()["data"]
+        self.assertTrue(first["is_default"], "第一条个人信息自动成为默认")
+
+        second = self.client.post(
+            "/api/info-fragments", json={"kind": "basic", "payload": {"name": "Zhang San", "email": "c@d.com"}}
+        ).json()["data"]
+        self.assertFalse(second["is_default"])
+
+        switched = self.client.post(f"/api/info-fragments/{second['id']}/default").json()
+        self.assertEqual(switched["code"], 200)
+        self.assertTrue(switched["data"]["is_default"])
+
+        items = self.client.get("/api/info-fragments?kind=basic").json()["data"]["items"]
+        flags = {item["id"]: item["is_default"] for item in items}
+        self.assertTrue(flags[second["id"]])
+        self.assertFalse(flags[first["id"]])
+
+        project = self.client.post(
+            "/api/info-fragments", json={"kind": "project", "payload": {"name": "简历系统"}}
+        ).json()["data"]
+        rejected = self.client.post(f"/api/info-fragments/{project['id']}/default").json()
+        self.assertNotEqual(rejected["code"], 200)
+
+    def test_apply_overwrites_template_basics(self):
+        from app.schemas.resume import default_resume_data
+
+        resume = _resume(self.db)
+        resume.resume_data = normalize_resume_document(default_resume_data())
+        self.db.commit()
+
+        reader = self.client.post(
+            "/api/info-fragments",
+            json={"kind": "basic", "payload": {"name": "卢俊隆", "email": "lujunlong631@163.com"}},
+        ).json()["data"]
+        applied = self.client.post(
+            "/api/info-fragments/apply",
+            json={"resume_id": resume.id, "fragment_ids": [reader["id"]]},
+        ).json()
+        self.assertEqual(applied["code"], 200)
+        self.assertEqual(applied["data"]["resume_data"]["basics"]["name"], "卢俊隆")
 
     def test_invalid_payload_is_rejected(self):
         resp = self.client.post("/api/info-fragments", json={"kind": "project", "payload": {"role": "开发"}})

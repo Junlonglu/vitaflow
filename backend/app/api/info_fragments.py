@@ -116,6 +116,17 @@ def update_fragment(
     return success(svc.fragment_out(row), "信息已更新")
 
 
+@router.post("/{fragment_id}/default")
+def set_default_fragment(
+    fragment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """把一条个人信息设为默认（自动补基本信息时取这一条）。"""
+    row = svc.set_default_fragment(db, current_user.id, fragment_id)
+    return success(svc.fragment_out(row), "已设为默认个人信息")
+
+
 @router.delete("/{fragment_id}")
 def delete_fragment(
     fragment_id: int,
@@ -150,7 +161,13 @@ def apply_to_resume(
     或逐条确认的改写走对话里的待确认修改（import_info_fragments 工具）。
     """
     resume = resume_service.get_resume(db, current_user.id, payload.resume_id)
-    merged, added, rows = svc.import_fragments(db, current_user.id, resume, payload.fragment_ids)
+    merged, added, rows = svc.import_fragments(
+        db,
+        current_user.id,
+        resume,
+        payload.fragment_ids,
+        overwrite_placeholders=payload.overwrite_placeholders,
+    )
     updated = resume_service.update_resume(
         db,
         current_user.id,

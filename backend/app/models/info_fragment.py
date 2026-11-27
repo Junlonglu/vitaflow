@@ -25,6 +25,7 @@ class InfoFragment(Base):
     __table_args__ = (
         Index("ix_info_fragments_user_kind", "user_id", "kind"),
         Index("ix_info_fragments_user_updated", "user_id", "update_time"),
+        Index("ix_info_fragments_user_default", "user_id", "kind", "is_default"),
     )
 
     id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
@@ -43,6 +44,9 @@ class InfoFragment(Base):
     # manual（手填）/ chat（对话生成）/ resume（从简历提取）/ import（批量导入）
     source: Mapped[str] = mapped_column(String(20), default="manual")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # 默认条目：目前只有 basic 用。一个用户同一分类只应有一条，服务层负责唯一性；
+    # Agent 自动补基本信息时不猜「哪条是我」，直接取这条。
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     usage_count: Mapped[int] = mapped_column(Integer, default=0)
     last_used_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     create_time: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

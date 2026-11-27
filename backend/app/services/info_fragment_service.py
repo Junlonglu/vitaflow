@@ -17,7 +17,7 @@ import re
 from datetime import datetime
 from typing import Any, Iterable, Optional
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppException
@@ -34,6 +34,7 @@ from app.core.resume_schema import (
 )
 from app.models.info_fragment import InfoFragment
 from app.models.resume import Resume
+from app.services.resume_placeholder import is_blank, is_placeholder_value
 
 MAX_FRAGMENTS_PER_USER = 500
 MAX_BULK_CREATE = 30
@@ -98,7 +99,35 @@ def _search_text(kind: str, title: str, summary: str, tags: list[str], payload: 
 
 
 def _fingerprint(kind: str, payload: dict[str, Any]) -> str:
+    if kind == "basic":
+        # 个人信息按「身份」判重，不按整条 payload：title / status / expected_salary
+        # 是求职意向，换方向就会变，混进指纹会让同一个人变成两条（历史数据里已经出现）。
+        identity = _basic_identity_key(payload)
+        if identity:
+            return identity
     material = json.dumps({"kind": kind, "payload": payload}, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha1(material.encode("utf-8")).hexdigest()
+
+
+def _normalize_identity(value: Any) -> str:
+    text = re.sub(r"[\s\-()（）]", "", str(value or ""))
+    return text.strip().lower()
+
+
+def _basic_identity_key(payload: dict[str, Any]) -> str:
+    """身份指纹：姓名 + 首要联系方式（邮箱优先，其次手机号）。
+
+    用「邮箱优先」而不是手机号：换号比换邮箱常见，按手机号判重会把同一个人
+    拆成两条；两者都没有时退回姓名，姓名也没有就不做身份判重。
+    """
+    payload = payload if isinstance(payload, dict) else {}
+    name = _normalize_identity(payload.get("name"))
+    contact = _normalize_identity(payload.get("email")) or _normalize_identity(payload.get("phone"))
+    if not name and not contact:
+        return ""
+    material = json.dumps(
+        {"kind": "basic", "name": name, "contact": contact}, ensure_ascii=False, sort_keys=True
+    )
     return hashlib.sha1(material.encode("utf-8")).hexdigest()
 
 
@@ -145,6 +174,7 @@ def fragment_out(row: InfoFragment) -> dict[str, Any]:
         "tags": row.tags or [],
         "source": row.source,
         "enabled": bool(row.enabled),
+        "is_default": bool(row.is_default),
         "usage_count": row.usage_count or 0,
         "last_used_time": row.last_used_time,
         "update_time": row.update_time,
@@ -156,6 +186,49 @@ def _user_row(db: Session, user_id: int, fragment_id: int) -> InfoFragment:
     row = db.get(InfoFragment, fragment_id)
     if not row or row.user_id != user_id:
         raise AppException("信息不存在", 404)
+    return row
+
+
+def resolve_default_basic(db: Session, user_id: int) -> InfoFragment | None:
+    """取「我」的那一条个人信息：优先显式默认，其次用得最多的那条。
+
+    没有默认时不返回 None 就完事——历史数据（迁移前写入）没有标记，回退到
+    usage_count 能保证老用户也能被自动补齐。
+    """
+    base = [InfoFragment.user_id == user_id, InfoFragment.kind == "basic", InfoFragment.enabled.is_(True)]
+    row = db.scalar(
+        select(InfoFragment)
+        .where(*base, InfoFragment.is_default.is_(True))
+        .order_by(InfoFragment.update_time.desc(), InfoFragment.id.desc())
+        .limit(1)
+    )
+    if row is not None:
+        return row
+    return db.scalar(
+        select(InfoFragment)
+        .where(*base)
+        .order_by(InfoFragment.usage_count.desc(), InfoFragment.update_time.desc(), InfoFragment.id.desc())
+        .limit(1)
+    )
+
+
+def set_default_fragment(db: Session, user_id: int, fragment_id: int) -> InfoFragment:
+    """把一条个人信息设为默认；同用户其它默认条目一起清掉。"""
+    row = _user_row(db, user_id, fragment_id)
+    if row.kind != "basic":
+        raise AppException("只有个人信息可以设为默认", 400)
+    db.execute(
+        update(InfoFragment)
+        .where(InfoFragment.user_id == user_id, InfoFragment.is_default.is_(True))
+        .values(is_default=False)
+        .execution_options(synchronize_session=False)
+    )
+    row.is_default = True
+    if not row.enabled:
+        row.enabled = True
+    db.add(row)
+    db.commit()
+    db.refresh(row)
     return row
 
 
@@ -230,6 +303,26 @@ def kind_options() -> list[dict[str, Any]]:
     ]
 
 
+def _find_same_identity(db: Session, user_id: int, payload: dict[str, Any]) -> InfoFragment | None:
+    """按身份找已有的 basic 条目。
+
+    历史行的指纹是「整条 payload」，与新的身份指纹对不上，所以这里补一次
+    身份比对；只扫 basic（每人个位数），不做全表匹配。
+    """
+    key = _basic_identity_key(payload)
+    if not key:
+        return None
+    rows = db.scalars(
+        select(InfoFragment)
+        .where(InfoFragment.user_id == user_id, InfoFragment.kind == "basic")
+        .order_by(InfoFragment.update_time.desc())
+    )
+    for row in rows:
+        if _basic_identity_key(row.payload or {}) == key:
+            return row
+    return None
+
+
 def _upsert(
     db: Session,
     user_id: int,
@@ -245,12 +338,30 @@ def _upsert(
                 InfoFragment.fingerprint == values["fingerprint"],
             )
         )
+        if existing is None and values["kind"] == "basic":
+            existing = _find_same_identity(db, user_id, values["payload"])
     if existing is not None:
         # 同内容已存在：只在标题/标签有新增时补上去，不改用户后来编辑过的内容
         changed = False
         if values["title"] and values["title"] != existing.title and values["title"] not in (existing.title or ""):
             existing.title = values["title"]
             changed = True
+        if existing.kind == "basic":
+            # 身份相同但字段有新值（换手机、补城市）：只填空，不覆盖用户已存内容。
+            merged_payload = dict(existing.payload or {})
+            filled = False
+            for key, value in (values["payload"] or {}).items():
+                if is_blank(merged_payload.get(key)) and not is_blank(value):
+                    merged_payload[key] = value
+                    filled = True
+            if filled:
+                existing.payload = merged_payload
+                existing.summary = fragment_summary(existing.kind, merged_payload)
+                changed = True
+            # 指纹收敛到身份键，下次直接走快路径。
+            if values["fingerprint"] != existing.fingerprint:
+                existing.fingerprint = values["fingerprint"]
+                changed = True
         merged_tags = _clean_tags([*(existing.tags or []), *values["tags"]])
         if merged_tags != (existing.tags or []):
             existing.tags = merged_tags
@@ -268,6 +379,9 @@ def _upsert(
     if total >= MAX_FRAGMENTS_PER_USER:
         raise AppException(f"信息库最多保存 {MAX_FRAGMENTS_PER_USER} 条，请先清理不需要的信息", 400)
     row = InfoFragment(user_id=user_id, source=source, enabled=True, usage_count=0, **values)
+    # 第一条个人信息自动成为默认：新用户不必先去哪个页面点一次「设为默认」。
+    if values["kind"] == "basic" and resolve_default_basic(db, user_id) is None:
+        row.is_default = True
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -317,8 +431,17 @@ def update_fragment(
 
 def delete_fragment(db: Session, user_id: int, fragment_id: int) -> None:
     row = _user_row(db, user_id, fragment_id)
+    was_default = bool(row.is_default) and row.kind == "basic"
     db.delete(row)
     db.commit()
+    if not was_default:
+        return
+    # 默认条目被删掉后自动接替，否则「自动补基本信息」会静默失效，用户看不出原因。
+    next_row = resolve_default_basic(db, user_id)
+    if next_row is not None:
+        next_row.is_default = True
+        db.add(next_row)
+        db.commit()
 
 
 def bulk_create(
@@ -508,8 +631,15 @@ def _reveal_section(data: dict[str, Any], key: str) -> None:
 def merge_fragments_into_resume(
     current_data: dict[str, Any] | None,
     rows: list[InfoFragment],
+    *,
+    overwrite_placeholders: bool = True,
 ) -> tuple[dict[str, Any], list[str]]:
-    """把原子信息追加到对应模块；返回 ``(merged_data, added_labels)``。"""
+    """把原子信息追加到对应模块；返回 ``(merged_data, added_labels)``。
+
+    basics 过去只填空白字段，模板自带的示例值（Elliot / zhangsan@example.com）
+    会把导入挡在外面。``overwrite_placeholders`` 打开时，模板占位值也算「可写」，
+    用户真实填过的内容依然不动（判断集中在 resume_placeholder）。
+    """
     import copy
 
     data = copy.deepcopy(current_data or {})
@@ -526,9 +656,15 @@ def merge_fragments_into_resume(
             basics = data.setdefault("basics", {})
             changed = False
             for key, value in payload.items():
-                if key in SECTIONS["basics"].field_keys and not str(basics.get(key) or "").strip():
-                    basics[key] = value
-                    changed = True
+                if key not in SECTIONS["basics"].field_keys:
+                    continue
+                current = basics.get(key)
+                if not is_blank(current) and not (overwrite_placeholders and is_placeholder_value(key, current)):
+                    continue
+                if str(current or "").strip() == str(value or "").strip():
+                    continue
+                basics[key] = value
+                changed = True
             if changed:
                 added.append(f"基本信息（{row.title}）")
             continue
@@ -566,6 +702,8 @@ def import_fragments(
     resume: Resume,
     fragment_ids: list[int],
     base_data: dict[str, Any] | None = None,
+    *,
+    overwrite_placeholders: bool = True,
 ) -> tuple[dict[str, Any], list[str], list[InfoFragment]]:
     """把信息库条目并入简历快照。
 
@@ -589,7 +727,9 @@ def import_fragments(
     for fragment_id in ids:
         rows.append(_user_row(db, user_id, fragment_id))
 
-    merged, added = merge_fragments_into_resume(base_data or resume.resume_data, rows)
+    merged, added = merge_fragments_into_resume(
+        base_data or resume.resume_data, rows, overwrite_placeholders=overwrite_placeholders
+    )
     # 「已存在」不是错误：即便没有新增条目，也要把目标模块从 hidden_sections 里
     # 放出来并写回，否则用户看到的是「导入了但简历里找不到」。是否真的新增由
     # added 告知调用方，前端据此给出不同提示。
@@ -626,7 +766,9 @@ def search_for_agent(
             db.scalars(
                 select(InfoFragment)
                 .where(*filters)
-                .order_by(InfoFragment.usage_count.desc(), InfoFragment.update_time.desc())
+                .order_by(
+                    InfoFragment.is_default.desc(), InfoFragment.usage_count.desc(), InfoFragment.update_time.desc()
+                )
                 .limit(safe_limit)
             )
         )
@@ -643,12 +785,14 @@ def search_for_agent(
     )
     terms = [term for term in re.split(r"[\s，,、/]+", text) if term]
 
-    def score(row: InfoFragment) -> tuple[int, int, float]:
+    def score(row: InfoFragment) -> tuple[int, int, int, float]:
         haystack = row.search_text or ""
         title = row.title or ""
         hits = sum(1 for term in terms if term and term in haystack)
         title_hits = sum(1 for term in terms if term and term in title)
-        return (title_hits, hits, row.usage_count or 0)
+        # 默认条目排在同分之前：问「我的邮箱是什么」时，别让某份旧简历里的
+        # 重复个人信息抢在前面。
+        return (1 if row.is_default else 0, title_hits, hits, row.usage_count or 0)
 
     candidates.sort(key=score, reverse=True)
     if candidates:
@@ -659,7 +803,9 @@ def search_for_agent(
         db.scalars(
             select(InfoFragment)
             .where(*filters)
-            .order_by(InfoFragment.usage_count.desc(), InfoFragment.update_time.desc())
+            .order_by(
+                InfoFragment.is_default.desc(), InfoFragment.usage_count.desc(), InfoFragment.update_time.desc()
+            )
             .limit(min(3, safe_limit))
         )
     )

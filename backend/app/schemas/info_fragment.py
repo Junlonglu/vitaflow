@@ -32,6 +32,9 @@ class InfoFragmentExtractIn(BaseModel):
 class InfoFragmentApplyIn(BaseModel):
     resume_id: int
     fragment_ids: list[int] = Field(default_factory=list)
+    # 导入基本信息时是否覆盖模板示例值（Elliot / zhangsan@example.com）。
+    # 默认打开：用户点「导入」就是明确授权，占位值挡着才是不可见的坑。
+    overwrite_placeholders: bool = True
 
 
 class InfoFragmentOut(BaseModel):
@@ -44,6 +47,7 @@ class InfoFragmentOut(BaseModel):
     tags: list[str]
     source: str
     enabled: bool
+    is_default: bool = False
     usage_count: int
     last_used_time: Optional[datetime] = None
     update_time: Optional[datetime] = None

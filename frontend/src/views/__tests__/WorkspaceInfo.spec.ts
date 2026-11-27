@@ -38,6 +38,7 @@ const api = vi.hoisted(() => ({
   deleteInfoFragmentApi: vi.fn(),
   extractInfoFragmentsApi: vi.fn(),
   applyInfoFragmentsApi: vi.fn(),
+  setDefaultInfoFragmentApi: vi.fn(),
 }))
 const resumeApi = vi.hoisted(() => ({ listResumesApi: vi.fn() }))
 const avatarApi = vi.hoisted(() => ({ listAvatarsApi: vi.fn(), deleteAvatarApi: vi.fn() }))
@@ -64,6 +65,7 @@ const fragment: InfoFragment = {
   tags: ["简历", "AI"],
   source: "manual",
   enabled: true,
+  is_default: false,
   usage_count: 3,
   last_used_time: null,
   update_time: new Date().toISOString(),
@@ -133,6 +135,35 @@ describe("WorkspaceInfo", () => {
       page: 1,
       page_size: 24,
     })
+  })
+
+  it("marks the default personal info and lets the user switch it", async () => {
+    const defaultBasic: InfoFragment = {
+      ...fragment,
+      id: 62,
+      kind: "basic",
+      kind_label: "个人信息",
+      title: "卢俊隆",
+      payload: { name: "卢俊隆", email: "lujunlong631@163.com" },
+      is_default: true,
+    }
+    const otherBasic: InfoFragment = {
+      ...defaultBasic,
+      id: 63,
+      title: "卢俊隆（英文）",
+      is_default: false,
+    }
+    api.setDefaultInfoFragmentApi.mockResolvedValue({ ...otherBasic, is_default: true })
+    const wrapper = await mountPage([defaultBasic, otherBasic])
+
+    expect(wrapper.text()).toContain("默认")
+    const switches = wrapper.findAll('button[title="设为默认个人信息"]')
+    expect(switches).toHaveLength(1)
+    await switches[0].trigger("click")
+    await flushPromises()
+
+    expect(api.setDefaultInfoFragmentApi).toHaveBeenCalledWith(63)
+    expect(toast.showGlobalToast).toHaveBeenCalledWith("已设为默认个人信息")
   })
 
   it("waits for kind metadata before cards can be opened", async () => {

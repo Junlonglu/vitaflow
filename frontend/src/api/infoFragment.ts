@@ -29,6 +29,8 @@ export interface InfoFragment {
   tags: string[]
   source: "manual" | "chat" | "resume" | "import" | string
   enabled: boolean
+  /** 默认个人信息：Agent 自动补基本信息时取这一条（只有 basic 用）。 */
+  is_default: boolean
   usage_count: number
   last_used_time: string | null
   update_time: string | null
@@ -80,6 +82,10 @@ export const updateInfoFragmentApi = (id: number, data: Partial<InfoFragmentInpu
 
 export const deleteInfoFragmentApi = (id: number) =>
   request.delete(`/info-fragments/${id}`)
+
+/** 设为默认个人信息：同一用户只有一条，后端会把其它默认清掉。 */
+export const setDefaultInfoFragmentApi = (id: number) =>
+  request.post<InfoFragment, InfoFragment>(`/info-fragments/${id}/default`)
 
 export const extractInfoFragmentsApi = (resumeId: number) =>
   request.post<{ created: number; updated: number; skipped: number }, { created: number; updated: number; skipped: number }>(

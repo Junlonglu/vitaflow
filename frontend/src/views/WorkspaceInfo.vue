@@ -11,6 +11,7 @@ import {
   Plus,
   Search,
   Sparkles,
+  Star,
   Trash2,
   Upload,
   X,
@@ -32,6 +33,7 @@ import {
   extractInfoFragmentsApi,
   getInfoFragmentMetaApi,
   listInfoFragmentsApi,
+  setDefaultInfoFragmentApi,
   updateInfoFragmentApi,
   type InfoFragment,
   type InfoFragmentKind,
@@ -335,6 +337,27 @@ async function confirmDelete() {
 }
 
 // ---------------------------------------------------------------------------
+// 默认个人信息
+// ---------------------------------------------------------------------------
+
+/** 同一个人可能有多条个人信息（不同求职方向），默认那条是 Agent 自动补齐时用的。 */
+const defaultingId = ref<number | null>(null)
+
+async function setDefaultFragment(item: InfoFragment) {
+  if (defaultingId.value === item.id || item.is_default) return
+  defaultingId.value = item.id
+  try {
+    await setDefaultInfoFragmentApi(item.id)
+    showGlobalToast("已设为默认个人信息")
+    await reloadList()
+  } catch (error) {
+    showGlobalToast(errorMessage(error, "设置失败"), "error")
+  } finally {
+    defaultingId.value = null
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 从简历提取 / 导入简历
 // ---------------------------------------------------------------------------
 
@@ -623,8 +646,28 @@ onUnmounted(() => window.clearTimeout(searchTimer))
             class="group flex flex-col rounded-xl border border-zinc-200/70 bg-white p-4 transition-colors hover:border-zinc-300"
           >
             <div class="flex items-start justify-between gap-2">
-              <span class="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[11px] font-medium text-zinc-500">{{ kindLabel(item.kind) }}</span>
+              <div class="flex items-center gap-1.5">
+                <span class="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[11px] font-medium text-zinc-500">{{ kindLabel(item.kind) }}</span>
+                <span
+                  v-if="item.is_default"
+                  class="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-600"
+                  title="AI 自动补基本信息时使用这一条"
+                >
+                  <Star class="h-3 w-3" />默认
+                </span>
+              </div>
               <div class="touch-always-visible flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                <button
+                  v-if="item.kind === 'basic' && !item.is_default"
+                  type="button"
+                  class="grid h-7 w-7 place-items-center rounded-md text-zinc-400 transition-colors hover:bg-amber-50 hover:text-amber-600 disabled:opacity-40"
+                  title="设为默认个人信息"
+                  :disabled="defaultingId === item.id"
+                  @click="setDefaultFragment(item)"
+                >
+                  <LoaderCircle v-if="defaultingId === item.id" class="h-3.5 w-3.5 animate-spin" />
+                  <Star v-else class="h-3.5 w-3.5" />
+                </button>
                 <button
                   type="button"
                   class="grid h-7 w-7 place-items-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-900"

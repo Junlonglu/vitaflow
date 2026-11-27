@@ -132,8 +132,8 @@ vitaflow/
 
 **信息库（原子信息）`info_fragments.py`**
 - 列表：`GET /info-fragments`（`kind` / `q` 关键词 / `tag` / `page` / `page_size`，返回 `items` + `total` + 各分类 `counts`）、`GET /info-fragments/meta`（分类定义、字段表、上限）
-- 写入：`POST /info-fragments`（指纹重复时合并）、`POST /info-fragments/bulk`（单次 30 条）、`PUT|DELETE /info-fragments/{id}`
-- 流转：`POST /info-fragments/extract`（从指定简历提取，已存在跳过）、`POST /info-fragments/apply`（把若干条导入简历，返回最新 `resume_data` 与新增条目名，重复导入返回 400）
+- 写入：`POST /info-fragments`（指纹重复时合并；`basic` 按**身份**判重＝姓名 + 邮箱/手机，换求职方向不会再多一条）、`POST /info-fragments/bulk`（单次 30 条）、`PUT|DELETE /info-fragments/{id}`、`POST /info-fragments/{id}/default`（设为默认个人信息，同用户只有一条）
+- 流转：`POST /info-fragments/extract`（从指定简历提取，已存在跳过）、`POST /info-fragments/apply`（把若干条导入简历，返回最新 `resume_data` 与新增条目名；`overwrite_placeholders=true` 时基本信息里的模板示例值（Elliot / zhangsan@example.com）会被真实信息替换，用户自己填的值不动）
 
 **头像库 `avatars.py`**
 - 不单独建表：复用 `uploaded_files` 的 `file_type="avatar"` 记录当库，上传即入库（`POST /files/upload-avatar`），账号级，每人最多 30 张。
@@ -296,6 +296,7 @@ createAgentSession({ cwd, sessionManager: SessionManager.inMemory(cwd), resource
   - `resume_fields`：`schema_compact()` 的一行一模块字段清单
   - `context_summary`：滚动压缩摘要（超出窗口的旧消息）
   - `history`：最近 N 条消息（N 取模型定价行 `context_messages`，夹在 1..40）
+  - `known_basics`：信息库默认 basic 条目的身份字段（姓名/邮箱/电话/城市/学历/链接），模板占位值会附 `basics_placeholder_fields`，用于自动补齐而不是反问用户
   - `pending_change`：是否存在待确认变更及其摘要
 - 长对话压缩：回合结束后 `asyncio.create_task` 起后台任务，调 `/v1/task` 的 `chat_summary` 增量合并旧消息进 `ai_chat_sessions.summary`。
 
@@ -348,7 +349,7 @@ createAgentSession({ cwd, sessionManager: SessionManager.inMemory(cwd), resource
 1. **工具不持数据库句柄**：Node 侧只做参数整理，增量 POST 给 Python。
 2. **Python 侧加载真实简历**：不信任 Node 传来的现状，避免「模型基于过期快照改」。
 3. **限定合并**：按 item id 合并，不允许新增未提供的条目 id，不允许越界改 section。
-4. **数值防幻觉校验**：`_unverified_numeric_claims()` 比对原文，模型新增的百分比/数量/QPS 等量化结果会被标记或剔除。
+4. **数值防幻觉校验**：`_unverified_numeric_claims()` 比对原文，模型新增的百分比/数量/QPS 等量化结果会被标记或剔除。证据源除了简历、本会话历史、用户这句话、联网检索，还包括信息库的默认个人信息（`known_basics`）——手机号/邮箱里的数字是既有事实，漏掉它会把整份 basics 更新当成编造拦下（真实故障：补手机号连拦 8 次）；不在任何证据里的号码仍然会被拦。
 5. **落成 pending**：结果写入 `ai_chat_messages.optimized_resume_data` + `action_status=pending`，用户点「应用」才执行合并写库；信息库条目的提案另存 `pending_info_fragments`，确认时先入库再写简历。
 
 ### 7.8 模型配置三分
@@ -422,7 +423,9 @@ Key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），`models.json` 里只�
 
 - **一条消息可同时承载两种待确认内容**（简历快照 + 信息条目），`action_status=pending` 只要任一存在；`resolve_chat_change` 的 apply 分支先用 `apply_proposals()` 入库并把 `pending_info_fragments` 置空，再合并 `optimized_resume_data`；只有信息提案时不会报「没有可写入的修改」。
 - **工具不直接写库**：`update-resume`（含 `from_library`）与 `info-fragments/propose` 在 Python 侧只做校验与组装，返回 `optimized_resume_data` / `pending_info_fragments`，落库发生在用户确认之后。
-- **幂等**：`fingerprint = sha1(kind + payload)`，重复保存合并标题与标签而不覆盖用户编辑；导入简历按条目内容判重，全部已存在时返回 400 而不是静默造重复条目。
+- **幂等**：`fingerprint = sha1(kind + payload)`；`basic` 例外，按身份（姓名 + 邮箱/手机）判重，否则换个求职方向就会多一条个人信息。重复保存合并标题与标签、只补空字段，不覆盖用户编辑；导入简历按条目内容判重，全部已存在时返回 400 而不是静默造重复条目。
+- **默认个人信息**：`info_fragments.is_default`（迁移 `0049_basic_default`），每个用户一条，`POST /info-fragments/{id}/default` 切换；没设置时回退「用得最多 → 最近更新」。删除默认条目会自动接替。
+- **注入 Agent**：`build_ai_service_context()` 把默认条目的身份字段（姓名/邮箱/电话/城市/学历/链接）作为 `known_basics` 下发，并给出 `basics_placeholder_fields` / `basics_looks_like_template`，让模型在模板占位值时先补 basics 而不是反问用户。检索接口的卡片也带 `is_default`。
 - **可见性**：`search_library` 只返回当前用户、`enabled` 的条目；所有端点都带 `user_id` 过滤，跨用户 `fragment_id` 按 404 处理。
 - **前端确认卡**：`ResumeAiChatPanel` 的待确认卡同时看 `optimized_resume_data` 与 `pending_info_fragments`：主按钮是「应用」（只有信息条目时叫「保存到信息库」），有简历改动时多一个次要的「逐条审阅」，另有「放弃」；两种状态的结果文案分开（修改已生效 / 信息已保存到信息库）。
 

@@ -118,7 +118,8 @@ layout: section_order, hidden_sections, section_titles, field_labels
   "payload": { "company": "字节跳动", "position": "后端开发", "highlights": ["QPS 提升 3 倍"] },
   "tags": ["后端", "实习"],
   "source": "manual",             // manual | resume | ai
-  "fingerprint": "…",             // sha1(kind + payload)，去重用
+  "fingerprint": "…",             // sha1(kind + payload)；basic 用「姓名 + 邮箱/手机」身份指纹
+  "is_default": false,            // 仅 basic：默认个人信息，每用户一条
   "usage_count": 2                // 被导入简历的次数
 }
 ```
@@ -127,7 +128,7 @@ layout: section_order, hidden_sections, section_titles, field_labels
 
 | kind | 标签 | 落到简历 | 标题字段 | preset_type |
 |---|---|---|---|---|
-| `basic` | 个人信息 | `basics`（只填空字段） | `name` | — |
+| `basic` | 个人信息 | `basics`（空格填、模板示例值可覆盖） | `name` | — |
 | `education` | 教育经历 | `education` | `school` | — |
 | `work` | 工作经历 | `work` | `company` | — |
 | `internship` | 实习经历 | `custom_sections` | `company` | `internships` |
@@ -148,7 +149,8 @@ layout: section_order, hidden_sections, section_titles, field_labels
 ### 6.2 校验与幂等
 
 - `normalize_fragment_payload(kind, payload)`：按分类字段表清洗；`basic` 只要求「至少一个非空字段」，其余分类要求标题字段非空且至少一个非空字段（「一等奖」本身就是完整的一条信息）。
-- 指纹 `sha1(kind + payload)`：同一用户重复保存同一条内容会**合并标题与标签**，不覆盖用户手动编辑过的字段。
+- 指纹 `sha1(kind + payload)`：同一用户重复保存同一条内容会**合并标题与标签**，不覆盖用户手动编辑过的字段。`basic` 例外，指纹只取身份字段（姓名 + 邮箱，缺邮箱用手机）——`title` / `status` / `expected_salary` 是求职意向，换方向就会变，算进指纹会让同一个人变成两条。
+- `basic` 落进简历时：空字段直接填；模板示例值（`Elliot` / `zhangsan@example.com` / `13800000000`，判定在 `services/resume_placeholder.py`）在 `overwrite_placeholders` 打开时被替换；用户自己填过的值不动。
 - 导入简历时忽略条目 `id` 判重：已存在的条目不会被重复追加，全部已存在时返回 400「这些信息在简历里已经存在」。
 - 所有查询与写入都带 `user_id`；`fragment_id` 指向他人数据时按 404 处理。
 - 上限：每用户 500 条、单次批量 30 条、一次提案 10 条、一次导入 20 条、标签 8 个。

@@ -25,12 +25,13 @@ export const DEFAULT_SYSTEM_PROMPT = `你是 ResumeFlow 的简历助手。你的
 写法类需求按技能来做：${skillCatalogLine()}。用自然语言提需求时，先 use_skill 取到对应做法再动手。
 
 # 事实底线
-公司、职位、时间、学校、奖项、数字，只能来自简历、用户这句话，或用户对 ask_user 的回答。
+公司、职位、时间、学校、奖项、数字，只能来自简历、用户这句话、用户对 ask_user 的回答，或信息库里用户确认过的条目。
 缺关键信息就问，一次不超过 3 个，问「有没有这回事」，不要问「要不要我帮你润色成更好看的」。
 用户没说过的技术、职责、规模、百分比一律不写；归属不确定的成果不写成个人成绩。
 
 # 信息库
 用户过去拆好的素材在信息库里。需要「他以前做过什么」时先 search_library，不要凭印象编。
+姓名、邮箱、电话、城市这类基本信息以下发的默认个人信息为准，不要反问用户；需要补齐时用 update_resume 写 basics。
 对话里出现值得留存的完整事实（新项目、新奖项、可复用的量化结果）时用 save_library 提交，用户确认后入库；同一条先检索再写，避免重复。
 
 # 回复
@@ -47,6 +48,16 @@ export interface AiServiceContext {
   };
   /** 每个模块的字段名清单（后端 core/resume_schema.py 生成，一行一个模块）。 */
   resume_fields?: string;
+  /** 信息库里的默认个人信息（后端 resolve_default_basic 产出），agent 不必再去检索。 */
+  known_basics?: {
+    fragment_id?: number;
+    title?: string;
+    payload?: Record<string, string>;
+  };
+  /** 当前简历 basics 里仍是模板示例的字段名。 */
+  basics_placeholder_fields?: string[];
+  /** 整份 basics 是否还是模板（姓名未改，或占位字段 ≥2 个）。 */
+  basics_looks_like_template?: boolean;
   /** 窗口外历史消息的滚动摘要（后台摘要压缩任务产出，可为空）。 */
   context_summary?: string;
   history?: Array<{ role?: string; content?: string }>;
@@ -93,6 +104,10 @@ export function buildContextPrompt(
   const skillBody = (options?.skillBody ?? "").trim();
   if (skillBody) parts.push(skillBody);
 
+  // 3.5 默认个人信息：信息库里的「我」。只在用户改默认条目时变，排在简历之前。
+  const knownBasics = knownBasicsSection(context);
+  if (knownBasics) parts.push(knownBasics);
+
   // 4. 以下每轮都可能变：简历 → 摘要 → 历史 → 待确认。
   const resume = context?.resume;
   const data = resume?.data;
@@ -120,6 +135,38 @@ export function buildContextPrompt(
   }
 
   return parts.join("\n\n");
+}
+
+/** 渲染「已知个人信息」一节；没有默认条目时返回空串。 */
+function knownBasicsSection(context?: AiServiceContext | null): string {
+  const payload = context?.known_basics?.payload;
+  if (!payload) return "";
+  const entries = Object.entries(payload).filter(([, value]) => typeof value === "string" && value.trim());
+  if (!entries.length) return "";
+
+  const labels: Record<string, string> = {
+    name: "姓名",
+    title: "求职方向",
+    status: "当前状态",
+    phone: "电话",
+    email: "邮箱",
+    location: "所在城市",
+    expected_salary: "期望薪资",
+    highest_degree: "最高学历",
+    website: "个人网站",
+    github: "代码仓库",
+  };
+  const lines = entries.map(([key, value]) => `- ${labels[key] ?? key}：${value}`);
+  const placeholders = (context?.basics_placeholder_fields ?? []).filter(Boolean).map((key) => labels[key] ?? key);
+  // 简历还带着模板示例值时，这一段是「先动手补齐」的指令，不是参考资料。
+  const note =
+    context?.basics_looks_like_template || placeholders.length
+      ? `当前简历的基本信息还是模板示例${placeholders.length ? `（${placeholders.join("、")}）` : ""}。` +
+        "动手改其它模块前，先用 update_resume 的 basics.fields 换成上面的真实值；" +
+        "求职方向、当前状态、期望薪资按岗位与简历现况决定，不要照抄。不要反问用户姓名、邮箱、电话。"
+      : "简历里的基本信息与它不一致时以简历为准，除非用户要求更新。";
+
+  return ["# 已知个人信息", "信息库里的默认个人信息，用户已确认过：", ...lines, "", note].join("\n");
 }
 
 /** 用户上传并启用的技能：FastAPI 每轮只下发启用中的、且已按总长度截断。 */

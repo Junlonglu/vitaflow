@@ -30,8 +30,9 @@ from app.services.ai_config_service import (
 from app.services.ai_service_client import ai_service_chat_events, ai_service_task_result
 from app.services.ai_task_service import create_ai_task, finish_ai_task
 from app.services.flow_points_service import precheck_flow_points
-from app.services.info_fragment_service import apply_proposals
+from app.services.info_fragment_service import apply_proposals, resolve_default_basic
 from app.services.resume_normalization import localize_ai_text, strip_thinking_text
+from app.services.resume_placeholder import basics_look_like_template, is_placeholder_value, placeholder_fields
 from app.services.resume_service import (
     VERSION_REASON_AI,
     VERSION_SOURCE_AI,
@@ -538,6 +539,8 @@ def build_ai_service_context(
         .order_by(AiChatMessage.id.desc())
     )
     resume_data = resume.resume_data or {}
+    basics = resume_data.get("basics") if isinstance(resume_data, dict) else None
+    known_basics = _known_basics_payload(db, user.id)
     return {
         "resume": {
             "id": resume.id,
@@ -550,12 +553,47 @@ def build_ai_service_context(
         "history": [{"role": item.role, "content": item.content} for item in history[-context_limit:]],
         # 字段清单（一行一个模块）由 core/resume_schema.py 单一维护，比整份契约省一个数量级。
         "resume_fields": schema_compact(),
+        # 默认个人信息随上下文注入：模板新建的简历 basics 是示例值，Agent 不能靠
+        # 「想起来去检索」才发现库里已有真实信息（实测 6 次检索没一次查 basic）。
+        "known_basics": known_basics,
+        "basics_placeholder_fields": placeholder_fields(basics if isinstance(basics, dict) else None),
+        "basics_looks_like_template": basics_look_like_template(basics if isinstance(basics, dict) else None),
         "pending_change": {
             "exists": pending_change is not None,
             "message_id": pending_change.id if pending_change else None,
             "summary": pending_change.suggestions if pending_change else [],
         },
     }
+
+
+def known_basics_for_user(db: Session, user_id: int) -> dict[str, Any]:
+    """默认个人信息的证据形态（身份字段）。校验守卫与提示词注入共用一份。"""
+    return _known_basics_payload(db, user_id) or {}
+
+
+def _known_basics_payload(db: Session, user_id: int) -> dict[str, Any] | None:
+    """默认个人信息的可下发形态：只给「身份」字段。
+
+    title / status / expected_salary 是求职意向，随岗位变，从信息库带进简历只会
+    让旧方向渗到新简历里；身份字段（姓名、联系方式、城市、学历）才是每份简历
+    都一样的部分。头像存的是对象名，不是可写进简历的事实，一并去掉。
+    """
+    row = resolve_default_basic(db, user_id)
+    if row is None:
+        return None
+    identity_keys = ("name", "phone", "email", "location", "highest_degree", "website", "github")
+    payload: dict[str, Any] = {}
+    for key in identity_keys:
+        value = (row.payload or {}).get(key)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        if is_placeholder_value(key, value):
+            # 信息库也可能是从模板简历提来的示例值，别把它当事实下发。
+            continue
+        payload[key] = value.strip()
+    if not payload:
+        return None
+    return {"fragment_id": row.id, "title": row.title, "payload": payload}
 
 
 def _context_message_limit(model_config) -> int:
@@ -1258,6 +1296,10 @@ def _unverified_numeric_claims(payload: dict[str, Any], optimized_data: dict[str
         # web_search 本回合检索到的结果（/service/tool/search-evidence 落的记忆）
         # 也算证据：行业/JD 类数字可以引用搜索到的公开事实
         "search_evidence": payload.get("search_evidence") or [],
+        # 信息库里的默认个人信息：手机号、邮箱里的数字是既有事实，不在这份
+        # 证据里就会被当成「未提供的量化结果」，整份 basics 更新被拦下
+        # （真实故障：补手机号连续被拦 8 次）。
+        "known_basics": payload.get("known_basics") or {},
     }
     return _numeric_claims(optimized_data) - _numeric_claims(source)
 
@@ -1300,6 +1342,7 @@ def validate_basics_field_update(
     history: list[dict[str, Any]] | None = None,
     user_message: str = "",
     search_evidence: list[str] | None = None,
+    known_basics: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any] | None, list[str], str]:
     """Validate a field-level basics change proposed by ``update_basics_field``.
 
@@ -1325,6 +1368,7 @@ def validate_basics_field_update(
         "user_message": user_message,
         "attachments": [],
         "search_evidence": search_evidence or [],
+        "known_basics": known_basics or {},
     }
     # The tool submits only the changed fields; merge them into the current basics
     # (leaving the rest of the basics section intact) rather than replacing it.
@@ -1504,6 +1548,7 @@ def validate_section_update(
     user_message: str = "",
     removed_ids: list[str] | None = None,
     search_evidence: list[str] | None = None,
+    known_basics: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any] | None, list[str], str]:
     """Validate a section-level change proposed by the AI service's ``update_section`` tool.
 
@@ -1534,6 +1579,7 @@ def validate_section_update(
         "user_message": user_message,
         "attachments": [],
         "search_evidence": search_evidence or [],
+        "known_basics": known_basics or {},
     }
     if _unverified_numeric_claims(payload, merged):
         return None, [], "检测到方案包含简历和对话中未提供的量化结果，已阻止写入。"
@@ -1547,6 +1593,7 @@ def validate_propose_change(
     history: list[dict[str, Any]] | None = None,
     user_message: str = "",
     search_evidence: list[str] | None = None,
+    known_basics: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any] | None, list[str], str]:
     """Validate an atomic change spanning several sections (``propose_change`` tool).
 
@@ -1590,6 +1637,7 @@ def validate_propose_change(
         "user_message": user_message,
         "attachments": [],
         "search_evidence": search_evidence or [],
+        "known_basics": known_basics or {},
     }
     if _unverified_numeric_claims(payload, merged):
         return None, [], "检测到方案包含简历和对话中未提供的量化结果，已阻止写入。"

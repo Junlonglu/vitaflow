@@ -77,6 +77,54 @@ class ValidateSectionUpdateTest(unittest.TestCase):
         self.assertIn("title", issue)
         self.assertIn("name", issue)
 
+    def test_contact_fields_from_library_count_as_evidence(self):
+        """信息库里的手机号/邮箱是既有事实，不应被当成「未提供的量化结果」。
+
+        真实故障：Agent 从信息库补基本信息时，手机号和邮箱里的数字不在简历与
+        对话里，整次 basics 更新被拒，模型连续重试 8 次仍失败。
+        """
+        known = {
+            "fragment_id": 62,
+            "title": "卢俊隆",
+            "payload": {"name": "卢俊隆", "phone": "13727784150", "email": "lujunlong631@163.com"},
+        }
+        merged, suggestions, issue = validate_section_update(
+            CURRENT,
+            "basics",
+            {"phone": "13727784150", "email": "lujunlong631@163.com", "location": "广州"},
+            [{"role": "user", "content": "按信息库把基本信息补上"}],
+            "按信息库把基本信息补上",
+            known_basics=known,
+        )
+        self.assertEqual(issue, "")
+        self.assertEqual(merged["basics"]["phone"], "13727784150")
+        self.assertEqual(merged["basics"]["email"], "lujunlong631@163.com")
+        self.assertIn("基本信息", suggestions[0])
+
+    def test_contact_number_not_in_library_is_still_blocked(self):
+        known = {"fragment_id": 62, "payload": {"name": "卢俊隆", "phone": "13727784150"}}
+        merged, suggestions, issue = validate_section_update(
+            CURRENT,
+            "basics",
+            {"phone": "13999999999"},
+            [{"role": "user", "content": "改一下手机号"}],
+            "改一下手机号",
+            known_basics=known,
+        )
+        self.assertIsNone(merged)
+        self.assertIn("量化", issue)
+
+    def test_fabricated_number_in_prose_is_still_blocked(self):
+        merged, suggestions, issue = validate_section_update(
+            CURRENT,
+            "summary",
+            {"content": "主导秒杀系统，支撑 12 万 QPS"},
+            [{"role": "user", "content": "把简介写强一点"}],
+            "把简介写强一点",
+        )
+        self.assertIsNone(merged)
+        self.assertIn("量化", issue)
+
     def test_hallucinated_quantified_result_is_blocked(self):
         # The model invents a time range that appears ONLY in its proposal (never in the
         # resume or the user's own words), so the numeric anti-hallucination guard blocks it.

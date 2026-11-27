@@ -58,6 +58,7 @@ from app.services.ai_chat_service import (
     validate_propose_change,
     tool_issue_category,
     get_section_context,
+    known_basics_for_user,
 )
 from app.services.ai_config_service import (
     get_active_ai_config,
@@ -1000,6 +1001,7 @@ def service_update_basics_field(
         history,
         user_message,
         search_evidence=get_recent_search_evidence(payload.user_id, payload.resume_id),
+        known_basics=known_basics_for_user(db, payload.user_id),
     )
     if issue:
         return success({"ok": False, "category": tool_issue_category(issue), "retryable": False, "reason": issue})
@@ -1038,6 +1040,7 @@ def service_update_section(
         user_message,
         payload.removed_ids,
         search_evidence=get_recent_search_evidence(payload.user_id, payload.resume_id),
+        known_basics=known_basics_for_user(db, payload.user_id),
     )
     if issue:
         return success({"ok": False, "category": tool_issue_category(issue), "retryable": False, "reason": issue})
@@ -1071,6 +1074,7 @@ def service_propose_change(
         history,
         user_message,
         search_evidence=get_recent_search_evidence(payload.user_id, payload.resume_id),
+        known_basics=known_basics_for_user(db, payload.user_id),
     )
     if issue:
         return success({"ok": False, "category": tool_issue_category(issue), "retryable": False, "reason": issue})
@@ -1121,6 +1125,7 @@ def service_update_resume(
             history,
             user_message,
             search_evidence=get_recent_search_evidence(payload.user_id, payload.resume_id),
+            known_basics=known_basics_for_user(db, payload.user_id),
         )
         if issue:
             return success({"ok": False, "category": tool_issue_category(issue), "retryable": False, "reason": issue})
@@ -1195,6 +1200,8 @@ def _fragment_card(row) -> dict[str, Any]:
         "tags": row.tags or [],
         "payload": row.payload or {},
         "usage_count": row.usage_count or 0,
+        # 默认个人信息：模型要「用我的信息」时优先这条，不必再问用户。
+        "is_default": bool(row.is_default),
     }
 
 

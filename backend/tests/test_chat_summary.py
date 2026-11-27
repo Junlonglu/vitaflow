@@ -72,6 +72,12 @@ def _rows(count: int) -> list[AiChatMessage]:
 
 
 class ContextSummaryInjectionTest(unittest.TestCase):
+    def setUp(self) -> None:
+        # 默认个人信息要查库；这里的 session 是 scalar 桩，统一当作「没有信息库」。
+        patcher = patch("app.services.ai_chat_service.resolve_default_basic", return_value=None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def _resume_stub(self):
         return SimpleNamespace(id=3, title="后端简历", resume_data={"basics": {"title": "后端工程师"}})
 

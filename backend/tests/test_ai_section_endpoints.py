@@ -54,6 +54,10 @@ class SectionToolEndpointTest(unittest.TestCase):
     def setUp(self):
         self._original_token = settings.ai_service_token
         settings.ai_service_token = "test-token"
+        # 这些用例的 db 是 SimpleNamespace（没有 scalar），默认个人信息按「没有」处理。
+        patcher = patch("app.services.ai_chat_service.resolve_default_basic", return_value=None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def tearDown(self):
         settings.ai_service_token = self._original_token

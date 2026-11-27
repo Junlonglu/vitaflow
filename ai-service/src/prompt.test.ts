@@ -82,6 +82,48 @@ describe("buildContextPrompt", () => {
     assert.ok(summaryIdx !== -1 && summaryIdx < historyIdx, "summary precedes recent history");
   });
 
+  it("injects the default personal info and tells the model to replace template values", () => {
+    const prompt = buildContextPrompt(DEFAULT_SYSTEM_PROMPT, {
+      resume: { id: 1, data: { basics: { name: "Elliot", email: "zhangsan@example.com" } } },
+      known_basics: {
+        fragment_id: 62,
+        title: "卢俊隆",
+        payload: { name: "卢俊隆", email: "lujunlong631@163.com", phone: "13727784150", location: "广州" },
+      },
+      basics_placeholder_fields: ["name", "email"],
+      basics_looks_like_template: true,
+    });
+
+    assert.match(prompt, /# 已知个人信息/);
+    assert.match(prompt, /姓名：卢俊隆/);
+    assert.match(prompt, /邮箱：lujunlong631@163\.com/);
+    assert.match(prompt, /update_resume 的 basics\.fields/, "tells the model how to write it back");
+    assert.match(prompt, /不要反问用户姓名、邮箱、电话/, "no pointless question round");
+    assert.ok(
+      prompt.indexOf("# 已知个人信息") < prompt.indexOf("# 当前简历"),
+      "known basics must precede the resume (it is the reference for fixing it)",
+    );
+  });
+
+  it("keeps the resume authoritative when its basics are real", () => {
+    const prompt = buildContextPrompt(DEFAULT_SYSTEM_PROMPT, {
+      resume: { id: 1, data: { basics: { name: "张三", email: "zhangsan@real.com" } } },
+      known_basics: { fragment_id: 9, payload: { name: "旧名字", email: "old@real.com" } },
+      basics_placeholder_fields: [],
+      basics_looks_like_template: false,
+    });
+    assert.match(prompt, /# 已知个人信息/);
+    assert.match(prompt, /以简历为准/);
+    assert.doesNotMatch(prompt, /模板示例/);
+  });
+
+  it("omits the section entirely when there is no default personal info", () => {
+    const prompt = buildContextPrompt(DEFAULT_SYSTEM_PROMPT, {
+      resume: { id: 1, data: { basics: { name: "张三" } } },
+    });
+    assert.doesNotMatch(prompt, /# 已知个人信息/);
+  });
+
   it("keeps section order: fields → resume → summary → history → pending", () => {
     const prompt = buildContextPrompt(DEFAULT_SYSTEM_PROMPT, {
       resume: { id: 1, title: "前端简历", data: { basics: {} } },

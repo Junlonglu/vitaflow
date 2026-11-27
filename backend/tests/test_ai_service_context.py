@@ -42,6 +42,12 @@ class AiServiceContextBuildTest(unittest.TestCase):
             template_config={},
         )
 
+    def setUp(self) -> None:
+        # 默认个人信息要查库；这些用例只验证上下文字段，统一当作「没有信息库」。
+        patcher = patch("app.services.ai_chat_service.resolve_default_basic", return_value=None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def _history(self, *items: tuple[str, str]) -> list[SimpleNamespace]:
         return [SimpleNamespace(role=role, content=text) for role, text in items]
 
@@ -98,6 +104,40 @@ class AiServiceContextBuildTest(unittest.TestCase):
         self.assertEqual(len(context["history"]), 2)
         self.assertEqual(context["history"][0], {"role": "assistant", "content": "回复二"})
         self.assertEqual(context["history"][1], {"role": "user", "content": "第三轮"})
+
+    def test_context_injects_default_basic_and_placeholder_flags(self) -> None:
+        """基本信息不能只靠模型「想起来检索」：默认个人信息要随上下文下发。"""
+        resume = self._resume()
+        resume.resume_data["basics"] = {
+            "name": "Elliot",
+            "email": "zhangsan@example.com",
+            "phone": "13800000000",
+            "avatar": "",
+        }
+        row = SimpleNamespace(
+            id=62,
+            title="卢俊隆",
+            payload={
+                "name": "卢俊隆",
+                "email": "lujunlong631@163.com",
+                "avatar": "avatar/1_x.jpg",
+                "phone": "",
+            },
+        )
+        with (
+            patch("app.services.ai_chat_service.list_chat_messages", return_value=[]),
+            patch("app.services.ai_chat_service.resolve_default_basic", return_value=row),
+        ):
+            context = build_ai_service_context(_DbStub(pending=None), SimpleNamespace(id=1), resume)
+
+        self.assertEqual(context["known_basics"]["fragment_id"], 62)
+        self.assertEqual(context["known_basics"]["payload"]["name"], "卢俊隆")
+        # 头像对象名不是可写进简历的事实；空值也不下发，避免提示词里出现空字段
+        self.assertNotIn("avatar", context["known_basics"]["payload"])
+        self.assertNotIn("phone", context["known_basics"]["payload"])
+        self.assertTrue(context["basics_looks_like_template"])
+        self.assertIn("name", context["basics_placeholder_fields"])
+        self.assertIn("email", context["basics_placeholder_fields"])
 
 
 if __name__ == "__main__":
